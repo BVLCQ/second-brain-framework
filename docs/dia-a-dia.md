@@ -485,11 +485,11 @@ O desenho separa **framework** (o produto, clonável, sem nada seu dentro) de
 **instância** (o seu cérebro, com seus dados — nunca commitado em lugar nenhum):
 
 ```bash
-# 1. clonar e virar SUA instância (o .git sai: seu dado nunca é commitado)
+# 1. clonar — esta pasta É a instância (mantenha o .git para atualizar depois)
 git clone <repo-do-framework> ~/brain
-cd ~/brain && rm -rf .git
+cd ~/brain
 
-# 2. subir o esqueleto das zonas pra raiz
+# 2. subir o esqueleto das zonas pra raiz (blindadas pelo .gitignore)
 mv estrutura/* . && rmdir estrutura
 
 # 3. conectores (opcional — o cérebro funciona 100% manual sem eles)
@@ -501,6 +501,7 @@ cp config/watch.yaml.example config/watch.yaml                # liste o que obse
 #    durante a entrevista viram o primeiro dump
 
 # 5. viver: jogar coisas em RAW/inbox/ → /dump → /brief no dia seguinte
+#    (atualizar o framework, quando quiser: bash scripts/update-framework.sh)
 ```
 
 O cérebro **nasce vazio e fica inteligente na velocidade em que você o

@@ -1,12 +1,23 @@
-# Segredos e estado — nunca commitados
+# ═══ ZONAS DE DADOS (a instância vive no mesmo clone — o git NUNCA vê seus dados) ═══
+/RAW/
+/PROCESSED/
+/FRESH/
+/PROFILE/
+/PLANNING/
+RAW/
+PROCESSED/
+FRESH/
+PROFILE/
+PLANNING/
+
+# ═══ Config e estado da INSTÂNCIA (nunca commitados) ═══
 .env
 config/.env
+config/watch.yaml
 config/.state.json
+config/nightly.log
 
 # Sistema
 .DS_Store
 __pycache__/
 *.pyc
-
-# Dados de instância NÃO vivem neste repo (a instância é uma pasta separada,
-# criada com cp -r estrutura/* — este gitignore é higiene do repo do framework)

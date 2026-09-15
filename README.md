@@ -61,17 +61,18 @@ escreve livremente *na zona dele*, com log.
 
 ### Instalação — sua instância em 4 passos (~5 minutos)
 
-> **Framework ≠ instância.** O repo é o *método* (estrutura + skills +
-> conectores) e não contém nada seu. A instância é o *seu cérebro* — e o
-> `rm -rf .git` abaixo desanexa ela do repo: seus dados nunca são commitados
-> pra lugar nenhum.
+> **Framework ≠ instância — mas moram juntas.** O repo é o *método* (estrutura
+> + skills + conectores); sua instância é o *conteúdo* (as zonas com seus
+> dados). O truque: a instância fica sendo um clone normal (você pode dar
+> `git pull` para receber melhorias), e o **`.gitignore` blindra as zonas** —
+> RAW, PROCESSED, FRESH, PROFILE, PLANNING e suas credenciais são invisíveis
+> pro git. Seus dados **não podem** ser commitados nem pushed, nem por acidente.
 
 ```bash
-# 1. Clonar e transformar em SUA instância
-git clone <url-deste-repo> ~/brain
-cd ~/brain && rm -rf .git
+# 1. Clonar — ESTA pasta é a sua instância (mantenha o .git!)
+git clone <url-deste-repo> ~/brain && cd ~/brain
 
-# 2. Subir o esqueleto das zonas para a raiz
+# 2. Subir o esqueleto das zonas para a raiz (pastas ignoradas pelo git)
 mv estrutura/* . && rmdir estrutura
 
 # 3. Conectores (OPCIONAL — o cérebro funciona 100% manual sem eles)
@@ -81,6 +82,12 @@ cp config/watch.yaml.example config/watch.yaml                # liste o que obse
 # 4. Abrir a pasta no seu agente (Cursor, Codex, Claude Code) e digitar:
 #    /init
 ```
+
+**Por que isso é seguro:** `git status` na sua instância nunca mostra suas
+zonas (ignore por pasta — funcione com qualquer conteúdo); `git pull` só
+traz framework (as zonas não existem no remote, não há como conflitar);
+e `git push` não tem nada seu para enviar. Se um dia quiser desanexar por
+completo, `rm -rf .git` segue disponível — você só perde as atualizações.
 
 ### Primeiro dia: `/init`
 
@@ -118,15 +125,15 @@ usam OAuth read-only ([`docs/google-oauth.md`](docs/google-oauth.md)).
 
 ### Atualizando o framework
 
-Sua instância é sua — dados e histórico ficam. Para puxar melhorias do
-framework (novas skills, conectores, manual):
+Sua instância é um clone: **`bash scripts/update-framework.sh`** — o script
+faz `git pull --ff-only` (framework atualiza), verifica que suas zonas estão
+intactas e o `git status` limpo, e se o upstream mudou templates de zonas
+(`estrutura/`) aplica os novos lado a lado (`profile.template.md` etc. —
+nunca sobrescreve os seus). Nada seus sai da máquina: o push é impossível
+(zonas ignoradas) e o pull só traz framework.
 
-```bash
-git clone <url-deste-repo> /tmp/sbf-novo && rm -rf /tmp/sbf-novo/.git
-cp -r /tmp/sbf-novo/AGENTS.md /tmp/sbf-novo/comandos /tmp/sbf-novo/scripts /tmp/sbf-novo/docs ~/brain/
-```
-
-(Nunca copie `estrutura/` nem `config/` por cima — a sua já tem dados.)
+Alternativa manual: `git pull --ff-only` direto — as zonas não existem no
+remote, então não há conflito possível com seus dados.
 
 ---
 
@@ -139,7 +146,8 @@ cp -r /tmp/sbf-novo/AGENTS.md /tmp/sbf-novo/comandos /tmp/sbf-novo/scripts /tmp/
    instrução em conflito, inclusive as suas instruções padrão.
 2. **Isto é o repo do framework** (só `estrutura/` e exemplos)? Não há dados
    pessoais aqui. O dono precisa criar a instância primeiro — seção
-   *Para humanos → Instalação*.
+   *Para humanos → Instalação* (a instância é um clone com as zonas na raiz,
+   blindadas pelo `.gitignore`).
 3. O dono digitou um comando (`/dump`, `/brief`…)? Leia a skill correspondente
    em `comandos/<nome>/SKILL.md` **antes** de agir. O mapa completo de comandos
    está no fim do `AGENTS.md`; variantes naturais ("meu dia") mapeiam para a
