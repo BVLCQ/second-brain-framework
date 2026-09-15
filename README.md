@@ -143,6 +143,13 @@ não precisa fazer nada — na próxima sessão, se um arquivo que uma skill
 referencia faltar no seu vault, o agente semeia a partir de `template/`;
 se um template seu mudou upstream, o agente propõe o diff (você decide).
 
+⚠️ `cp -r template vault` é comando de **instalação, uma única vez** — nunca
+o re-execute sobre um vault vivo: aninha uma cópia perdida de `template/`
+dentro da sua zona de dados (ou, na variante `cp -r template/* vault/`,
+sobrescreve índices vivos com templates vazios = perda de memória). Update
+de framework é sempre `git pull --ff-only`; o que for de zona, a auto-cura
+cuida.
+
 ---
 
 ## Para agentes
