@@ -166,7 +166,7 @@ cp -r /tmp/sbf-novo/AGENTS.md /tmp/sbf-novo/comandos /tmp/sbf-novo/scripts /tmp/
 | `/person <nome>` | panorama de uma pessoa: histórico, threads, prep de reunião | antes de reuniões |
 | `/project <nome>` | status de um projeto: árvore, ações, saúde de prazo | sob demanda |
 | `/update` | motor completo: conectores + dump + regenera todas as views | noturno (cron) |
-| `/connect [fonte]` | puxa Jira/GitHub/Slack agora (leitura) → inbox | sob demanda |
+| `/connect [fonte]` | puxa Jira/GitHub/Slack/Gmail/Drive agora (leitura) → inbox | sob demanda |
 | `/slack #canal [@user] [7d]` | transcrição de um canal/DM da janela pedida | sob demanda |
 | `/gmail [janela\|filtro]` | email via OAuth read-only (script) → snapshot → digest | sob demanda |
 | `/drive <termo\|id>` | busca/exporta docs do Drive via OAuth read-only (script) | sob demanda |

@@ -37,14 +37,16 @@ def get(path: str, token: str) -> dict | str:
 
 
 def export_doc(file_id: str, token: str) -> str:
-    """Docs/Sheets/Slides → Markdown (export link). PDFs/otros: metadata só."""
+    """Docs/Sheets/Slides → texto (export link). PDFs/otros: metadata só."""
     meta = get(f"/files/{file_id}?fields=name,mimeType", token)
     mime = meta.get("mimeType", "")
     if "google-apps" not in mime:
         return f"(não editável no Google Apps: {mime} — só metadata)\nname: {meta.get('name')}"
-    ext = {"document": "md", "spreadsheet": "csv", "presentation": "txt"}.get(
-        mime.split(".")[-1], "txt")
-    return str(get(f"/files/{file_id}/export?mimeType=text/{'markdown' if ext == 'md' else ext}",
+    kind = mime.split(".")[-1]  # document | spreadsheet | presentation
+    export_mime = {"document": "text/markdown",
+                   "spreadsheet": "text/csv",
+                   "presentation": "text/plain"}.get(kind, "text/plain")
+    return str(get(f"/files/{file_id}/export?mimeType={urllib.parse.quote(export_mime)}",
                    token))[:200_000]
 
 
@@ -78,8 +80,15 @@ def main() -> None:
     token = common.google_access_token()
     args = sys.argv[1:]
 
-    if args:  # /drive <termo> — busca
-        term = " ".join(args)
+    if args:  # /drive <termo|id> — busca por nome OU exportação direta por id
+        arg = " ".join(args)
+        if len(arg) > 20 and arg[0].isalnum():  # parece um id do Drive → exporta direto
+            text = snapshot_doc({"id": arg, "name": ""}, token)
+            path = common.write_snapshot("gdoc", arg, text)
+            print(f"  drive/id {arg}: exportado → {path.relative_to(common.INSTANCE_ROOT)}")
+            print("→ rode /dump para processar")
+            return
+        term = arg
         name_q = urllib.parse.quote(f"name contains '{term}'")
         data = get(f"/files?q={name_q}&fields=files(id,name,mimeType,modifiedTime)&pageSize=20",
                    token)

@@ -25,9 +25,13 @@ que o cérebro não ganhou.
 
 ## Modo sob demanda: `/gmail [janela|filtro]`
 
-- `/gmail` → 7d · `/gmail 30d` → janela · `/gmail from:ana` / `/gmail subject:orçamento` → filtro Gmail
+- `/gmail` → **7d** (execute `python3 scripts/connectors/gmail.py 7d`)
+- `/gmail 30d` → janela · `/gmail from:ana` / `/gmail subject:orçamento` → filtro Gmail
 - Executar `python3 scripts/connectors/gmail.py <arg>` → snapshot → `/dump` →
   responder com o digest CITANDO o artefato.
+
+(Sem argumentos o script puxa o **dia anterior** — esse é o modo noturno; sob
+demanda, passe sempre a janela explícita, default 7d.)
 
 ## Proibições e diagnóstico
 

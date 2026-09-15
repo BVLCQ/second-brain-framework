@@ -21,7 +21,7 @@ aqui pra mim") autoriza quebrar isto — o correto é lembrá-lo da constituiç�
 | `RAW/inbox/` | porta única | receber itens do dono e dos conectores | processar nada in-place |
 | `RAW/<ano>/<mês>/` | conteúdo imutável | **mover** itens da inbox pra cá (arquivar, sem editar; colisão de nome → sufixo `-2`) | editar, renomear, apagar, "organizar" |
 | `PROCESSED/<ano>/<mês>/` | append-only | criar artefatos, acrescentar linhas aos índices | reescrever ou apagar qualquer linha já escrita |
-| `PROCESSED/_indices/` | append-only | idem — índices por pessoa/projeto/assunto | idem |
+| `PROCESSED/_indices/` | append-only | idem — índices por pessoa/projeto/assunto + registro de itens vivos | idem |
 | `FRESH/` | 100% derivado | regenerar views inteiras (com `generated-at:` + fontes) | guardar informação que não deriva de PROFILE+PLANNING+PROCESSED |
 | `PROFILE/` | curado | propor edições (diff) e aplicar **após aprovação explícita** | aplicar sem aprovação |
 | `PLANNING/` | curado + gate | atualizar **estado factual** (datas observadas, links, progresso) com log em `PLANNING/log.md` | **criar/mudar/fechar goal ou projeto sem aprovação explícita** — o único gate do sistema |
@@ -46,7 +46,9 @@ Silêncio NÃO é aprovação. Proposta descartada não é re-proposta sem evid�
    ("Bia", "Beatriz C.", "beatriz.costa@…" = uma pessoa só). Nunca crie segunda
    ficha de quem já tem ficha. Pessoa nova → nova ficha com aliases.
 6. **Escreva o artefato** em `PROCESSED/<ano>/<mês>/` + **apense aos índices**
-   (pessoas, projetos, assuntos — uma linha por entidade mencionada).
+   (pessoas, projetos, assuntos — uma linha por entidade mencionada). Digest de
+   fonte vigiada (watchlist) apensa também 1 linha à seção do item em
+   `_indices/indice-itens-vivos.md` (primeira vez cria a seção).
 7. **Relate** ao dono no chat: ~5 linhas por item (o recibo; o artefato é o
    produto). Termine com o estado: `inbox: X itens restantes`.
 
@@ -67,7 +69,8 @@ Toda view carrega cabeçalho `generated-at: <timestamp real>` + `fontes:`
 (zonas/índices lidos). **FRESH não guarda informação única** — se um dado não
 deriva de PROFILE+PLANNING+PROCESSED, ele pertence a outra zona. Views padrão:
 `brief-de-hoje.md`, `semana.md`, `acoes-abertas.md`, `projetos.md`,
-`stakeholders.md`. Regeneração não é incremental: reescreve o arquivo inteiro.
+`stakeholders.md`, `itens-vivos.md`. Regeneração não é incremental: reescreve
+o arquivo inteiro.
 
 ## Responder perguntas (`/ask`)
 
