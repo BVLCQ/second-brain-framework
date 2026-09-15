@@ -501,8 +501,8 @@ cp config/watch.yaml.example config/watch.yaml                # liste o que obse
 #    /init → entrevista + vault/PROFILE/PLANNING propostos; arquivos soltos
 #    durante a entrevista viram o primeiro dump
 
-# 5. viver: jogar coisas em vault/RAW/inbox/ → /dump → /brief no dia seguinte
-#    (atualizar o framework, quando quiser: bash scripts/update-framework.sh)
+# 5. viver: jogar coisas em RAW/inbox/ → /dump → /brief no dia seguinte
+#    (atualizar o framework, quando quiser: git pull --ff-only)
 ```
 
 O cérebro **nasce vazio e fica inteligente na velocidade em que você o

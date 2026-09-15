@@ -128,15 +128,20 @@ usam OAuth read-only ([`docs/google-oauth.md`](docs/google-oauth.md)).
 
 ### Atualizando o framework
 
-Sua instância é um clone: **`bash scripts/update-framework.sh`** — o script
-faz `git pull --ff-only` (framework atualiza), verifica que suas zonas estão
-intactas e o `git status` limpo, e se o upstream mudou templates de zonas
-(`estrutura/`) aplica os novos lado a lado (`profile.template.md` etc. —
-nunca sobrescreve os seus). Nada seus sai da máquina: o push é impossível
-(zonas ignoradas) e o pull só traz framework.
+Sua instância é um clone:
 
-Alternativa manual: `git pull --ff-only` direto — as zonas não existem no
-remote, então não há conflito possível com seus dados.
+```bash
+git pull --ff-only
+```
+
+Só isso — skills, conectores, docs e `AGENTS.md` atualizam no lugar. Suas zonas
+não existem pro git, então nenhum conflito é possível. Se você editou arquivos
+do framework localmente e o pull reclamar, `git stash` → pull → `git stash pop`.
+
+**Templates de zona** (novos índices, mudanças de template em `estrutura/vault/`):
+não precisa fazer nada — na próxima sessão, se um arquivo que uma skill
+referencia faltar no seu vault, o agente semeia a partir de `estrutura/vault/`;
+se um template seu mudou upstream, o agente propõe o diff (você decide).
 
 ---
 
