@@ -72,8 +72,9 @@ escreve livremente *na zona dele*, com log.
 # 1. Clonar — ESTA pasta é a sua instância (mantenha o .git!)
 git clone <url-deste-repo> ~/brain && cd ~/brain
 
-# 2. Subir o esqueleto das zonas para a raiz (pastas ignoradas pelo git)
-mv estrutura/* . && rmdir estrutura
+# 2. Copiar o esqueleto das zonas para a raiz (cp, NÃO mv: estrutura/ fica
+#    intacta no repo — suas cópias na raiz são ignoradas pelo .gitignore)
+cp -r estrutura/* .
 
 # 3. Conectores (OPCIONAL — o cérebro funciona 100% manual sem eles)
 cp config/.env.example config/.env && chmod 600 config/.env   # SEUS tokens read-only
@@ -83,11 +84,13 @@ cp config/watch.yaml.example config/watch.yaml                # liste o que obse
 #    /init
 ```
 
-**Por que isso é seguro:** `git status` na sua instância nunca mostra suas
-zonas (ignore por pasta — funcione com qualquer conteúdo); `git pull` só
-traz framework (as zonas não existem no remote, não há como conflitar);
-e `git push` não tem nada seu para enviar. Se um dia quiser desanexar por
-completo, `rm -rf .git` segue disponível — você só perde as atualizações.
+**Por que isso é seguro:** suas zonas são cópias **não-rastreadas** de pastas
+que o `.gitignore` cega — `git add -A` não as vê, `git status` fica limpo,
+`git pull` só traz framework (`estrutura/` segue no repo e atualiza; seu
+conteúdo na raiz não existe pro git — zero conflito) e `git push` não tem
+nada seu para enviar. ⚠️ Não use `mv` no passo 2: mover deixa os arquivos
+rastreados (rename), e arquivo rastreado **ignora o `.gitignore`**. Se um dia
+quiser desanexar por completo, `rm -rf .git` segue disponível.
 
 ### Primeiro dia: `/init`
 
