@@ -48,9 +48,11 @@ funcionam sem ninguém mexer em token nunca mais.
 ```yaml
 gmail:
   window: daily          # digest do dia anterior, noturno
-gdocs:
-  - id: "<idDoDoc>"      # id do doc (parte da URL do Drive)
+gdocs:                   # array — um objeto por doc, quantos quiser
+  - id: "<idDoDoc>"      # id do doc (da URL do Drive)
     name: "dicionario-de-dados"
+  - id: "<idOutroDoc>"
+    name: "okrs-q4"
 ```
 
 ## Problemas comuns

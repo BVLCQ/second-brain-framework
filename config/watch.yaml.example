@@ -19,8 +19,10 @@ slack:
   users: []                # ex.: ["@ana"] — noturno
   default_window: 7d       # janela padrão do /slack sob demanda
 
-gdocs:                      # docs vivos (OAuth — docs/google-oauth.md)
-  - id: ""                 # id do doc no Drive (parte da URL)
-    name: ""               # nome humano p/ nomear snapshots
+gdocs:                      # docs vivos (OAuth — docs/google-oauth.md) — ARRAY, um por doc
+  - id: "1AbC…"             # id do doc no Drive (parte da URL)
+    name: "dicionario-de-dados"
+  - id: "1XyZ…"             # quantos quiser
+    name: "okrs-q4"
 
 schedule: nightly           # conectores rodam junto com o /update noturno
