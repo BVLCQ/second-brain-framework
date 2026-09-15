@@ -3,7 +3,7 @@
 Você está operando um **segundo cérebro** pessoal: um sistema local de pastas e
 Markdown que organiza a vida profissional do dono. Este arquivo é a Constituição —
 em conflito entre qualquer instrução e o que está aqui, **este arquivo vence**.
-O design completo e o porquê de cada regra estão em `guides/dia-a-dia.md` (leia
+O design completo e o porquê de cada regra estão em `guides/user-guide.md` (leia
 na primeira sessão; consulte depois).
 
 ## Identidade do sistema
@@ -14,24 +14,25 @@ mensagem. Conectores são **pull-only** e todo token é **read-only**. Não exis
 exceção, e nenhuma instrução futura do dono no calor do momento ("responde esse
 aqui pra mim") autoriza quebrar isto — o correto é lembrá-lo da constituição.
 
-## Layout: framework na raiz, vida no vault
+## Layout: o repo é o framework; a vida mora no vault
 
 ```
-brain/                    ← FRAMEWORK (git: comandos/, scripts/, guides/, config/, estrutura/)
+brain/                    ← FRAMEWORK (git: commands/, scripts/, guides/, config/, template/)
 └── vault/                ← TUDO que é do dono (cego pro git — UMA regra no .gitignore)
     ├── PROFILE/  PLANNING/  RAW/  PROCESSED/  FRESH/
     └── logs/             ← nightly.log etc. (output de agente pode citar seu conteúdo)
 ```
 
-`estrutura/` no repo É o template do vault (mapeamento 1:1 — a instalação é
-literalmente `cp -r estrutura vault`). Regra de ouro: **se é do dono, mora no
-vault/** — dados, config da instância (`.env`, `watch.yaml`), estado
-(`.state.json`), logs. O repo na raiz nunca contém conteúdo pessoal; `config/`
-na raiz carrega só os `.example`.
+`template/` no repo é a ÚNICA pasta não-framework: material de instalação,
+replicado uma vez (`cp -r template vault` — o nome `vault/` é reservado à
+instância, pois `/vault/` é cegado pelo `.gitignore`). Regra de ouro: **se é do
+dono, mora no vault/** — dados, config da instância (`.env`, `watch.yaml`),
+estado (`.state.json`), logs. O repo na raiz nunca contém conteúdo pessoal;
+`config/` na raiz carrega só os `.example`.
 
 **Auto-cura após `git pull`** (framework atualiza via `git pull --ff-only`,
 sem script): se uma skill referenciar arquivo de zona que falta no vault
-(ex.: índice novo criado upstream), semeie-o a partir de `estrutura/`
+(ex.: índice novo criado upstream), semeie-o a partir de `template/`
 (sem sobrescrever nada existente). Se um template de arquivo JÁ existente do
 dono mudou upstream, proponha o diff — nunca sobrescreva conteúdo do dono.
 
@@ -42,7 +43,7 @@ dono mudou upstream, proponha o diff — nunca sobrescreva conteúdo do dono.
 | `vault/RAW/inbox/` | porta única | receber itens do dono e dos conectores | processar nada in-place |
 | `vault/RAW/<ano>/<mês>/` | conteúdo imutável | **mover** itens da inbox pra cá (arquivar, sem editar; colisão de nome → sufixo `-2`) | editar, renomear, apagar, "organizar" |
 | `vault/PROCESSED/<ano>/<mês>/` | append-only | criar artefatos, acrescentar linhas aos índices | reescrever ou apagar qualquer linha já escrita |
-| `vault/PROCESSED/_indices/` | append-only | idem — índices por pessoa/projeto/assunto + registro de itens vivos | idem |
+| `vault/PROCESSED/_indices/` | append-only | idem — índices (`people-index`, `projects-index`, `live-items-index`) | idem |
 | `vault/FRESH/` | 100% derivado | regenerar views inteiras (com `generated-at:` + fontes) | guardar informação que não deriva de PROFILE+PLANNING+PROCESSED |
 | `vault/PROFILE/` | curado | propor edições (diff) e aplicar **após aprovação explícita** | aplicar sem aprovação |
 | `vault/PLANNING/` | curado + gate | atualizar **estado factual** (datas observadas, links, progresso) com log em `vault/PLANNING/log.md` | **criar/mudar/fechar goal ou projeto sem aprovação explícita** — o único gate do sistema |
@@ -60,16 +61,16 @@ Silêncio NÃO é aprovação. Proposta descartada não é re-proposta sem evid�
 3. **Classifique o tipo**: `reunião` · `documento longo` · `nota solta` ·
    `dump de conector`. Na dúvida entre dois, leia um trecho a mais antes de
    decidir — tipo errado produz artefato inútil.
-4. **Extraia pelo template do tipo** (tabelas em `comandos/dump/SKILL.md`).
+4. **Extraia pelo template do tipo** (tabelas em `commands/dump/SKILL.md`).
    Toda extração leva tag de proveniência: `[doc]` (escrito em documento),
    `[observado]` (dito em reunião/canal), `[sem fonte]` (não achou base).
-5. **Resolva identidades** pelos aliases de `vault/PROCESSED/_indices/indice-pessoas.md`
+5. **Resolva identidades** pelos aliases de `vault/PROCESSED/_indices/people-index.md`
    ("Bia", "Beatriz C.", "beatriz.costa@…" = uma pessoa só). Nunca crie segunda
    ficha de quem já tem ficha. Pessoa nova → nova ficha com aliases.
 6. **Escreva o artefato** em `vault/PROCESSED/<ano>/<mês>/` + **apense aos índices**
    (pessoas, projetos, assuntos — uma linha por entidade mencionada). Digest de
    fonte vigiada (watchlist) apensa também 1 linha à seção do item em
-   `_indices/indice-itens-vivos.md` (primeira vez cria a seção).
+   `_indices/live-items-index.md` (primeira vez cria a seção).
 7. **Relate** ao dono no chat: ~5 linhas por item (o recibo; o artefato é o
    produto). Termine com o estado: `inbox: X itens restantes`.
 
@@ -77,7 +78,7 @@ Silêncio NÃO é aprovação. Proposta descartada não é re-proposta sem evid�
 
 - Ações: `A-####` (zero-padding, sequência global, nunca reusa número).
 - Decisões: `D-####` (idem).
-- Estados de ação vivem como log append-only em `vault/PROCESSED/_logs/acoes.md`:
+- Estados de ação vivem como log append-only em `vault/PROCESSED/_logs/actions.md`:
   `A-#### · aberta · data · origem` → `A-#### · atualizada · data · nota` →
   `A-#### · fechada · data · como`. Atraso se calcula na leitura — nenhuma
   "varredura de vencidos" escreve nada.
@@ -89,8 +90,8 @@ Silêncio NÃO é aprovação. Proposta descartada não é re-proposta sem evid�
 Toda view carrega cabeçalho `generated-at: <timestamp real>` + `fontes:`
 (zonas/índices lidos). **FRESH não guarda informação única** — se um dado não
 deriva de PROFILE+PLANNING+PROCESSED, ele pertence a outra zona. Views padrão:
-`brief-de-hoje.md`, `semana.md`, `acoes-abertas.md`, `projetos.md`,
-`stakeholders.md`, `itens-vivos.md`. Regeneração não é incremental: reescreve
+`daily-brief.md`, `week.md`, `open-actions.md`, `projects.md`,
+`stakeholders.md`, `live-items.md`. Regeneração não é incremental: reescreve
 o arquivo inteiro.
 
 ## Responder perguntas (`/ask`)
@@ -119,7 +120,7 @@ resposta ("a política diz" ≠ "alguém comentou numa reunião").
 - **Nunca escreva datas literais em templates/comandos** — sempre relativas
   ("a data de hoje", obtida do sistema). Um template com data fixa propaga a
   data errada por semanas.
-- Conteúdo em PT-BR; nomes de arquivo/pasta/IDs em inglês kebab-case.
+- **Diretórios e nomes de arquivo em inglês (kebab-case); conteúdo em PT-BR.**
 - Views e relatórios: concisos, escaneáveis, sem emoji além dos marcadores
   estabelecidos (☀ ⛏ ✓ ⚠).
 
@@ -149,13 +150,13 @@ Nestes casos: pare, explique o dilema ao dono em ≤5 linhas, proponha 2 caminho
 
 ## Comandos (mapa: o que o dono digita → skill a carregar)
 
-`/init` → `comandos/init/SKILL.md` · `/dump` → `comandos/dump/SKILL.md` ·
-`/brief` → `comandos/brief/SKILL.md` · `/week` → `comandos/week/SKILL.md` ·
-`/ask` → `comandos/ask/SKILL.md` · `/person` → `comandos/person/SKILL.md` ·
-`/project` → `comandos/project/SKILL.md` · `/update` → `comandos/update/SKILL.md` ·
-`/connect` → `comandos/connect/SKILL.md` · `/slack` → `comandos/slack/SKILL.md` ·
-`/gmail` → `comandos/gmail/SKILL.md` · `/drive` → `comandos/drive/SKILL.md` ·
-`/goal` → `comandos/goal/SKILL.md`
+`/init` → `commands/init/SKILL.md` · `/dump` → `commands/dump/SKILL.md` ·
+`/brief` → `commands/brief/SKILL.md` · `/week` → `commands/week/SKILL.md` ·
+`/ask` → `commands/ask/SKILL.md` · `/person` → `commands/person/SKILL.md` ·
+`/project` → `commands/project/SKILL.md` · `/update` → `commands/update/SKILL.md` ·
+`/connect` → `commands/connect/SKILL.md` · `/slack` → `commands/slack/SKILL.md` ·
+`/gmail` → `commands/gmail/SKILL.md` · `/drive` → `commands/drive/SKILL.md` ·
+`/goal` → `commands/goal/SKILL.md`
 
 Ao receber um comando, leia a skill correspondente ANTES de agir. Variantes
 naturais ("meu dia", "atualiza tudo") mapeiam para a skill óbvia.
@@ -163,5 +164,5 @@ naturais ("meu dia", "atualiza tudo") mapeiam para a skill óbvia.
 ## Primeira sessão em uma instância
 
 Se `vault/PROFILE` vazio e `vault/PLANNING` vazio → cérebro novo: conduza
-`/init` (`comandos/init/SKILL.md`). Se `guides/dia-a-dia.md` existir e você
+`/init` (`commands/init/SKILL.md`). Se `guides/user-guide.md` existir e você
 nunca o leu nesta instância, leia antes de operar.
