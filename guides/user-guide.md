@@ -489,9 +489,9 @@ O desenho separa **framework** (o produto, clonável, sem nada seu dentro) de
 git clone <repo-do-framework> ~/brain
 cd ~/brain
 
-# 2. COPIAR o esqueleto das zonas pra raiz (cp, não mv — vault-template/ fica no
+# 2. COPIAR o esqueleto das zonas pra raiz (cp, não mv — template/ fica no
 #    repo intacta; suas cópias na raiz são invisíveis pro git)
-cp -r vault-template vault
+cp -r template vault
 
 # 3. conectores (opcional — o cérebro funciona 100% manual sem eles)
 cp config/.env.example config/.env && chmod 600 config/.env   # SEUS tokens read-only
