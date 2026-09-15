@@ -6,7 +6,7 @@ Cada conector LÊ uma fonte externa e escreve um snapshot Markdown em
 no código, por design.** Tokens read-only em `config/.env` (chmod 600).
 
 > **Gmail e Drive** também são scripts (OAuth read-only via
-> `google_auth.py` — guia [`docs/google-oauth.md`](../docs/google-oauth.md);
+> `google_auth.py` — guia [`guides/google-oauth.md`](../guides/google-oauth.md);
 > skills `comandos/gmail` e `comandos/drive`). Mesma disciplina: leitura →
 > snapshot → /dump.
 

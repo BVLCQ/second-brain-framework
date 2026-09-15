@@ -13,7 +13,7 @@ O que faz:
 Você então cola no config/.env:
   GOOGLE_REFRESH_TOKEN=<valor impresso>
 
-Guia completo (criar o OAuth client, publicar em produção): docs/google-oauth.md
+Guia completo (criar o OAuth client, publicar em produção): guides/google-oauth.md
 NUNCA commite o .env. O refresh token é de longo prazo se o app estiver
 publicado ("In production") — em "Testing" expira em 7 dias.
 """

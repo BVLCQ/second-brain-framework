@@ -7,7 +7,7 @@
 >
 > **Ele observa e organiza. Nunca trabalha por você.**
 
-**Leituras rápidas:** [manual completo (`docs/dia-a-dia.md`)](docs/dia-a-dia.md) —
+**Leituras rápidas:** [manual completo (`guides/dia-a-dia.md`)](guides/dia-a-dia.md) —
 tudo explicado como numa apresentação a um colega · [constituição do agente
 (`AGENTS.md`)](AGENTS.md) · [conectores (`scripts/connectors/README.md`)](scripts/connectors/README.md)
 
@@ -74,7 +74,7 @@ git clone <url-deste-repo> ~/brain && cd ~/brain
 
 # 2. Copiar o esqueleto das zonas para a raiz (cp, NÃO mv: estrutura/ fica
 #    intacta no repo — suas cópias na raiz são ignoradas pelo .gitignore)
-cp -r estrutura/* .
+cp -r estrutura vault
 
 # 3. Conectores (OPCIONAL — o cérebro funciona 100% manual sem eles)
 cp config/.env.example config/.env && chmod 600 config/.env   # SEUS tokens read-only
@@ -124,7 +124,7 @@ repos, boards (seus cards + os que você segue + boards do time), canais e
 pessoas do Slack. Tokens **read-only** em `config/.env`. O passo-a-passo de
 cada token (Jira, GitHub, Slack) está em
 [`scripts/connectors/README.md`](scripts/connectors/README.md); Gmail e Drive
-usam OAuth read-only ([`docs/google-oauth.md`](docs/google-oauth.md)).
+usam OAuth read-only ([`guides/google-oauth.md`](guides/google-oauth.md)).
 
 ### Atualizando o framework
 
@@ -138,9 +138,9 @@ Só isso — skills, conectores, docs e `AGENTS.md` atualizam no lugar. Suas zon
 não existem pro git, então nenhum conflito é possível. Se você editou arquivos
 do framework localmente e o pull reclamar, `git stash` → pull → `git stash pop`.
 
-**Templates de zona** (novos índices, mudanças de template em `estrutura/vault/`):
+**Templates de zona** (novos índices, mudanças de template em `estrutura/`):
 não precisa fazer nada — na próxima sessão, se um arquivo que uma skill
-referencia faltar no seu vault, o agente semeia a partir de `estrutura/vault/`;
+referencia faltar no seu vault, o agente semeia a partir de `estrutura/`;
 se um template seu mudou upstream, o agente propõe o diff (você decide).
 
 ---
@@ -165,7 +165,7 @@ se um template seu mudou upstream, o agente propõe o diff (você decide).
 5. **Você NUNCA escreve em ferramentas externas.** Conectores são pull-only e
    todo token é read-only — por constituição, sem exceção. Se o dono pedir
    ("responde esse email"), o correto é lembrá-lo da constituição.
-6. O design completo e o porquê de cada regra: `docs/dia-a-dia.md` — leia na
+6. O design completo e o porquê de cada regra: `guides/dia-a-dia.md` — leia na
    primeira sessão numa instância; consulte depois.
 
 ---
@@ -202,7 +202,7 @@ seu card é trabalho — e trabalho é só seu. Nenhum token tem escopo de escri
 | **Drive** | watchlist de docs vivos + change digests + `/drive <termo>` busca — **OAuth read-only** |
 
 Todos os conectores são **scripts pull-only** (tokens/OAuth read-only no `.env`
-— guia do Google: [`docs/google-oauth.md`](docs/google-oauth.md)). Nada roda
+— guia do Google: [`guides/google-oauth.md`](guides/google-oauth.md)). Nada roda
 embutido nas suas sessões com o agente: conectores executam só no noturno ou
 sob demanda — custo zero de contexto. E toda leitura vira snapshot em
 `vault/RAW/inbox/` antes de virar resposta; fontes vivas entram como **snapshots

@@ -6,7 +6,7 @@ description: "Docs vivos do Drive via OAuth read-only (script gdrive.py): snapsh
 # /drive — docs vivos pelo canal, nunca direto
 
 **Autenticação:** OAuth do Google via script (`google_auth.py` uma vez; refresh
-token no `.env`). Guia: `docs/google-oauth.md`. Escopo: **só `drive.readonly`**.
+token no `.env`). Guia: `guides/google-oauth.md`. Escopo: **só `drive.readonly`**.
 
 ## A regra de ouro deste comando (o canal)
 
@@ -37,4 +37,4 @@ do PROCESSED. Responder "o que diz o doc" sem snapshotar = memória perdida.
 - NUNCA criar/editar/upload — só leitura (constituição).
 - Doc fora da watchlist só entra por pedido explícito (`/drive`) — o watch.yaml
   é o universo observável do noturno.
-- `invalid_grant` → ver `docs/google-oauth.md` (app em Testing = 7 dias).
+- `invalid_grant` → ver `guides/google-oauth.md` (app em Testing = 7 dias).

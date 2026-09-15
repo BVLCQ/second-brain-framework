@@ -491,7 +491,7 @@ cd ~/brain
 
 # 2. COPIAR o esqueleto das zonas pra raiz (cp, não mv — estrutura/ fica no
 #    repo intacta; suas cópias na raiz são invisíveis pro git)
-cp -r estrutura/* .
+cp -r estrutura vault
 
 # 3. conectores (opcional — o cérebro funciona 100% manual sem eles)
 cp config/.env.example config/.env && chmod 600 config/.env   # SEUS tokens read-only

@@ -141,7 +141,7 @@ def _unquote(v: str) -> str:
 def google_access_token() -> str:
     """OAuth refresh do Google (.env: GOOGLE_CLIENT_ID/SECRET/REFRESH_TOKEN)
     → access token. Educado no erro clássico: app em 'Testing' = refresh
-    token de 7 dias (docs/google-oauth.md)."""
+    token de 7 dias (guides/google-oauth.md)."""
     data = urllib.parse.urlencode({
         "client_id": os.environ["GOOGLE_CLIENT_ID"],
         "client_secret": os.environ["GOOGLE_CLIENT_SECRET"],
@@ -156,7 +156,7 @@ def google_access_token() -> str:
         body = e.read().decode(errors="replace")[:300]
         if "invalid_grant" in body:
             die("refresh token inválido/expirado — provável app em 'Testing' no GCP (expira em "
-                "7 dias): publique em produção (docs/google-oauth.md) e rode google_auth.py de novo.")
+                "7 dias): publique em produção (guides/google-oauth.md) e rode google_auth.py de novo.")
         die(f"token Google falhou ({e.code}): {body}", code=2)
     except KeyError:
         die("resposta do Google sem access_token — cheque GOOGLE_* no config/.env", code=2)

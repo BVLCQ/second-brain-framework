@@ -6,7 +6,7 @@ description: "Puxa emails via OAuth read-only (script gmail.py — mesma famíli
 # /gmail — email pelo canal, nunca direto
 
 **Autenticação:** OAuth do Google via script (`scripts/connectors/google_auth.py`,
-uma vez; depois o refresh token trabalha no `.env`). Guia: `docs/google-oauth.md`.
+uma vez; depois o refresh token trabalha no `.env`). Guia: `guides/google-oauth.md`.
 Escopo: **só `gmail.readonly`** — o script não contém nenhuma chamada de envio.
 
 ## A regra de ouro deste comando (o canal)
@@ -38,4 +38,4 @@ demanda, passe sempre a janela explícita, default 7d.)
 - NUNCA compor/enviar email — constituição. Pedido de resposta → lembrar da constituição.
 - Nunca imprimir tokens ou conteúdo do `.env`.
 - Erro `invalid_grant` → app em "Testing" no GCP (refresh token de 7 dias):
-  publique em produção e rode `google_auth.py` de novo (`docs/google-oauth.md`).
+  publique em produção e rode `google_auth.py` de novo (`guides/google-oauth.md`).

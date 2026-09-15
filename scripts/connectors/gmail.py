@@ -6,7 +6,7 @@ Uso (/gmail):    python3 scripts/connectors/gmail.py 30d        # janela
                  python3 scripts/connectors/gmail.py from:ana   # filtro gmail
 
 Requer no config/.env: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN
-(gerados via google_auth.py — docs/google-oauth.md). Escopo: gmail.readonly.
+(gerados via google_auth.py — guides/google-oauth.md). Escopo: gmail.readonly.
 Usa apenas urllib (stdlib). NENHUMA chamada de escrita existe.
 """
 from __future__ import annotations
