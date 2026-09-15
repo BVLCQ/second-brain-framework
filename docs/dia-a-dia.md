@@ -397,6 +397,13 @@ estáticos; ele guarda uma **linha do tempo de snapshots** e processa
    mudança.
 4. Os índices costuram a linha do tempo: `/ask "o que mudou no dicionário?"`
    agrega os digests em ordem, cada um citando seu snapshot.
+5. Fontes vigiadas têm um **registro próprio** — `_indices/indice-itens-vivos.md`,
+   append-only: uma seção por item (doc, board, canal), primeira linha = estado
+   inicial, uma linha por mudança (`data · snapshot · o que mudou`). É o
+   "repositório de itens vivos": a view `FRESH/itens-vivos.md` deriva dele
+   (última mudança, idade, estabilidade de cada item). Pull sem mudança =
+   silêncio; fluxos sem identidade por item (digest diário do Gmail) ficam de
+   fora — o artefato diário já é o registro.
 
 O doc vivo continua vivo lá fora; aqui dentro, cada estado dele ficou congelado
 e citável.

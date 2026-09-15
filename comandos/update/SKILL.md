@@ -13,8 +13,12 @@ description: "O motor completo: roda os conectores (conforme config/watch.yaml),
    sem credencial: pular com 1 linha de aviso, não abortar o resto.
 2. **`/dump`** — processar toda a inbox (idempotente por construção).
 3. **Regenerar TODAS as views de FRESH**: brief-de-hoje, semana, acoes-abertas,
-   projetos, stakeholders. Cada uma com `generated-at:` + `fontes:`. Views são
-   reescritas inteiras — nada de patch incremental.
+   projetos, stakeholders, itens-vivos. Cada uma com `generated-at:` + `fontes:`.
+   Views são reescritas inteiras — nada de patch incremental.
+
+`itens-vivos.md` (deriva de `_indices/indice-itens-vivos.md`): uma linha por
+item vigiado — última mudança, idade, nº de snapshots; itens sem mudança desde
+o estado inicial aparecem como "estável".
 
 ## Reporte (≤10 linhas)
 

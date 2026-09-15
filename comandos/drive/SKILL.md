@@ -22,7 +22,8 @@ do PROCESSED. Responder "o que diz o doc" sem snapshotar = memória perdida.
 2. Hash contra o pull anterior da MESMA fonte: **idêntico → não escreve nada**;
    diferente → snapshot `gdoc-<nome>-<ts>.md`.
 3. `/dump` → artefato = **change digest** (o que mudou — seções, comentários
-   novos), citando os dois snapshots.
+   novos), citando os dois snapshots; apenda a linha do item ao
+   `_indices/indice-itens-vivos.md` (registro de itens vivos).
 
 ## Modo sob demanda
 

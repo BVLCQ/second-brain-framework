@@ -37,7 +37,7 @@ brain/
 ├── RAW/
 │   ├── inbox/   a ÚNICA porta de entrada — você e conectores só escrevem aqui
 │   └── <ano>/<mês>/  arquivo morto — o AGENTE arquiva no /dump
-├── PROCESSED/   caderno de registros (append-only) + índices por entidade
+├── PROCESSED/   caderno de registros (append-only) + índices + itens vivos
 └── FRESH/       quadro branco — 100% derivado, sempre reconstrutível
 ```
 
