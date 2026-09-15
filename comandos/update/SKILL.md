@@ -16,9 +16,13 @@ description: "O motor completo: roda os conectores (conforme config/watch.yaml),
    projetos, stakeholders, itens-vivos. Cada uma com `generated-at:` + `fontes:`.
    Views são reescritas inteiras — nada de patch incremental.
 
-`itens-vivos.md` (deriva de `_indices/indice-itens-vivos.md`): uma linha por
-item vigiado — última mudança, idade, nº de snapshots; itens sem mudança desde
-o estado inicial aparecem como "estável".
+`itens-vivos.md` (deriva de `_indices/indice-itens-vivos.md` + `config/watch.yaml`):
+uma linha por item do registro — última mudança, idade, nº de snapshots; sem
+mudança desde o estado inicial = "estável". **Vigência:** item presente na
+watch.yaml = vigiado; item do registro que NÃO está mais na watch.yaml =
+"arquivado (não vigiado)" — última linha histórica, sem idade corrente. Item
+estável há >60d ganha nota: "considerar tirar da watchlist?" (sugestão, não
+ação — a curadoria da watchlist é do dono, sem gate).
 
 ## Reporte (≤10 linhas)
 

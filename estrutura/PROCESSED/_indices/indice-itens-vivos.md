@@ -6,6 +6,10 @@
 > `data · snapshot no RAW · o que mudou (1 linha)`. Pull sem mudança = silêncio.
 > Fluxos sem identidade por item (ex.: digest diário do Gmail) NÃO entram —
 > o artefato diário já é o registro. A view `FRESH/itens-vivos.md` deriva daqui.
+>
+> **Ciclo de vida:** a VIGÊNCIA mora no `config/watch.yaml` (item removido lá
+> deixa de ser puxado — a view o marca "arquivado"); a MEMÓRIA mora aqui e
+> nunca é apagada. Seções nunca são removidas deste índice.
 
 <!-- MODELO de seção (apague este comentário ao criar a primeira real):
 
