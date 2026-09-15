@@ -7,7 +7,7 @@ description: "Panorama de uma pessoa: quem é, histórico, threads abertas, o qu
 
 ## Passo 0 — resolver identidade
 
-Pelo `indice-pessoas.md` e aliases. Duas fichas plausíveis → perguntar ao dono
+Pelo `people-index.md` e aliases. Duas fichas plausíveis → perguntar ao dono
 ("Ana Ribeiro (dados) ou Ana Souza (CS)?"), nunca chutar.
 
 ## O panorama (view em `vault/FRESH/stakeholders.md`, seção da pessoa)

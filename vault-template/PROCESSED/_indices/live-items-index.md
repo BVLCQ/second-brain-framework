@@ -5,7 +5,7 @@
 > linha é o estado inicial; cada MUDANÇA (hash diferente) apensa:
 > `data · snapshot no RAW · o que mudou (1 linha)`. Pull sem mudança = silêncio.
 > Fluxos sem identidade por item (ex.: digest diário do Gmail) NÃO entram —
-> o artefato diário já é o registro. A view `vault/FRESH/itens-vivos.md` deriva daqui.
+> o artefato diário já é o registro. A view `vault/FRESH/live-items.md` deriva daqui.
 >
 > **Ciclo de vida:** a VIGÊNCIA mora no `config/watch.yaml` (item removido lá
 > deixa de ser puxado — a view o marca "arquivado"); a MEMÓRIA mora aqui e

@@ -23,7 +23,7 @@ do PROCESSED. Responder "o que diz o doc" sem snapshotar = memória perdida.
    diferente → snapshot `gdoc-<nome>-<ts>.md`.
 3. `/dump` → artefato = **change digest** (o que mudou — seções, comentários
    novos), citando os dois snapshots; apenda a linha do item ao
-   `_indices/indice-itens-vivos.md` (registro de itens vivos).
+   `_indices/live-items-index.md` (registro de itens vivos).
 
 ## Modo sob demanda
 

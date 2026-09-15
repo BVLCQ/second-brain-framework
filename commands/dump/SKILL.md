@@ -22,7 +22,7 @@ consultar os logs antes de numerar.
 
 **Fontes vigiadas → registro de itens vivos:** todo artefato de digest de fonte
 da watchlist (gdocs, boards Jira, canais/pessoas Slack) apenda 1 linha à seção
-do item em `_indices/indice-itens-vivos.md` (`data · snapshot · o que mudou`);
+do item em `_indices/live-items-index.md` (`data · snapshot · o que mudou`);
 primeira vez cria a seção com o estado inicial. Pull sem mudança não escreve
 nada. Fluxos sem identidade por item (digest diário do Gmail) não entram — o
 artefato diário já é o registro.

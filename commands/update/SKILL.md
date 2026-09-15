@@ -12,11 +12,11 @@ description: "O motor completo: roda os conectores (conforme config/watch.yaml),
    escreve snapshots em `vault/RAW/inbox/` (prefixo da fonte). Conector ausente ou
    sem credencial: pular com 1 linha de aviso, não abortar o resto.
 2. **`/dump`** — processar toda a inbox (idempotente por construção).
-3. **Regenerar TODAS as views de FRESH**: brief-de-hoje, semana, acoes-abertas,
-   projetos, stakeholders, itens-vivos. Cada uma com `generated-at:` + `fontes:`.
+3. **Regenerar TODAS as views de FRESH**: daily-brief, week, open-actions,
+   projects, stakeholders, live-items. Cada uma com `generated-at:` + `fontes:`.
    Views são reescritas inteiras — nada de patch incremental.
 
-`itens-vivos.md` (deriva de `_indices/indice-itens-vivos.md` + `config/watch.yaml`):
+`live-items.md` (deriva de `_indices/live-items-index.md` + `config/watch.yaml`):
 uma linha por item do registro — última mudança, idade, nº de snapshots; sem
 mudança desde o estado inicial = "estável". **Vigência:** item presente na
 watch.yaml = vigiado; item do registro que NÃO está mais na watch.yaml =

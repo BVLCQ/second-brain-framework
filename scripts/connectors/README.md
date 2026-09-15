@@ -7,7 +7,7 @@ no código, por design.** Tokens read-only em `config/.env` (chmod 600).
 
 > **Gmail e Drive** também são scripts (OAuth read-only via
 > `google_auth.py` — guia [`guides/google-oauth.md`](../guides/google-oauth.md);
-> skills `comandos/gmail` e `comandos/drive`). Mesma disciplina: leitura →
+> skills `commands/gmail` e `commands/drive`). Mesma disciplina: leitura →
 > snapshot → /dump.
 
 ## Uso

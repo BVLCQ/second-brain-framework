@@ -105,8 +105,8 @@ O que o agente extrai de cada item do RAW, espelhando a partição
 
 - **Artefatos** — um por item processado: o resumo profundo, estruturado por
   tipo de documento (seção 6).
-- **Índices** — o atalho por entidade: `indice-pessoas.md`, `indice-projetos.md`,
-  `indice-assuntos.md`. Cada linha aponta para os artefatos onde a entidade
+- **Índices** — o atalho por entidade: `people-index.md`, `projects-index.md`,
+  `subjects-index.md`. Cada linha aponta para os artefatos onde a entidade
   aparece. *Escreve-se por mês, lê-se por entidade*: você nunca pergunta "o que
   aconteceu em março" — pergunta "o que sei sobre a Ana?", e o índice entrega.
 
@@ -116,8 +116,8 @@ Histórico é o produto.
 
 ### 3.5 `vault/FRESH/` — o quadro branco
 
-As visões que você consome: `brief-de-hoje.md`, `semana.md`, `projetos.md`,
-`stakeholders.md`, `acoes-abertas.md`. **Regra: 100% derivado e descartável** —
+As visões que você consome: `daily-brief.md`, `week.md`, `projects.md`,
+`stakeholders.md`, `open-actions.md`. **Regra: 100% derivado e descartável** —
 nada aqui é informação única; tudo se reconstrói de PROFILE + PLANNING +
 PROCESSED. Se amanhã uma view melhor aparecer, apaga-se e gera outra, sem perda.
 O invariante que guarda a zona: *se não é derivável, está na pasta errada.*
@@ -397,10 +397,10 @@ estáticos; ele guarda uma **linha do tempo de snapshots** e processa
    mudança.
 4. Os índices costuram a linha do tempo: `/ask "o que mudou no dicionário?"`
    agrega os digests em ordem, cada um citando seu snapshot.
-5. Fontes vigiadas têm um **registro próprio** — `_indices/indice-itens-vivos.md`,
+5. Fontes vigiadas têm um **registro próprio** — `_indices/live-items-index.md`,
    append-only: uma seção por item (doc, board, canal), primeira linha = estado
    inicial, uma linha por mudança (`data · snapshot · o que mudou`). É o
-   "repositório de itens vivos": a view `vault/FRESH/itens-vivos.md` deriva dele
+   "repositório de itens vivos": a view `vault/FRESH/live-items.md` deriva dele
    (última mudança, idade, estabilidade de cada item). Pull sem mudança =
    silêncio; fluxos sem identidade por item (digest diário do Gmail) ficam de
    fora — o artefato diário já é o registro.
@@ -489,9 +489,9 @@ O desenho separa **framework** (o produto, clonável, sem nada seu dentro) de
 git clone <repo-do-framework> ~/brain
 cd ~/brain
 
-# 2. COPIAR o esqueleto das zonas pra raiz (cp, não mv — estrutura/ fica no
+# 2. COPIAR o esqueleto das zonas pra raiz (cp, não mv — vault-template/ fica no
 #    repo intacta; suas cópias na raiz são invisíveis pro git)
-cp -r estrutura vault
+cp -r vault-template vault
 
 # 3. conectores (opcional — o cérebro funciona 100% manual sem eles)
 cp config/.env.example config/.env && chmod 600 config/.env   # SEUS tokens read-only

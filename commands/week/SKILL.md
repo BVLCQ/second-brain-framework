@@ -5,7 +5,7 @@ description: "Cockpit semanal: lookahead de 14 dias, radar de goals por frente, 
 
 # /week — o cockpit
 
-## Estrutura da view `semana.md`
+## Estrutura da view `week.md`
 
 ```
 ⛏ SEMANA <nº> · lookahead 14 dias

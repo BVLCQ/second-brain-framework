@@ -44,12 +44,12 @@ seu goal principal?").
 
 1. Escrever `vault/PROFILE/profile.md` preenchido (proposta).
 2. Escrever `vault/PLANNING/goals.md` com a árvore G#/P# (proposta).
-3. Se houver pessoas: fichas no `indice-pessoas.md` com aliases coletados
+3. Se houver pessoas: fichas no `people-index.md` com aliases coletados
    (append-only — já é escrita normal, sem gate).
 4. Mostrar o resumo das duas propostas e pedir aprovação explícita.
 5. Aprovação → registrar em `vault/PLANNING/log.md` (entrada de nascimento) ·
    processar qualquer restante da inbox · gerar o primeiro
-   `vault/FRESH/brief-de-hoje.md`.
+   `vault/FRESH/daily-brief.md`.
 6. Encerrar com o caminho do dia a dia: "jogue coisas em vault/RAW/inbox/ e rode
    /dump; amanhã, /brief".
 
