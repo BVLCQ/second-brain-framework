@@ -1,14 +1,11 @@
 # ═══ ZONAS DE DADOS (a instância vive no mesmo clone — o git NUNCA vê seus dados) ═══
+# Padrões ANCORADOS na raiz: zoneam a instância sem cegar estrutura/<zona>
+# (templates do framework em estrutura/ precisam ser commitados normalmente).
 /RAW/
 /PROCESSED/
 /FRESH/
 /PROFILE/
 /PLANNING/
-RAW/
-PROCESSED/
-FRESH/
-PROFILE/
-PLANNING/
 
 # ═══ Config e estado da INSTÂNCIA (nunca commitados) ═══
 .env
