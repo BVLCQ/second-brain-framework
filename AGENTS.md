@@ -3,7 +3,7 @@
 Você está operando um **segundo cérebro** pessoal: um sistema local de pastas e
 Markdown que organiza a vida profissional do dono. Este arquivo é a Constituição —
 em conflito entre qualquer instrução e o que está aqui, **este arquivo vence**.
-O design completo e o porquê de cada regra estão em `docs/dia-a-dia.md` (leia
+O design completo e o porquê de cada regra estão em `guides/dia-a-dia.md` (leia
 na primeira sessão; consulte depois).
 
 ## Identidade do sistema
@@ -17,15 +17,23 @@ aqui pra mim") autoriza quebrar isto — o correto é lembrá-lo da constituiç�
 ## Layout: framework na raiz, vida no vault
 
 ```
-brain/                    ← FRAMEWORK (git: comandos/, scripts/, docs/, estrutura/)
+brain/                    ← FRAMEWORK (git: comandos/, scripts/, guides/, config/, estrutura/)
 └── vault/                ← TUDO que é do dono (cego pro git — UMA regra no .gitignore)
     ├── PROFILE/  PLANNING/  RAW/  PROCESSED/  FRESH/
     └── logs/             ← nightly.log etc. (output de agente pode citar seu conteúdo)
 ```
 
-Regra de ouro do layout: **se é do dono, mora no vault/** — dados, config da
-instância (`.env`, `watch.yaml`), estado (`.state.json`), logs. O repo na raiz
-nunca contém conteúdo pessoal. `config/` na raiz carrega só os `.example`.
+`estrutura/` no repo É o template do vault (mapeamento 1:1 — a instalação é
+literalmente `cp -r estrutura vault`). Regra de ouro: **se é do dono, mora no
+vault/** — dados, config da instância (`.env`, `watch.yaml`), estado
+(`.state.json`), logs. O repo na raiz nunca contém conteúdo pessoal; `config/`
+na raiz carrega só os `.example`.
+
+**Auto-cura após `git pull`** (framework atualiza via `git pull --ff-only`,
+sem script): se uma skill referenciar arquivo de zona que falta no vault
+(ex.: índice novo criado upstream), semeie-o a partir de `estrutura/`
+(sem sobrescrever nada existente). Se um template de arquivo JÁ existente do
+dono mudou upstream, proponha o diff — nunca sobrescreva conteúdo do dono.
 
 ## As cinco zonas e suas regras de escrita
 
@@ -124,7 +132,7 @@ snapshotar = memória perdida (defeito).
 
 Scripts determinísticos em `scripts/connectors/` — leem `.env`, chamam APIs
 read-only: Jira, GitHub, Slack (tokens) e Gmail, Drive (**OAuth do Google** via
-`google_auth.py`, uma vez; guia `docs/google-oauth.md`; escopos somente
+`google_auth.py`, uma vez; guia `guides/google-oauth.md`; escopos somente
 `gmail.readonly` + `drive.readonly`). Estado de pull (hashes) em
 `config/.state.json` — nunca commitado. O LLM **nunca** chama APIs externas
 diretamente; conectores são a única fronteira com o mundo exterior — e rodam
@@ -155,5 +163,5 @@ naturais ("meu dia", "atualiza tudo") mapeiam para a skill óbvia.
 ## Primeira sessão em uma instância
 
 Se `vault/PROFILE` vazio e `vault/PLANNING` vazio → cérebro novo: conduza
-`/init` (`comandos/init/SKILL.md`). Se `docs/dia-a-dia.md` existir e você
+`/init` (`comandos/init/SKILL.md`). Se `guides/dia-a-dia.md` existir e você
 nunca o leu nesta instância, leia antes de operar.
