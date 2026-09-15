@@ -52,18 +52,18 @@ regra, não a pasta, que protege os dados.
 
 ```
 brain/
-├── PROFILE/     quem eu sou (curado, muda raramente)
-├── PLANNING/    goals → projetos → entregáveis (curado, com trava)
-├── RAW/
+├── vault/PROFILE/     quem eu sou (curado, muda raramente)
+├── vault/PLANNING/    goals → projetos → entregáveis (curado, com trava)
+├── vault/RAW/
 │   ├── inbox/   a ÚNICA porta de entrada — você e conectores só escrevem aqui
 │   └── 2026/
 │       ├── 09/  arquivo morto — o AGENTE arquiva aqui no /dump
 │       └── 10/
-├── PROCESSED/   caderno de registros — espelha os meses, só se adiciona
-└── FRESH/       quadro branco — sempre reescrito, sempre reconstruível
+├── vault/PROCESSED/   caderno de registros — espelha os meses, só se adiciona
+└── vault/FRESH/       quadro branco — sempre reescrito, sempre reconstruível
 ```
 
-### 3.1 `PROFILE/` — quem eu sou
+### 3.1 `vault/PROFILE/` — quem eu sou
 
 Você em texto: papel atual, frentes de trabalho, como gosta de operar, o que
 importa. O agente usa como contexto para *tudo* (um resumo de reunião para um
@@ -71,7 +71,7 @@ analista júnior é diferente do que para você). **Quem escreve:** você, ou o
 agente mediante proposta que você aprova. Muda raramente — é identidade, não
 diário.
 
-### 3.2 `PLANNING/` — onde eu quero chegar
+### 3.2 `vault/PLANNING/` — onde eu quero chegar
 
 A hierarquia: **goal → projeto → entregável → ação**. Exemplo: goal "destravar
 a frente de dados" → projeto "Padronização de métricas" → entregável "dicionário
@@ -80,14 +80,14 @@ pode *propor* criar, fechar ou mudar goal/projeto, mas a mudança só entra com
 sua aprovação explícita ("ok", "1a"). Estado factual (progresso, links, datas
 observadas) o agente atualiza sozinho — com log.
 
-### 3.3 `RAW/` — o arquivo morto (inbox única, partição por ano/mês)
+### 3.3 `vault/RAW/` — o arquivo morto (inbox única, partição por ano/mês)
 
-A porta de entrada é **UMA**: `RAW/inbox/`. Transcrições, PDFs, decks, notas,
+A porta de entrada é **UMA**: `vault/RAW/inbox/`. Transcrições, PDFs, decks, notas,
 dumps de conectores — tudo cai aí, como veio, sem renomear, sem escolher pasta,
 sem navegar ano/mês. **Você nunca organiza nada.**
 
 **Quem arquiva é o agente, no `/dump`:** cada item da inbox é movido para
-`RAW/<ano>/<mês>/` pela data de captura — mover, nunca editar (colisão de nome
+`vault/RAW/<ano>/<mês>/` pela data de captura — mover, nunca editar (colisão de nome
 ganha sufixo `-2`). Dentro do mês, tudo plano, sem subpastas por tipo: o tipo é
 detectado no processamento, e os conectores prefixam a fonte no nome do arquivo
 (`slack-…`, `gmail-…`, `gdoc-…`, `jira-…`).
@@ -98,10 +98,10 @@ move da inbox pro mês. A data de captura define a partição; a data do *evento
 seu processo seletivo inconsciente preservado: se o agente pudesse "limpar" o
 bruto, ele decidiria o que você esquece.
 
-### 3.4 `PROCESSED/` — o caderno de registros (por mês)
+### 3.4 `vault/PROCESSED/` — o caderno de registros (por mês)
 
 O que o agente extrai de cada item do RAW, espelhando a partição
-(`PROCESSED/2026/09/`...). Dois moradores:
+(`vault/PROCESSED/2026/09/`...). Dois moradores:
 
 - **Artefatos** — um por item processado: o resumo profundo, estruturado por
   tipo de documento (seção 6).
@@ -114,7 +114,7 @@ O que o agente extrai de cada item do RAW, espelhando a partição
 errado se corrige com um registro novo que aponta o erro — como um livro-caixa.
 Histórico é o produto.
 
-### 3.5 `FRESH/` — o quadro branco
+### 3.5 `vault/FRESH/` — o quadro branco
 
 As visões que você consome: `brief-de-hoje.md`, `semana.md`, `projetos.md`,
 `stakeholders.md`, `acoes-abertas.md`. **Regra: 100% derivado e descartável** —
@@ -132,7 +132,7 @@ O invariante que guarda a zona: *se não é derivável, está na pasta errada.*
 ☀ BRIEF — segunda, 14/09 · gerado 08:52 (nightly de ontem + 0 mudanças)
 
 HOJE
-  10:00  1:1 com Ana (gestora)     → card de prep pronto em FRESH/stakeholders.md
+  10:00  1:1 com Ana (gestora)     → card de prep pronto em vault/FRESH/stakeholders.md
   15:00  Cerimônia do time Migração
 
 ATRASADAS (2)
@@ -161,8 +161,8 @@ a Ana. Só sabe.
 ### 10h00 → 11h00 — reunião, transcrição, `/dump`
 
 No 1:1 com a Ana, você gravou (ou anotou). Ao terminar, salva o arquivo em
-`RAW/inbox/` — sem renomear, sem escolher pasta — e roda `/dump`. O agente
-arquiva em `RAW/2026/09/` e responde no chat — **o relatório curto, para você**:
+`vault/RAW/inbox/` — sem renomear, sem escolher pasta — e roda `/dump`. O agente
+arquiva em `vault/RAW/2026/09/` e responde no chat — **o relatório curto, para você**:
 
 ```
 ✓ 1 item processado (0 duplicado):
@@ -170,11 +170,11 @@ arquiva em `RAW/2026/09/` e responde no chat — **o relatório curto, para voc�
     (A-0146), 1 thread aberta (orçamento Q4), menções: Ana, Bruno, G2
 ```
 
-Mas o que fica guardado em `PROCESSED/2026/09/` é o **artefato completo**:
+Mas o que fica guardado em `vault/PROCESSED/2026/09/` é o **artefato completo**:
 
 ```markdown
 # REUNIÃO · 1:1 Ana · 2026-09-14
-fonte: RAW/2026/09/raw-2026-09-14-1a1-ana.md · processado: 2026-09-14
+fonte: vault/RAW/2026/09/raw-2026-09-14-1a1-ana.md · processado: 2026-09-14
 
 ## Contexto
 1:1 quinzenal com Ana (gestora, frente de dados). Tom: alinhamento de Q4.
@@ -205,7 +205,7 @@ transcrição bruta no RAW. Fidelidade total, sempre.
 
 ### 14h00 — chega um monstro: PDF de política, 40 páginas
 
-Alguém te mandou a política nova de dados. Você salva o PDF em `RAW/inbox/`
+Alguém te mandou a política nova de dados. Você salva o PDF em `vault/RAW/inbox/`
 e roda `/dump` de novo.
 
 Aqui entra o desenho por **tipo de documento** — um PDF de política não é uma
@@ -214,7 +214,7 @@ reunião, e extrair "ações e decisões" dele seria inútil. O artefato de
 
 ```markdown
 # DOCUMENTO · Política de Tratamento de Dados v3 · 40 págs
-fonte: RAW/2026/09/politica-dados-v3.pdf · processado: 2026-09-14
+fonte: vault/RAW/2026/09/politica-dados-v3.pdf · processado: 2026-09-14
 
 ## Do que trata
 Política corporativa de coleta/retenção/exclusão de dados de clientes.
@@ -269,7 +269,7 @@ resposta válida e frequente — um cérebro que inventa memória é pior que ne
 À noite (cron às ~05h, ou quando o `/brief` da manhã detectar que não rodou),
 o cérebro roda `/update` sozinho. Os conectores puxam **todas as fontes** —
 Jira, GitHub, Gmail (digest do dia), Slack (canais fixos), Drive (watchlist) —
-e despejam snapshots em `RAW/inbox/`. O `/dump` arquiva e processa: fonte que
+e despejam snapshots em `vault/RAW/inbox/`. O `/dump` arquiva e processa: fonte que
 mudou vira **change digest**; fonte idêntica é arquivada em silêncio. As views
 de FRESH são regeradas — e amanhã 08h50 o `/brief` já nasce atualizado. Se seu
 notebook estava desligado às 5h, o `/brief` detecta o atraso e se atualiza
@@ -293,7 +293,7 @@ andou. Roda `/connect`:
   gmail               → 23 emails ontem (digest completo) · 2 de stakeholders
   slack/#retention    → 1 thread nova: plano de retenção Q4 (14 msgs)
   gdocs/dicionário    → §3 "Campos" reescrito pelo Bruno + 2 comentários novos
-→ snapshots em RAW/inbox/ (prefixo da fonte no nome) · rode /dump p/ processar
+→ snapshots em vault/RAW/inbox/ (prefixo da fonte no nome) · rode /dump p/ processar
 ```
 
 Duas semanas depois, quando você perguntar "quando o MIG-118 apareceu na minha
@@ -332,7 +332,7 @@ livremente *na zona dele*.
 
 ### O mês vira
 
-Outubro nasce: `RAW/2026/10/` e `PROCESSED/2026/10/` se criam sozinhos no
+Outubro nasce: `vault/RAW/2026/10/` e `vault/PROCESSED/2026/10/` se criam sozinhos no
 primeiro `/dump` de outubro. Setembro fica como está — arquivo morto e caderno
 fechados, sempre consultáveis pelos índices, que seguem crescendo (os índices
 são globais; a partição por mês é só o endereço).
@@ -343,17 +343,17 @@ são globais; a partição por mês é só o endereço).
 
 É o comando central. Passo a passo do que ele faz:
 
-1. **Varre** `RAW/inbox/` procurando itens ainda não processados (cada artefato
+1. **Varre** `vault/RAW/inbox/` procurando itens ainda não processados (cada artefato
    carrega a fonte; fonte que já tem artefato é pulada — é isso que o torna
    **idempotente**: rodar duas vezes não duplica nada).
-2. **Arquiva** cada item novo em `RAW/<ano>/<mês>/` pela data de captura —
+2. **Arquiva** cada item novo em `vault/RAW/<ano>/<mês>/` pela data de captura —
    mover sem editar; colisão de nome ganha sufixo `-2`.
 3. **Classifica o tipo**: reunião, documento longo, nota solta, dump de conector.
 4. **Extrai pelo template do tipo** (tabela abaixo).
 5. **Resolve identidades**: "Bia", "Beatriz C.", "beatriz.costa@…" são a mesma
    pessoa — cada pessoa tem aliases; o agente nunca cria segunda ficha de quem
    já tem ficha.
-6. **Escreve o artefato** em `PROCESSED/<ano>/<mês>/` e **apensa aos índices**.
+6. **Escreve o artefato** em `vault/PROCESSED/<ano>/<mês>/` e **apensa aos índices**.
 7. **Relata** no chat — as tais ~5 linhas por item, para você auditar se valeu
    a pena. O relatório é o recibo; o artefato é o produto.
 
@@ -388,7 +388,7 @@ estáticos; ele guarda uma **linha do tempo de snapshots** e processa
 **diferenças**:
 
 1. Cada pull **exporta** a fonte (doc, canal, caixa de entrada, board) → um
-   snapshot em Markdown cai em `RAW/inbox/`, prefixado pela fonte
+   snapshot em Markdown cai em `vault/RAW/inbox/`, prefixado pela fonte
    (`gdoc-…`, `slack-…`, `gmail-…`).
 2. O **hash** do snapshot é comparado ao anterior da mesma fonte: idêntico →
    arquiva e segue (zero ruído, zero custo de IA); diferente → o artefato é um
@@ -400,7 +400,7 @@ estáticos; ele guarda uma **linha do tempo de snapshots** e processa
 5. Fontes vigiadas têm um **registro próprio** — `_indices/indice-itens-vivos.md`,
    append-only: uma seção por item (doc, board, canal), primeira linha = estado
    inicial, uma linha por mudança (`data · snapshot · o que mudou`). É o
-   "repositório de itens vivos": a view `FRESH/itens-vivos.md` deriva dele
+   "repositório de itens vivos": a view `vault/FRESH/itens-vivos.md` deriva dele
    (última mudança, idade, estabilidade de cada item). Pull sem mudança =
    silêncio; fluxos sem identidade por item (digest diário do Gmail) ficam de
    fora — o artefato diário já é o registro.
@@ -460,11 +460,11 @@ trata o snapshot como trata qualquer arquivo que você jogou lá.
 
 | Zona | Regra | Agente pode | Agente NÃO pode |
 |---|---|---|---|
-| `RAW/` | conteúdo imutável | ler (e reler, sempre) · mover da inbox pro mês | editar, apagar, "organizar" conteúdo |
-| `PROCESSED/` | append-only | acrescentar artefatos e linhas de índice | reescrever ou apagar o que escreveu |
-| `FRESH/` | descartável | regenerar views inteiras | guardar informação única (não-derivável) |
-| `PROFILE/` | curado | propor edições | aplicar sem aprovação |
-| `PLANNING/` | curado + gate | atualizar estado factual com log | **criar/mudar/fechar goal ou projeto sem sua aprovação** |
+| `vault/RAW/` | conteúdo imutável | ler (e reler, sempre) · mover da inbox pro mês | editar, apagar, "organizar" conteúdo |
+| `vault/PROCESSED/` | append-only | acrescentar artefatos e linhas de índice | reescrever ou apagar o que escreveu |
+| `vault/FRESH/` | descartável | regenerar views inteiras | guardar informação única (não-derivável) |
+| `vault/PROFILE/` | curado | propor edições | aplicar sem aprovação |
+| `vault/PLANNING/` | curado + gate | atualizar estado factual com log | **criar/mudar/fechar goal ou projeto sem sua aprovação** |
 | Ferramentas | read-only | puxar via conectores | criar, mover, comentar, responder — nunca |
 
 Três travas transversais:
@@ -498,10 +498,10 @@ cp config/.env.example config/.env && chmod 600 config/.env   # SEUS tokens read
 cp config/watch.yaml.example config/watch.yaml                # liste o que observar
 
 # 4. abrir a pasta no seu agente (Cursor, Codex, Claude Code) e rodar:
-#    /init → entrevista + PROFILE/PLANNING propostos; arquivos soltos
+#    /init → entrevista + vault/PROFILE/PLANNING propostos; arquivos soltos
 #    durante a entrevista viram o primeiro dump
 
-# 5. viver: jogar coisas em RAW/inbox/ → /dump → /brief no dia seguinte
+# 5. viver: jogar coisas em vault/RAW/inbox/ → /dump → /brief no dia seguinte
 #    (atualizar o framework, quando quiser: bash scripts/update-framework.sh)
 ```
 

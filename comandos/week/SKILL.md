@@ -38,7 +38,7 @@ aprovar? (ok / editar / descartar)
 
 Regras: uma proposta por vez, no máximo 2 por /week (cerimônia mata o hábito) ·
 descartada não volta sem evidência NOVA · aprovada → aplicar + registrar em
-`PLANNING/log.md` com a assinatura do dono.
+`vault/PLANNING/log.md` com a assinatura do dono.
 
 ## Progresso declarado
 

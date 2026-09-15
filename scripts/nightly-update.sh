@@ -2,8 +2,16 @@
 # Second Brain — nightly: conectores + /update via agente headless.
 # Agende (instância): launchd ou cron às ~05:00. O /brief da manhã detecta
 # se não rodou e faz catch-up — nada apodrece em silêncio.
+#
+# O log desta execução mora em vault/logs/nightly.log — DENTRO da zona cega
+# do git — porque o output do agente pode citar assunto de email, nomes de
+# cards etc. (o vault é do dono; o repo nunca vê).
 set -uo pipefail
 cd "$(dirname "$0")/.."
+
+mkdir -p vault/logs
+exec >> vault/logs/nightly.log 2>&1
+echo "──── nightly $(date '+%Y-%m-%d %H:%M') ────"
 
 # 1. Conectores (pull-only) — cada um é isolado: erro não derruba os demais
 for c in jira github slack gmail gdrive; do

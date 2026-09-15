@@ -5,7 +5,7 @@ description: "Primeira entrevista do cérebro: descobre quem é o dono, seus goa
 
 # /init — o nascimento do cérebro
 
-**Gatilho:** PROFILE/profile.md e PLANNING/goals.md sem conteúdo real (só template).
+**Gatilho:** vault/PROFILE/profile.md e vault/PLANNING/goals.md sem conteúdo real (só template).
 
 ## Princípios da entrevista
 
@@ -13,7 +13,7 @@ description: "Primeira entrevista do cérebro: descobre quem é o dono, seus goa
    respondíveis numa mensagem só. Entrevista de formulário um-a-um é abandonada.
 2. **Arquivos valem mais que respostas** — a qualquer momento o dono pode
    soltar arquivos (CV, doc de onboarding, apresentação, export, notas).
-   Ao detectar arquivos novos em `RAW/inbox/`: processe-os JÁ pelo pipeline do
+   Ao detectar arquivos novos em `vault/RAW/inbox/`: processe-os JÁ pelo pipeline do
    `/dump` (eles alimentam as próximas perguntas: "vi no seu CV que…"),
    e continue a entrevista de onde parou.
 3. **Proposta, nunca imposição** — PROFILE e PLANNING são escritos como
@@ -42,15 +42,15 @@ seu goal principal?").
 
 ## Entrega final
 
-1. Escrever `PROFILE/profile.md` preenchido (proposta).
-2. Escrever `PLANNING/goals.md` com a árvore G#/P# (proposta).
+1. Escrever `vault/PROFILE/profile.md` preenchido (proposta).
+2. Escrever `vault/PLANNING/goals.md` com a árvore G#/P# (proposta).
 3. Se houver pessoas: fichas no `indice-pessoas.md` com aliases coletados
    (append-only — já é escrita normal, sem gate).
 4. Mostrar o resumo das duas propostas e pedir aprovação explícita.
-5. Aprovação → registrar em `PLANNING/log.md` (entrada de nascimento) ·
+5. Aprovação → registrar em `vault/PLANNING/log.md` (entrada de nascimento) ·
    processar qualquer restante da inbox · gerar o primeiro
-   `FRESH/brief-de-hoje.md`.
-6. Encerrar com o caminho do dia a dia: "jogue coisas em RAW/inbox/ e rode
+   `vault/FRESH/brief-de-hoje.md`.
+6. Encerrar com o caminho do dia a dia: "jogue coisas em vault/RAW/inbox/ e rode
    /dump; amanhã, /brief".
 
 ## Pitfalls

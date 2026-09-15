@@ -2,7 +2,7 @@
 """Second Brain — utilidades comuns dos conectores (pull-only, read-only).
 
 Regras da constituição que este arquivo encarna:
-- Conectores LEM fontes externas e ESCREVEM snapshots Markdown em RAW/inbox/.
+- Conectores LEM fontes externas e ESCREVEM snapshots Markdown em vault/RAW/inbox/.
 - Estado (hashes) em config/.state.json — nunca commitado.
 - Nenhuma chamada de escrita existe aqui, por design.
 """
@@ -23,7 +23,7 @@ from typing import NoReturn
 # Paths — instância é o cwd do script: scripts/connectors/../../
 CONNECTORS_DIR = Path(__file__).resolve().parent
 INSTANCE_ROOT = CONNECTORS_DIR.parent.parent
-INBOX = INSTANCE_ROOT / "RAW" / "inbox"
+INBOX = INSTANCE_ROOT / "vault" / "RAW" / "inbox"
 CONFIG_DIR = INSTANCE_ROOT / "config"
 STATE_FILE = CONFIG_DIR / ".state.json"
 
@@ -179,7 +179,7 @@ def changed_since_last(key: str, text: str, state: dict) -> tuple[bool, str]:
 
 
 def write_snapshot(prefix: str, name: str, text: str) -> Path:
-    """Escreve snapshot em RAW/inbox/ com prefixo da fonte. Retorna o path."""
+    """Escreve snapshot em vault/RAW/inbox/ com prefixo da fonte. Retorna o path."""
     INBOX.mkdir(parents=True, exist_ok=True)
     safe = re.sub(r"[^a-zA-Z0-9_.-]+", "-", name).strip("-").lower() or "item"
     path = INBOX / f"{prefix}-{safe}-{ts()}.md"

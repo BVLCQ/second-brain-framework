@@ -1,18 +1,12 @@
-# ═══ ZONAS DE DADOS (a instância vive no mesmo clone — o git NUNCA vê seus dados) ═══
-# Padrões ANCORADOS na raiz: zoneam a instância sem cegar estrutura/<zona>
-# (templates do framework em estrutura/ precisam ser commitados normalmente).
-/RAW/
-/PROCESSED/
-/FRESH/
-/PROFILE/
-/PLANNING/
+# ═══ VAULT — TUDO que é seu mora aqui (dados, config, estado, logs) ═══
+# Uma única linha blinda o cérebro inteiro; framework na raiz segue commitável.
+/vault/
 
-# ═══ Config e estado da INSTÂNCIA (nunca commitados) ═══
+# Config e estado da INSTÂNCIA (nunca commitados)
 .env
 config/.env
 config/watch.yaml
 config/.state.json
-config/nightly.log
 
 # Sistema
 .DS_Store

@@ -1,7 +1,7 @@
 # Conectores — pull-only, read-only
 
 Cada conector LÊ uma fonte externa e escreve um snapshot Markdown em
-`RAW/inbox/` (prefixo da fonte no nome). O processamento (`/dump`) faz o resto.
+`vault/RAW/inbox/` (prefixo da fonte no nome). O processamento (`/dump`) faz o resto.
 **Nenhum conector escreve em ferramenta externa — não existe chamada de escrita
 no código, por design.** Tokens read-only em `config/.env` (chmod 600).
 

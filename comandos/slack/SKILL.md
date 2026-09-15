@@ -13,7 +13,7 @@ Período ausente = janela padrão do `watch.yaml` (default 7d).
 ## Sequência
 
 1. Executar `scripts/connectors/slack.py` com os argumentos (canal OU usuário +
-   janela). O snapshot cai em `RAW/inbox/slack-<alvo>-<janela>.md`.
+   janela). O snapshot cai em `vault/RAW/inbox/slack-<alvo>-<janela>.md`.
 2. Processar via `/dump` — artefato tipo "dump de conector": transcrição limpa
    da janela, threads reconstruídas, quem disse o quê (resolver aliases!).
 3. Resposta ao dono: o digest (temas da janela, decisões, menções a ele),

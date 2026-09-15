@@ -4,12 +4,12 @@
 #   bash scripts/update-framework.sh
 #
 # Garantias:
-# - git pull --ff-only: só framework chega (suas zonas na raiz são cópias
-#   NÃO-rastreadas de pastas cegadas pelo .gitignore — o git não as vê)
-# - estrutura/ segue no repo e atualiza junto; este script sincroniza:
-#   arquivo de zona que não existe na raiz → copia; template que mudou →
+# - git pull --ff-only: só framework chega (seu vault/ é cegado pelo .gitignore
+#   — uma única regra protege tudo: dados, config, estado, logs)
+# - estrutura/vault/ segue no repo e atualiza junto; este script sincroniza:
+#   arquivo que falta no seu vault → copia; template que mudou upstream →
 #   chega como *.template.md AO LADO do seu (nunca sobrescreve)
-# - verificação final: zonas intactas + git status limpo
+# - verificação final: vault intacto + git status limpo
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -24,10 +24,10 @@ else
   exit 1
 fi
 
-# 2. sincronizar templates de zona (estrutura/ → raiz), sem sobrescrever nada
-if [ -d estrutura ]; then
-  find estrutura -type f | while read -r f; do
-    rel="${f#estrutura/}"
+# 2. sincronizar templates de zona (estrutura/vault/ → vault/), sem sobrescrever
+if [ -d estrutura/vault ]; then
+  find estrutura/vault -type f | while read -r f; do
+    rel="vault/${f#estrutura/vault/}"
     if [ ! -e "$rel" ]; then
       mkdir -p "$(dirname "$rel")"
       cp "$f" "$rel" && echo "  novo: $rel"
@@ -39,10 +39,9 @@ if [ -d estrutura ]; then
   done
 fi
 
-# 3. verificação final: suas zonas intactas e git limpo
-ok=1
+# 3. verificação final: vault intacto e git limpo
 for z in RAW PROCESSED FRESH PROFILE PLANNING; do
-  if [ -d "$z" ]; then echo "✓ $z/ intacta"; else echo "⚠ $z/ ausente (instância nova?)"; ok=0; fi
+  [ -d "vault/$z" ] && echo "✓ vault/$z/ intacta" || echo "⚠ vault/$z/ ausente (instância nova?)"
 done
 if [ -z "$(git status --porcelain)" ]; then
   echo "✓ git status limpo — nenhum dado seu tracked/staged"
@@ -51,5 +50,4 @@ else
   git status --short >&2
   exit 1
 fi
-[ "$ok" = 1 ] || exit 1
 echo "== pronto: framework atual, dados intactos =="

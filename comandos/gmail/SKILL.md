@@ -1,6 +1,6 @@
 ---
 name: gmail
-description: "Puxa emails via OAuth read-only (script gmail.py — mesma família do jira/github/slack): snapshot em RAW/inbox/ → /dump → digest. Noturno (digest do dia, conforme watch.yaml) ou sob demanda (/gmail [janela|filtro]). Nunca compõe/envia email."
+description: "Puxa emails via OAuth read-only (script gmail.py — mesma família do jira/github/slack): snapshot em vault/RAW/inbox/ → /dump → digest. Noturno (digest do dia, conforme watch.yaml) ou sob demanda (/gmail [janela|filtro]). Nunca compõe/envia email."
 ---
 
 # /gmail — email pelo canal, nunca direto
@@ -12,7 +12,7 @@ Escopo: **só `gmail.readonly`** — o script não contém nenhuma chamada de en
 ## A regra de ouro deste comando (o canal)
 
 **Nenhuma leitura de email vira resposta direto.** O script grava o snapshot
-em `RAW/inbox/gmail-…` primeiro; o `/dump` produz o artefato; só então você
+em `vault/RAW/inbox/gmail-…` primeiro; o `/dump` produz o artefato; só então você
 responde/usa o conteúdo — citando o artefato. Email lido sem snapshot = memória
 que o cérebro não ganhou.
 

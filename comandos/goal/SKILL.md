@@ -29,7 +29,7 @@ PROPOSTA (nada alterado):
 aprovar? (ok / editar / descartar)
 ```
 
-Aprovação explícita → aplicar + registrar em `PLANNING/log.md` (data · diff ·
+Aprovação explícita → aplicar + registrar em `vault/PLANNING/log.md` (data · diff ·
 motivo · evidência · "aprovado: <resposta do dono>").
 
 ## Regras

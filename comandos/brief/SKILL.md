@@ -7,7 +7,7 @@ description: "O dia do dono em uma tela: hoje, ações atrasadas, próximos 3 di
 
 ## Antes de responder: checagem de frescor
 
-1. Ler `FRESH/brief-de-hoje.md` (se existir) e seu `generated-at:`.
+1. Ler `vault/FRESH/brief-de-hoje.md` (se existir) e seu `generated-at:`.
 2. Se algo mudou desde (`PROCESSED` ganhou artefatos, inbox tem itens, ou a
    data de hoje ≠ data do generated-at): rodar `/update` primeiro (ou, no
    mínimo, dump da inbox + regeneração deste brief). Avisar o dono do catch-up

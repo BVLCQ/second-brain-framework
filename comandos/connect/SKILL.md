@@ -14,7 +14,7 @@ slack, gmail, drive) = só aquela fonte.
 
 1. Executar o(s) conector(es) de `scripts/connectors/` correspondentes
    (gmail→`gmail.py`, drive→`gdrive.py`) — leitura pura, snapshots em
-   `RAW/inbox/` com prefixo.
+   `vault/RAW/inbox/` com prefixo.
 2. Relatório curto por fonte: **só o que é novo** (change digest contra
    `.state.json`): "PR #142 +2 comentários (sem resposta sua)".
 3. Processar via `/dump` (o dono raramente quer o dado cru esperando).

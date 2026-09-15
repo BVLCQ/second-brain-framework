@@ -1,6 +1,6 @@
 ---
 name: drive
-description: "Docs vivos do Drive via OAuth read-only (script gdrive.py): snapshot datado em RAW/inbox/ → /dump (change digest). Noturno (watchlist gdocs do watch.yaml) ou sob demanda (/drive <termo> busca, /drive <id> exporta). Nunca cria/edita docs."
+description: "Docs vivos do Drive via OAuth read-only (script gdrive.py): snapshot datado em vault/RAW/inbox/ → /dump (change digest). Noturno (watchlist gdocs do watch.yaml) ou sob demanda (/drive <termo> busca, /drive <id> exporta). Nunca cria/edita docs."
 ---
 
 # /drive — docs vivos pelo canal, nunca direto
@@ -11,7 +11,7 @@ token no `.env`). Guia: `docs/google-oauth.md`. Escopo: **só `drive.readonly`**
 ## A regra de ouro deste comando (o canal)
 
 Docs do Drive MUDAM — por isso cada leitura é um **snapshot datado** em
-`RAW/inbox/`, e a memória fica na linha do tempo de snapshots + change digests
+`vault/RAW/inbox/`, e a memória fica na linha do tempo de snapshots + change digests
 do PROCESSED. Responder "o que diz o doc" sem snapshotar = memória perdida.
 
 ## Modo noturno (watchlist — padrão do /update)

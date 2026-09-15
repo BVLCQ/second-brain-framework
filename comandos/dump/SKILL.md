@@ -1,6 +1,6 @@
 ---
 name: dump
-description: "O comando central: arquiva tudo que está em RAW/inbox/ no mês correto (RAW/ano/mes/) e processa cada item — extrai decisões, ações, fatos e menções, escreve artefatos em PROCESSED e apensa aos índices. Use sempre que houver itens novos na inbox."
+description: "O comando central: arquiva tudo que está em vault/RAW/inbox/ no mês correto (vault/RAW/ano/mes/) e processa cada item — extrai decisões, ações, fatos e menções, escreve artefatos em PROCESSED e apensa aos índices. Use sempre que houver itens novos na inbox."
 ---
 
 # /dump — a esteira de processamento

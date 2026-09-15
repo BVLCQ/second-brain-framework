@@ -7,9 +7,9 @@ description: "Status de um projeto: árvore de entregáveis, ações abertas, sa
 
 ## Passo 0 — resolver o projeto
 
-Pelo `indice-projetos.md` (P#) e pela árvore em `PLANNING/goals.md`.
+Pelo `indice-projetos.md` (P#) e pela árvore em `vault/PLANNING/goals.md`.
 
-## A view (seção em `FRESH/projetos.md`)
+## A view (seção em `vault/FRESH/projetos.md`)
 
 ```
 ▣ <P# Nome> · goal: <G#> · status: <…> · deadline mais próximo: <data>

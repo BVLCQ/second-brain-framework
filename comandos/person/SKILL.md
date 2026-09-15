@@ -10,7 +10,7 @@ description: "Panorama de uma pessoa: quem é, histórico, threads abertas, o qu
 Pelo `indice-pessoas.md` e aliases. Duas fichas plausíveis → perguntar ao dono
 ("Ana Ribeiro (dados) ou Ana Souza (CS)?"), nunca chutar.
 
-## O panorama (view em `FRESH/stakeholders.md`, seção da pessoa)
+## O panorama (view em `vault/FRESH/stakeholders.md`, seção da pessoa)
 
 ```
 ◎ <Nome> · <papel> · relação: <…> · última interação: <data> (<o quê>)
@@ -25,7 +25,7 @@ COMO OPERA       (se constar no índice: estilo, preferências observadas)
 
 5–8 linhas: contexto da última conversa · threads abertas pra fechar ·
 assuntos quentes da semana dela (via índice) · 1–2 perguntas boas pra fazer.
-Gerado em `FRESH/` junto ao brief do dia — nunca enviado a ninguém, é prep
+Gerado em `vault/FRESH/` junto ao brief do dia — nunca enviado a ninguém, é prep
 pessoal.
 
 Regras: tudo deriva de índices+artefatos (FRESH é descartável) · observações

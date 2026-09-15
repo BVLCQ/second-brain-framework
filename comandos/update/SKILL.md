@@ -9,7 +9,7 @@ description: "O motor completo: roda os conectores (conforme config/watch.yaml),
 
 1. **Conectores** (se `config/.env` + `config/watch.yaml` existirem): executar
    `scripts/connectors/` na ordem — jira, github, slack, gmail, gdrive. Cada um
-   escreve snapshots em `RAW/inbox/` (prefixo da fonte). Conector ausente ou
+   escreve snapshots em `vault/RAW/inbox/` (prefixo da fonte). Conector ausente ou
    sem credencial: pular com 1 linha de aviso, não abortar o resto.
 2. **`/dump`** — processar toda a inbox (idempotente por construção).
 3. **Regenerar TODAS as views de FRESH**: brief-de-hoje, semana, acoes-abertas,

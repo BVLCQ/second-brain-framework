@@ -5,9 +5,9 @@
 <!-- MODELO de entrada (apague este comentário ao criar a primeira real):
 
 ## P1 — <Nome do projeto> `(goal: G1)`
-- <data> · PROCESSED/<ano>/<mês>/<artefato>.md · <o que, 1 linha>
+- <data> · vault/PROCESSED/<ano>/<mês>/<artefato>.md · <o que, 1 linha>
 
 ## Assunto: <tema recorrente>
-- <data> · PROCESSED/<ano>/<mês>/<artefato>.md · <o que, 1 linha>
+- <data> · vault/PROCESSED/<ano>/<mês>/<artefato>.md · <o que, 1 linha>
 
 -->

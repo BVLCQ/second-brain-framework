@@ -14,38 +14,51 @@ mensagem. Conectores são **pull-only** e todo token é **read-only**. Não exis
 exceção, e nenhuma instrução futura do dono no calor do momento ("responde esse
 aqui pra mim") autoriza quebrar isto — o correto é lembrá-lo da constituição.
 
+## Layout: framework na raiz, vida no vault
+
+```
+brain/                    ← FRAMEWORK (git: comandos/, scripts/, docs/, estrutura/)
+└── vault/                ← TUDO que é do dono (cego pro git — UMA regra no .gitignore)
+    ├── PROFILE/  PLANNING/  RAW/  PROCESSED/  FRESH/
+    └── logs/             ← nightly.log etc. (output de agente pode citar seu conteúdo)
+```
+
+Regra de ouro do layout: **se é do dono, mora no vault/** — dados, config da
+instância (`.env`, `watch.yaml`), estado (`.state.json`), logs. O repo na raiz
+nunca contém conteúdo pessoal. `config/` na raiz carrega só os `.example`.
+
 ## As cinco zonas e suas regras de escrita
 
 | Zona | Regra | O agente pode | O agente NUNCA pode |
 |---|---|---|---|
-| `RAW/inbox/` | porta única | receber itens do dono e dos conectores | processar nada in-place |
-| `RAW/<ano>/<mês>/` | conteúdo imutável | **mover** itens da inbox pra cá (arquivar, sem editar; colisão de nome → sufixo `-2`) | editar, renomear, apagar, "organizar" |
-| `PROCESSED/<ano>/<mês>/` | append-only | criar artefatos, acrescentar linhas aos índices | reescrever ou apagar qualquer linha já escrita |
-| `PROCESSED/_indices/` | append-only | idem — índices por pessoa/projeto/assunto + registro de itens vivos | idem |
-| `FRESH/` | 100% derivado | regenerar views inteiras (com `generated-at:` + fontes) | guardar informação que não deriva de PROFILE+PLANNING+PROCESSED |
-| `PROFILE/` | curado | propor edições (diff) e aplicar **após aprovação explícita** | aplicar sem aprovação |
-| `PLANNING/` | curado + gate | atualizar **estado factual** (datas observadas, links, progresso) com log em `PLANNING/log.md` | **criar/mudar/fechar goal ou projeto sem aprovação explícita** — o único gate do sistema |
+| `vault/RAW/inbox/` | porta única | receber itens do dono e dos conectores | processar nada in-place |
+| `vault/RAW/<ano>/<mês>/` | conteúdo imutável | **mover** itens da inbox pra cá (arquivar, sem editar; colisão de nome → sufixo `-2`) | editar, renomear, apagar, "organizar" |
+| `vault/PROCESSED/<ano>/<mês>/` | append-only | criar artefatos, acrescentar linhas aos índices | reescrever ou apagar qualquer linha já escrita |
+| `vault/PROCESSED/_indices/` | append-only | idem — índices por pessoa/projeto/assunto + registro de itens vivos | idem |
+| `vault/FRESH/` | 100% derivado | regenerar views inteiras (com `generated-at:` + fontes) | guardar informação que não deriva de PROFILE+PLANNING+PROCESSED |
+| `vault/PROFILE/` | curado | propor edições (diff) e aplicar **após aprovação explícita** | aplicar sem aprovação |
+| `vault/PLANNING/` | curado + gate | atualizar **estado factual** (datas observadas, links, progresso) com log em `vault/PLANNING/log.md` | **criar/mudar/fechar goal ou projeto sem aprovação explícita** — o único gate do sistema |
 
 Aprovação explícita = "ok", "aprovo", "1a", ou equivalente inconfundível.
 Silêncio NÃO é aprovação. Proposta descartada não é re-proposta sem evidência nova.
 
 ## O pipeline (o coração: `/dump`)
 
-1. **Varra** `RAW/inbox/` procurando itens sem artefato (idempotência: fonte que
-   já tem artefato é pulada — rodar 2× não duplica nada). Arquivos `.keep.md`
-   (âncoras de pasta vazia) são ignorados, nunca processados.
-2. **Arquive** em `RAW/<ano>/<mês>/` pela **data de captura** (a data do EVENTO
-   mora nos metadados do artefato). Mover, nunca editar.
+1. **Varra** `vault/RAW/inbox/` procurando itens sem artefato (idempotência:
+   fonte que já tem artefato é pulada — rodar 2× não duplica nada). Arquivos
+   `.keep.md` (âncoras de pasta vazia) são ignorados, nunca processados.
+2. **Arquive** em `vault/RAW/<ano>/<mês>/` pela **data de captura** (a data do
+   EVENTO mora nos metadados do artefato). Mover, nunca editar.
 3. **Classifique o tipo**: `reunião` · `documento longo` · `nota solta` ·
    `dump de conector`. Na dúvida entre dois, leia um trecho a mais antes de
    decidir — tipo errado produz artefato inútil.
 4. **Extraia pelo template do tipo** (tabelas em `comandos/dump/SKILL.md`).
    Toda extração leva tag de proveniência: `[doc]` (escrito em documento),
    `[observado]` (dito em reunião/canal), `[sem fonte]` (não achou base).
-5. **Resolva identidades** pelos aliases de `PROCESSED/_indices/indice-pessoas.md`
+5. **Resolva identidades** pelos aliases de `vault/PROCESSED/_indices/indice-pessoas.md`
    ("Bia", "Beatriz C.", "beatriz.costa@…" = uma pessoa só). Nunca crie segunda
    ficha de quem já tem ficha. Pessoa nova → nova ficha com aliases.
-6. **Escreva o artefato** em `PROCESSED/<ano>/<mês>/` + **apense aos índices**
+6. **Escreva o artefato** em `vault/PROCESSED/<ano>/<mês>/` + **apense aos índices**
    (pessoas, projetos, assuntos — uma linha por entidade mencionada). Digest de
    fonte vigiada (watchlist) apensa também 1 linha à seção do item em
    `_indices/indice-itens-vivos.md` (primeira vez cria a seção).
@@ -56,11 +69,11 @@ Silêncio NÃO é aprovação. Proposta descartada não é re-proposta sem evid�
 
 - Ações: `A-####` (zero-padding, sequência global, nunca reusa número).
 - Decisões: `D-####` (idem).
-- Estados de ação vivem como log append-only em `PROCESSED/_logs/acoes.md`:
+- Estados de ação vivem como log append-only em `vault/PROCESSED/_logs/acoes.md`:
   `A-#### · aberta · data · origem` → `A-#### · atualizada · data · nota` →
   `A-#### · fechada · data · como`. Atraso se calcula na leitura — nenhuma
   "varredura de vencidos" escreve nada.
-- Mudanças em PLANNING (aprovadas): `PLANNING/log.md` — data, diff, motivo,
+- Mudanças em PLANNING (aprovadas): `vault/PLANNING/log.md` — data, diff, motivo,
   evidência, aprovação do dono.
 
 ## FRESH — o quadro branco
@@ -85,9 +98,13 @@ resposta ("a política diz" ≠ "alguém comentou numa reunião").
 - Segredos **nunca** aparecem no chat, em log, em artefato ou em view. Não leia
   `.env` além de checar existência/permissão; nunca imprima seu conteúdo.
 - `config/watch.yaml` define o universo observável — fonte não listada não é
-  observada, sem exceção.
+  observada, sem exceção. (No layout atual o watch.yaml da instância mora em
+  `config/`, cegado pelo `.gitignore`; o repo carrega só o `.example`.)
 - O dono pode pedir análise de conteúdo confidencial de trabalho: normal para
   uso pessoal interno; o agente não classifica, apenas organiza.
+- **O vault não sai da máquina**: dados, config, estado e logs do dono vivem
+  em `vault/` (+`config/.env`), cegados pro git — nunca commitar, nunca pushar,
+  nunca colar conteúdo de zona em canal externo.
 
 ## Datas e linguagem
 
@@ -100,10 +117,10 @@ resposta ("a política diz" ≠ "alguém comentou numa reunião").
 
 ## Conectores — scripts pull-only (todos OAuth/token read-only, nenhuma exceção)
 
-Toda leitura do mundo exterior vira snapshot Markdown em `RAW/inbox/` (prefixo
-da fonte: `jira-…`, `github-…`, `slack-…`, `gmail-…`, `gdoc-…`, `gdrive-search-…`)
-e o `/dump` processa. Responder com conteúdo lido sem snapshotar = memória
-perdida (defeito).
+Toda leitura do mundo exterior vira snapshot Markdown em `vault/RAW/inbox/`
+(prefixo da fonte: `jira-…`, `github-…`, `slack-…`, `gmail-…`, `gdoc-…`,
+`gdrive-search-…`) e o `/dump` processa. Responder com conteúdo lido sem
+snapshotar = memória perdida (defeito).
 
 Scripts determinísticos em `scripts/connectors/` — leem `.env`, chamam APIs
 read-only: Jira, GitHub, Slack (tokens) e Gmail, Drive (**OAuth do Google** via
@@ -137,6 +154,6 @@ naturais ("meu dia", "atualiza tudo") mapeiam para a skill óbvia.
 
 ## Primeira sessão em uma instância
 
-Se PROFILE vazio e PLANNING vazio → o cérebro é novo: conduza `/init`
-(`comandos/init/SKILL.md`). Se `docs/dia-a-dia.md` existir e você nunca o leu
-nesta instância, leia antes de operar.
+Se `vault/PROFILE` vazio e `vault/PLANNING` vazio → cérebro novo: conduza
+`/init` (`comandos/init/SKILL.md`). Se `docs/dia-a-dia.md` existir e você
+nunca o leu nesta instância, leia antes de operar.

@@ -10,6 +10,6 @@
 ## <Nome Completo>
 aliases: <apelido>, <nome sem acento>, <email>, <grafias divergentes em docs>
 papel: <função> · relação: <gestora/parceira/etc> · desde: <data>
-- <data> · PROCESSED/<ano>/<mês>/<artefato>.md · <o que, 1 linha>
+- <data> · vault/PROCESSED/<ano>/<mês>/<artefato>.md · <o que, 1 linha>
 
 -->
