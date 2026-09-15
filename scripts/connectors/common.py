@@ -75,12 +75,12 @@ def save_state(state: dict) -> None:
 
 def _parse_list(rhs: str) -> list[str]:
     """Parse de lista inline do watch.yaml (fallback sem PyYAML).
-    Itens entre aspas vêm inteiros (canais '#x' têm # legítimo); fora de
-    aspas, comentário é só ' # espaço-hash'."""
+    Comentário inline (' # …') sai PRIMEIRO — senão aspas dentro de comentário
+    (ex.: 'channels: []  # ex.: ["#x"]') vazam como itens reais."""
+    rhs = re.split(r"\s+#", rhs)[0].strip()
     quoted = re.findall(r'"([^"]+)"', rhs)
     if quoted:
         return quoted
-    rhs = re.split(r"\s+#", rhs)[0].strip()
     items = [i.strip().strip("[]\"'") for i in rhs.split(",")]
     return [i for i in items if i]
 
@@ -103,9 +103,11 @@ def load_watch() -> dict:
             if not ln.strip() or ln.strip().startswith("#"):
                 continue
             if not ln[0].isspace():
-                section = ln.rstrip(":").strip()
+                # cabeçalho de seção — comentário inline (' # …') fora, senão
+                # 'gdocs:  # docs vivos' nunca casa com 'gdocs'
+                section = re.split(r"\s+#", ln)[0].strip().rstrip(":").strip()
                 continue
-            s = ln.strip()
+            s = re.split(r"\s+#", ln.strip(), 1)[0].strip() if section == "gdocs" else ln.strip()
             if section == "github" and s.startswith("- "):
                 item = s[2:].split("#")[0].strip().strip('"\'')
                 if item:
