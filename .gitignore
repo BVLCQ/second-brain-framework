@@ -1,0 +1,12 @@
+# Segredos e estado — nunca commitados
+.env
+config/.env
+config/.state.json
+
+# Sistema
+.DS_Store
+__pycache__/
+*.pyc
+
+# Dados de instância NÃO vivem neste repo (a instância é uma pasta separada,
+# criada com cp -r estrutura/* — este gitignore é higiene do repo do framework)

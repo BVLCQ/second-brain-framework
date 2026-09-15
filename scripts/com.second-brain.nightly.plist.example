@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Second Brain — agendamento noturno do /update (macOS launchd).
+
+INSTALAÇÃO (na SUA instância, não no repo):
+  1. Copie este arquivo para ~/Library/LaunchAgents/com.second-brain.nightly.plist
+  2. Substitua TODAS as ocorrências de /Users/EXEMPLO/brain pelo caminho
+     real da sua instância (3 lugares: script, log-out, log-err)
+  3. Ative:   launchctl load ~/Library/LaunchAgents/com.second-brain.nightly.plist
+     Desative: launchctl unload ~/Library/LaunchAgents/com.second-brain.nightly.plist
+
+O catch-up existe por segurança: se o Mac estava dormindo às 05h e o launchd
+não rodou, o /brief da manhã detecta a view velha e atualiza antes de responder.
+Linux: use cron — `0 5 * * * /bin/bash /caminho/da/instancia/scripts/nightly-update.sh`
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.second-brain.nightly</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/EXEMPLO/brain/scripts/nightly-update.sh</string>
+    </array>
+
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>5</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>/Users/EXEMPLO/brain/config/nightly.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/EXEMPLO/brain/config/nightly.log</string>
+</dict>
+</plist>
