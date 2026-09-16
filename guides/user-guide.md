@@ -481,9 +481,10 @@ de menções em atas). Qualitativo, ainda sem métrica formal de adoção.
 | **Nota solta** | anotação curta, ideia, lembrete | nota limpa · tags · ligações com entidades existentes |
 | **Dump de conector** | saída de script (jira/github/gmail/slack/gdocs) | **change digest**: só o que mudou desde o último pull daquela fonte |
 
-Toda extração leva tag de proveniência — `[doc]`, `[observado]`, `[sem fonte]` —
-porque "a política diz" e "alguém comentou numa reunião" não pesam igual numa
-decisão.
+Toda extração leva tag de proveniência — `[doc]`, `[observado]`, `[declarado]`
+(afirmação direta sua, o nível mais alto), `[sem fonte]` —
+porque "a política diz", "alguém comentou numa reunião" e "eu estou afirmando"
+não pesam igual numa decisão.
 
 **Ações carregam o grafo:** quando a fala revela dependência ("assim que o
 Bruno revisar, eu envio"), as ações ganham os campos `blocked-by:` / `unblocks:`

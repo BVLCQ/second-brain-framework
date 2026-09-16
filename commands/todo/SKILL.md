@@ -63,6 +63,8 @@ A-0153 · ler material de retenção — antes de eu registrar:
 
 A nova ação aparece sozinha no `/brief` (ATRASADAS/72h), `open-actions.md`,
 `/week` e no cronograma (`/timeline` gantt) — as views leem o ledger.
+Fechar é com o **`/done`** (o par deste comando), incluindo a cascata de
+desbloqueio.
 
 ## Regras
 

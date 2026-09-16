@@ -25,7 +25,7 @@ envio" → A-nova `blocked-by: A-do-Bruno`) e ligações a projetos. Ação comp
 `_actions/A-####.md`: contexto, passos, decisões ligadas, artefatos-fonte,
 pessoas — o ledger aponta pra ficha.
 
-Regras transversais: proveniência em toda extração (`[doc]`/`[observado]`/`[sem fonte]`) ·
+Regras transversais: proveniência em toda extração (`[doc]`/`[observado]`/`[declarado]`/`[sem fonte]`) ·
 aliases resolvem pessoas antes de qualquer menção · IDs A-/D- globais e zero-padded,
 consultar os logs antes de numerar.
 
