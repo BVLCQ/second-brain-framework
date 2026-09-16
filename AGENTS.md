@@ -100,7 +100,9 @@ deriva de PROFILE+PLANNING+PROCESSED, ele pertence a outra zona. Views padrão:
 `daily-brief.md`, `week.md`, `month.md` (30-45d por goal→projeto→entregável),
 `open-actions.md` (com cadeias blocked-by/unblocks), `projects.md`,
 `stakeholders.md`, `live-items.md`, `pocket.md` (status compartilhável pro
-gestor). Regeneração não é incremental: reescreve o arquivo inteiro.
+gestor), `map.md` (grafos Mermaid: áreas/projetos, stakeholders×projetos,
+dependências de ações) e `timeline.md` (timeline do passado + gantt de
+deadlines). Regeneração não é incremental: reescreve o arquivo inteiro.
 **Reports** (`vault/reports/`, do `/recap`) não são views: são documentos
 datados, point-in-time, feitos pra compartilhar — nunca reescritos.
 

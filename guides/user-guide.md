@@ -116,8 +116,12 @@ Histórico é o produto.
 
 ### 3.5 `vault/FRESH/` — o quadro branco
 
-As visões que você consome: `daily-brief.md`, `week.md`, `projects.md`,
-`stakeholders.md`, `open-actions.md`. **Regra: 100% derivado e descartável** —
+As visões que você consome: `daily-brief.md`, `week.md`, `month.md`, `projects.md`,
+`stakeholders.md`, `open-actions.md`, `live-items.md`, `pocket.md` (a versão
+pro gestor) — e duas visuais, que renderizam de graça em Obsidian/GitHub:
+`map.md` (grafos Mermaid: áreas→goals→projetos, stakeholders×projetos,
+dependências entre ações) e `timeline.md` (linha do tempo do que aconteceu +
+gantt dos deadlines à frente). **Regra: 100% derivado e descartável** —
 nada aqui é informação única; tudo se reconstrói de PROFILE + PLANNING +
 PROCESSED. Se amanhã uma view melhor aparecer, apaga-se e gera outra, sem perda.
 O invariante que guarda a zona: *se não é derivável, está na pasta errada.*
