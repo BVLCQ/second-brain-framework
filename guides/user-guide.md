@@ -101,10 +101,11 @@ bruto, ele decidiria o que você esquece.
 ### 3.4 `vault/PROCESSED/` — o caderno de registros (por mês)
 
 O que o agente extrai de cada item do RAW, espelhando a partição
-(`vault/PROCESSED/2026/09/`...). Dois moradores:
+(`vault/PROCESSED/2026/09/`...). Três moradores:
 
 - **Artefatos** — um por item processado: o resumo profundo, estruturado por
-  tipo de documento (seção 6).
+  tipo de documento (seção 6). Ações complexas têm ficha própria em
+  `_actions/A-####.md` (contexto, passos, decisões ligadas).
 - **Índices** — o atalho por entidade: `people-index.md`, `projects-index.md`,
   `subjects-index.md`. Cada linha aponta para os artefatos onde a entidade
   aparece. *Escreve-se por mês, lê-se por entidade*: você nunca pergunta "o que
@@ -118,7 +119,8 @@ Histórico é o produto.
 
 As visões que você consome: `daily-brief.md`, `week.md`, `month.md`, `projects.md`,
 `stakeholders.md`, `open-actions.md`, `live-items.md`, `pocket.md` (a versão
-pro gestor) — e duas visuais, que renderizam de graça em Obsidian/GitHub:
+pro gestor) — e duas visuais, que renderizam de graça em Obsidian/GitHub,
+**geradas sob demanda** (`/map` e `/timeline` — não gastam o noturno):
 `map.md` (grafos Mermaid: áreas→goals→projetos, stakeholders×projetos,
 dependências entre ações) e `timeline.md` (linha do tempo do que aconteceu +
 gantt dos deadlines à frente). **Regra: 100% derivado e descartável** —
@@ -341,6 +343,22 @@ primeiro `/dump` de outubro. Setembro fica como está — arquivo morto e cadern
 fechados, sempre consultáveis pelos índices, que seguem crescendo (os índices
 são globais; a partição por mês é só o endereço).
 
+### Memória de entrega: `deliveries.md` e o `/recap`
+
+O caderno também guarda **o que você ENTREGOU** — não só o que deve.
+`_logs/deliveries.md` é o livro-razão das entregas: toda vez que você declara
+"fechei X" no `/week` (ou uma ação fecha com resultado), uma linha nasce —
+`data · o que · resultado · evidência · [proveniência]`. Sem número inventado:
+resultado não declarado fica registrado como "não declarado".
+
+É daí que nasce o **`/recap [goal|projeto|período]`**: um dossiê datado e
+**compartilhável** (gerente lê sem conhecer o cérebro) em `vault/reports/` —
+objetivo, entregas com resultado, impacto, pendências, fontes pra auditoria.
+Reports são point-in-time: nunca reescritos, regerar cria arquivo novo.
+E pra o dia a dia com a liderança: `FRESH/pocket.md` — 1 página com status
+por goal, foco da semana, entregue recentemente e os bloqueios que dependem
+deles.
+
 ---
 
 ## 6. Por dentro do `/dump` — a esteira de processamento
@@ -371,6 +389,12 @@ são globais; a partição por mês é só o endereço).
 Toda extração leva tag de proveniência — `[doc]`, `[observado]`, `[sem fonte]` —
 porque "a política diz" e "alguém comentou numa reunião" não pesam igual numa
 decisão.
+
+**Ações carregam o grafo:** quando a fala revela dependência ("assim que o
+Bruno revisar, eu envio"), as ações ganham os campos `blocked-by:` / `unblocks:`
+(+ `proj:`, `link:`, estado `waiting` pra quem espera terceiro). O `/brief` e o
+`/week` mostram as cadeias (`⛔ blocked-by: A-0147 — Bruno`), e o `/map` desenha
+o grafo inteiro. Bloqueio visível é cobrança fácil — e atraso sem culpa.
 
 E o RAW? **Nunca é tocado** — só movido da inbox pro mês. O arquivo bruto é a
 prova original; tudo à frente é derivado e reprocessável.
@@ -423,6 +447,12 @@ e citável.
 | **Drive** | noturno: watchlist de docs que VOCÊ listar · busca ad-hoc `/drive <termo>` | **OAuth read-only (script)** — snapshot do doc + comentários; change digest se mudou |
 
 ### 7.3 A configuração (mora na instância, nunca no framework)
+
+Além de listar fontes, o `config/watch.yaml` tem **kill-switch**: qualquer item
+(github repo, doc do Drive, board) ou seção inteira (gmail, slack) aceita
+`enabled: false` — a fonte fica **muda**: o conector pula o pull e declara em
+1 linha; não é erro, ninguém debuga. Reativar = apagar a linha. Exemplo
+comentado no `config/watch.yaml.example`.
 
 `config/watch.yaml` — o que observar é escolha sua, em texto:
 
@@ -512,6 +542,12 @@ cp config/watch.yaml.example config/watch.yaml                # liste o que obse
 O cérebro **nasce vazio e fica inteligente na velocidade em que você o
 alimenta**. Não há setup de banco, não há migração, não há importação — o
 primeiro `/dump` do kit de onboarding dele já é o teste da esteira.
+
+E não viva com uma cópia única: **todo domingo** o noturno zipa o vault
+inteiro pra uma pasta do SEU Google Drive (retenção de 8; setup de 3 min em
+`guides/backup.md`). É a única exceção de escrita da constituição — estreita:
+o escopo só cria/apaga os próprios backups na pasta configurada, e segredos
+(`.env`) moram fora do vault, fora do zip. `/backup status` mostra o último.
 
 ---
 

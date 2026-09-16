@@ -122,8 +122,8 @@ def status(fid: str, token: str) -> None:
 
 def main() -> None:
     common.load_env()
+    fid = folder_id()          # gate de config ANTES do token (morte educada)
     token = common.google_access_token()
-    fid = folder_id()
     if "--status" in sys.argv:
         status(fid, token)
         return
