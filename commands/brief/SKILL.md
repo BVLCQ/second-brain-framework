@@ -20,7 +20,8 @@ description: "O dia do dono em uma tela: hoje, ações atrasadas, próximos 3 di
 ☀ BRIEF — <dia da semana>, <data> · gerado <hh:mm> (<origem: nightly|agora>)
 
 HOJE          compromissos de hoje (hora · o quê · com quem · → card de prep se houver)
-ATRASADAS     ações A-#### abertas com deadline < hoje (idade em dias)
+ATRASADAS     ações A-#### abertas com deadline < hoje (idade em dias;
+              blocked-by ativo vira ⛔ + quem bloqueia — cobrança, não culpa)
 PRÓXIMAS 72H  deadlines e compromissos na janela
 GOAL EM FOCO  o goal mais urgente por PLANNING + próxima pedra
 CONTEXTO      3–5 linhas: o que mudou ontem (digests, decisões, movimentos)

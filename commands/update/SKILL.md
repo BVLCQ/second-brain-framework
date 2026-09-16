@@ -13,8 +13,12 @@ description: "O motor completo: roda os conectores (conforme config/watch.yaml),
    sem credencial: pular com 1 linha de aviso, não abortar o resto.
 2. **`/dump`** — processar toda a inbox (idempotente por construção).
 3. **Regenerar TODAS as views de FRESH**: daily-brief, week, open-actions,
-   projects, stakeholders, live-items. Cada uma com `generated-at:` + `fontes:`.
-   Views são reescritas inteiras — nada de patch incremental.
+   projects, stakeholders, live-items, **month**, **pocket**. Cada uma com
+   `generated-at:` + `fontes:`. Views são reescritas inteiras — nada de patch incremental.
+
+`month.md`: lookahead 30-45 dias por goal → projeto → entregável (deadlines,
+progresso, dependências cruzadas visíveis — cadeias de `blocked-by/unblocks`
+que atravessam projetos). `pocket.md`: ver spec em `commands/week/SKILL.md`.
 
 `live-items.md` (deriva de `_indices/live-items-index.md` + `config/watch.yaml`):
 uma linha por item do registro — última mudança, idade, nº de snapshots; sem

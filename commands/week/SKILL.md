@@ -13,7 +13,7 @@ description: "Cockpit semanal: lookahead de 14 dias, radar de goals por frente, 
 DEADLINES          entregáveis e ações com data na janela
 REUNIÕES           compromissos da semana (→ cards de prep por participante)
 GOALS              por goal: progresso declarado + idade do último movimento ⚠
-AÇÕES ENVELHECENDO abertas há >7 dias (com nota: dependência externa? escalar?)
+AÇÕES ENVELHECENDO abertas há >7 dias (com nota: dependência externa? escalar? ⛔ blocked-by visível)
 FOCO SUGERIDO      1–2 linhas: o que atacar primeiro e por quê
 ```
 
@@ -44,3 +44,20 @@ descartada não volta sem evidência NOVA · aprovada → aplicar + registrar em
 
 O /week é também onde o dono declara progresso ("G2 em 70%") — atualizar o
 PLANNING (estado factual, sem gate) e refletir na view.
+
+## Entregas da semana → deliveries.md
+
+Todo "fechei/terminei/entreguei X" declarado no /week (ou ação fechada com
+resultado) vira 1 linha em `_logs/deliveries.md`
+(`data · ref · o que · resultado · evidência · [proveniência]`) — é daí que o
+/recap monta o histórico de impacto. Resultado não declarado = escrever exatamente isso.
+
+## Geração da pocket (`FRESH/pocket.md`)
+
+Derivada, regenerada no /week (e /update): **status compartilhável pro
+coordenador/gerente** — 1 página, tom sóbrio, sem jargão interno:
+- **Status por goal** (1 linha cada: % e próxima pedra)
+- **Foco da semana** (1-2 linhas)
+- **Entregue recentemente** (do deliveries.md, ≤5 linhas)
+- **Bloqueios que preciso de vocês** (dependências externas, com nome de quem)
+- cabeçalho `generated-at:`; nada que não derive das zonas.

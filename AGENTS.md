@@ -81,7 +81,14 @@ Silêncio NÃO é aprovação. Proposta descartada não é re-proposta sem evid�
 - Estados de ação vivem como log append-only em `vault/PROCESSED/_logs/actions.md`:
   `A-#### · aberta · data · origem` → `A-#### · atualizada · data · nota` →
   `A-#### · fechada · data · como`. Atraso se calcula na leitura — nenhuma
-  "varredura de vencidos" escreve nada.
+  "varredura de vencidos" escreve nada. Campos opcionais: `blocked-by:`/
+  `unblocks:` (dependências entre ações e projetos), `proj:`, `link:`, estado
+  `waiting` (dependência externa). Ação complexa tem ficha própria em
+  `vault/PROCESSED/_actions/A-####.md`.
+- **Entregas**: `vault/PROCESSED/_logs/deliveries.md` (append-only) — o que foi
+  entregue, resultado/impacto, evidência, proveniência. A linha nasce quando a
+  entrega é declarada (/week) ou a ação fecha com resultado. É a espinha dorsal
+  dos recaps; nunca inventar resultado — sem fonte, registrar "não declarado".
 - Mudanças em PLANNING (aprovadas): `vault/PLANNING/log.md` — data, diff, motivo,
   evidência, aprovação do dono.
 
@@ -90,9 +97,12 @@ Silêncio NÃO é aprovação. Proposta descartada não é re-proposta sem evid�
 Toda view carrega cabeçalho `generated-at: <timestamp real>` + `fontes:`
 (zonas/índices lidos). **FRESH não guarda informação única** — se um dado não
 deriva de PROFILE+PLANNING+PROCESSED, ele pertence a outra zona. Views padrão:
-`daily-brief.md`, `week.md`, `open-actions.md`, `projects.md`,
-`stakeholders.md`, `live-items.md`. Regeneração não é incremental: reescreve
-o arquivo inteiro.
+`daily-brief.md`, `week.md`, `month.md` (30-45d por goal→projeto→entregável),
+`open-actions.md` (com cadeias blocked-by/unblocks), `projects.md`,
+`stakeholders.md`, `live-items.md`, `pocket.md` (status compartilhável pro
+gestor). Regeneração não é incremental: reescreve o arquivo inteiro.
+**Reports** (`vault/reports/`, do `/recap`) não são views: são documentos
+datados, point-in-time, feitos pra compartilhar — nunca reescritos.
 
 ## Responder perguntas (`/ask`)
 
@@ -156,7 +166,7 @@ Nestes casos: pare, explique o dilema ao dono em ≤5 linhas, proponha 2 caminho
 `/project` → `commands/project/SKILL.md` · `/update` → `commands/update/SKILL.md` ·
 `/connect` → `commands/connect/SKILL.md` · `/slack` → `commands/slack/SKILL.md` ·
 `/gmail` → `commands/gmail/SKILL.md` · `/drive` → `commands/drive/SKILL.md` ·
-`/goal` → `commands/goal/SKILL.md`
+`/goal` → `commands/goal/SKILL.md` · `/recap` → `commands/recap/SKILL.md`
 
 Ao receber um comando, leia a skill correspondente ANTES de agir. Variantes
 naturais ("meu dia", "atualiza tudo") mapeiam para a skill óbvia.

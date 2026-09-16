@@ -184,10 +184,11 @@ cuida.
 | `/init` | **entrevista você** (papel, goals, projetos, pessoas) e monta PROFILE + PLANNING — você pode soltar arquivos (CV, docs, notas) durante, viram o primeiro dump | uma vez, no começo |
 | `/dump` | arquiva e processa tudo que está na inbox → artefatos + índices | sempre que jogar coisa |
 | `/brief` | seu dia: hoje, atrasadas, 72h, goal em foco, contexto | toda manhã |
-| `/week` | cockpit semanal: 14 dias, radar de goals, foco sugerido | sextas |
+| `/week` | cockpit semanal: 14 dias, radar de goals, foco sugerido + pocket pro gestor | sextas |
 | `/ask <pergunta>` | o que o cérebro sabe sobre X — sempre citando fonte | sempre |
 | `/person <nome>` | panorama de uma pessoa: histórico, threads, prep de reunião | antes de reuniões |
 | `/project <nome>` | status de um projeto: árvore, ações, saúde de prazo | sob demanda |
+| `/recap [goal\|projeto\|período]` | **dossiê compartilhável** (vault/reports/): entregas, resultado, impacto, fontes | sob demanda |
 | `/update` | motor completo: conectores + dump + regenera todas as views | noturno (cron) |
 | `/connect [fonte]` | puxa Jira/GitHub/Slack/Gmail/Drive agora (leitura) → inbox | sob demanda |
 | `/slack #canal [@user] [7d]` | transcrição de um canal/DM da janela pedida | sob demanda |

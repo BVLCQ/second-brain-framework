@@ -16,6 +16,15 @@ Siga o pipeline da constituição (AGENTS.md, seção "O pipeline"), sem pular p
 | **nota solta** | anotação curta, ideia, lembrete | nota limpa · tags · ligações com entidades existentes |
 | **dump de conector** | arquivo prefixado (`jira-…`, `github-…`, `slack-…`, `gmail-…`, `gdoc-…`) | **change digest**: comparar com o snapshot anterior da MESMA fonte (via `config/.state.json` + índice) e extrair SÓ o que mudou; primeira vez = estado inicial |
 
+**Ações — campos do ledger (`_logs/actions.md`, todos opcionais):**
+`blocked-by: A-####` (por que não anda) · `unblocks: A-####, P#` (o que ela destrava)
+· `proj: P#` · `link: <artefato/doc>` · estado `waiting` (esperando terceiro).
+Na extração, DETECTE dependências explícitas ("assim que o Bruno revisar, eu
+envio" → A-nova `blocked-by: A-do-Bruno`) e ligações a projetos. Ação complexa
+(multi-passo, contexto próprio, >1 reunião mencionando) → **ficha própria**
+`_actions/A-####.md`: contexto, passos, decisões ligadas, artefatos-fonte,
+pessoas — o ledger aponta pra ficha.
+
 Regras transversais: proveniência em toda extração (`[doc]`/`[observado]`/`[sem fonte]`) ·
 aliases resolvem pessoas antes de qualquer menção · IDs A-/D- globais e zero-padded,
 consultar os logs antes de numerar.
