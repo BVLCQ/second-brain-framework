@@ -13,31 +13,14 @@ description: "O motor completo: roda os conectores (conforme config/watch.yaml),
    sem credencial: pular com 1 linha de aviso, não abortar o resto.
 2. **`/dump`** — processar toda a inbox (idempotente por construção).
 3. **Regenerar TODAS as views de FRESH**: daily-brief, week, month,
-   open-actions, projects, stakeholders, live-items, pocket, map, timeline.
+   open-actions, projects, stakeholders, live-items, pocket.
    Cada uma com `generated-at:` + `fontes:`. Views são reescritas inteiras —
-   nada de patch incremental.
+   nada de patch incremental. (map.md e timeline.md NÃO rodam aqui — são
+   sob demanda: `/map` e `/timeline`.)
 
 `month.md`: lookahead 30-45 dias por goal → projeto → entregável (deadlines,
 progresso, dependências cruzadas visíveis — cadeias de `blocked-by/unblocks`
 que atravessam projetos). `pocket.md`: ver spec em `commands/week/SKILL.md`.
-
-`map.md` — o mapa visual (blocos **Mermaid**; renderiza em Obsidian/GitHub):
-- **Áreas & projetos** (`graph TD`): frentes do PROFILE → G# → P# (label =
-  nome curto; deadline como sufixo quando existe)
-- **Stakeholders × projetos** (`graph LR`): pessoa → projeto com label do
-  papel (fonte: people-index + projects-index; incluir gestor/leads do PROFILE)
-- **Ações & dependências** (`graph LR`): só ações ABERTAS com grafo ativo —
-  `unblocks` (seta verde) e `blocked-by` (seta vermelha, ⛔ no nó bloqueado)
-Regras Mermaid (grafo quebrado = view inútil): IDs ASCII sem espaços
-(`G1`, `P1`, `A0146`, `ST_ana`); labels SEMPRE entre aspas duplas
-(`P1["Dicionário de dados v1"]`); ≤30 nós por grafo — acima disso, agregar
-por projeto e citar o detalhe no open-actions.
-
-`timeline.md` — a linha do tempo (Mermaid):
-- `timeline` (passado, por semana/mês): entregas (deliveries.md), decisões
-  D-#### relevantes, mudanças de goal (PLANNING/log.md), estreias de itens vivos
-- `gantt` (futuro, 30-45d): entregáveis com deadline, agrupados por projeto
-Datas ISO; período sem evento fica de fora (timeline honesta, não enchimento).
 
 `live-items.md` (deriva de `_indices/live-items-index.md` + `config/watch.yaml`):
 uma linha por item do registro — última mudança, idade, nº de snapshots; sem

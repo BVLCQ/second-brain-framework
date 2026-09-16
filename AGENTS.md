@@ -152,6 +152,12 @@ diretamente; conectores são a única fronteira com o mundo exterior — e rodam
 só no noturno/sob demanda, nunca embutidos na sessão. Fontes vivas: snapshot
 datado sempre; o processamento decide digest (mudou) vs. silêncio (hash idêntico).
 
+**Exceção constitucional única (backup):** `scripts/connectors/backup.py` usa
+o escopo `drive.file` para criar/apagar APENAS seus próprios `brain-backup-*.zip`
+na pasta configurada (`GOOGLE_BACKUP_FOLDER_ID`) — não lê nem toca em mais nada
+do Drive. Gatilhos: noturno semanal e `/backup` do dono. Nenhum outro fluxo de
+escrita existe; se algum aparecer, é violação da constituição.
+
 ## Limites de julgamento (o que ESCALAR pro dono)
 
 - Ambiguidade séria de identidade (duas pessoas plausíveis pro mesmo alias).
@@ -168,7 +174,9 @@ Nestes casos: pare, explique o dilema ao dono em ≤5 linhas, proponha 2 caminho
 `/project` → `commands/project/SKILL.md` · `/update` → `commands/update/SKILL.md` ·
 `/connect` → `commands/connect/SKILL.md` · `/slack` → `commands/slack/SKILL.md` ·
 `/gmail` → `commands/gmail/SKILL.md` · `/drive` → `commands/drive/SKILL.md` ·
-`/goal` → `commands/goal/SKILL.md` · `/recap` → `commands/recap/SKILL.md`
+`/goal` → `commands/goal/SKILL.md` · `/recap` → `commands/recap/SKILL.md` ·
+`/map` → `commands/map/SKILL.md` · `/timeline` → `commands/timeline/SKILL.md` ·
+`/backup` → `commands/backup/SKILL.md`
 
 Ao receber um comando, leia a skill correspondente ANTES de agir. Variantes
 naturais ("meu dia", "atualiza tudo") mapeiam para a skill óbvia.

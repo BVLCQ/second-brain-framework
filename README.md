@@ -189,7 +189,10 @@ cuida.
 | `/person <nome>` | panorama de uma pessoa: histórico, threads, prep de reunião | antes de reuniões |
 | `/project <nome>` | status de um projeto: árvore, ações, saúde de prazo | sob demanda |
 | `/recap [goal\|projeto\|período]` | **dossiê compartilhável** (vault/reports/): entregas, resultado, impacto, fontes | sob demanda |
-| `/update` | motor completo: conectores + dump + regenera todas as views (incl. **mapa Mermaid** e **timeline**) | noturno (cron) |
+| `/map` | mapa visual Mermaid (áreas, stakeholders×projetos, dependências) — sob demanda | reviews de planejamento |
+| `/timeline` | linha do tempo (passado: entregas/decisões; futuro: gantt 45d) | recaps e reviews |
+| `/backup` | zip do vault → pasta do Google Drive (semanal no noturno; a única exceção de escrita) | sob demanda |
+| `/update` | motor completo: conectores + dump + regenera as views diárias | noturno (cron) |
 | `/connect [fonte]` | puxa Jira/GitHub/Slack/Gmail/Drive agora (leitura) → inbox | sob demanda |
 | `/slack #canal [@user] [7d]` | transcrição de um canal/DM da janela pedida | sob demanda |
 | `/gmail [janela\|filtro]` | email via OAuth read-only (script) → snapshot → digest | sob demanda |

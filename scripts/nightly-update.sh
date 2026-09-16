@@ -20,7 +20,13 @@ for c in jira github slack gmail gdrive; do
   fi
 done
 
-# 2. /update via agente headless — AJUSTE PARA SEU AGENTE (um só):
+# 2. Backup semanal do vault (domingo) — a única exceção de escrita, ver guides/backup.md
+DOW=$(date +%u)  # 1=seg … 7=dom
+if [ "$DOW" = "7" ] && [ -f config/.env ]; then
+  python3 scripts/connectors/backup.py || echo "AVISO: backup falhou — verificando na próxima" >&2
+fi
+
+# 3. /update via agente headless — AJUSTE PARA SEU AGENTE (um só):
 AGENT_CMD="${AGENT_CMD:-codex exec}"           # alternativa: claude -p
 if command -v codex >/dev/null 2>&1; then
   $AGENT_CMD "/update"
