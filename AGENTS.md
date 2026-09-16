@@ -177,7 +177,7 @@ Nestes casos: pare, explique o dilema ao dono em ≤5 linhas, proponha 2 caminho
 `/gmail` → `commands/gmail/SKILL.md` · `/drive` → `commands/drive/SKILL.md` ·
 `/goal` → `commands/goal/SKILL.md` · `/recap` → `commands/recap/SKILL.md` ·
 `/map` → `commands/map/SKILL.md` · `/timeline` → `commands/timeline/SKILL.md` ·
-`/backup` → `commands/backup/SKILL.md`
+`/backup` → `commands/backup/SKILL.md` · `/upgrade` → `commands/upgrade/SKILL.md`
 
 Ao receber um comando, leia a skill correspondente ANTES de agir. Variantes
 naturais ("meu dia", "atualiza tudo") mapeiam para a skill óbvia.
