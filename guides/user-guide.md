@@ -73,12 +73,31 @@ diário.
 
 ### 3.2 `vault/PLANNING/` — onde eu quero chegar
 
-A hierarquia: **goal → projeto → entregável → ação**. Exemplo: goal "destravar
-a frente de dados" → projeto "Padronização de métricas" → entregável "dicionário
-de dados v1" → ações com data. **É a única zona com trava de verdade:** o agente
-pode *propor* criar, fechar ou mudar goal/projeto, mas a mudança só entra com
-sua aprovação explícita ("ok", "1a"). Estado factual (progresso, links, datas
-observadas) o agente atualiza sozinho — com log.
+A hierarquia: **goal → projeto → entregável → ação**. Mora em dois arquivos:
+
+- **`goals.md`** — a árvore viva, com IDs (`G#` goal, `P#` projeto):
+
+```markdown
+## Goals ativos
+
+### G2 — Destravar a frente de dados
+- **Por quê:** sem dicionário comum, toda análise nasce discutida
+- **Horizonte:** 30/11 · **Status:** ativo · **Progresso:** 60% (declarado por você)
+
+#### P1 · Padronização de métricas
+- Entregável: dicionário de dados v1 — draft qua 16/09 — em revisão
+- Entregável: pipeline no padrão X — 30/10 — não iniciado
+```
+
+- **`log.md`** — o livro de bordo das mudanças: toda criação/fechamento/
+  recongelamento de goal entra com data, diff, motivo, evidência e sua
+  aprovação ("ok", "1a"). É daqui que o `/timeline` conta as viradas de rumo.
+
+**É a única zona com trava de verdade:** o agente pode *propor* criar, fechar
+ou mudar goal/projeto (diff com evidência), mas só entra com sua aprovação
+explícita. Estado factual (progresso declarado, datas observadas, links) o
+agente atualiza sozinho — com log. As ações (`A-####`) **não moram aqui**:
+moram no ledger do PROCESSED (seção 6); o PLANNING é a bússola, não a fila.
 
 ### 3.3 `vault/RAW/` — o arquivo morto (inbox única, partição por ano/mês)
 
@@ -110,6 +129,11 @@ O que o agente extrai de cada item do RAW, espelhando a partição
   `subjects-index.md`. Cada linha aponta para os artefatos onde a entidade
   aparece. *Escreve-se por mês, lê-se por entidade*: você nunca pergunta "o que
   aconteceu em março" — pergunta "o que sei sobre a Ana?", e o índice entrega.
+- **Logs** — os livros-razão da sua vida profissional, em `_logs/`:
+  `actions.md` (o dossiê de cada ação: aberta → atualizada → fechada, com
+  `blocked-by`/`unblocks`/`proj`/`waiting` — o grafo de dependências mora aqui)
+  e `deliveries.md` (o que foi ENTREGUE, com resultado e evidência — a matéria
+  -prima dos recaps). Append-only como tudo aqui: o histórico é o produto.
 
 **Regra: append-only** (só se acrescenta, nunca se reescreve ou apaga). Registro
 errado se corrige com um registro novo que aponta o erro — como um livro-caixa.
@@ -336,6 +360,49 @@ nova. **Essa é a única trava do sistema** — goals e projetos são os únicos
 arquivos onde criar/mudar/fechar exige você. Todo o resto o agente escreve
 livremente *na zona dele*.
 
+### O planejamento em escada: dia → semana → mês (+ a pocket)
+
+Três horizontes, um por view — cada nível enxerga mais longe e agrega mais:
+
+| View | Janela | O que decide |
+|---|---|---|
+| `daily-brief.md` | hoje + 72h | o que eu executo AGORA (e o que está atrasado me bloqueando) |
+| `week.md` | 14 dias | o foco da semana, o radar de goals, as propostas de mudança (o gate) |
+| `month.md` | 30-45 dias | por goal → projeto → entregável: deadlines, progresso, dependências que atravessam projetos |
+
+`month.md` é a visão de rota: enxerga cadeias que o dia esconde — "o draft de
+16/09 destrava o pipeline de 30/10; se o draft escorregar, o mês inteiro do G2
+escorrega junto". E pra quem só tem 1 minuto: **`pocket.md`** — a página pro
+coordenador/gerente: status por goal em uma linha, foco da semana, entregue
+recentemente, e os bloqueios que dependem *deles* (com nome de quem). Derivada
+das mesmas fontes; compartilhável por copy-paste.
+
+Todas derivam de `PLANNING/goals.md` + `deliveries.md` + índices — nunca são
+editadas à mão; o `/update` as regenera toda noite.
+
+### O cérebro desenhado: `/map` e `/timeline`
+
+Sob demanda (não gastam o noturno), dois documentos visuais em **Mermaid** —
+abrem renderizados no Obsidian e no GitHub:
+
+- **`/map`** → `map.md`, três grafos: **áreas → goals → projetos** (a floresta
+  inteira num olhar), **stakeholders × projetos** (quem está em quê, com o
+  papel), e o grafo de **dependências entre ações abertas** — setas verdes
+  (`unblocks`) e vermelhas (`blocked-by`, com ⛔ no nó bloqueado):
+
+```mermaid
+graph LR
+  A0147["Bruno revisa draft"] -->|unblocks| A0146["Você envia v1"]
+  A0146 -->|unblocks| P1["Dicionário v1 em produção"]
+```
+
+- **`/timeline`** → `timeline.md`: o **passado** como linha do tempo (entregas
+  do `deliveries.md`, decisões que mudaram direção, viradas de goal do
+  `log.md`) e o **futuro** como **gantt** de 30-45 dias com os entregáveis por
+  projeto e o hoje marcado. Timeline honesta: período sem evento não entra.
+
+Ambos com header `generated-at:` — a idade do desenho é sempre visível.
+
 ### O mês vira
 
 Outubro nasce: `vault/RAW/2026/10/` e `vault/PROCESSED/2026/10/` se criam sozinhos no
@@ -358,6 +425,34 @@ Reports são point-in-time: nunca reescritos, regerar cria arquivo novo.
 E pra o dia a dia com a liderança: `FRESH/pocket.md` — 1 página com status
 por goal, foco da semana, entregue recentemente e os bloqueios que dependem
 deles.
+
+Um recap parece isto (autocontido — quem lê não tem acesso ao cérebro):
+
+```markdown
+# G2 · Destravar a frente de dados — recap & impacto
+_Gerado em 30/11 · cobre 15/09–30/11 · fontes no fim_
+
+## Objetivo
+Unificar a definição de métricas de retenção para acabar com a disputa
+de números nos comitês.
+
+## O que foi entregue
+- Dicionário de dados v1 em produção (02/10) — 100% das métricas do pipeline
+  documentadas. Resultado: consultas de métricas sem abertura de ticket
+  (declaração da Ana, 1:1 de 15/10).
+- Pipeline de ingestão no padrão X (28/11) — queda de 40 min para 6 min no
+  refresh diário (dashboard de monitoramento [doc]).
+
+## Resultado & impacto
+Zero disputas de número nos 3 comitês desde 15/10 (antes: 2/mês, em média
+de menções em atas). Qualitativo, ainda sem métrica formal de adoção.
+
+## Pendências
+- Treinamento do time de CS no dicionário (dez/26).
+
+## Fontes
+- D-0092 (reunião 14/09) · deliveries 02/10 e 28/11 · A-0146, A-0151
+```
 
 ---
 
