@@ -2,11 +2,14 @@
 # Uma única linha blinda o cérebro inteiro; framework na raiz segue commitável.
 /vault/
 
-# Config e estado da INSTÂNCIA (nunca commitados)
+# ═══ Config e estado da INSTÂNCIA (nunca commitados) ═══
 .env
 config/.env
 config/watch.yaml
 config/.state.json
+
+# ═══ Inovação local: scripts nascidos na instância (graduam p/ upstream) ═══
+scripts/local/
 
 # Sistema
 .DS_Store

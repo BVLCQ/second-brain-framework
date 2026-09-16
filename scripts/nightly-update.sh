@@ -20,7 +20,10 @@ for c in jira github slack gmail gdrive; do
   fi
 done
 
-# 2. Backup semanal do vault (domingo) — a única exceção de escrita, ver guides/backup.md
+# 2. Lembrete semanal de reauth Google (auto-gateado; silêncio se token ok)
+bash scripts/google-reauth-reminder.sh || true
+
+# 3. Backup semanal do vault (domingo) — a única exceção de escrita, ver guides/backup.md
 DOW=$(date +%u)  # 1=seg … 7=dom
 if [ "$DOW" = "7" ] && [ -f config/.env ]; then
   python3 scripts/connectors/backup.py || echo "AVISO: backup falhou — verificando na próxima" >&2

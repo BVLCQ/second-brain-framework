@@ -128,27 +128,26 @@ usam OAuth read-only ([`guides/google-oauth.md`](guides/google-oauth.md)).
 
 ### Atualizando o framework
 
-Sua instância é um clone:
+Sua instância é um clone. Duas rotinas:
 
-```bash
-git pull --ff-only
-```
+**Dia a dia — `git pull --ff-only`.** Suas zonas não existem pro git, então
+nenhum conflito é possível com seus dados. (Se você editou arquivos do
+framework localmente e o pull reclamar, `git stash` → pull → `git stash pop`.)
 
-Só isso — skills, conectores, docs e `AGENTS.md` atualizam no lugar. Suas zonas
-não existem pro git, então nenhum conflito é possível. Se você editou arquivos
-do framework localmente e o pull reclamar, `git stash` → pull → `git stash pop`.
-
-**Templates de zona** (novos índices, mudanças de template em `template/`):
-não precisa fazer nada — na próxima sessão, se um arquivo que uma skill
-referencia faltar no seu vault, o agente semeia a partir de `template/`;
-se um template seu mudou upstream, o agente propõe o diff (você decide).
+**Com edições locais do agente — `/upgrade`.** Agentes melhoram scripts/skills
+in place e o clone diverge; o `/upgrade` reconcilia: classifica cada mudança
+(drift de versão antiga vs. edição genuína), atualiza com stash, junta
+melhorias ao upstream novo, semeia zonas faltantes do `template/` e reporta
+candidatos a **graduar pro upstream** — melhorias boas voltam pro repo pra
+todo mundo. Scripts novos nascem em `scripts/local/` (gitignored): nunca
+bloqueiam pull e provam valor antes de graduarem.
 
 ⚠️ `cp -r template vault` é comando de **instalação, uma única vez** — nunca
 o re-execute sobre um vault vivo: aninha uma cópia perdida de `template/`
 dentro da sua zona de dados (ou, na variante `cp -r template/* vault/`,
 sobrescreve índices vivos com templates vazios = perda de memória). Update
-de framework é sempre `git pull --ff-only`; o que for de zona, a auto-cura
-cuida.
+de framework é sempre `git pull --ff-only` (ou `/upgrade`); o que for de
+zona, a auto-cura cuida.
 
 ---
 
@@ -192,6 +191,7 @@ cuida.
 | `/map` | mapa visual Mermaid (áreas, stakeholders×projetos, dependências) — sob demanda | reviews de planejamento |
 | `/timeline` | linha do tempo (passado: entregas/decisões; futuro: gantt 45d) | recaps e reviews |
 | `/backup` | zip do vault → pasta do Google Drive (semanal no noturno; a única exceção de escrita) | sob demanda |
+| `/upgrade` | atualiza o framework **reconciliando edições locais do agente** (stash→pull→re-aplica; candidatos a upstream) | após o agente editar scripts |
 | `/update` | motor completo: conectores + dump + regenera as views diárias | noturno (cron) |
 | `/connect [fonte]` | puxa Jira/GitHub/Slack/Gmail/Drive agora (leitura) → inbox | sob demanda |
 | `/slack #canal [@user] [7d]` | transcrição de um canal/DM da janela pedida | sob demanda |

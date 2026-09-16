@@ -69,8 +69,13 @@ def main() -> None:
                 }))
     print("Abrindo o navegador para autorização (escopos READ-ONLY de Gmail+Drive)…")
     print(f"Se não abrir: {auth_url}\n")
+    import shutil
     import subprocess
-    subprocess.run(["open", auth_url], check=False)  # macOS; Linux: xdg-open
+    opener = shutil.which("open") or shutil.which("xdg-open")
+    if opener:
+        subprocess.run([opener, auth_url], check=False)
+    else:
+        print("(não achei open/xdg-open — cole a URL acima no navegador)")
 
     server = HTTPServer(("127.0.0.1", PORT), _Handler)
     threading.Thread(target=server.handle_request, daemon=True).start()
