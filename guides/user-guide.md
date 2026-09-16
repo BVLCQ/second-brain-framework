@@ -534,11 +534,14 @@ aceita o lote ("fechei X, Y e Z") com este mesmo protocolo — um /done por
 coisa, sem cerimônia.
 
 Confirmação em 2 linhas, e a ação já aparece no `/brief` e no `open-actions`
-sem mais nada. **Sem arquivo manual na inbox** — o ledger é o registro. E o
-detalhe que não coube em 1 linha mora na ficha: `/todo A-0152 + <contexto>`
-apenda à ficha `_actions/A-0152.md` (cria se não existir). A ficha é o
-"dossiê da ação" — contexto, passos, decisões e artefatos ligados — para
-qualquer ação complexa, tenha nascido de reunião ou de você.
+sem mais nada. **Sem arquivo manual na inbox — e sem risco de perda:** o
+registro É arquivo (linha append no `_logs/actions.md`, zona eterna do
+PROCESSED); o `/update` nunca reconstrói o PROCESSED, só lê — o que ele
+regenera são as views, que derivam justamente do ledger. Pessoas e projetos
+linkados ganham sua linha de menção nos índices na hora (o `/person` e o
+`/project` veem a ação). Por que não arquivo na inbox? Porque o dump teria
+que re-parsear via LLM o que você já disse certo — custo, latência e risco
+de errar o que estava certo. Declaração estruturada → ledger direto.
 
 E o RAW? **Nunca é tocado** — só movido da inbox pro mês. O arquivo bruto é a
 prova original; tudo à frente é derivado e reprocessável.

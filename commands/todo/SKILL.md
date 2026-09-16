@@ -51,10 +51,14 @@ A-0153 · ler material de retenção — antes de eu registrar:
 4. **Escreva no ledger** (`_logs/actions.md`, append):
    `A-#### · aberta · <data real> · <o quê> · dono: VOCÊ · deadline <ISO> ·
    proj: P# · origem: /todo (declarado pelo dono)`
-5. **Ficha se houver detalhe**: texto longo/contexto (ou "detalhe:") → cria
+5. **Alimente os índices** (a garantia que o dump daria de graça — escrita
+   direta também indexa): 1 linha em `people-index.md` por pessoa linkada e
+   em `projects-index.md` por projeto linkado (`<data> · A-#### · <o quê, 1
+   linha>`) — o estado atual da ação vem do ledger (o índice aponta o ID).
+6. **Ficha se houver detalhe**: texto longo/contexto (ou "detalhe:") → cria
    `_actions/A-####.md` com o que veio. `/todo A-0146 + <texto>` APENDA
    detalhe à ficha existente (cria se não existir) — nunca reescreve.
-6. **Confirme em 1-2 linhas**: "A-0152 · ler material de retenção · até qua
+7. **Confirme em 1-2 linhas**: "A-0152 · ler material de retenção · até qua
    18/09 · P1 · com a Ana". O dono confere o encaixe em 2 segundos.
 
 A nova ação aparece sozinha no `/brief` (ATRASADAS/72h), `open-actions.md`,

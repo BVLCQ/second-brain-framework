@@ -8,6 +8,10 @@ description: "Fecha uma ação: /done A-0146 <como> — ledger, cascata de desbl
 **Nunca registre TODO/DONE como arquivo na inbox** — declarações do dono vão
 DIRETO ao ledger (arquivo na inbox é para material bruto; se o dono soltar um
 .md anotando tarefas, o /dump extrai — mas declaração falada/comando é ledger).
+O ledger É persistência: arquivo append-only no PROCESSED — `/update` nunca o
+tocca, apenas lê (as views derivam dele). O que o dump daria de graça
+(linhas de menção nos índices), a escrita direta faz explicitamente — ver
+passos 5 (todo) e 4 (done).
 
 ## Sequência
 
@@ -22,7 +26,8 @@ DIRETO ao ledger (arquivo na inbox é para material bruto; se o dono soltar um
    - **Ação de terceiro** ou ação antiga (>30d) → sempre confirme em 1 linha
      (fechar o que não é seu/velho por engano é o erro mais caro).
 2. **Feche no ledger** (append): `A-#### · fechada · <data real> · <como>` —
-   o texto do dono, limpo; sem texto → "concluída".
+   o texto do dono, limpo; sem texto → "concluída". (Índice: não precisa de
+   linha nova — a menção de abertura já aponta o A-####; estado vem do ledger.)
 3. **Entrega ou só fechamento?** (a regra que mantém o recap limpo)
    - **Linha em `_logs/deliveries.md`** SE a ação tinha `proj:`/`unblocks:` OU
      o "como" descreve resultado observável ("em produção", "aprovado",
