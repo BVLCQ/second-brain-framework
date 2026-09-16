@@ -56,9 +56,12 @@ def issue_line(i: dict) -> str:
 def main() -> None:
     common.load_env()
     state = common.load_state()
-    repos = common.load_watch().get("github") or []
+    repos, off = common.watch_items(common.load_watch().get("github") or [], "repo")
+    for r in off:
+        print(f"  github/{r}: desligado no watch.yaml (mudo — não puxa, não debuga)")
+    repos = [r for r in repos if r not in off]
     if not repos:
-        print("github: nenhum repo em config/watch.yaml — nada a fazer")
+        print("github: nenhum repo habilitado no config/watch.yaml — nada a fazer")
         return
     print("github: puxando…")
     any_new = False

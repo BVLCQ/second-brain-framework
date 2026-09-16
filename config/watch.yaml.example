@@ -1,28 +1,39 @@
 # Second Brain — o universo observável pelo cérebro (INSTÂNCIA)
 # Copie para config/watch.yaml · tudo enumerado por você: o que não está
 # listado, o cérebro não vê. Tokens read-only ficam em config/.env.
+#
+# KILL-SWITCH: itens de lista (github/gdocs) e seções inteiras (gmail/slack)
+# aceitam `enabled: false` — a fonte fica MUDA: o conector pula o pull e
+# declara em 1 linha ("desligado no watch.yaml"). NÃO é erro: sem debug,
+# sem alerta, sem investigação. Reativar = apagar a linha (ou true).
 
 github:
-  - owner/repo-um          # repos a observar: PRs, issues, reviews
-  - owner/repo-dois
+  - repo: owner/repo-um      # repos a observar: PRs, issues, reviews
+  - repo: owner/repo-dois
+    enabled: false           # MUDO: config preservada, pull pulado
 
 jira:
-  me: true                 # seus cards (assignee = você)
-  following: true          # cards que você segue (watcher)
-  boards: []               # boards do time, INTEIROS (project key ou board id)
+  me: true                   # seus cards (assignee = você) — false = off
+  following: true            # cards que você segue (watcher) — false = off
+  boards: []                 # boards do time, INTEIROS (project key)
+  # - MIG
+  #   enabled: false        # board mudo
 
 gmail:
-  window: daily            # digest do dia anterior (OAuth — docs/google-oauth.md)
+  enabled: true              # kill-switch da seção inteira
+  window: daily              # digest do dia anterior (OAuth — guides/google-oauth.md)
 
 slack:
-  channels: []             # ex.: ["#retention", "#squad-cs"] — noturno
-  users: []                # ex.: ["@ana"] — noturno
-  default_window: 7d       # janela padrão do /slack sob demanda
+  enabled: true              # kill-switch da seção inteira
+  channels: []               # ex.: ["#retention", "#squad-cs"] — noturno
+  users: []                  # ex.: ["@ana"] — noturno
+  default_window: 7d         # janela padrão do /slack sob demanda
 
-gdocs:                      # docs vivos (OAuth — docs/google-oauth.md) — ARRAY, um por doc
-  - id: "1AbC…"             # id do doc no Drive (parte da URL)
+gdocs:                       # docs vivos (OAuth — guides/google-oauth.md)
+  - id: "1AbC…"              # id do doc no Drive (parte da URL)
     name: "dicionario-de-dados"
-  - id: "1XyZ…"             # quantos quiser
+  - id: "1XyZ…"
     name: "okrs-q4"
+    enabled: false           # doc mudo: config preservada, pull pulado
 
-schedule: nightly           # conectores rodam junto com o /update noturno
+schedule: nightly            # conectores rodam junto com o /update noturno

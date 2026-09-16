@@ -85,6 +85,31 @@ def _parse_list(rhs: str) -> list[str]:
     return [i for i in items if i]
 
 
+def _parse_item(s: str) -> str | dict:
+    '''"- repo: owner/x" → {"repo": "owner/x"} · "- owner/x" → "owner/x".
+    Comentário inline (" # …") sai antes — valor nunca vem com # grudado.'''
+    body = re.split(r"\s+#", s[2:].strip())[0].strip()
+    m = re.match(r"^([a-zA-Z_]+):\s*(.+)$", body)
+    if m:
+        return {m.group(1): _unquote(m.group(2))}
+    return _unquote(body)
+
+
+def watch_items(raw: list, key: str) -> tuple[list[str], list[str]]:
+    """Normaliza itens do watch (string curta OU objeto com enabled) →
+    (habilitados, desligados). Item desligado = MUDO: não puxa, não debuga."""
+    enabled, disabled = [], []
+    for it in raw or []:
+        if isinstance(it, dict):
+            name = str(it.get(key) or it.get("id") or it.get("name") or "").strip()
+            if not name:
+                continue
+            (enabled if it.get("enabled", True) else disabled).append(name)
+        else:
+            enabled.append(str(it).strip())
+    return enabled, disabled
+
+
 def load_watch() -> dict:
     """Lê config/watch.yaml — PyYAML se disponível, senão parse minimalista."""
     watch_file = CONFIG_DIR / "watch.yaml"
@@ -97,33 +122,42 @@ def load_watch() -> dict:
     except ImportError:
         watch: dict = {"jira": {"me": True, "following": True, "boards": []},
                        "github": [], "slack": {"channels": [], "users": []},
-                       "gdocs": []}
+                       "gdocs": [], "gmail": {"enabled": True}}
         section = None
+        last_list: list | None = None
         for ln in text.splitlines():
             if not ln.strip() or ln.strip().startswith("#"):
                 continue
             if not ln[0].isspace():
-                # cabeçalho de seção — comentário inline (' # …') fora, senão
-                # 'gdocs:  # docs vivos' nunca casa com 'gdocs'
+                # cabeçalho de seção — comentário inline (' # …') fora
                 section = re.split(r"\s+#", ln)[0].strip().rstrip(":").strip()
                 continue
             s = re.split(r"\s+#", ln.strip(), 1)[0].strip() if section == "gdocs" else ln.strip()
-            if section == "github" and s.startswith("- "):
-                item = s[2:].split("#")[0].strip().strip('"\'')
-                if item:
+            if section == "github":
+                if s.startswith("- "):
+                    item = _parse_item(s)
                     watch["github"].append(item)
+                    last_list = watch["github"] if isinstance(item, dict) else None
+                elif s.startswith("enabled:") and last_list is watch["github"] and watch["github"] and isinstance(watch["github"][-1], dict):
+                    watch["github"][-1]["enabled"] = "true" in s.lower()
             elif section == "slack":
                 if s.startswith("channels:"):
                     watch["slack"]["channels"] = _parse_list(s.split(":", 1)[1])
+                    last_list = watch["slack"]["channels"]
                 elif s.startswith("users:"):
                     watch["slack"]["users"] = _parse_list(s.split(":", 1)[1])
+                    last_list = watch["slack"]["users"]
+                elif s.startswith("enabled:"):
+                    watch["slack"]["enabled"] = "true" in s.lower()
                 elif s.startswith("default_window:"):
                     watch["slack"]["default_window"] = s.split(":", 1)[1].strip()
-            elif section == "gdocs":
-                if s.startswith("- id:"):
-                    watch["gdocs"].append({"id": _unquote(s.split(":", 1)[1]), "name": ""})
-                elif s.startswith("name:") and watch["gdocs"]:
-                    watch["gdocs"][-1]["name"] = _unquote(s.split(":", 1)[1])
+                elif s.startswith("- ") and last_list is not None:
+                    item = _parse_item(s)
+                    last_list.append(item)
+                    if not isinstance(item, dict):
+                        last_list = None
+                elif s.startswith("enabled:") and last_list and isinstance(last_list[-1], dict):
+                    last_list[-1]["enabled"] = "true" in s.lower()
             elif section == "jira":
                 if s.startswith("me:"):
                     watch["jira"]["me"] = "true" in s.lower()
@@ -131,6 +165,24 @@ def load_watch() -> dict:
                     watch["jira"]["following"] = "true" in s.lower()
                 elif s.startswith("boards:"):
                     watch["jira"]["boards"] = _parse_list(s.split(":", 1)[1])
+                    last_list = watch["jira"]["boards"]
+                elif s.startswith("- ") and last_list is not None:
+                    item = _parse_item(s)
+                    last_list.append(item)
+                    if not isinstance(item, dict):
+                        last_list = None
+                elif s.startswith("enabled:") and last_list and isinstance(last_list[-1], dict):
+                    last_list[-1]["enabled"] = "true" in s.lower()
+            elif section == "gdocs":
+                if s.startswith("- id:"):
+                    watch["gdocs"].append({"id": _unquote(s.split(":", 1)[1]), "name": ""})
+                elif s.startswith("name:") and watch["gdocs"]:
+                    watch["gdocs"][-1]["name"] = _unquote(s.split(":", 1)[1])
+                elif s.startswith("enabled:") and watch["gdocs"]:
+                    watch["gdocs"][-1]["enabled"] = "true" in s.lower()
+            elif section == "gmail":
+                if s.startswith("enabled:"):
+                    watch["gmail"]["enabled"] = "true" in s.lower()
         return watch
 
 

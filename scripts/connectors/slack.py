@@ -164,6 +164,13 @@ def main() -> None:
         return
     # modo noturno: watchlist
     channels, users, _ = load_watch_slack()
+    w = common.load_watch().get("slack") or {}
+    if w.get("enabled") is False:
+        print("slack: desligado no watch.yaml (mudo — não puxa, não debuga)")
+        return
+    for ch in channels:
+        if isinstance(ch, str) and ch in (w.get("disabled_channels") or []):
+            print(f"  slack/{ch}: desligado no watch.yaml (mudo)")
     if not channels and not users:
         print("slack: watchlist vazia — nada a fazer")
         return

@@ -105,9 +105,13 @@ def main() -> None:
         return
 
     # noturno: watchlist gdocs
-    docs = common.load_watch().get("gdocs") or []
+    docs_raw = common.load_watch().get("gdocs") or []
+    docs, off = common.watch_items(docs_raw, "id")
+    for d in off:
+        print(f"  gdoc/{d}: desligado no watch.yaml (mudo — não puxa, não debuga)")
+    docs = [d for d in docs_raw if isinstance(d, dict) and d.get("id") not in off]
     if not docs:
-        print("gdrive: watchlist 'gdocs:' vazia no watch.yaml — nada a fazer")
+        print("gdrive: watchlist 'gdocs:' vazia (ou toda desligada) — nada a fazer")
         return
     print("gdrive: puxando watchlist…")
     any_new = False

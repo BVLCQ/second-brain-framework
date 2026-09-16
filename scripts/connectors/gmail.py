@@ -48,6 +48,11 @@ def header(msg: dict, name: str) -> str:
 def main() -> None:
     common.load_env()
     state = common.load_state()
+    w = common.load_watch()
+    # noturno: kill-switch da seção inteira
+    if w.get("gmail", {}).get("enabled") is False:
+        print("gmail: desligado no watch.yaml (mudo — não puxa, não debuga)")
+        return
     token = common.google_access_token()
     args = sys.argv[1:]
     if args and args[0].startswith(("from:", "to:", "subject:", "q:", "is:", "in:")):

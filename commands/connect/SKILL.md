@@ -26,4 +26,8 @@ slack, gmail, drive) = só aquela fonte.
 - Nunca escrever em ferramenta externa. Nunca responder/comentar por conta própria.
 - Fonte sem credencial: dizer qual variável falta do `.env.example`, sem
   imprimir valor nenhum.
+- **Fonte desligada (`enabled: false` no watch.yaml) NÃO é erro**: o conector
+  reporta "desligado no watch.yaml (mudo)" — reconheça, reporte em 1 linha e
+  SIGA. Proibido debugar, testar credencial ou "investigar" fonte desligada;
+  reativar é decisão do dono (uma linha no watch.yaml).
 - Erro de API: reportar a mensagem BRUTA do conector, não interpretar demais.
