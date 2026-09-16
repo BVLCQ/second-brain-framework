@@ -536,7 +536,8 @@ cp config/watch.yaml.example config/watch.yaml                # liste o que obse
 #    durante a entrevista viram o primeiro dump
 
 # 5. viver: jogar coisas em vault/RAW/inbox/ → /dump → /brief no dia seguinte
-#    (atualizar o framework, quando quiser: git pull --ff-only)
+#    (atualizar o framework: git pull --ff-only · se seu agente editou
+#     scripts/skills, use /upgrade — ele reconcilia tudo)
 ```
 
 O cérebro **nasce vazio e fica inteligente na velocidade em que você o
@@ -548,6 +549,28 @@ inteiro pra uma pasta do SEU Google Drive (retenção de 8; setup de 3 min em
 `guides/backup.md`). É a única exceção de escrita da constituição — estreita:
 o escopo só cria/apaga os próprios backups na pasta configurada, e segredos
 (`.env`) moram fora do vault, fora do zip. `/backup status` mostra o último.
+
+### Atualizando o framework (e o que fazer quando o agente edita código)
+
+Sua instância é um clone — `git pull --ff-only` traz skills, conectores e
+guias novos sem nunca tocar seus dados (vault e config são invisíveis pro
+git). Mas agentes melhoram o mundo ao redor: editam um script, criam outro.
+Aí o pull reclama (clone divergido) — e a resposta **não é proibir**, é
+reconciliar:
+
+- **`/upgrade`** — o agente faz a dança completa: classifica cada mudança
+  (drift de versão antiga vs. edição genuína), `stash` → `pull` → `pop`
+  **juntando** melhorias ao código novo, semeia zonas faltantes do
+  `template/`, roda a checagem de saúde e reporta **candidatos a graduação
+  ao upstream** (você mantém o repo — melhoria boa volta pra todos).
+- **`scripts/local/`** — o berçário: scripts que SEU agente criar nascem aí
+  (cego pro git): nunca bloqueiam pull, provam valor na prática, e graduam
+  pro repo quando fizer sentido.
+- **Lembrete de reauth**: se o OAuth do Google expirar (app em Testing =
+  7 dias), o noturno deixa uma **nota na sua inbox** (vira brief no dia
+  seguinte) — não é erro, é o cérebro pedindo reautorização.
+- Pull simples recusado sem edição conhecida: `git stash` → pull →
+  `git stash pop` resolve na mão o trivial.
 
 ---
 
