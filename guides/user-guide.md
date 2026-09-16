@@ -501,6 +501,21 @@ A-0152 · aberta · 2026-09-16 · ler material de retenção · dono: VOCÊ ·
   deadline 2026-09-18 · proj: P1 · origem: /todo (declarado pelo dono)
 ```
 
+E se o texto NÃO traz prazo/projeto/pessoa, o agente pergunta o que falta —
+**em uma rodada só, com sugestões** (você responde "1a 2pula 3Ana"):
+
+```
+A-0153 · ler material de retenção — antes de eu registrar:
+1. Para quando?  (a) qua 18/09  (b) sex 20/09  (c) sem prazo  (d) outra
+2. Projeto?      (a) P1 Padronização  (b) P3 Onboarding  (c) nenhuma  (d) outra
+3. Alguém além de você?  (a) nenhum  (b) outra
+```
+
+Cada resposta encaixa a ação no planejamento: prazo a coloca no `/brief` e no
+gantt do `/timeline`; projeto a liga à árvore de goals (radar do `/week`,
+`month.md`, recaps); pessoa a liga às threads e ao prep de reunião. Texto já
+traz tudo → zero perguntas, cria direto — TODO rápido continua rápido.
+
 Confirmação em 2 linhas, e a ação já aparece no `/brief` e no `open-actions`
 sem mais nada. **Sem arquivo manual na inbox** — o ledger é o registro. E o
 detalhe que não coube em 1 linha mora na ficha: `/todo A-0152 + <contexto>`
