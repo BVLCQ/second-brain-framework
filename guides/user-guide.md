@@ -516,6 +516,23 @@ gantt do `/timeline`; projeto a liga à árvore de goals (radar do `/week`,
 `month.md`, recaps); pessoa a liga às threads e ao prep de reunião. Texto já
 traz tudo → zero perguntas, cria direto — TODO rápido continua rápido.
 
+**E fechar é `/done`** — o par exato. Concluiu? Conta pro cérebro na hora:
+
+```
+você: /done A-0146 enviado — o Bruno confirmou recebimento
+agente: A-0146 fechada (enviado, confirmado) · delivery registrada ·
+        A-0151 desbloqueada
+```
+
+Três coisas acontecem juntas: a linha de fechamento no ledger (`fechada ·
+como`), a **cascata** (ações que ela travava ganham "desbloqueada"), e — só
+se for entrega de verdade (tinha projeto, ou o resultado é observável) — a
+linha em `deliveries.md` com a tag **`[declarado]`** (afirmação sua, o nível
+mais alto de proveniência). Ação operacional ("li o material") só fecha:
+checkbox não é entrega, e o recap agradece o silêncio. Na sexta, o `/week`
+aceita o lote ("fechei X, Y e Z") com este mesmo protocolo — um /done por
+coisa, sem cerimônia.
+
 Confirmação em 2 linhas, e a ação já aparece no `/brief` e no `open-actions`
 sem mais nada. **Sem arquivo manual na inbox** — o ledger é o registro. E o
 detalhe que não coube em 1 linha mora na ficha: `/todo A-0152 + <contexto>`

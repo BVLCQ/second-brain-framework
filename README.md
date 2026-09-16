@@ -193,6 +193,7 @@ zona, a auto-cura cuida.
 | `/backup` | zip do vault → pasta do Google Drive (semanal no noturno; a única exceção de escrita) | sob demanda |
 | `/upgrade` | atualiza o framework **reconciliando edições locais do agente** (stash→pull→re-aplica; candidatos a upstream) | após o agente editar scripts |
 | `/todo <texto>` | cria ação A-#### na hora: deadline, pessoas e projeto parseados do que você digitou | sempre que lembrar de algo |
+| `/done <A-####\|texto> <como>` | fecha a ação (cascata de desbloqueio; entrega → deliveries.md) | ao concluir |
 | `/update` | motor completo: conectores + dump + regenera as views diárias | noturno (cron) |
 | `/connect [fonte]` | puxa Jira/GitHub/Slack/Gmail/Drive agora (leitura) → inbox | sob demanda |
 | `/slack #canal [@user] [7d]` | transcrição de um canal/DM da janela pedida | sob demanda |

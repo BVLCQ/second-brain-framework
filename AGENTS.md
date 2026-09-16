@@ -63,7 +63,8 @@ Silêncio NÃO é aprovação. Proposta descartada não é re-proposta sem evid�
    decidir — tipo errado produz artefato inútil.
 4. **Extraia pelo template do tipo** (tabelas em `commands/dump/SKILL.md`).
    Toda extração leva tag de proveniência: `[doc]` (escrito em documento),
-   `[observado]` (dito em reunião/canal), `[sem fonte]` (não achou base).
+   `[observado]` (dito em reunião/canal), `[declarado]` (afirmação direta do
+   dono — ex.: /todo, /done), `[sem fonte]` (não achou base).
 5. **Resolva identidades** pelos aliases de `vault/PROCESSED/_indices/people-index.md`
    ("Bia", "Beatriz C.", "beatriz.costa@…" = uma pessoa só). Nunca crie segunda
    ficha de quem já tem ficha. Pessoa nova → nova ficha com aliases.
@@ -178,7 +179,7 @@ Nestes casos: pare, explique o dilema ao dono em ≤5 linhas, proponha 2 caminho
 `/goal` → `commands/goal/SKILL.md` · `/recap` → `commands/recap/SKILL.md` ·
 `/map` → `commands/map/SKILL.md` · `/timeline` → `commands/timeline/SKILL.md` ·
 `/backup` → `commands/backup/SKILL.md` · `/upgrade` → `commands/upgrade/SKILL.md` ·
-`/todo` → `commands/todo/SKILL.md`
+`/todo` → `commands/todo/SKILL.md` · `/done` → `commands/done/SKILL.md`
 
 Ao receber um comando, leia a skill correspondente ANTES de agir. Variantes
 naturais ("meu dia", "atualiza tudo") mapeiam para a skill óbvia.

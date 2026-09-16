@@ -47,10 +47,11 @@ PLANNING (estado factual, sem gate) e refletir na view.
 
 ## Entregas da semana → deliveries.md
 
-Todo "fechei/terminei/entreguei X" declarado no /week (ou ação fechada com
-resultado) vira 1 linha em `_logs/deliveries.md`
-(`data · ref · o que · resultado · evidência · [proveniência]`) — é daí que o
-/recap monta o histórico de impacto. Resultado não declarado = escrever exatamente isso.
+Todo "fechei/terminei/entreguei X" declarado no /week segue o **protocolo do
+`/done`** (commands/done/SKILL.md): linha no ledger, cascata de desbloqueio,
+e linha em `_logs/deliveries.md` (`data · ref · o que · resultado · evidência
+· [declarado]`) — só quando for entrega real (projeto ligado ou resultado
+observável); operacional só fecha. É daí que o /recap monta o histórico.
 
 ## Geração da pocket (`FRESH/pocket.md`)
 
