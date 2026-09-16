@@ -16,6 +16,9 @@
    - **Data Access → Add or Remove Scopes** → adicione APENAS:
      - `https://www.googleapis.com/auth/gmail.readonly`
      - `https://www.googleapis.com/auth/drive.readonly`
+   - ⚠️ Se você usar o **backup semanal** (`guides/backup.md`), adicione
+     TAMBÉM `https://www.googleapis.com/auth/drive.file` AQUI e reautorize —
+     é o escopo de upload; sem ele o backup de domingo falha com 403.
 4. **Auth Platform → Clients → Create Client** → tipo **Desktop app** → criar.
    Copie **Client ID** e **Client Secret** (não precisa de redirect URI — o
    fluxo usa `localhost` efêmero).

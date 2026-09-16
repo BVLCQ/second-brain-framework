@@ -360,6 +360,10 @@ nova. **Essa é a única trava do sistema** — goals e projetos são os únicos
 arquivos onde criar/mudar/fechar exige você. Todo o resto o agente escreve
 livremente *na zona dele*.
 
+E a árvore não espera a sexta: **`/goal`** abre o panorama a qualquer momento
+(visual) e é a porta oficial de mudanças — criar, fechar, congelar, replanejar:
+sempre proposta com evidência, sempre sua aprovação.
+
 ### O planejamento em escada: dia → semana → mês (+ a pocket)
 
 Três horizontes, um por view — cada nível enxerga mais longe e agrega mais:

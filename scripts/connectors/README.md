@@ -19,6 +19,11 @@ python3 scripts/connectors/github.py      # repos do watch.yaml
 python3 scripts/connectors/slack.py       # watchlist (canais + users)
 python3 scripts/connectors/slack.py #canal 30d   # sob demanda (/slack)
 python3 scripts/connectors/slack.py @user        # sob demanda (/slack)
+python3 scripts/connectors/gmail.py 7d           # sob demanda (/gmail; sem args = noturno 1d)
+python3 scripts/connectors/gdrive.py "termo"     # busca (/drive <termo|id>)
+python3 scripts/connectors/backup.py             # backup do vault (ver guides/backup.md)
+python3 scripts/connectors/backup.py --status    # último backup + saúde
+bash scripts/google-reauth-reminder.sh           # lembrete semanal (auto-gateado; hook do nightly)
 bash scripts/nightly-update.sh            # todos + /update via agente headless
 ```
 
