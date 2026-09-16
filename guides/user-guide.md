@@ -491,6 +491,23 @@ Bruno revisar, eu envio"), as ações ganham os campos `blocked-by:` / `unblocks
 `/week` mostram as cadeias (`⛔ blocked-by: A-0147 — Bruno`), e o `/map` desenha
 o grafo inteiro. Bloqueio visível é cobrança fácil — e atraso sem culpa.
 
+**A ação que NASCE de você: `/todo`.** Nem toda ação vem de reunião — a maioria
+vem da sua cabeça, no meio do dia. `/todo preciso ler esse material até quarta`
+→ o agente parseia (o quê · deadline "quarta" resolvida em data real · pessoas
+por alias · `proj:` se você citar) e apensa direto no ledger:
+
+```
+A-0152 · aberta · 2026-09-16 · ler material de retenção · dono: VOCÊ ·
+  deadline 2026-09-18 · proj: P1 · origem: /todo (declarado pelo dono)
+```
+
+Confirmação em 2 linhas, e a ação já aparece no `/brief` e no `open-actions`
+sem mais nada. **Sem arquivo manual na inbox** — o ledger é o registro. E o
+detalhe que não coube em 1 linha mora na ficha: `/todo A-0152 + <contexto>`
+apenda à ficha `_actions/A-0152.md` (cria se não existir). A ficha é o
+"dossiê da ação" — contexto, passos, decisões e artefatos ligados — para
+qualquer ação complexa, tenha nascido de reunião ou de você.
+
 E o RAW? **Nunca é tocado** — só movido da inbox pro mês. O arquivo bruto é a
 prova original; tudo à frente é derivado e reprocessável.
 
