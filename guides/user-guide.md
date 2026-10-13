@@ -129,8 +129,9 @@ falha.
 `FRESH/` (home, todo, goals, dashboard…) é **100% derivado** do
 livro-razão + PLANNING. Qualquer hora, `./brain render` apaga e redesenha
 tudo do zero. Você nunca precisa "manter" nada ali — e nada que você
-estragar ali tem valor perdido. As duas únicas exceções colhidas antes de
-sobrescrever (seção 9): checkbox no `todo.md` e `status:` na ficha da ação.
+estragar ali tem valor perdido. As três exceções colhidas antes de
+sobrescrever (seção 9): checkbox no `todo.md`, `status:` na ficha da ação e
+checkbox de entregável em `PLANNING/goals.md`.
 
 ### 2.5 Aprovação explícita: silêncio não é "sim"
 
@@ -379,6 +380,21 @@ em outros agentes, o texto é entendido do mesmo jeito.)
   (propostas, plano de foco, rascunhos). Aponta o painel para o resto.
 - **Pegadinha:** nenhuma. É o comando mais seguro do sistema.
 
+#### `/week` — a semana
+- **Quando:** sextas (ou "minha semana").
+- **Digita:** `/week`
+- **Por dentro:** renderiza e lê `FRESH/home.md`, `goals.md`, `wins.md`,
+  `focus.md`; escreve a narrativa em `FRESH/notes/semana.md` (narrativa é
+  descartável, como tudo em FRESH).
+- **Recebe:** o cockpit em ≤20 linhas — lookahead de 14 dias (minhas +
+  o que me devem) · radar por goal (progresso calculado vs. declarado,
+  saúde, próximo marco) · ações envelhecendo (abertas há mais de
+  `aging_warn_days` sem movimento) · conquistas da semana · e a oferta de
+  rodar `/focus` se não houver plano vigente.
+- **Pegadinhas:** (1) propostas de mudança de plano só entram com evidência
+  nova, uma de cada vez; (2) se você listar várias conclusões de uma vez,
+  as ambíguas são confirmadas em lote, as claras fecham direto.
+
 #### `/todo` — criar tarefa falando
 - **Quando:** "preciso…", "tenho que…", "lembra de…".
 - **Digita:** `/todo preciso ler a política de dados até quarta`
@@ -398,7 +414,7 @@ em outros agentes, o texto é entendido do mesmo jeito.)
 - **Por dentro:** ID exato fecha direto. Se você escrever texto em vez do
   ID, ele casa: achou uma única → confirma em 1 linha; várias → lista para
   você escolher; ação de terceiro ou muito antiga → sempre confirma antes.
-  Se o fechamento tem resultado observável e projeto, nasce automaticamente
+  Se o fechamento tem resultado observável ligado a projeto, entregável ou desbloqueio, nasce automaticamente
   uma **entrega `E-####`** (isso alimenta suas conquistas). Ações que
   esperavam por essa recebem nota de "destravada" — não fecham sozinhas.
 - **Recebe:** id, como fechou, se virou entrega, o que desbloqueou.
@@ -604,17 +620,26 @@ busca global. Abas:
   **e** declarado), saúde, hoje + 7 dias (prazos, ações, blocos de foco),
   "precisa de você" (propostas, planos, rascunhos), conquistas e decisões
   recentes.
-- **TODO** — três listas (minhas · aguardando · observando) com atraso,
-  esforço, projeto. Marcar checkbox ali (é Markdown) fecha a ação no
-  próximo render.
-- **Goals / Projetos** — a árvore e as fichas: entregáveis com peso,
-  próximos marcos, saúde com motivo.
+- **TODO** (badge: atrasadas) — três listas (minhas · aguardando ·
+  observando) com atraso, esforço, projeto. Clicar numa ação abre a ficha.
+- **Projetos** — ficha por projeto: entregáveis com peso, próximos marcos,
+  saúde com motivo, decisões e ações ligadas. (A árvore completa de goals
+  fica em `FRESH/goals.md`.)
 - **Decisões** — quem decidiu, quando, com base em quê, substituídas por
   quais (cadeia de supersedes).
-- **Pessoas** — ficha por pessoa.
-- **Linha do tempo / Gantt / Mapa** — passado, próximos 30–45d e os grafos
-  de dependência.
-- **Foco / Outbox / Saúde** — plano da semana, rascunhos e o doctor.
+- **Conquistas** — wins por semana: entregas, entregáveis concluídos,
+  ações fechadas.
+- **Pessoas** — ficha por pessoa: papel, o que cada um deve ao outro,
+  decisões que tomou, menções recentes.
+- **Linha do tempo** — o que aconteceu e o que vem: prazos e marcos.
+- **Foco** (badge: plano proposto) — o plano da semana e seus blocos.
+- **Mensagens** (badge: rascunhos pendentes) — o outbox: rascunhos,
+  enviadas, falhas. Nada sai sem sua aprovação do texto exato.
+- **Saúde** (badge: avisos) — o `doctor` visual.
+
+Fora das abas ficam dois arquivos Mermaid que o render gera e você abre no
+editor/preview que renderizar Mermaid: `FRESH/map.md` (os três grafos do
+`/map`) e `FRESH/timeline.md` (Gantt 30–45d).
 
 Toda view carrega `generated-at` e `fontes` no topo — você sempre sabe o
 quão fresco é o que está vendo e de onde derivou.
