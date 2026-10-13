@@ -7,8 +7,9 @@ explícita: blocos de foco no calendário, mensagem no Slack, publicação no
 espaço do time, backup no Drive.
 
 A constituição é `AGENTS.md`. O manual completo é `guides/manual.md`.
-O porquê de cada regra está em `guides/user-guide.md`. A instalação
-completa do stack local de IA (LM Studio + Hindsight) é `setup.md`.
+O guia de uso A a Z — cada comando, cada conexão, a rotina normal — é
+`guides/user-guide.md`. A instalação completa do stack local de IA
+(LM Studio + Hindsight) é `setup.md`.
 
 ## Como ele funciona
 
