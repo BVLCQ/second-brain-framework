@@ -1,63 +1,37 @@
 ---
 name: init
-description: "Primeira entrevista do cérebro: descobre quem é o dono, seus goals, projetos e pessoas, e monta PROFILE + PLANNING como proposta. Use quando PROFILE e PLANNING estiverem vazios (cérebro novo). O dono pode soltar arquivos a qualquer momento durante a entrevista — viram o primeiro dump."
+description: "Primeira entrevista do cérebro: descobre quem é o dono, seus goals, projetos e pessoas, e monta PROFILE + PLANNING como proposta. Use quando PROFILE e PLANNING estiverem vazios (cérebro novo). Arquivos soltos na inbox viram o primeiro dump."
 ---
 
 # /init — o nascimento do cérebro
 
-**Gatilho:** vault/PROFILE/profile.md e vault/PLANNING/goals.md sem conteúdo real (só template).
+**Gatilho:** `vault/PROFILE/profile.md` e `vault/PLANNING/goals.md` sem conteúdo real (só template).
 
-## Princípios da entrevista
+Antes de perguntar: `./brain init --owner-id <slug> --owner-name "<nome>"` se o ledger ainda não tiver o dono. Confira com `./brain doctor`.
 
-1. **Pergunte em blocos, não em gotejamento** — 3 a 5 perguntas por vez,
-   respondíveis numa mensagem só. Entrevista de formulário um-a-um é abandonada.
-2. **Arquivos valem mais que respostas** — a qualquer momento o dono pode
-   soltar arquivos (CV, doc de onboarding, apresentação, export, notas).
-   Ao detectar arquivos novos em `vault/RAW/inbox/`: processe-os JÁ pelo pipeline do
-   `/dump` (eles alimentam as próximas perguntas: "vi no seu CV que…"),
-   e continue a entrevista de onde parou.
-3. **Proposta, nunca imposição** — PROFILE e PLANNING são escritos como
-   PROPOSTA ao final; o dono aprova/edita. Isto é o gate de goals da primeira vez.
-4. **10 minutos, não 60** — se o dono não souber algo, siga adiante; o cérebro
-   aprende depois, com dados reais.
+## Princípios
+
+1. **Pergunte em blocos** — 3 a 5 perguntas por vez, respondíveis numa mensagem só.
+2. **Arquivos valem mais que respostas** — se cair coisa em `vault/RAW/inbox/`, rode `/dump` e ancore as próximas perguntas no que leu.
+3. **Proposta, nunca imposição** — PROFILE e PLANNING saem como PROPOSTA; o dono aprova/edita. Isto é o gate da primeira vez.
+4. **10 minutos, não 60** — se não souber, siga; o cérebro aprende com dados reais.
 
 ## Roteiro (4 blocos)
 
-**Bloco 1 — Quem é você:** papel atual e empresa/squad · frentes de trabalho ·
-como gosta de operar · o que importa nos próximos 6 meses.
+**Bloco 1 — Quem é você:** papel e empresa/squad · frentes · como gosta de operar · o que importa nos próximos 6 meses.
 
-**Bloco 2 — Para onde vai:** 2–4 goals com horizonte · projetos ativos por goal ·
-entregáveis com deadline real (se souber; senão `?`).
+**Bloco 2 — Para onde vai:** 2–4 goals com horizonte · projetos por goal · entregáveis com prazo real (se souber; senão deixe sem `prazo:`).
 
-**Bloco 3 — Quem te cerca:** pessoas recorrentes (gestor, pares, parceiros) —
-nome + como grafam + apelido + e-mail se souber (alimentam aliases) · relação
-de cada uma com seus goals.
+**Bloco 3 — Quem te cerca:** pessoas recorrentes — nome + como grafam + apelido + e-mail · relação com os goals. Grave com `./brain person add`.
 
-**Bloco 4 — O que observar** (opcional, pode ficar pra depois): se
-`config/watch.yaml` existir, oferecer editá-lo (repos, boards, canais, pessoas).
+**Bloco 4 — O que observar** (opcional): oferecer editar `config/watch.toml` (canais, boards, caixas). Leituras são MCP; sem fonte listada o `/update` não puxa.
 
-Se arquivos já caíram na inbox antes de um bloco: leia os artefatos processados
-e FAÇA perguntas ancoradas neles ("seu goal G2 aparece na apresentação X — é
-seu goal principal?").
+## Fechamento
 
-## Entrega final
+1. Mostre o diff de `PROFILE/profile.md` e `PLANNING/goals.md`.
+2. Espere aprovação explícita ("ok", "aprovo"). Silêncio não é aprovação.
+3. Aplique. Registre a árvore: `./brain plan log --diff "nascimento" --reason "entrevista /init" --approval "<literal>"`.
+4. `./brain render --open` e mostre o painel.
+5. Ofereça `/update` se já houver fontes no watch.toml.
 
-1. Escrever `vault/PROFILE/profile.md` preenchido (proposta).
-2. Escrever `vault/PLANNING/goals.md` com a árvore G#/P# (proposta).
-3. Se houver pessoas: fichas no `people-index.md` com aliases coletados
-   (append-only — já é escrita normal, sem gate).
-4. Mostrar o resumo das duas propostas e pedir aprovação explícita.
-5. Aprovação → registrar em `vault/PLANNING/log.md` (entrada de nascimento) ·
-   processar qualquer restante da inbox · gerar o primeiro
-   `vault/FRESH/daily-brief.md`.
-6. Encerrar com o caminho do dia a dia: "jogue coisas em vault/RAW/inbox/ e rode
-   /dump; amanhã, /brief".
-
-## Pitfalls
-
-- Não inventar goals que o dono não disse — espaço em branco é honesto, goal
-  fictício corrompe o radar pra sempre.
-- Não processar arquivos soltos "depois": o valor do /init é a entrevista
-  ancorada em evidência.
-- Datas: sempre relativas ao dia real do sistema — nunca escrever data literal
-  derivada de "hoje" em arquivo permanente sem checar.
+O dono pode recusar um goal: não reescreva a proposta inteira — corte o que ele cortou e reapresente o resto.

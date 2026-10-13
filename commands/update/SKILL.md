@@ -1,49 +1,24 @@
 ---
 name: update
-description: "O motor completo: roda os conectores (conforme config/watch.yaml), processa a inbox (/dump) e regenera TODAS as views de FRESH. É o que o cron noturno executa; use também sob demanda quando o dono pedir atualização geral."
+description: "O motor completo: puxa as fontes do watch.toml via MCP, grava snapshots, processa a inbox (/dump) e regenera as views. É o que o cron noturno pede ao agente; use também quando o dono quiser atualização geral."
 ---
 
-# /update — o motor completo
+# /update — puxar, processar, mostrar
 
-## Sequência
+No noturno (`BRAIN_NIGHTLY=1`) isto é o único comando largo permitido. Sem aprovações, sem envio, sem publicação, sem `focus apply` no Google.
 
-1. **Conectores** (se `config/.env` + `config/watch.yaml` existirem): executar
-   `scripts/connectors/` na ordem — jira, github, slack, gmail, gdrive. Cada um
-   escreve snapshots em `vault/RAW/inbox/` (prefixo da fonte). Conector ausente ou
-   sem credencial: pular com 1 linha de aviso, não abortar o resto.
-2. **`/dump`** — processar toda a inbox (idempotente por construção).
-3. **Regenerar TODAS as views de FRESH**: daily-brief, week, month,
-   open-actions, projects, stakeholders, live-items, pocket.
-   Cada uma com `generated-at:` + `fontes:`. Views são reescritas inteiras —
-   nada de patch incremental. (map.md e timeline.md NÃO rodam aqui — são
-   sob demanda: `/map` e `/timeline`.)
-
-`month.md`: lookahead 30-45 dias por goal → projeto → entregável (deadlines,
-progresso, dependências cruzadas visíveis — cadeias de `blocked-by/unblocks`
-que atravessam projetos). `pocket.md`: ver spec em `commands/week/SKILL.md`.
-
-`live-items.md` (deriva de `_indices/live-items-index.md` + `config/watch.yaml`):
-uma linha por item do registro — última mudança, idade, nº de snapshots; sem
-mudança desde o estado inicial = "estável". **Vigência:** item presente na
-watch.yaml = vigiado; item do registro que NÃO está mais na watch.yaml =
-"arquivado (não vigiado)" — última linha histórica, sem idade corrente. Item
-estável há >60d ganha nota: "considerar tirar da watchlist?" (sugestão, não
-ação — a curadoria da watchlist é do dono, sem gate).
-
-## Reporte (≤10 linhas)
+1. Leia `config/watch.toml`. Fonte não listada = não puxa.
+2. Para cada `[[source]]`, use **só** ferramentas MCP de leitura. Grave o resultado:
 
 ```
-⚙ UPDATE — <data hora>
-  conectores: jira 3 novidades · github 2 · slack 1 · (gmail: sem credencial)
-  dump: 6 itens processados (0 duplicados) · inbox: 0 restantes
-  views regeneradas: 5 · duração: ~2min
+./brain snapshot --key <key> --prefix <kind> --ext md
 ```
 
-## Regras
+(stdin = o conteúdo; ou `--file`). Vazio → `--fail "MCP não devolveu nada"`.
+2+ falhas seguidas da mesma key → **escalar ao dono** (`brain doctor`).
+3. `/dump` no que chegou.
+4. `./brain render`.
+5. Se memória estiver ligada: `./brain memory sync` (falha isolada — não derruba o resto).
+6. Recibo: fontes puxadas / sem novidade / falhas · itens processados · avisos do doctor.
 
-- Rodar 2× = zero duplicatas (idempotência de conectores por hash + dump por
-  artefato). Se não for o que aconteceu, reportar o defeito.
-- Erro em UMA fonte não derruba as outras — isolar, avisar, seguir.
-- Sem `.env`/`watch.yaml`: pular etapa 1 em silêncio (cérebro manual é válido).
-- Este comando NÃO mexe em PLANNING (gate) e NUNCA em ferramentas externas
-  além de LER via conectores.
+Proibido: ferramentas MCP de escrita, `outbox approve/sent`, `publish`, `focus approve/apply` (google), mudanças de PLANNING.

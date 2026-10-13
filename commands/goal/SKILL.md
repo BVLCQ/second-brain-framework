@@ -1,43 +1,33 @@
 ---
 name: goal
-description: "A árvore de goals e projetos: visualização, progresso declarado, e o ÚNICO gate do sistema — qualquer criação/mudança/fechamento é proposta de diff aprovada explicitamente pelo dono. Use quando o dono falar em goals, prioridades ou mudanças de plano."
+description: "A árvore de goals e projetos: visualização, progresso declarado, e o ÚNICO gate do sistema — qualquer criação/mudança/fechamento é proposta de diff aprovada explicitamente pelo dono."
 ---
 
-# /goal [filtro] — a única porta com trava
+# /goal — a árvore e o gate
 
-## Visualização (sem argumentos ou com filtro)
+## Só ver
 
-```
-◉ G2 Destravar frente de dados · ativo · 60% · horizonte 30/11
-    P1 Padronização de métricas · 3/5 entregáveis · próxima pedra qua 16/09
-    P4 Dicionário de dados v1 · draft (ver A-0146)
-  G3 Apoio ao BI · congelado até 05/10 ⚠ (12d sem movimento)
-```
+`./brain plan show` e `FRESH/goals.md`. Progresso calculado (entregáveis) e declarado (`brain progress G1 45`) aparecem lado a lado. Não misture.
 
-Progresso de goal = declarado pelo dono; progresso de projeto = derivado dos
-entregáveis. Idade de movimento vem dos índices (regra do /week).
+## Mudar estado factual de um entregável
 
-## Mudanças (o gate)
-
-Qualquer criar/mudar/fechar goal ou projeto = PROPOSTA:
+Com evidência (artefato, declaração):
 
 ```
-PROPOSTA (nada alterado):
-  <G#/P#> <campo>: <atual> → <novo>
-  por quê: <motivo>
-  evidência: <IDs/artefatos/datas>
-aprovar? (ok / editar / descartar)
+./brain plan deliverable P1.2 --status feito --evidence "…" --by agent --prov observado --source PROCESSED/…
 ```
 
-Aprovação explícita → aplicar + registrar em `vault/PLANNING/log.md` (data · diff ·
-motivo · evidência · "aprovado: <resposta do dono>").
+Isso não é o gate. É checkbox + data + linha no log.
 
-## Regras
+## Mudar a estrutura (gate)
 
-- Estado factual (deadline observada num doc, link adicionado) NÃO é gate —
-  atualiza com log, sem cerimônia.
-- Fechar goal que atingiu os entregáveis: ainda passa pelo gate (o dono
-  confirma), mas é rotineiro — 1 linha de proposta.
-- Silêncio não é aprovação. Proposta descartada não volta sem evidência nova.
-- O agente JAMAIS cria goal por conta própria, nem "organiza" a árvore sem
-  pedir.
+Criar, renomear, fundir, fechar, reabrir goal ou projeto:
+
+1. Mostre o diff exato de `PLANNING/goals.md` (antes/depois).
+2. Uma frase: por quê, com evidência.
+3. Espere "ok" / "aprovo" / equivalente. Silêncio = não.
+4. Aplique o diff no arquivo.
+5. `./brain plan log --diff "<resumo>" --reason "<por quê>" --evidence "<fonte>" --approval "<literal>"`.
+6. `./brain render`.
+
+Não reapresente proposta rejeitada sem evidência nova. No noturno, nunca mude a árvore — abra `brain proposal add --kind mudar-plano`.

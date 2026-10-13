@@ -1,63 +1,30 @@
-# Backup do vault — guia de configuração (~3 min)
+# Backup do vault
 
-> O vault é cegado pro git (certo — contra leak) e por isso vive numa cópia
-> única. Este backup é a outra metade da segurança: **contra perda**.
-> Destino: uma pasta do SEU Google Drive. O mesmo OAuth do Gmail/Drive,
-> com um escopo adicional mínimo.
+Uma vez por semana (se `[backup] enabled = true`) ou quando você pede
+`/backup`. O zip contém o `vault/` inteiro, menos arquivos maiores que
+`[backup].max_file_mb` — esses entram só no `BACKUP-MANIFEST.json` (caminho,
+tamanho, sha256), para você saber o que ficou de fora.
 
-## 1. Escopo adicional (uma linha)
+`config/.env` **não** está no vault. Não vai no zip. Guarde o client secret
+onde você guarda senhas.
 
-Google Cloud Console → Auth Platform → Data Access → adicione ao lado dos
-readonly existentes:
+## Destino
 
-```
-https://www.googleapis.com/auth/drive.file
-```
+- **Drive** (padrão): pasta `GOOGLE_BACKUP_FOLDER_ID`, escopo `drive.file`.
+  Só cria/apaga `brain-backup-*.zip`. Upload em pedaços de 8 MB.
+- **Local**: `./brain backup --local ~/Backups`
 
-`drive.file` = criar/apagar **apenas arquivos criados por este app**. Ele não
-vê nem toca no resto do seu Drive — é a exceção de escrita mais estreita que
-o Google oferece. (Sempre em **In production**, como o resto — ver
-`guides/google-oauth.md`.)
+Mantém `[backup].keep` zips (os mais novos); o resto some.
 
-## 2. Reautorizar (o token antigo não tem o escopo novo)
+## Restaurar
 
-```bash
-python3 scripts/connectors/google_auth.py
-```
+1. Baixe o zip. Confira o nome (`brain-backup-AAAAMMDD-HHMM.zip`).
+2. Extraia sobre um `vault/` vazio da instância (não misture com um vault
+   pela metade).
+3. Leia `vault/BACKUP-MANIFEST.json` — se listar arquivos pulados, copie-os
+   de outro lugar se ainda existirem.
+4. `./brain doctor` e `./brain validate`.
+5. `./brain render`.
+6. Se usava Hindsight: `./brain memory rebuild`.
 
-Authorize de novo (o app pede o escopo extra); cole o NOVO refresh token no
-`config/.env` (substitui o anterior — o antigo continua válido só pros
-escopos antigos; use sempre o novo).
-
-## 3. A pasta de destino
-
-1. Crie a pasta no Drive (ex.: `brain-backups`).
-2. Da URL (`drive.google.com/drive/folders/<ID>`), copie o `<ID>`.
-3. No `config/.env`:
-
-```
-GOOGLE_BACKUP_FOLDER_ID=<ID>
-```
-
-## 4. Rodar
-
-```bash
-python3 scripts/connectors/backup.py          # primeiro backup AGORA
-python3 scripts/connectors/backup.py --status # conferir
-```
-
-Daí em diante: **domingo, no noturno** (já embutido no nightly-update.sh).
-Retenção automática: 8 backups; o script só apaga arquivos `brain-backup-*.zip`
-que ELE criou naquela pasta — nada mais.
-
-## O que é protegido
-
-`vault/` inteiro (zonas, índices, logs, reports). `config/.env` (segredos) e
-`config/.state.json` NÃO vão — ficam fora do vault por construção. Se trocar
-de máquina: reclone o framework + restaure o zip do vault + recrie o `.env`.
-
-## Problemas comuns
-
-- **`invalid_grant`** → app em Testing (7 dias) — publique, como no guia OAuth.
-- **404 na pasta** → ID errado (use o da URL, não o nome da pasta).
-- **Escopo negado no consent** → o passo 1 não foi salvo; refaça e reautorize.
+Não existe "restore" automático. O agente guia; você move o arquivo.

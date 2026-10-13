@@ -3,30 +3,16 @@ name: brief
 description: "O dia do dono em uma tela: hoje, ações atrasadas, próximos 3 dias, goal em foco, contexto recente. Use toda manhã, ou quando o dono pedir 'meu dia'."
 ---
 
-# /brief — a manhã do dono
+# /brief — o dia
 
-## Antes de responder: checagem de frescor
-
-1. Ler `vault/FRESH/daily-brief.md` (se existir) e seu `generated-at:`.
-2. Se algo mudou desde (`PROCESSED` ganhou artefatos, inbox tem itens, ou a
-   data de hoje ≠ data do generated-at): rodar `/update` primeiro (ou, no
-   mínimo, dump da inbox + regeneração deste brief). Avisar o dono do catch-up
-   em 1 linha: "nightly não rodou — atualizei agora (~40s)".
-3. Se nada mudou: entregar a view como está.
-
-## Estrutura da view `daily-brief.md`
-
-```
-☀ BRIEF — <dia da semana>, <data> · gerado <hh:mm> (<origem: nightly|agora>)
-
-HOJE          compromissos de hoje (hora · o quê · com quem · → card de prep se houver)
-ATRASADAS     ações A-#### abertas com deadline < hoje (idade em dias;
-              blocked-by ativo vira ⛔ + quem bloqueia — cobrança, não culpa)
-PRÓXIMAS 72H  deadlines e compromissos na janela
-GOAL EM FOCO  o goal mais urgente por PLANNING + próxima pedra
-CONTEXTO      3–5 linhas: o que mudou ontem (digests, decisões, movimentos)
-```
-
-Regras: atraso calculado na leitura (nunca escrito em log) · nada de informação
-que não derive de PROFILE+PLANNING+PROCESSED · cabeçalho `generated-at:` +
-`fontes:` sempre.
+1. `./brain render` (colhe checkboxes/status e atualiza o painel).
+2. Leia `vault/FRESH/home.md` e `vault/FRESH/todo.md`. Não recalcule atraso/progresso — o CLI já fez.
+3. Escreva `vault/FRESH/notes/brief.md` (reescreve; é narrativa, não verdade nova) com:
+   - **Hoje** — o que vence hoje + o que já está `fazendo`
+   - **Atrasadas** — minhas, com dias e o que as bloqueia
+   - **Próximos 3 dias**
+   - **Me devem** — `waiting` atrasada ou que vence cedo (não cobra `watching`)
+   - **Goal em foco** — o mais em risco / o que o dono declarou
+   - **Aguardando você** — propostas, plano de foco, rascunhos
+4. No chat: o mesmo em ≤15 linhas, escaneável. Aponte o painel (`FRESH/dashboard/index.html`).
+5. Se o doctor tiver `error`, uma linha no topo.

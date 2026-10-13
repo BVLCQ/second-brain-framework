@@ -1,0 +1,4 @@
+# Python do repo — `mise install` na raiz baixa a versão certa.
+# O CLI precisa de 3.11+ (tomllib); 3.12 é o alvo testado.
+[tools]
+python = "3.12"

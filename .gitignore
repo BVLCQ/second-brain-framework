@@ -1,12 +1,13 @@
-# ═══ VAULT — TUDO que é seu mora aqui (dados, config, estado, logs) ═══
-# Uma única linha blinda o cérebro inteiro; framework na raiz segue commitável.
+# ═══ VAULT — TUDO que é do dono mora aqui ═══
 /vault/
 
 # ═══ Config e estado da INSTÂNCIA (nunca commitados) ═══
 .env
 config/.env
-config/watch.yaml
+config/brain.toml
+config/watch.toml
 config/.state.json
+config/.memory-state.json
 
 # ═══ Inovação local: scripts nascidos na instância (graduam p/ upstream) ═══
 scripts/local/
@@ -15,3 +16,6 @@ scripts/local/
 .DS_Store
 __pycache__/
 *.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/

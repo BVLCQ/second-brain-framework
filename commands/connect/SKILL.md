@@ -1,33 +1,13 @@
 ---
 name: connect
-description: "Puxa fontes externas AGORA (Jira, GitHub, Slack) via conectores de leitura, fora do cron noturno — e processa o que chegou. Use quando o dono quiser o estado atual de uma fonte antes de uma reunião/decisão."
+description: "Puxa UMA fonte agora via MCP de leitura, snapshota na inbox e processa. Use quando o dono quiser o estado atual antes de uma reunião/decisão."
 ---
 
-# /connect [fonte] — puxar do mundo agora
+# /connect — uma fonte, agora
 
-## Argumentos
+1. Identifique a fonte (key do `watch.toml` ou ad-hoc: `jira-PROJ`, `gmail-from:ana`).
+2. Leia pelo MCP de leitura correspondente. Sem ferramenta = diga que não dá e pare.
+3. `./brain snapshot --key <key> --prefix <kind>`. Sem novidade = uma linha e pare.
+4. `/dump` só nesse item. Recibo curto. `./brain render` se nasceu ação/decisão.
 
-`/connect` = todas as fontes do `watch.yaml` · `/connect jira` (ou github,
-slack, gmail, drive) = só aquela fonte.
-
-## Sequência
-
-1. Executar o(s) conector(es) de `scripts/connectors/` correspondentes
-   (gmail→`gmail.py`, drive→`gdrive.py`) — leitura pura, snapshots em
-   `vault/RAW/inbox/` com prefixo.
-2. Relatório curto por fonte: **só o que é novo** (change digest contra
-   `.state.json`): "PR #142 +2 comentários (sem resposta sua)".
-3. Processar via `/dump` (o dono raramente quer o dado cru esperando).
-4. Se algo relevante para o dia (resposta de stakeholder, card que andou):
-   1 linha no final: "→ relevante p/ sua reunião com Ana às 15h".
-
-## Regras
-
-- Nunca escrever em ferramenta externa. Nunca responder/comentar por conta própria.
-- Fonte sem credencial: dizer qual variável falta do `.env.example`, sem
-  imprimir valor nenhum.
-- **Fonte desligada (`enabled: false` no watch.yaml) NÃO é erro**: o conector
-  reporta "desligado no watch.yaml (mudo)" — reconheça, reporte em 1 linha e
-  SIGA. Proibido debugar, testar credencial ou "investigar" fonte desligada;
-  reativar é decisão do dono (uma linha no watch.yaml).
-- Erro de API: reportar a mensagem BRUTA do conector, não interpretar demais.
+Não escreva em Jira/GitHub/Slack/Gmail/Drive. Não "aproveite" para puxar o resto do watch — isso é `/update`.

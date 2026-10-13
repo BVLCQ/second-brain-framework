@@ -1,36 +1,14 @@
 ---
 name: ask
-description: "Pergunta livre ao cérebro ('o que sabemos sobre X?'). Responde sempre citando a fonte do artefato e a proveniência; 'não consta' é resposta válida. Use quando o dono perguntar qualquer coisa que o cérebro possa saber."
+description: "Pergunta livre ao cérebro ('o que sabemos sobre X?'). Responde sempre citando a fonte do artefato e a proveniência; 'não consta' é resposta válida."
 ---
 
-# /ask — interrogar o cérebro
+# /ask — pergunta livre
 
-## Caminho de leitura (em ordem, pare quando bastar)
+1. `./brain search "<pergunta>"` — índice determinístico, sem LLM.
+2. Se `[memory] engine = "hindsight"` e `brain doctor` não reclamar do servidor: `./brain memory recall "<pergunta>"` como atalho. Cada trecho precisa de `document_id` do vault; sem ele, é pista — confirme no arquivo.
+3. Abra o artefato / evento citado. Desça ao RAW só pela letra exata (página, minuto).
+4. Responda diferenciando proveniência: "a política diz" ≠ "alguém comentou numa reunião" ≠ "você declarou".
+5. **Não consta** é resposta válida. Não complete com conhecimento de mundo se o vault não tem.
 
-1. **Índices** (`_indices/`) — achar a entidade (aliases!) e a lista de
-   artefatos que a mencionam.
-2. **Artefato(s)** em PROCESSED — extrair a resposta com ID (A-/D-) e data.
-3. **RAW** — descer ao original SÓ para a letra exata (página do PDF, minuto
-   da transcrição, mensagem do Slack). Citar a âncora ao responder.
-
-Nunca varrer RAW inteiro — o índice existe para isso.
-
-## Contrato de resposta
-
-```
-<resposta direta, 1–3 linhas>
-
-  · <evidência 1> — fonte: <artefato> (<data>) [<proveniência>]
-  · <evidência 2> — fonte: <artefato> (<data>) [<proveniência>]
-
-Não consta: <o que o cérebro NÃO sabe sobre a pergunta>
-```
-
-Regras:
-- Proveniência sempre visível: "[observado]" (dito em reunião/canal) pesa
-  diferente de "[doc]" (escrito em documento).
-- **"Não consta" é resposta válida e frequente** — o dono confia no cérebro
-  porque ele admite buracos. Inventar memória é o erro imperdoável.
-- Se a pergunta é sobre fonte viva (doc do Drive, card), checar staleness e
-  oferecer `/connect <fonte>` antes de responder com dado velho.
-- Se duas fontes se contradizem: apresentar as duas com datas, não escolher.
+Cite caminho (`PROCESSED/…`, `ledger/A-####`, `PLANNING/goals.md`) em toda afirmação.

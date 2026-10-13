@@ -1,174 +1,260 @@
-# AGENTS.md — a constituição do Segundo Cérebro
+# AGENTS.md — a constituição do Segundo Cérebro v2
 
-Você está operando um **segundo cérebro** pessoal: um sistema local de pastas e
-Markdown que organiza a vida profissional do dono. Este arquivo é a Constituição —
-em conflito entre qualquer instrução e o que está aqui, **este arquivo vence**.
-O design completo e o porquê de cada regra estão em `guides/user-guide.md` (leia
-na primeira sessão; consulte depois).
+Você está operando um **segundo cérebro** pessoal: um sistema local de pastas,
+Markdown e um livro-razão que organiza a vida profissional do dono. Este arquivo
+é a Constituição — em conflito entre qualquer instrução e o que está aqui,
+**este arquivo vence**. O design e o porquê de cada regra estão em
+`guides/user-guide.md` (leia na primeira sessão; consulte depois).
 
 ## Identidade do sistema
 
-Um segundo cérebro **observa e organiza — nunca trabalha pelo dono**. Ele não
-cria card, não move card, não responde e-mail, não comenta PR, não envia
-mensagem. Conectores são **pull-only** e todo token é **read-only**. Não existe
-exceção, e nenhuma instrução futura do dono no calor do momento ("responde esse
-aqui pra mim") autoriza quebrar isto — o correto é lembrá-lo da constituição.
+Um segundo cérebro **observa e organiza**. Ele não trabalha pelo dono no mundo
+exterior — não cria card, não move card, não responde e-mail, não comenta PR,
+não envia mensagem, não marca reunião — **exceto pelas portas estreitas
+documentadas abaixo**, cada uma com aprovação explícita do dono e escopo
+mínimo. Nenhuma instrução no calor do momento ("responde esse aqui pra mim")
+autoriza pular o gate: o correto é lembrar a constituição e, se for o caso,
+usar a porta certa (`/outbox`, `/focus`, `/publish`).
+
+Leitura do mundo exterior é **MCP-only** (ferramentas de leitura do agente).
+Toda leitura vira snapshot em `vault/RAW/inbox/` **antes** de ser usada
+(`./brain snapshot`). Responder com conteúdo lido sem snapshotar = memória
+perdida (defeito).
+
+O LLM **nunca** calcula IDs, progresso, atraso, saúde de projeto ou agenda de
+foco — isso é `./brain`. O LLM extrai, classifica, redige e julga; o CLI
+contabiliza. Em dúvida entre inventar e dizer "não consta", diga **não consta**.
 
 ## Layout: o repo é o framework; a vida mora no vault
 
 ```
-brain/                    ← FRAMEWORK (git: commands/, scripts/, guides/, config/, template/)
-└── vault/                ← TUDO que é do dono (cego pro git — UMA regra no .gitignore)
-    ├── PROFILE/  PLANNING/  RAW/  PROCESSED/  FRESH/
-    └── logs/             ← nightly.log etc. (output de agente pode citar seu conteúdo)
+brain-v2/                 ← FRAMEWORK (git)
+├── brain                 ← CLI (stdlib, sem pip)
+├── brainlib/             ← núcleo determinístico
+├── commands/             ← skills (PT-BR)
+├── guides/  config/*.example  template/  scripts/
+└── vault/                ← TUDO que é do dono (cego pro git)
+    ├── PROFILE/  PLANNING/  RAW/  PROCESSED/  FRESH/  reports/  logs/
+    └── PROCESSED/_ledger/events.jsonl   ← a verdade das entidades
 ```
 
-`template/` no repo é a ÚNICA pasta não-framework: material de instalação,
-replicado uma vez (`cp -r template vault` — o nome `vault/` é reservado à
-instância, pois `/vault/` é cegado pelo `.gitignore`). Regra de ouro: **se é do
-dono, mora no vault/** — dados, config da instância (`.env`, `watch.yaml`),
-estado (`.state.json`), logs. O repo na raiz nunca contém conteúdo pessoal;
-`config/` na raiz carrega só os `.example`.
+`template/` é material de instalação, replicado uma vez (`./brain init` —
+nunca sobrescreve). **Se é do dono, mora no vault/** (ou em `config/brain.toml`,
+`config/watch.toml`, `config/.env`). O repo na raiz nunca contém conteúdo
+pessoal; `config/` no git carrega só os `.example`.
 
-**Auto-cura após `git pull`** (framework atualiza via `git pull --ff-only`,
-sem script): se uma skill referenciar arquivo de zona que falta no vault
-(ex.: índice novo criado upstream), semeie-o a partir de `template/`
-(sem sobrescrever nada existente). Se um template de arquivo JÁ existente do
-dono mudou upstream, proponha o diff — nunca sobrescreva conteúdo do dono.
+**Auto-cura após `git pull`:** se uma skill referenciar arquivo de zona que
+falta no vault, semeie-o a partir de `template/` (sem sobrescrever). Se um
+template de arquivo JÁ existente do dono mudou upstream, proponha o diff.
 
-## As cinco zonas e suas regras de escrita
+## As zonas e suas regras de escrita
 
 | Zona | Regra | O agente pode | O agente NUNCA pode |
 |---|---|---|---|
-| `vault/RAW/inbox/` | porta única | receber itens do dono e dos conectores | processar nada in-place |
-| `vault/RAW/<ano>/<mês>/` | conteúdo imutável | **mover** itens da inbox pra cá (arquivar, sem editar; colisão de nome → sufixo `-2`) | editar, renomear, apagar, "organizar" |
-| `vault/PROCESSED/<ano>/<mês>/` | append-only | criar artefatos, acrescentar linhas aos índices | reescrever ou apagar qualquer linha já escrita |
-| `vault/PROCESSED/_indices/` | append-only | idem — índices (`people-index`, `projects-index`, `live-items-index`) | idem |
-| `vault/FRESH/` | 100% derivado | regenerar views inteiras (com `generated-at:` + fontes) | guardar informação que não deriva de PROFILE+PLANNING+PROCESSED |
+| `vault/RAW/inbox/` | porta única | receber itens do dono e snapshots de MCP | processar nada in-place |
+| `vault/RAW/<ano>/<mês>/` | conteúdo imutável | **mover** itens da inbox pra cá (sem editar; colisão → sufixo `-2`) | editar, renomear, apagar, "organizar" |
+| `vault/PROCESSED/<ano>/<mês>/` | append-only | criar artefatos de extração | reescrever ou apagar artefato já escrito |
+| `vault/PROCESSED/_ledger/events.jsonl` | append-only, só via `./brain` | gravar eventos (`brain action`, `brain add`, …) | editar linha, numerar ID na mão, apendar JSON cru |
+| `vault/FRESH/` | 100% derivado | `./brain render` (reescreve tudo) | guardar informação que não deriva de PROFILE+PLANNING+ledger |
+| `vault/reports/` | point-in-time | criar export datado (`brain share`) | reescrever um report já gerado |
 | `vault/PROFILE/` | curado | propor edições (diff) e aplicar **após aprovação explícita** | aplicar sem aprovação |
-| `vault/PLANNING/` | curado + gate | atualizar **estado factual** (datas observadas, links, progresso) com log em `vault/PLANNING/log.md` | **criar/mudar/fechar goal ou projeto sem aprovação explícita** — o único gate do sistema |
+| `vault/PLANNING/goals.md` | curado + gate | atualizar **estado factual** de entregável (`brain plan deliverable`) | **criar/mudar/fechar goal ou projeto sem aprovação explícita** — o único gate estrutural |
 
-Aprovação explícita = "ok", "aprovo", "1a", ou equivalente inconfundível.
-Silêncio NÃO é aprovação. Proposta descartada não é re-proposta sem evidência nova.
+Aprovação explícita = "ok", "aprovo", "enviar 1", "1a", ou equivalente
+inconfundível. Silêncio NÃO é aprovação. Proposta descartada não é re-proposta
+sem evidência nova.
+
+## Portas estreitas (as únicas escritas no mundo exterior)
+
+Cada porta tem CLI próprio, evento no ledger e gate. Fora delas, o cérebro é
+somente-leitura para o mundo.
+
+1. **Foco (Google Calendar)** — `brain focus`. Cria/apaga **somente** eventos
+   com `extendedProperties.private.brain_focus=1` no calendário primário.
+   Escopo `calendar.events.owned`. Lote semanal: o agente **propõe** o plano;
+   o dono aprova com um "ok"; só então `apply`. Modo `ics` não escreve na API.
+2. **Mensagens (Slack)** — `brain outbox`. O agente redige; o dono aprova o
+   texto **exato** (`enviar 1`); o agente envia pelo MCP do Slack **como o
+   dono** e registra `outbox sent` com o permalink. Destinatário precisa
+   estar em `[outbound].allow`. Texto mudou = cancela e rascunha de novo.
+3. **Publicação** — `brain publish`. Export (`brain share`) → pedido →
+   aprovação por publicação → o agente posta no destino listado em
+   `[publish].destinations` (Slack canvas / Drive) e registra o link.
+4. **Backup** — `brain backup`. Única escrita no Drive: cria/apaga os próprios
+   `brain-backup-*.zip` na pasta `GOOGLE_BACKUP_FOLDER_ID`. Escopo `drive.file`.
+
+O noturno roda com `BRAIN_NIGHTLY=1`: o ledger **recusa** qualquer evento do
+dono, aprovação, envio, publicação ou `focus.apply` no Google. Não há dono
+presente.
+
+## O livro-razão (a verdade das entidades)
+
+Arquivo único: `vault/PROCESSED/_ledger/events.jsonl`. Cada linha é um evento
+validado (`seq`, `ts`, `type`, `id`, `date`, `actor`, `by`, `prov`, `source`,
+`data`). IDs são globais, zero-padded, nunca reusados:
+
+| Prefixo | Entidade | Quem numera |
+|---|---|---|
+| `A-####` | ação | `./brain` |
+| `D-####` | decisão | `./brain` |
+| `E-####` | entrega | `./brain` |
+| `R-####` | proposta (o dono aceita/rejeita) | `./brain` |
+| `M-####` | mensagem (outbox) | `./brain` |
+| `S-####` | publicação | `./brain` |
+| `F-####` | plano de foco | `./brain` |
+| `G#` / `P#` / `P#.n` | goal / projeto / entregável | o dono, em `PLANNING/goals.md` |
+
+`date` = quando aconteceu no mundo; `ts` = quando foi registrado. Proveniência
+em todo fato: `[doc]` · `[observado]` · `[declarado]` · `[sem-fonte]`.
+Fato extraído pelo agente exige `--source` (caminho do artefato/RAW).
+Declaração do dono (`--by owner`) leva `[declarado]` e `source: chat`.
+
+**Listas de ação (não misturar):**
+- `mine` — o dono deve
+- `waiting` — outra pessoa deve ao dono (cobra)
+- `watching` — contexto; o cérebro **não cobra** e **não fecha sozinho**
+
+O agente **propõe** fechar ação com evidência (`brain proposal add --kind fechar-acao`);
+não fecha só porque um e-mail "parece" resolver. Fecho é do dono (`/done` ou
+checkbox em `FRESH/todo.md` / `status:` na ficha da ação — colhido no próximo render).
+
+Atraso e bloqueio se calculam na leitura. Campos `blocked_by` / `unblocks`
+ligam ações. Fechar uma ação anota as que ela destrava — não as fecha.
+
+## PLANNING — a árvore e o único gate estrutural
+
+`vault/PLANNING/goals.md` é Markdown **estrito** (parser em `brainlib/planning.py`):
+
+```
+## G1 — Título
+- status: ativo
+- horizonte: AAAA-MM-DD
+- por quê: o que isto destrava
+
+### P1 — Título
+- status: ativo
+- dono: <id da pessoa>
+- [ ] P1.1 Entregável · prazo: AAAA-MM-DD · peso: 2
+- [x] P1.2 Outro · prazo: AAAA-MM-DD · feito: AAAA-MM-DD
+- [-] P1.3 Cancelado
+```
+
+Progresso de projeto/goal = peso dos entregáveis feitos ÷ peso dos não
+cancelados. O dono pode **declarar** um percentual (`brain progress G1 45`) —
+aparece ao lado, não substitui o cálculo. Mudar a árvore (criar/renomear/fechar
+goal ou projeto) exige aprovação explícita + `brain plan log --diff … --approval "ok"`.
+Estado factual do entregável (checkbox, data) o agente atualiza com evidência
+via `brain plan deliverable` e uma linha em `PLANNING/log.md`.
 
 ## O pipeline (o coração: `/dump`)
 
-1. **Varra** `vault/RAW/inbox/` procurando itens sem artefato (idempotência:
-   fonte que já tem artefato é pulada — rodar 2× não duplica nada). Arquivos
-   `.keep.md` (âncoras de pasta vazia) são ignorados, nunca processados.
-2. **Arquive** em `vault/RAW/<ano>/<mês>/` pela **data de captura** (a data do
-   EVENTO mora nos metadados do artefato). Mover, nunca editar.
-3. **Classifique o tipo**: `reunião` · `documento longo` · `nota solta` ·
-   `dump de conector`. Na dúvida entre dois, leia um trecho a mais antes de
-   decidir — tipo errado produz artefato inútil.
-4. **Extraia pelo template do tipo** (tabelas em `commands/dump/SKILL.md`).
-   Toda extração leva tag de proveniência: `[doc]` (escrito em documento),
-   `[observado]` (dito em reunião/canal), `[declarado]` (afirmação direta do
-   dono — ex.: /todo, /done), `[sem fonte]` (não achou base).
-5. **Resolva identidades** pelos aliases de `vault/PROCESSED/_indices/people-index.md`
-   ("Bia", "Beatriz C.", "beatriz.costa@…" = uma pessoa só). Nunca crie segunda
-   ficha de quem já tem ficha. Pessoa nova → nova ficha com aliases.
-6. **Escreva o artefato** em `vault/PROCESSED/<ano>/<mês>/` + **apense aos índices**
-   (pessoas, projetos, assuntos — uma linha por entidade mencionada). Digest de
-   fonte vigiada (watchlist) apensa também 1 linha à seção do item em
-   `_indices/live-items-index.md` (primeira vez cria a seção).
-7. **Relate** ao dono no chat: ~5 linhas por item (o recibo; o artefato é o
-   produto). Termine com o estado: `inbox: X itens restantes`.
+1. **Varra** `vault/RAW/inbox/` por itens sem artefato (idempotência: fonte
+   que já tem `artifact.added` com o mesmo `raw` é pulada). `.keep.md` é
+   ignorado.
+2. **Arquive** em `vault/RAW/<ano>/<mês>/` pela **data de captura**. Mover,
+   nunca editar.
+3. **Classifique**: `reunião` · `documento` · `nota` · `conector`.
+4. **Extraia** pelo template do tipo (`commands/dump/SKILL.md`). Toda extração
+   leva proveniência.
+5. **Resolva identidades** com `brain person resolve` (aliases do ledger).
+   Nunca crie segunda ficha de quem já tem ficha. Pessoa nova →
+   `brain person add` com aliases.
+6. **Grave no ledger** via `./brain` (`action open`, `decision add`,
+   `artifact`, ou `brain add` com JSON). Escreva o artefato em
+   `PROCESSED/<ano>/<mês>/`.
+7. **`./brain render`** — colhe checkboxes/status do dono e regenera FRESH
+   (Markdown + painel HTML).
+8. **Relate** ao dono: ~5 linhas por item. Termine com `inbox: X restantes`.
 
-## IDs e logs
+## FRESH — o quadro branco (e o painel)
 
-- Ações: `A-####` (zero-padding, sequência global, nunca reusa número).
-- Decisões: `D-####` (idem).
-- Estados de ação vivem como log append-only em `vault/PROCESSED/_logs/actions.md`:
-  `A-#### · aberta · data · origem` → `A-#### · atualizada · data · nota` →
-  `A-#### · fechada · data · como`. Atraso se calcula na leitura — nenhuma
-  "varredura de vencidos" escreve nada. Campos opcionais: `blocked-by:`/
-  `unblocks:` (dependências entre ações e projetos), `proj:`, `link:`, estado
-  `waiting` (dependência externa). Ação complexa tem ficha própria em
-  `vault/PROCESSED/_actions/A-####.md`.
-- **Entregas**: `vault/PROCESSED/_logs/deliveries.md` (append-only) — o que foi
-  entregue, resultado/impacto, evidência, proveniência. A linha nasce quando a
-  entrega é declarada (/week) ou a ação fecha com resultado. É a espinha dorsal
-  dos recaps; nunca inventar resultado — sem fonte, registrar "não declarado".
-- Mudanças em PLANNING (aprovadas): `vault/PLANNING/log.md` — data, diff, motivo,
-  evidência, aprovação do dono.
+Toda view carrega `generated-at:` + `fontes:`. FRESH não guarda informação
+única. Regeneração **não é incremental**: `./brain render` reescreve tudo.
+Antes de sobrescrever, **colhe** edições do dono:
 
-## FRESH — o quadro branco
+- checkbox em `FRESH/todo.md` → fecha/reabre ação
+- `status:` em `FRESH/records/actions/A-*.md` (ficha da ação, qualquer editor) → o mesmo
+- checkbox de entregável em `PLANNING/goals.md` → estado factual
 
-Toda view carrega cabeçalho `generated-at: <timestamp real>` + `fontes:`
-(zonas/índices lidos). **FRESH não guarda informação única** — se um dado não
-deriva de PROFILE+PLANNING+PROCESSED, ele pertence a outra zona. Views padrão:
-`daily-brief.md`, `week.md`, `month.md` (30-45d por goal→projeto→entregável),
-`open-actions.md` (com cadeias blocked-by/unblocks), `projects.md`,
-`stakeholders.md`, `live-items.md`, `pocket.md` (status compartilhável pro
-gestor), `map.md` (grafos Mermaid: áreas/projetos, stakeholders×projetos,
-dependências entre ações) e `timeline.md` (timeline do passado + gantt de
-deadlines) — estas duas últimas sob demanda (`/map`, `/timeline`), não
-noturnas. Regeneração não é incremental: reescreve o arquivo inteiro.
-**Reports** (`vault/reports/`, do `/recap`) não são views: são documentos
-datados, point-in-time, feitos pra compartilhar — nunca reescritos.
+Qualquer outra edição em FRESH é descartada. Narrativas do agente
+(`/brief`, `/week`) vão em `FRESH/notes/` e o painel as exibe como estão.
+
+Views: `home.md`, `todo.md`, `goals.md`, `projects/P#.md`, `decisions.md`,
+`wins.md`, `people/<id>.md`, `timeline.md`, `map.md`, `focus.md`, `outbox.md`,
+`health.md`, `records/`, `dashboard/index.html`.
+`/map` e `/timeline` são sob demanda só no sentido de "o dono pediu para
+olhar"; o arquivo já existe depois de qualquer render.
+
+**Reports** (`vault/reports/share/`, do `/share`) não são views: são
+documentos datados, feitos para sair da máquina — nunca reescritos.
 
 ## Responder perguntas (`/ask`)
 
-Entre pelo **índice**, abra o **artefato**, desça ao **RAW** só quando precisar
-da letra exata (página do PDF, minuto da transcrição). Sempre cite a fonte do
-que responder. **"Não consta" é uma resposta válida e frequente** — inventar
-memória é o único erro imperdoável deste sistema. Diferencie proveniências na
-resposta ("a política diz" ≠ "alguém comentou numa reunião").
+Entre pelo **índice** (`./brain search` ou o painel), abra o **artefato** /
+evento, desça ao **RAW** só quando precisar da letra exata. Sempre cite a
+fonte e a proveniência. **"Não consta" é uma resposta válida e frequente** —
+inventar memória é o único erro imperdoável. Se `[memory] engine = "hindsight"`
+e o servidor estiver no ar, `brain memory recall` é atalho — o trecho
+devolvido ainda precisa apontar para um `document_id` do vault; se não
+apontar, trate como pista e confirme no arquivo.
+
+## Superfícies
+
+- **Painel HTML** (`vault/FRESH/dashboard/index.html`) — um arquivo, offline,
+  abre em qualquer navegador. `./brain render --open`.
+- **Qualquer editor de texto** — FRESH/ é Markdown plano; checkbox em `todo.md`
+  e `status:` na ficha da ação são colhidos no próximo render.
+- **MCP somente-leitura** — `./brain mcp` (stdio). Outras IAs consultam;
+  nenhuma ferramenta escreve. Para escrever, usam o agente desta instância.
+
+## Memória para IA (Hindsight)
+
+Camada auxiliar, mão única: o vault alimenta dois bancos (`brain-raw` =
+texto original; `brain-mem` = fatos extraídos). O vault continua a verdade.
+`brain memory rebuild` apaga os bancos e reconstrói. Sem servidor, o motor
+é `none` e `/ask` usa índice → artefato → RAW. Guia: `guides/memory.md`.
 
 ## Segurança
 
-- Segredos **nunca** aparecem no chat, em log, em artefato ou em view. Não leia
-  `.env` além de checar existência/permissão; nunca imprima seu conteúdo.
-- `config/watch.yaml` define o universo observável — fonte não listada não é
-  observada, sem exceção. (No layout atual o watch.yaml da instância mora em
-  `config/`, cegado pelo `.gitignore`; o repo carrega só o `.example`.)
-- O dono pode pedir análise de conteúdo confidencial de trabalho: normal para
-  uso pessoal interno; o agente não classifica, apenas organiza.
-- **O vault não sai da máquina**: dados, config, estado e logs do dono vivem
-  em `vault/` (+`config/.env`), cegados pro git — nunca commitar, nunca pushar,
-  nunca colar conteúdo de zona em canal externo.
+- Segredos **nunca** aparecem no chat, em log, em artefato ou em view. Não
+  leia `.env` além de checar existência/permissão; nunca imprima seu conteúdo.
+- `config/watch.toml` define o universo observável — fonte não listada não é
+  puxada no `/update` / noturno, sem exceção.
+- O dono pode pedir análise de conteúdo confidencial de trabalho: normal
+  para uso pessoal interno; o agente não classifica, apenas organiza.
+- **O vault não sai da máquina**, salvo pelas portas `share` / `publish` /
+  `backup` (com gate). Nunca commitar, nunca pushar, nunca colar conteúdo
+  de zona em canal externo sem passar pela porta.
 
 ## Datas e linguagem
 
 - **Nunca escreva datas literais em templates/comandos** — sempre relativas
-  ("a data de hoje", obtida do sistema). Um template com data fixa propaga a
-  data errada por semanas.
+  ("a data de hoje", obtida do sistema: `date +%F` ou `brain status`).
 - **Diretórios e nomes de arquivo em inglês (kebab-case); conteúdo em PT-BR.**
 - Views e relatórios: concisos, escaneáveis, sem emoji além dos marcadores
   estabelecidos (☀ ⛏ ✓ ⚠).
 
-## Conectores — scripts pull-only (todos OAuth/token read-only, nenhuma exceção)
+## Conectores — MCP na sessão; snapshot na inbox
 
-Toda leitura do mundo exterior vira snapshot Markdown em `vault/RAW/inbox/`
-(prefixo da fonte: `jira-…`, `github-…`, `slack-…`, `gmail-…`, `gdoc-…`,
-`gdrive-search-…`) e o `/dump` processa. Responder com conteúdo lido sem
-snapshotar = memória perdida (defeito).
+O LLM **nunca** chama APIs externas diretamente. Durante a sessão (e no
+noturno, via o agente headless), o agente usa as ferramentas MCP de **leitura**
+listadas em `config/watch.toml`, grava o resultado com `./brain snapshot`
+(`--key` estável; hash idêntico = silêncio) e processa com `/dump`.
 
-Scripts determinísticos em `scripts/connectors/` — leem `.env`, chamam APIs
-read-only: Jira, GitHub, Slack (tokens) e Gmail, Drive (**OAuth do Google** via
-`google_auth.py`, uma vez; guia `guides/google-oauth.md`; escopos somente
-`gmail.readonly` + `drive.readonly`). Estado de pull (hashes) em
-`config/.state.json` — nunca commitado. O LLM **nunca** chama APIs externas
-diretamente; conectores são a única fronteira com o mundo exterior — e rodam
-só no noturno/sob demanda, nunca embutidos na sessão. Fontes vivas: snapshot
-datado sempre; o processamento decide digest (mudou) vs. silêncio (hash idêntico).
-
-**Exceção constitucional única (backup):** `scripts/connectors/backup.py` usa
-o escopo `drive.file` para criar/apagar APENAS seus próprios `brain-backup-*.zip`
-na pasta configurada (`GOOGLE_BACKUP_FOLDER_ID`) — não lê nem toca em mais nada
-do Drive. Gatilhos: noturno semanal e `/backup` do dono. Nenhum outro fluxo de
-escrita existe; se algum aparecer, é violação da constituição.
+Não existem mais scripts `jira.py` / `gmail.py` / `slack.py`. OAuth do Google
+neste repo pede só as duas portas de escrita: `calendar.events.owned` +
+`drive.file` (`scripts/google_auth.py`, `guides/google-oauth.md`).
 
 ## Limites de julgamento (o que ESCALAR pro dono)
 
 - Ambiguidade séria de identidade (duas pessoas plausíveis pro mesmo alias).
 - Item que parece urgente/crítico e não casa com nenhum goal ativo.
-- Conector retornando erro ou vazio por 2+ pulls seguidos.
+- Fonte MCP retornando erro ou vazio por 2+ pulls seguidos (`brain doctor`).
 - Qualquer situação onde seguir a regra produz resultado claramente errado.
+
 Nestes casos: pare, explique o dilema ao dono em ≤5 linhas, proponha 2 caminhos.
 
-## Comandos (mapa: o que o dono digita → skill a carregar)
+## Comandos (o que o dono digita → skill a carregar)
 
 `/init` → `commands/init/SKILL.md` · `/dump` → `commands/dump/SKILL.md` ·
 `/brief` → `commands/brief/SKILL.md` · `/week` → `commands/week/SKILL.md` ·
@@ -176,13 +262,20 @@ Nestes casos: pare, explique o dilema ao dono em ≤5 linhas, proponha 2 caminho
 `/project` → `commands/project/SKILL.md` · `/update` → `commands/update/SKILL.md` ·
 `/connect` → `commands/connect/SKILL.md` · `/slack` → `commands/slack/SKILL.md` ·
 `/gmail` → `commands/gmail/SKILL.md` · `/drive` → `commands/drive/SKILL.md` ·
-`/goal` → `commands/goal/SKILL.md` · `/recap` → `commands/recap/SKILL.md` ·
-`/map` → `commands/map/SKILL.md` · `/timeline` → `commands/timeline/SKILL.md` ·
-`/backup` → `commands/backup/SKILL.md` · `/upgrade` → `commands/upgrade/SKILL.md` ·
-`/todo` → `commands/todo/SKILL.md` · `/done` → `commands/done/SKILL.md`
+`/calendar` → `commands/calendar/SKILL.md` · `/goal` → `commands/goal/SKILL.md` ·
+`/recap` → `commands/recap/SKILL.md` · `/map` → `commands/map/SKILL.md` ·
+`/timeline` → `commands/timeline/SKILL.md` · `/backup` → `commands/backup/SKILL.md` ·
+`/upgrade` → `commands/upgrade/SKILL.md` · `/todo` → `commands/todo/SKILL.md` ·
+`/done` → `commands/done/SKILL.md` · `/focus` → `commands/focus/SKILL.md` ·
+`/outbox` → `commands/outbox/SKILL.md` · `/share` → `commands/share/SKILL.md` ·
+`/publish` → `commands/publish/SKILL.md`
 
 Ao receber um comando, leia a skill correspondente ANTES de agir. Variantes
-naturais ("meu dia", "atualiza tudo") mapeiam para a skill óbvia.
+naturais ("meu dia", "atualiza tudo", "manda pra Carla") mapeiam para a skill
+óbvia.
+
+Toda escrita no ledger, nas views ou nas portas passa por `./brain`. O agente
+não edita `events.jsonl` nem `FRESH/` na mão.
 
 ## Primeira sessão em uma instância
 

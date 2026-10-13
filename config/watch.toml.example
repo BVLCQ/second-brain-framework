@@ -1,0 +1,28 @@
+# Universo observável do /update e do noturno.
+# Fonte não listada aqui NÃO é puxada — sem exceção.
+# Leituras passam pelos MCPs do agente; o resultado cai na inbox via:
+#   ./brain snapshot --key <key> --prefix <kind>
+# Hash idêntico ao último pull da mesma key = silêncio (nada escrito).
+
+# [[source]]
+# key = "gcal-primary"
+# kind = "gcal"
+# window = "14d"
+# note = "agenda ocupada — alimenta o planejador de foco"
+
+# [[source]]
+# key = "gmail-today"
+# kind = "gmail"
+# window = "1d"
+# note = "digest do dia"
+
+# [[source]]
+# key = "slack-time-dados"
+# kind = "slack"
+# channel = "#time-dados"
+# window = "1d"
+
+# [[source]]
+# key = "jira-me"
+# kind = "jira"
+# jql = "assignee = currentUser() AND updated >= -1d"
