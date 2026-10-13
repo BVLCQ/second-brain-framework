@@ -1,0 +1,73 @@
+# Copiado para config/brain.toml no `./brain init` (esse arquivo NÃO vai pro git).
+# Chaves omitidas herdam o padrão de brainlib/config.py.
+
+[owner]
+id = "eu"
+name = "Dono do cérebro"
+
+# Fuso usado em prazos, foco e "hoje".
+# timezone = "America/Sao_Paulo"
+
+[work]
+days = [1, 2, 3, 4, 5]          # ISO: 1=segunda … 7=domingo
+start = "09:00"
+end = "18:00"
+lunch = "12:00-13:00"           # "" desliga
+
+# Folgas / férias: o planejador de foco não agenda nestes dias.
+# [[vacations]]
+# start = "2026-12-24"
+# end = "2027-01-04"
+
+[focus]
+mode = "ics"                    # "ics" (arquivo) | "google" (porta do calendário)
+calendar = "primary"
+horizon_days = 7
+block_min = 30
+block_max = 120
+daily_max_min = 180
+buffer_min = 10
+default_effort_min = 60
+title_prefix = "Foco"
+decline_message = "Em bloco de foco planejado."
+
+[outbound]
+# Destinatários permitidos: ids de pessoa do ledger ou #canal.
+allow = []
+daily_max = 10
+
+[publish]
+# Destinos do espaço do time. Cada publicação exige aprovação explícita.
+# Exemplos: "slack:#gtm-retention" · "drive:<folder-id>"
+destinations = []
+
+[extractor]
+# Rascunho de extração por modelo local (OpenAI-compatible — LM Studio).
+# `./brain extract <arquivo>` valida e não grava; --record grava só o válido.
+# Prova ponta a ponta: `./brain extract --selftest`. Guia: setup.md §4.
+enabled = false
+base_url = "http://localhost:1234/v1"
+model = ""                      # ex.: "qwen/qwen3-4b-2507" — `lms ls` lista os carregados
+api_key_env = ""                # LM Studio dispensa chave; gateway: nome da variável de ambiente
+# temperature = 0.1
+# max_tokens = 4096
+# timeout_s = 180
+
+[memory]
+engine = "none"                 # "hindsight" quando o servidor estiver no ar
+url = "http://localhost:8888"
+raw_bank = "brain-raw"
+mem_bank = "brain-mem"
+max_file_mb = 25
+
+[runner]
+agent = "auto"                  # auto | cursor | claude | codex | agy | gemini | none
+command = ""                    # se preenchido, substitui o preset (use {prompt})
+prompt = "/update"
+timeout_min = 45
+
+[backup]
+enabled = false
+max_file_mb = 50                # arquivos maiores entram só no manifesto
+keep = 8
+weekday = 7                     # ISO: 7 = domingo

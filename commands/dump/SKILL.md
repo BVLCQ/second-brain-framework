@@ -1,57 +1,69 @@
 ---
 name: dump
-description: "O comando central: arquiva tudo que está em vault/RAW/inbox/ no mês correto (vault/RAW/ano/mes/) e processa cada item — extrai decisões, ações, fatos e menções, escreve artefatos em PROCESSED e apensa aos índices. Use sempre que houver itens novos na inbox."
+description: "Arquiva vault/RAW/inbox/ no mês correto e processa cada item: extrai decisões, ações, fatos e menções, grava no ledger via ./brain e escreve o artefato em PROCESSED. Use sempre que houver itens novos na inbox."
 ---
 
 # /dump — a esteira de processamento
 
 Siga o pipeline da constituição (AGENTS.md, seção "O pipeline"), sem pular passo.
+Toda entidade (ação, decisão, pessoa, artefato) entra pelo `./brain` — nunca edite `events.jsonl`.
 
 ## Classificação e extração por tipo
 
 | Tipo | Sinais | O artefato contém |
 |---|---|---|
-| **reunião** | transcrição, ata, gravação com falantes | contexto · decisões `D-####` com base (quem/min) · ações `A-####` por dono · threads abertas (não-ações a acompanhar) · citações-chave com minuto · menções |
-| **documento longo** | PDF, política, apresentação, doc extenso | do-que-trata · TL;DR executivo (≤5 linhas) · **mapa de seções com página/âncora** (★ nos pontos relevantes ao dono) · pontos que afetam goals do PLANNING · perguntas que o documento responde (com página) |
-| **nota solta** | anotação curta, ideia, lembrete | nota limpa · tags · ligações com entidades existentes |
-| **dump de conector** | arquivo prefixado (`jira-…`, `github-…`, `slack-…`, `gmail-…`, `gdoc-…`) | **change digest**: comparar com o snapshot anterior da MESMA fonte (via `config/.state.json` + índice) e extrair SÓ o que mudou; primeira vez = estado inicial |
+| **reunião** | transcrição, ata, gravação com falantes | contexto · decisões com base (quem/min) · ações por dono e lista · threads abertas · citações-chave com minuto · menções |
+| **documento** | PDF, política, apresentação, doc extenso | do-que-trata · TL;DR (≤5 linhas) · mapa de seções com página/âncora · pontos que afetam goals · perguntas que o doc responde |
+| **nota** | anotação curta, ideia, lembrete | nota limpa · ligações com entidades existentes |
+| **conector** | snapshot prefixado (`jira-…`, `gmail-…`, `gcal-…`, `slack-…`) | **change digest**: só o que mudou vs. o snapshot anterior da mesma `--key`; primeira vez = estado inicial |
 
-**Ações — campos do ledger (`_logs/actions.md`, todos opcionais):**
-`blocked-by: A-####` (por que não anda) · `unblocks: A-####, P#` (o que ela destrava)
-· `proj: P#` · `link: <artefato/doc>` · estado `waiting` (esperando terceiro).
-Na extração, DETECTE dependências explícitas ("assim que o Bruno revisar, eu
-envio" → A-nova `blocked-by: A-do-Bruno`) e ligações a projetos. Ação complexa
-(multi-passo, contexto próprio, >1 reunião mencionando) → **ficha própria**
-`_actions/A-####.md`: contexto, passos, decisões ligadas, artefatos-fonte,
-pessoas — o ledger aponta pra ficha.
+**Ações — detecte na extração:**
+- dono da ação → `mine` se for o dono do cérebro, `waiting` se for terceiro que deve a ele, `watching` se for só contexto
+- `blocked_by` / `unblocks` quando o texto ligar uma ação a outra
+- `proj:` / entregável se casar com `PLANNING/goals.md`
+- esforço (`90m`, `2h`) se alguém falou tempo
+- **não feche** ação só porque o texto "parece" resolver — abra `brain proposal add --kind fechar-acao` com a evidência
 
-Regras transversais: proveniência em toda extração (`[doc]`/`[observado]`/`[declarado]`/`[sem fonte]`) ·
-aliases resolvem pessoas antes de qualquer menção · IDs A-/D- globais e zero-padded,
-consultar os logs antes de numerar.
+Regras transversais: proveniência em toda extração · `brain person resolve` antes de qualquer menção · IDs só o CLI numera.
 
-**Fontes vigiadas → registro de itens vivos:** todo artefato de digest de fonte
-da watchlist (gdocs, boards Jira, canais/pessoas Slack) apenda 1 linha à seção
-do item em `_indices/live-items-index.md` (`data · snapshot · o que mudou`);
-primeira vez cria a seção com o estado inicial. Pull sem mudança não escreve
-nada. Fluxos sem identidade por item (digest diário do Gmail) não entram — o
-artefato diário já é o registro.
+## Como gravar
 
-## O recibo (chat)
+Para cada item da inbox (ignore `.keep.md`):
 
-~5 linhas por item — tipo, contagem de extrações, menções, qualquer estranheza
-("transcrição sem falante identificado em 30% do texto"). Terminar com:
-`inbox: N itens restantes`.
+0. **Atalho opcional** — se `[extractor]` estiver ligado (LM Studio), rode
+   `./brain extract vault/RAW/<ano>/<mês>/<arquivo>`: o modelo local devolve
+   um rascunho **já validado** (pessoas resolvidas, datas, escopo). Revise,
+   complete o que faltar e use como lote do passo 4. Modelo erra → o CLI
+   recusa; o rascunho não substitui seu julgamento.
+1. Mova para `vault/RAW/<ano>/<mês>/` pela data de **captura** (hoje, se não souber). Colisão de nome → sufixo `-2`.
+2. Escreva o artefato em `vault/PROCESSED/<ano>/<mês>/<slug>.md`.
+3. Registre pessoas novas (`brain person add`) e o artefato:
 
-## Idempotência (verificação obrigatória)
+```
+./brain artifact PROCESSED/<ano>/<mês>/<slug>.md --kind reuniao|documento|nota|conector \
+  --title "…" --raw RAW/<ano>/<mês>/<arquivo> --people a,b --projects P1 --summary "…" \
+  --prov observado --source RAW/<ano>/<mês>/<arquivo>
+```
 
-Fonte que já tem artefato = pulada. Antes de escrever, confira que não existe
-artefato apontando para a mesma fonte. Re-rodar /dump no mesmo material = zero
-duplicatas — se não for isso que aconteceu, algo quebrou: reporte.
+4. Extrações em lote (preferível quando houver várias):
 
-Arquivos `.keep.md` (âncoras de pasta vazia) são **ignorados** — nunca
-processados, nunca arquivados.
+```
+./brain add <<'JSON'
+[
+  {"type":"decision.made","prov":"observado","source":"PROCESSED/…/x.md",
+   "data":{"title":"…","decided_by":["ana"],"project":"P1","rationale":"…"}},
+  {"type":"action.opened","prov":"observado","source":"PROCESSED/…/x.md",
+   "data":{"title":"…","owner":"eu","due":"AAAA-MM-DD","effort_min":90,"project":"P1"}}
+]
+JSON
+```
 
-## Depois do dump
+Fonte já registrada (`artifact.added` com o mesmo `raw`) = **pule**. Re-rodar = zero duplicatas.
 
-Se houve qualquer mudança relevante (novas ações, decisões, pessoas), as views
-de FRESH ficam velhas — ofereça `/update` ou regenere as views afetadas.
+## Recibo (chat)
+
+~5 linhas por item: tipo, quantas extrações, menções, estranheza.
+Termine com `inbox: N itens restantes`.
+Se houve ação/decisão/pessoa nova: `./brain render` (ou ofereça `/update`).
+Se `[memory] engine = "hindsight"`: `./brain memory sync` — o índice fica
+fresco no mesmo dia, sem esperar o noturno.
