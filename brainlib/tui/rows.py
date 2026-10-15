@@ -143,6 +143,15 @@ def row(store, it, width: int) -> Text:
         mark, st = {"ok": ("✓", GRN), "warn": ("⚠", AMB), "error": ("✗", RED)}[lvl]
         agent = (it.extra.get("fix") or {}).get("agent")
         return two(T((mark, st), " ", f"{d['title']}: {d['detail']}"), T(("⚡", VIO) if agent else ""), width)
+    if k == "src":
+        mark, st = ("●", GRN) if d["last_ok"] and not d["failures"] else (("✗", RED) if d["failures"] else ("○", AMB))
+        if not d["in_watch"]:
+            mark, st = "◌", FAINT
+        right = (T((f"{d['failures']} falha(s)", RED)) if d["failures"] else
+                 T(("fora do watch", FAINT)) if not d["in_watch"] else
+                 T((util.fmt_date(d["last_ok"][:10]), DIM)) if d["last_ok"] else T(("nunca puxada", AMB)))
+        extra = " · ".join(x for x in (d.get("kind"), d.get("window")) if x)
+        return two(T((mark, st), " ", d["key"], ("  " + extra if extra else "", DIM)), right, width)
     if k == "sys":
         return two(T(("▸", DIM), " ", d["name"]), T(("porta ", AMB) if d.get("door") else "", ("info" if d.get("info") else "⏎", DIM)), width)
     return T(str(it.id))
@@ -233,7 +242,7 @@ def detail(store, it) -> Text:
         return Text("Nada aqui.", DIM)
     fn = {"resumo": d_resumo, "action": d_action, "g": d_plan, "p": d_plan, "d": d_plan, "prop": d_prop,
           "msg": d_msg, "fday": d_focus, "fwarn": d_focus, "pub": d_pub, "dec": d_dec, "del": d_del,
-          "per": d_person, "art": d_art, "doc": d_doc, "sys": d_sys}[it.kind]
+          "per": d_person, "art": d_art, "doc": d_doc, "sys": d_sys, "src": d_src}[it.kind]
     return fn(store, it).text()
 
 
@@ -246,6 +255,29 @@ def d_doc(store, it) -> Doc:
         doc.sec("Como resolver").p(Text("⚡ " if fix.get("agent") else "▸ ", VIO if fix.get("agent") else CYN),
                                    fix["label"], ("  (tecla f)", DIM))
     return doc.sec("Equivalente na CLI").cmd("brain doctor --online")
+
+
+def d_src(store, it) -> Doc:
+    s = it.data
+    doc = Doc().h(Text(s["key"], "bold"), (f"  · {s['kind']}" if s.get("kind") else "", DIM))
+    if not s["in_watch"]:
+        doc.blank().p(Text("Fonte puxada avulso (/connect). Não está no watch.toml, então o /update e o noturno não a puxam.", AMB))
+        doc.p(("Tecla w inclui no watch.toml.", DIM))
+    skip = {"key", "kind", "in_watch", "last_ok", "last_error", "failures", "pulls", "last_changed"}
+    fields = [(k, Text(str(v))) for k, v in s.items() if k not in skip]
+    last = Text(f"{s['last_ok'][:16].replace('T', ' ')} · {s['pulls']} pull(s)") if s["last_ok"] else Text("nunca puxada", AMB)
+    rows_ = [("kind", Text(s.get("kind") or "—"))] + fields + [
+        ("último pull", last),
+        ("novidade", Text(util.fmt_date(s["last_changed"][:10]))) if s["last_changed"] else None,
+        ("falhas seguidas", Text(str(s["failures"]), RED if s["failures"] else DIM)),
+        ("último erro", Text(s["last_error"][:200], RED)) if s["last_error"] else None]
+    doc.blank().kv(rows_)
+    if s["in_watch"]:
+        doc.sec("O que acontece").p("O /update lê esta fonte pelo MCP de leitura e grava com brain snapshot (hash igual = silêncio). "
+                                    "Duas falhas seguidas pedem a sua atenção.")
+        doc.p(("Tecla c puxa só esta fonte; u atualiza todas.", DIM))
+    doc.sec("Arquivo").p(("config/watch.toml (fora do git). Fonte que não está lá NÃO é puxada.", DIM))
+    return doc.sec("Equivalente na CLI").cmd(f"brain watch edit {s['key']} --window 7d" if s["in_watch"] else f"brain watch add {s['key']} --kind …")
 
 
 def d_sys(store, it) -> Doc:

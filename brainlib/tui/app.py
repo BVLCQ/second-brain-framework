@@ -61,24 +61,30 @@ CMD_CATALOG = [               # paleta de comandos: nome, linha da CLI, (painel,
     ("Registrar entrega", 'brain delivery "…" --ref …', (5, 1, "n")),
     ("Nova pessoa", 'brain person add "…" --id …', (5, 2, "n")),
     ("Saúde da instância", "brain doctor --online", (1, 1, None)),
-    ("Regenerar views", "brain render", (1, 2, "enter", "sys:render")),
-    ("Abrir painel HTML", "brain render --open", (1, 2, "enter", "sys:open")),
-    ("Validar ledger", "brain validate", (1, 2, "enter", "sys:validate")),
-    ("Backup do vault", "brain backup", (1, 2, "enter", "sys:backup")),
-    ("Atualizar framework", "brain update --check", (1, 2, "enter", "sys:update")),
-    ("Varredura upstream", "brain upstream scan", (1, 2, "enter", "sys:upstream")),
-    ("Memória: sincronizar", "brain memory sync", (1, 2, "enter", "sys:memory")),
-    ("Memória: perguntar", 'brain memory recall|reflect "…"', (1, 2, "enter", "sys:recall")),
-    ("Memória: status", "brain memory status", (1, 2, "enter", "sys:memstatus")),
-    ("Saúde online", "brain doctor --online", (1, 2, "enter", "sys:doctor")),
-    ("Colher edições do dono", "brain sync", (1, 2, "enter", "sys:sync")),
-    ("Backup: ver últimos", "brain backup --status", (1, 2, "enter", "sys:backupst")),
-    ("Agendamento: ver", "brain schedule status", (1, 2, "enter", "sys:schedst")),
-    ("Agendamento: remover", "brain schedule remove", (1, 2, "enter", "sys:unsched")),
+    ("Regenerar views", "brain render", (1, 3, "enter", "sys:render")),
+    ("Abrir painel HTML", "brain render --open", (1, 3, "enter", "sys:open")),
+    ("Validar ledger", "brain validate", (1, 3, "enter", "sys:validate")),
+    ("Backup do vault", "brain backup", (1, 3, "enter", "sys:backup")),
+    ("Atualizar framework", "brain update --check", (1, 3, "enter", "sys:update")),
+    ("Varredura upstream", "brain upstream scan", (1, 3, "enter", "sys:upstream")),
+    ("Memória: sincronizar", "brain memory sync", (1, 3, "enter", "sys:memory")),
+    ("Memória: perguntar", 'brain memory recall|reflect "…"', (1, 3, "enter", "sys:recall")),
+    ("Memória: status", "brain memory status", (1, 3, "enter", "sys:memstatus")),
+    ("Saúde online", "brain doctor --online", (1, 3, "enter", "sys:doctor")),
+    ("Colher edições do dono", "brain sync", (1, 3, "enter", "sys:sync")),
+    ("Backup: ver últimos", "brain backup --status", (1, 3, "enter", "sys:backupst")),
+    ("Agendamento: ver", "brain schedule status", (1, 3, "enter", "sys:schedst")),
+    ("Agendamento: remover", "brain schedule remove", (1, 3, "enter", "sys:unsched")),
     ("Editar pessoa", "brain person update ID …", (5, 2, "u")),
     ("Quem é…?", 'brain person resolve "…"', (5, 2, "R")),
     ("Sincronizar o foco", "brain focus sync [--dry-run]", (4, 2, "s")),
     ("Primeira entrevista", "agente: /init", (1, 0, "i")),
+    ("Atualizar tudo", "agente: /update", (1, 0, "u")),
+    ("Puxar uma fonte", "agente: /connect <fonte>", (1, 0, "c")),
+    ("Fontes do watch.toml", "brain watch list", (1, 2, None)),
+    ("Adicionar fonte", "brain watch add KEY --kind …", (1, 2, "n")),
+    ("Editar fonte", "brain watch edit KEY …", (1, 2, "e")),
+    ("Remover fonte", "brain watch remove KEY", (1, 2, "x")),
     ("Processar a inbox", "agente: /dump", (1, 0, "d")),
     ("Brief do dia", "agente: /brief", (1, 0, "b")),
     ("Buscar no ledger", 'brain search "…"', (None, None, "g")),
@@ -330,6 +336,8 @@ class BrainApp(App):
                 n = sum(1 for s in m["shares"] if s["status"] in ("solicitada", "aprovada"))
         if pid == 1 and i == 1:
             n = sum(1 for h in self.store.health if h["level"] != "ok")
+        if pid == 1 and i == 2:
+            n = sum(1 for x in self.store.sources if x["failures"])
         return str(n) if n else ""
 
     def redraw(self) -> None:
@@ -558,6 +566,8 @@ class BrainApp(App):
             if t == 0:
                 if w(self.store and self.store.is_empty()):
                     add("i", "primeira entrevista", self.agent_init, agent=True)
+                add("u", "atualizar tudo", self.agent_update, agent=True)
+                add("c", "puxar fonte", self.pick_source, agent=True)
                 add("d", "processar inbox", lambda: self.agent_dump(), agent=True)
                 add("b", "brief", lambda: self.agent_brief(), agent=True)
                 add("o", "painel HTML", lambda: self.run_sys("sys:open"))
@@ -566,6 +576,16 @@ class BrainApp(App):
                     add("f", "corrigir", self.fix_doc)
                 add("o", "testar online", lambda: self.run_sys("sys:doctor"))
                 add("enter", "ampliar", self.toggle_zoom)
+            elif t == 2:
+                add("n", "adicionar", self.f_source_add)
+                if w(it and it.data["in_watch"]):
+                    add("e", "editar", self.f_source_edit)
+                    add("x", "remover", self.f_source_remove)
+                if w(it and not it.data["in_watch"]):
+                    add("w", "incluir no watch", self.f_source_include)
+                if w(it):
+                    add("c", "puxar", self.agent_connect_selected, agent=True)
+                add("u", "atualizar tudo", self.agent_update, agent=True)
             else:
                 add("enter", "executar", self.run_selected_sys)
                 if w(it and it.id == "sys:update"):
@@ -1181,7 +1201,7 @@ class BrainApp(App):
             self.agent_connect(fix["key"])
         elif fix.get("sys"):
             self.p = 1
-            self.tab[1] = 2
+            self.tab[1] = 3
             self.set_sel(1, [o["id"] for o in SYS_OPS].index(fix["sys"]))
             self.redraw()
         elif fix.get("go"):
@@ -1248,8 +1268,154 @@ class BrainApp(App):
     def agent_brief(self) -> None:
         self.ask_agent("Brief do dia", ["Lê FRESH/home.md e todo.md", "Escreve a narrativa em FRESH/notes/ (o painel exibe como está)"], "/brief")
 
+    MCP_NOTE = "Precisa de permissão para as ferramentas MCP de leitura ([tui].agent_allow ou [runner].command no brain.toml)"
+
     def agent_connect(self, key: str) -> None:
-        self.ask_agent(f"Puxar a fonte {key}", ["Lê a fonte pelo MCP, só leitura", "Grava com brain snapshot (hash igual = silêncio)", "Processa a novidade"], f"/connect {key}")
+        self.ask_agent(f"Puxar a fonte {key}", ["Lê a fonte pelo MCP, só leitura", "Grava com brain snapshot (hash igual = silêncio)",
+                                                "Processa a novidade (/dump só nesse item)", self.MCP_NOTE], f"/connect {key}")
+
+    def agent_connect_selected(self) -> None:
+        it = self.cur()
+        if it and it.kind == "src":
+            self.agent_connect(it.data["key"])
+
+    def agent_update(self) -> None:
+        keys = [x["key"] for x in self.store.sources if x["in_watch"]]
+        if not keys:
+            self.log_line("Nenhuma fonte no config/watch.toml: o /update não teria o que puxar. Painel 1, aba Fontes, tecla n.", "yellow")
+            return
+        shown = ", ".join(keys[:5]) + (f" e mais {len(keys) - 5}" if len(keys) > 5 else "")
+        self.ask_agent("Atualizar tudo (/update)", [f"Lê {len(keys)} fonte(s) do watch.toml pelo MCP de leitura: {shown}",
+                                                    "Grava cada leitura com brain snapshot (hash igual = silêncio)",
+                                                    "Processa a inbox (/dump), roda o render e sincroniza a memória, se ligada", self.MCP_NOTE], "/update")
+
+    def pick_source(self) -> None:
+        srcs = [x for x in self.store.sources]
+        if not srcs:
+            self.log_line("Nenhuma fonte conhecida. Cadastre em Painel 1, aba Fontes, tecla n.", "yellow")
+            return
+
+        def source(q: str) -> list[PickItem]:
+            f = util.fold(q)
+            return [PickItem(Text.assemble((x["key"].ljust(26), "bold"), (x.get("kind") or "avulsa").ljust(8), ("" if x["in_watch"] else "fora do watch", "dim")), x["key"])
+                    for x in srcs if f in util.fold(x["key"] + " " + (x.get("kind") or ""))]
+
+        def done(item) -> None:
+            if item:
+                self.agent_connect(item.data)
+        self.push_screen(PickerModal("Puxar qual fonte?", "digite para filtrar…", source), done)
+
+    # ── fontes: watch.toml pela CLI (`brain watch`) ────────────────────────
+    @staticmethod
+    def _extras_check(v: str) -> str:
+        from .. import watch
+        for part in [p for p in v.split(";") if p.strip()]:
+            k, sep, _ = part.partition("=")
+            if not sep or not watch.FIELD_RE.match(k.strip()):
+                return f"use campo=valor separados por ponto e vírgula (recebi {part.strip()!r})"
+        return ""
+
+    @staticmethod
+    def _extras(v: str) -> dict:
+        out = {}
+        for part in [p for p in v.split(";") if p.strip()]:
+            k, _, val = part.partition("=")
+            out[k.strip()] = val.strip()
+        return out
+
+    def _source_fields(self, src: dict | None, key_locked: bool = False) -> list[Field]:
+        from .. import watch
+        src = src or {}
+        known = {"key", "kind", "window", "channel", "jql", "note", "in_watch", "last_ok", "last_error", "failures", "pulls", "last_changed"}
+        other = "; ".join(f"{k}={v}" for k, v in src.items() if k not in known)
+        taken = {x["key"] for x in self.store.sources if x["in_watch"] and x["key"] != src.get("key")}
+
+        def key_check(v: str) -> str:
+            if not watch.KEY_RE.match(v):
+                return "key: minúsculas, números, '.', '_' e '-' (ex.: slack-time-dados)"
+            return "já existe uma fonte com essa key" if v in taken else ""
+
+        return [Field("key", "key", value=src.get("key", ""), req=True, ph="slack-time-dados", check=key_check),
+                Field("kind", "tipo", value=src.get("kind", ""), req=True, ph="gmail · slack · gcal · drive · jira"),
+                Field("window", "janela", value=src.get("window", ""), ph="1d · 7d · 14d"),
+                Field("channel", "canal", value=src.get("channel", ""), ph="#time-dados (slack)"),
+                Field("jql", "jql", value=src.get("jql", ""), ph="consulta (jira)"),
+                Field("note", "nota", value=src.get("note", ""), ph="para que serve esta fonte"),
+                Field("other", "outros", value=other, ph="campo=valor; campo=valor", check=self._extras_check)]
+
+    def _source_after(self, getkey) -> None:
+        self.p, self.tab[1] = 1, 2
+        self.redraw()
+        k = getkey()
+        if k:
+            self.jump_source(k)
+
+    def jump_source(self, key: str) -> None:
+        self._items = {}
+        ids = [i.id for i in self.items(1)]
+        if f"src:{key}" in ids:
+            self.set_sel(1, ids.index(f"src:{key}"))
+        self.redraw()
+
+    def f_source_add(self, pre: dict | None = None) -> None:
+        made: dict[str, str] = {}
+
+        def build(v):
+            made["key"] = v["key"]
+            c = ["watch", "add", v["key"] or "…", "--kind", v["kind"] or "…"]
+            for opt, k in (("--window", "window"), ("--note", "note")):
+                if v[k]:
+                    c += [opt, v[k]]
+            for k in ("channel", "jql"):
+                if v[k]:
+                    c += ["--set", f"{k}={v[k]}"]
+            for k, val in self._extras(v["other"]).items():
+                c += ["--set", f"{k}={val}"]
+            return [c]
+
+        self.form(FormSpec("Adicionar fonte ao watch.toml", self._source_fields(pre), build,
+                           sub="Fonte que não está no watch.toml não é puxada pelo /update nem pelo noturno.",
+                           render=False, after=lambda: self._source_after(lambda: made.get("key"))))
+
+    def f_source_include(self) -> None:
+        it = self.cur()
+        if it and it.kind == "src":
+            self.f_source_add({"key": it.data["key"]})
+
+    def f_source_edit(self) -> None:
+        old = self.cur().data
+        made: dict[str, str] = {}
+
+        def build(v):
+            made["key"] = v["key"]
+            c = ["watch", "edit", old["key"]]
+            if v["key"] != old["key"]:
+                c += ["--rename", v["key"]]
+            for opt, k in (("--kind", "kind"), ("--window", "window"), ("--note", "note")):
+                if v[k] != (old.get(k) or "") and v[k]:
+                    c += [opt, v[k]]
+            new = {k: v[k] for k in ("channel", "jql") if v[k]} | self._extras(v["other"])
+            for k, val in new.items():
+                if str(old.get(k, "")) != val:
+                    c += ["--set", f"{k}={val}"]
+            known = {"key", "kind", "in_watch", "last_ok", "last_error", "failures", "pulls", "last_changed"}
+            for k in old:
+                if k not in known and k not in new and (k != "window" or not v["window"]) and (k != "note" or not v["note"]):
+                    c += ["--unset", k]
+            return [c]
+
+        self.form(FormSpec(f"Editar a fonte {old['key']}", self._source_fields(old), build,
+                           sub="Mudar a key renomeia a fonte; o histórico de pulls fica na key antiga.",
+                           render=False, after=lambda: self._source_after(lambda: made.get("key"))))
+
+    def f_source_remove(self) -> None:
+        key = self.cur().data["key"]
+
+        def done(ok) -> None:
+            if ok:
+                self.exec([["watch", "remove", key]], render=False, after=lambda: self._source_after(lambda: None))
+        self.push_screen(ConfirmModal(f"Remover a fonte {key}", "O /update e o noturno deixam de puxá-la. Snapshots já gravados e o ledger ficam como estão.",
+                                      ["watch", "remove", key]), done)
 
     def agent_send(self) -> None:
         m = self.cur().data

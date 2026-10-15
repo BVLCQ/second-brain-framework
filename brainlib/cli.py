@@ -464,6 +464,11 @@ def cmd_backup(args, b: Brain) -> None:
     backup.cli(args, b)
 
 
+def cmd_watch(args, b) -> None:
+    from . import watch
+    watch.cli(args, b)
+
+
 def cmd_tui(args, b) -> None:
     from . import tui
     tui.cli(args, b)
@@ -835,6 +840,28 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--dir", required=True)
     p.add_argument("--open", action="store_true")
     p.set_defaults(fn=cmd_demo, no_brain=True)
+
+    p = sub.add_parser("watch", help="fontes do config/watch.toml (o universo observável do /update): listar, adicionar, editar, remover")
+    ws = p.add_subparsers(dest="wcmd", required=True)
+    x = ws.add_parser("list")
+    x.add_argument("--json", action="store_true")
+    x = ws.add_parser("add")
+    x.add_argument("key", help="identidade estável da fonte (ex.: slack-time-dados)")
+    x.add_argument("--kind", required=True, help="gmail · slack · gcal · drive · jira …")
+    x.add_argument("--window", help="janela de leitura (ex.: 1d, 7d, 14d)")
+    x.add_argument("--note")
+    x.add_argument("--set", action="append", metavar="CAMPO=VALOR", help="outro campo (channel, jql, …); repita a opção")
+    x = ws.add_parser("edit")
+    x.add_argument("key")
+    x.add_argument("--rename", metavar="NOVA_KEY")
+    x.add_argument("--kind")
+    x.add_argument("--window")
+    x.add_argument("--note")
+    x.add_argument("--set", action="append", metavar="CAMPO=VALOR")
+    x.add_argument("--unset", action="append", metavar="CAMPO", help="remove um campo opcional")
+    x = ws.add_parser("remove")
+    x.add_argument("key")
+    p.set_defaults(fn=cmd_watch)
 
     p = sub.add_parser("tui", help="cockpit de terminal (Textual, extra opcional): painéis, teclas contextuais e log da CLI")
     p.add_argument("--setup", action="store_true", help="cria a venv .venv-tui com as dependências travadas por hash")

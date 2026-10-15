@@ -243,7 +243,8 @@ texto original; `brain-mem` = fatos extraídos). O vault continua a verdade.
 - Segredos **nunca** aparecem no chat, em log, em artefato ou em view. Não
   leia `.env` além de checar existência/permissão; nunca imprima seu conteúdo.
 - `config/watch.toml` define o universo observável — fonte não listada não é
-  puxada no `/update` / noturno, sem exceção.
+  puxada no `/update` / noturno, sem exceção. Edite com `./brain watch` (ou a aba
+  Fontes do `./brain tui`): o arquivo é validado antes de gravar.
 - O dono pode pedir análise de conteúdo confidencial de trabalho: normal
   para uso pessoal interno; o agente não classifica, apenas organiza.
 - **O vault não sai da máquina**, salvo pelas portas `share` / `publish` /

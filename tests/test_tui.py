@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 os.environ.setdefault("BRAIN_NOW", "2026-10-09T10:00:00-03:00")
 
-from brainlib import config, demo as demo_mod, util
+from brainlib import config, demo as demo_mod, util, watch
 from brainlib.tui import bridge, dates
 
 HAVE_TEXTUAL = importlib.util.find_spec("textual") is not None
@@ -91,6 +91,8 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
         with open(self.root / "config" / "brain.toml", "a", encoding="utf-8") as fh:
             fh.write(f'\n[runner]\ncommand = "{sys.executable} {fake} {{prompt}}"\ntimeout_min = 1\n')
         self.inst = config.load(self.root)
+        watch.add(self.inst, "slack-dados", {"kind": "slack", "window": "1d", "channel": "#dados"})
+        watch.add(self.inst, "gcal-14d", {"kind": "gcal", "window": "14d"})
 
     # ── infra ──────────────────────────────────────────────────────────────
     async def settle(self, app, pilot, n=80):
@@ -109,6 +111,12 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
     async def typ(self, pilot, text: str) -> None:
         for ch in text:
             await pilot.press(self.KEYS.get(ch, ch))
+
+    async def fill(self, pilot, **vals) -> None:
+        """Preenche campos do formulário aberto pelo id (rápido e independente da ordem de tab)."""
+        for k, v in vals.items():
+            pilot.app.screen.query_one(f"#f_{k}").value = v
+        await pilot.pause(0.15)
 
     @staticmethod
     def text_of(widget) -> str:
@@ -163,7 +171,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             await pilot.press("4", "]")
             self.assertIn("n", keys())                      # outbox: rascunhar
             await pilot.press("1")
-            self.assertEqual({"d", "b", "o"}, keys())       # resumo: agente e painel
+            self.assertEqual({"u", "c", "d", "b", "o"}, keys())   # resumo: agente e painel
             every = {k.k for k in app.ctx_keys(every=True, panel=4, tab=1)}
             self.assertEqual({"n", "A", "S", "x", "T"}, every)
 
@@ -373,10 +381,10 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
         app = self.app()
         async with app.run_test(size=(140, 44)) as pilot:
             await pilot.pause(0.4)
-            app.run_catalog((1, 2, "enter", "sys:validate"))
+            app.run_catalog((1, 3, "enter", "sys:validate"))
             await self.settle(app, pilot)
             self.assertIn("$ brain validate", self.log_text(app))
-            app.run_catalog((1, 2, "enter", "sys:backup"))
+            app.run_catalog((1, 3, "enter", "sys:backup"))
             await pilot.pause(0.3)
             self.assertEqual(type(app.screen).__name__, "ConfirmModal")
             await pilot.press("escape")                               # porta: cancelar não executa nada
@@ -469,7 +477,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
         app = self.app()
         async with app.run_test(size=(140, 44)) as pilot:
             await pilot.pause(0.4)
-            app.run_catalog((1, 2, "enter", "sys:doctor"))
+            app.run_catalog((1, 3, "enter", "sys:doctor"))
             await self.settle_modal(app, pilot, "TextModal")
             self.assertIn("ledger", self.text_of(app.screen.query_one("#mb")))
             await pilot.press("escape")
@@ -485,7 +493,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
         app = self.app()
         async with app.run_test(size=(140, 44)) as pilot:
             await pilot.pause(0.4)
-            app.run_catalog((1, 2, "enter", "sys:recall"))
+            app.run_catalog((1, 3, "enter", "sys:recall"))
             await pilot.pause(0.3)
             await self.typ(pilot, "o que foi decidido")
             await pilot.press("enter")
@@ -644,12 +652,136 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             await self.settle(app, pilot)
             self.assertIn("brain focus sync --dry-run", self.log_text(app))
 
+    # ── fontes (watch.toml) e /update, /connect ────────────────────────────
+    async def test_sources_tab_add_edit_remove(self):
+        app = self.app()
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause(0.4)
+            await pilot.press("1", "]", "]")
+            self.assertEqual((app.p, app.tab[1]), (1, 2))
+            self.assertEqual([i.id for i in app.items(1)], ["src:slack-dados", "src:gcal-14d"])
+            await pilot.press("n")                                  # adicionar
+            await pilot.pause(0.3)
+            await self.fill(pilot, key="gmail-hoje", kind="gmail", window="1d", other="label=inbox; x=1")
+            await pilot.press("enter")
+            await self.settle(app, pilot)
+            added = next(x for x in watch.list_sources(self.inst) if x["key"] == "gmail-hoje")
+            self.assertEqual((added["kind"], added["window"], added["label"], added["x"]), ("gmail", "1d", "inbox", "1"))
+            self.assertEqual(app.cur().id, "src:gmail-hoje")            # a nova fonte já vem selecionada
+            await pilot.press("e")                                  # editar: janela, renomear, tira um campo
+            await pilot.pause(0.3)
+            await self.fill(pilot, key="gmail-dia", window="7d", other="label=inbox")
+            await pilot.press("enter")
+            await self.settle(app, pilot)
+            edited = next(x for x in watch.list_sources(self.inst) if x["key"] == "gmail-dia")
+            self.assertEqual((edited["window"], "x" in edited, edited["label"]), ("7d", False, "inbox"))
+            self.assertNotIn("gmail-hoje", [x["key"] for x in watch.list_sources(self.inst)])
+            self.assertIn("$ brain watch edit gmail-hoje --rename gmail-dia", self.log_text(app))
+            await pilot.press("x")                                  # remover pede confirmação
+            await pilot.pause(0.3)
+            self.assertEqual(type(app.screen).__name__, "ConfirmModal")
+            await pilot.press("escape")
+            self.assertIn("gmail-dia", [x["key"] for x in watch.list_sources(self.inst)])
+            await pilot.press("x")
+            await pilot.pause(0.3)
+            await pilot.press("enter")
+            await self.settle(app, pilot)
+            self.assertNotIn("gmail-dia", [x["key"] for x in watch.list_sources(self.inst)])
+
+    async def test_source_form_validation(self):
+        app = self.app()
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause(0.4)
+            await pilot.press("1", "]", "]", "n")
+            await pilot.pause(0.3)
+            await self.fill(pilot, key="Slack Dados", kind="slack")           # key inválida
+            await pilot.press("enter")
+            await pilot.pause(0.2)
+            self.assertIn("minúsculas", self.text_of(app.screen.query_one("#err")))
+            await self.fill(pilot, key="slack-dados")                         # já existe
+            await pilot.press("enter")
+            await pilot.pause(0.2)
+            self.assertIn("já existe", self.text_of(app.screen.query_one("#err")))
+            await self.fill(pilot, key="nova", other="semigual")
+            await pilot.press("enter")
+            await pilot.pause(0.2)
+            self.assertIn("campo=valor", self.text_of(app.screen.query_one("#err")))
+            self.assertEqual(len(watch.list_sources(self.inst)), 2)
+
+    async def test_adhoc_connector_can_be_included_in_watch(self):
+        import subprocess
+        env = {**os.environ, "BRAIN_HOME": str(self.root)}
+        r = subprocess.run([sys.executable, str(ROOT / "brain"), "snapshot", "--key", "avulsa-1", "--prefix", "nota"],
+                           input="olá", capture_output=True, text=True, env=env)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        app = self.app()
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause(0.4)
+            app.jump_source("avulsa-1")
+            await pilot.press("1", "]", "]")
+            app.jump_source("avulsa-1")
+            self.assertFalse(app.cur().data["in_watch"])
+            self.assertIn("w", {k.k for k in app.ctx_keys()})
+            self.assertNotIn("e", {k.k for k in app.ctx_keys()})              # avulsa não se edita nem remove
+            await pilot.press("w")
+            await pilot.pause(0.3)
+            await self.fill(pilot, kind="gmail")
+            await pilot.press("enter")
+            await self.settle(app, pilot)
+            self.assertIn("avulsa-1", [x["key"] for x in watch.list_sources(self.inst)])
+
+    async def test_update_all_runs_the_agent_with_the_slash_command(self):
+        app = self.app()
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause(0.4)
+            await pilot.press("1", "u")
+            await pilot.pause(0.3)
+            self.assertEqual(type(app.screen).__name__, "AgentModal")
+            await pilot.press("enter")
+            await self.settle(app, pilot, n=150)
+            self.assertIn("agente de mentira recebeu: /update", self.log_text(app))
+
+    async def test_connect_picks_a_source_from_watch(self):
+        app = self.app()
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause(0.4)
+            await pilot.press("1", "c")
+            await pilot.pause(0.5)
+            self.assertEqual(type(app.screen).__name__, "PickerModal")
+            await self.typ(pilot, "slack")
+            await pilot.pause(0.6)
+            await pilot.press("enter")
+            await pilot.pause(0.4)
+            self.assertEqual(type(app.screen).__name__, "AgentModal")
+            await pilot.press("enter")
+            await self.settle(app, pilot, n=150)
+            self.assertIn("recebeu: /connect slack-dados", self.log_text(app))
+
+    async def test_update_without_sources_explains_instead_of_asking_the_agent(self):
+        for k in ("slack-dados", "gcal-14d"):
+            watch.remove(self.inst, k)
+        app = self.app()
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause(0.4)
+            await pilot.press("1", "u")
+            await pilot.pause(0.3)
+            self.assertEqual(len(app.screen_stack), 1)
+            self.assertIn("watch.toml", self.log_text(app))
+
+    async def test_watch_toml_changed_outside_is_picked_up(self):
+        app = self.app()
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause(0.4)
+            watch.add(self.inst, "jira-me", {"kind": "jira"})
+            await app._watch()
+            self.assertIn("jira-me", [x["key"] for x in app.store.sources])
+
 
 class CoverageTest(unittest.TestCase):
     """Todo subcomando da CLI tem tecla no TUI ou uma razão explícita para não ter."""
     READ_ONLY_VIEWS = {   # a leitura já está num painel (modelo em processo), sem precisar chamar a CLI
         "person list", "action show", "action list", "decision list", "plan show", "focus show", "outbox show",
-        "outbox list", "proposal list", "publish list", "doctor", "search", "status", "artifact"}
+        "outbox list", "proposal list", "publish list", "doctor", "search", "status", "artifact", "watch list"}
     AGENT_ONLY = {        # quem escreve é o agente (extração, snapshot, envio), conforme a Constituição
         "init", "add", "snapshot", "extract", "proposal add", "outbox sent", "outbox failed", "publish done"}
     NOT_IN_TUI = {"demo", "tui"}

@@ -200,6 +200,8 @@ td code,.kb{font:500 12px var(--mono);background:var(--code);border:1px solid va
       <div><span class="kb">4</span> <span class="kb">]</span> <span class="kb">A</span><p>Aprove o rascunho para a Carla. Só a sua resposta digitada libera o texto exato.</p></div>
       <div><span class="kb">3</span> <span class="kb">E</span><p>Veja o único gate estrutural: diff do <code>goals.md</code> e aprovação literal antes do <code>plan log</code>.</p></div>
       <div><span class="kb ag">1</span> <span class="kb ag">d</span><p>Processe a inbox com o agente e observe as ações novas aparecerem nas listas.</p></div>
+      <div><span class="kb">1</span> <span class="kb">]</span> <span class="kb">]</span><p>Veja as fontes do <code>watch.toml</code>: <span class="kb">n</span> adiciona, <span class="kb">e</span> edita, <span class="kb">x</span> remove e <span class="kb ag">c</span> puxa só a selecionada.</p></div>
+      <div><span class="kb ag">1</span> <span class="kb ag">u</span><p>Atualize tudo: o agente lê cada fonte do <code>watch.toml</code> e você acompanha pelo log.</p></div>
       <div><span class="kb">?</span> <span class="kb">g</span> <span class="kb">/</span><p>Ajuda do contexto, busca em tudo e filtro da lista. <span class="kb">⏎</span> amplia o detalhe e <span class="kb">esc</span> volta. O duplo clique numa linha faz o mesmo que <span class="kb">⏎</span>.</p></div>
     </div>
   </section>
@@ -238,8 +240,9 @@ td code,.kb{font:500 12px var(--mono);background:var(--code);border:1px solid va
         <tr><td><code>publish</code></td><td>Painel 4, aba Publicar</td><td><span class="kb">n</span> <span class="kb">A</span> <span class="kb ag">P</span> <span class="kb">x</span></td></tr>
         <tr><td><code>decision</code> · <code>delivery</code> · <code>person</code> · <code>artifact</code></td><td>Painel 5, abas Decisões, Entregas, Pessoas (<span class="kb">n</span> <span class="kb">u</span> <span class="kb">a</span> <span class="kb">R</span> resolve um nome) e Artefatos</td><td><span class="kb">5</span> <span class="kb">n</span> <span class="kb">S</span> <span class="kb">a</span></td></tr>
         <tr><td><code>search</code></td><td>Busca global no ledger e nos artefatos</td><td><span class="kb">g</span></td></tr>
-        <tr><td><code>memory</code> (sync, status, setup, rebuild, recall, reflect) · <code>mcp</code> · <code>backup</code> (inclui <code>--status</code>) · <code>nightly</code> · <code>schedule</code> (install, status, remove) · <code>update</code> · <code>upstream</code> (scan, hook status)</td><td>Painel 1, aba Sistema; operações perigosas e portas pedem confirmação</td><td><span class="kb">1</span> <span class="kb">]</span> <span class="kb">]</span> <span class="kb">⏎</span></td></tr>
-        <tr><td><code>init</code> · <code>snapshot</code> · <code>add</code> · <code>extract</code> · <code>proposal add</code></td><td>Só pelo agente (extrair e gravar é dele): <span class="kb ag">i</span> primeira entrevista, <span class="kb ag">d</span> processar inbox, <span class="kb ag">c</span> puxar fonte. <code>outbox sent</code> e <code>publish done</code> o agente registra ao enviar e publicar</td><td><span class="kb ag">i</span> <span class="kb ag">d</span> <span class="kb ag">S</span> <span class="kb ag">P</span></td></tr>
+        <tr><td><code>watch</code> (list, add, edit, remove)</td><td>Painel 1, aba Fontes: lista com o último pull e as falhas de cada fonte do <code>config/watch.toml</code>; o arquivo é validado antes de gravar e os comentários ficam</td><td><span class="kb">1</span> <span class="kb">]</span> <span class="kb">]</span> <span class="kb">n</span> <span class="kb">e</span> <span class="kb">x</span> <span class="kb">w</span></td></tr>
+        <tr><td><code>memory</code> (sync, status, setup, rebuild, recall, reflect) · <code>mcp</code> · <code>backup</code> (inclui <code>--status</code>) · <code>nightly</code> · <code>schedule</code> (install, status, remove) · <code>update</code> · <code>upstream</code> (scan, hook status)</td><td>Painel 1, aba Sistema; operações perigosas e portas pedem confirmação</td><td><span class="kb">1</span> <span class="kb">]</span> <span class="kb">]</span> <span class="kb">]</span> <span class="kb">⏎</span></td></tr>
+        <tr><td><code>init</code> · <code>snapshot</code> · <code>add</code> · <code>extract</code> · <code>proposal add</code></td><td>Só pelo agente (ler pelo MCP, extrair e gravar é dele): <span class="kb ag">u</span> <code>/update</code> atualiza tudo, <span class="kb ag">c</span> <code>/connect</code> puxa uma fonte, <span class="kb ag">d</span> <code>/dump</code> processa a inbox, <span class="kb ag">i</span> primeira entrevista. O <code>snapshot</code> só grava o que o agente leu. <code>outbox sent</code> e <code>publish done</code> o agente registra ao enviar e publicar</td><td><span class="kb ag">i</span> <span class="kb ag">d</span> <span class="kb ag">S</span> <span class="kb ag">P</span></td></tr>
         <tr><td><code>demo</code> · <code>tui</code></td><td>Fora do TUI: criam uma instância fictícia e abrem o próprio TUI</td><td>—</td></tr>
         <tr><td>Qualquer comando</td><td>Paleta de comandos com busca; cada item mostra a linha da CLI e a tecla</td><td><span class="kb">:</span></td></tr>
       </tbody>
@@ -254,6 +257,7 @@ td code,.kb{font:500 12px var(--mono);background:var(--code);border:1px solid va
       <li><b>Mudar a árvore do plano (E).</b><p>Abre o <code>goals.md</code> no seu <code>$EDITOR</code>, mostra o diff e só mantém a edição se você digitar a aprovação (<code>brain plan log</code>). Cancelar devolve o arquivo ao que era.</p></li>
       <li><b>Aceitar proposta.</b><p>Registra a sua resposta (<code>proposal accept</code>) e, para <code>fechar-acao</code> e <code>reestimar</code>, executa também o comando correspondente na ação alvo. Propostas de mudança de plano pedem o gate (E) em seguida.</p></li>
       <li><b>Ações do agente (⚡).</b><p>Rodam o agente configurado em <code>[runner]</code> do <code>brain.toml</code>, em modo headless, com a saída transmitida ao log. A tecla <code>y</code> copia o prompt para você colar no chat. Para o agente enviar uma mensagem no Slack ou publicar, liste as ferramentas de escrita necessárias em <code>[tui].agent_allow</code>.</p></li>
+      <li><b>Fontes e atualização.</b><p>A aba Fontes edita o <code>config/watch.toml</code> pelo <code>brain watch</code>: valida o arquivo inteiro antes de gravar, preserva comentários e os exemplos comentados, e mostra o último pull e as falhas de cada fonte. <code>u</code> chama o <code>/update</code> do agente e <code>c</code> o <code>/connect</code>; ambos precisam de permissão para as ferramentas MCP de leitura (<code>[tui].agent_allow</code> ou <code>[runner].command</code>). O <code>brain snapshot</code> não aparece como tecla porque só grava o que o agente leu.</p></li>
       <li><b>Teclas.</b><p>Estilo vim e setas ao mesmo tempo (<code>j</code> <code>k</code> <code>h</code> <code>l</code>, <code>tab</code> entre painéis), <code>enter</code> confirma nos formulários (espaço abre uma lista de opções), e <code>T</code> alterna "todas" nas abas de Aprovar.</p></li>
       <li><b>Noturno.</b><p>Com <code>BRAIN_NIGHTLY=1</code> a TUI se recusa a abrir, já que o ledger rejeita eventos do dono nesse modo.</p></li>
     </ol>
@@ -386,12 +390,19 @@ var SYS=[
  {id:'sys:unsched',name:'Agendamento: remover',cmd:'brain schedule remove',desc:'Remove a entrada do noturno do crontab.',door:null,confirm:'brain schedule remove'},
  {id:'sys:mcp',name:'Servidor MCP (somente leitura)',cmd:'brain mcp',desc:'Expõe o cérebro por stdio para outras IAs consultarem. Nenhuma ferramenta escreve. Registre com: claude mcp add segundo-cerebro -- brain mcp',door:null,info:true}
 ];
+var SRC=[
+ {key:'slack-time-dados',kind:'slack',window:'1d',channel:'#time-dados',note:'canal do time',in_watch:true,last_ok:'2026-10-14T18:51',pulls:12,failures:0,last_error:''},
+ {key:'gmail-hoje',kind:'gmail',window:'1d',note:'digest do dia',in_watch:true,last_ok:'2026-10-14T18:51',pulls:9,failures:0,last_error:''},
+ {key:'gcal-14d',kind:'gcal',window:'14d',note:'agenda ocupada, alimenta o planejador de foco',in_watch:true,last_ok:'2026-10-14T18:51',pulls:9,failures:0,last_error:''},
+ {key:'jira-me',kind:'jira',jql:'assignee = currentUser() AND updated >= -1d',in_watch:true,last_ok:'',pulls:0,failures:2,last_error:'token expirado'},
+ {key:'avulsa-1',kind:'',in_watch:false,last_ok:'2026-10-13T10:02',pulls:1,failures:0,last_error:''}
+];
 var DOC=[
  {id:'doc:ledger',lvl:'ok',t:'ledger: 118 eventos íntegros',d:'Todas as linhas do events.jsonl validam. Último evento hoje às 09:02.'},
  {id:'doc:inbox',lvl:'warn',t:'inbox: 2 itens parados há 1 dia',d:'Existem arquivos em vault/RAW/inbox/ sem artefato. O /dump arquiva e extrai.',fix:{label:'processar com o agente',agent:'dump'}},
  {id:'doc:noturno',lvl:'warn',t:'noturno: nunca rodou',d:'Sem entrada no crontab. As views só atualizam quando você roda render.',fix:{label:'agendar',sys:'sys:schedule'}},
  {id:'doc:nodue',lvl:'warn',t:'ações sem prazo',dyn:'nodue',d:'O foco não agenda ações sem data. Dê um prazo com t (prazo) no painel 2.',fix:{label:'ir às ações',go:[2,0]}},
- {id:'doc:src1',lvl:'ok',t:'fonte slack-dados: último pull 14/10 18:51',d:'Fonte listada em config/watch.toml. Rode /connect para puxar agora.',fix:{label:'puxar agora',agent:'connect'}},
+ {id:'doc:src1',lvl:'ok',t:'fonte slack-dados: último pull 14/10 18:51',d:'Fonte listada em config/watch.toml. Rode /connect para puxar agora.',fix:{label:'puxar agora',agent:'connect',key:'slack-time-dados'}},
  {id:'doc:src2',lvl:'ok',t:'fonte gcal-14d: último pull 14/10 18:51',d:'Agenda dos próximos 14 dias, usada pelo planejador de foco.'},
  {id:'doc:views',lvl:'ok',t:'views: último render',dyn:'views',d:'FRESH/ é 100% derivado. Pode reescrever à vontade.'},
  {id:'doc:mem',lvl:'ok',t:'memória: Hindsight em localhost:8888',d:'0 documentos do vault ainda não enviados.'},
@@ -425,14 +436,20 @@ var CMDS=[
  ['Nova pessoa','brain person add "…" --id …',{p:5,t:2,k:'n'}],
  ['Quem é "…"?','brain person resolve "…"',{p:5,t:2}],
  ['Saúde da instância','brain doctor --online',{p:1,t:1}],
- ['Validar ledger','brain validate',{p:1,t:2,i:1,k:'enter'}],
+ ['Atualizar tudo','agente: /update',{p:1,t:0,k:'u'}],
+ ['Puxar uma fonte','agente: /connect <fonte>',{p:1,t:0,k:'c'}],
+ ['Fontes do watch.toml','brain watch list',{p:1,t:2}],
+ ['Adicionar fonte','brain watch add KEY --kind …',{p:1,t:2,k:'n'}],
+ ['Editar fonte','brain watch edit KEY …',{p:1,t:2,k:'e'}],
+ ['Remover fonte','brain watch remove KEY',{p:1,t:2,k:'x'}],
+ ['Validar ledger','brain validate',{p:1,t:3,i:1,k:'enter'}],
  ['Regenerar views','brain render',{run:'render'}],
  ['Abrir painel HTML','brain render --open',{run:'open'}],
- ['Backup do vault','brain backup',{p:1,t:2,i:5,k:'enter'}],
- ['Atualizar framework','brain update --check',{p:1,t:2,i:2,k:'enter'}],
- ['Varredura upstream','brain upstream scan',{p:1,t:2,i:3,k:'enter'}],
- ['Memória: sincronizar','brain memory sync',{p:1,t:2,i:4,k:'enter'}],
- ['Memória: perguntar','brain memory recall "…"',{p:1,t:2,i:4}],
+ ['Backup do vault','brain backup',{p:1,t:3,i:5,k:'enter'}],
+ ['Atualizar framework','brain update --check',{p:1,t:3,i:2,k:'enter'}],
+ ['Varredura upstream','brain upstream scan',{p:1,t:3,i:3,k:'enter'}],
+ ['Memória: sincronizar','brain memory sync',{p:1,t:3,i:4,k:'enter'}],
+ ['Memória: perguntar','brain memory recall "…"',{p:1,t:3,i:4}],
  ['Processar a inbox','agente: /dump',{run:'dump'}],
  ['Brief do dia','agente: /brief',{run:'brief'}],
  ['Buscar no ledger','brain search "…"',{run:'search'}]
@@ -441,7 +458,7 @@ var CMDS=[
 /* ---------------- estado ---------------- */
 var S={p:2,tab:{1:0,2:0,3:0,4:0,5:0},sel:{},collapsed:{},showAll:false,win:{},filter:'',modal:null,zoom:false,clock:[9,14],rendered:false,inbox:2,nextA:30,nextE:3,nextD:7,nextM:4,nextS:2,nextF:5,log:[
  {t:'09:02',k:'cmd',x:'$ brain doctor --online'},{t:'09:02',k:'warn',x:'⚠ 3 avisos · ledger íntegro'},{t:'09:03',k:'cmd',x:'$ brain render'},{t:'09:03',k:'ok',x:'✓ 18 views em 0,4s'}]};
-var PANELS={1:{n:'Status',tabs:['Resumo','Saúde','Sistema']},2:{n:'Ações',tabs:['mine','waiting','watching']},3:{n:'Plano',tabs:['Árvore']},4:{n:'Aprovar',tabs:['Propostas','Outbox','Foco','Publicar']},5:{n:'Registro',tabs:['Decisões','Entregas','Pessoas','Artefatos']}};
+var PANELS={1:{n:'Status',tabs:['Resumo','Saúde','Fontes','Sistema']},2:{n:'Ações',tabs:['mine','waiting','watching']},3:{n:'Plano',tabs:['Árvore']},4:{n:'Aprovar',tabs:['Propostas','Outbox','Foco','Publicar']},5:{n:'Registro',tabs:['Decisões','Entregas','Pessoas','Artefatos']}};
 var term=$('#term'),scr=$('#scr'),bar=$('#bar'),mo=$('#mo');
 
 function L(k,x){S.clock[1]++;if(S.clock[1]>=60){S.clock[1]=0;S.clock[0]++}S.log.push({t:pad(S.clock[0])+':'+pad(S.clock[1]),k:k,x:x});if(S.log.length>60)S.log.shift()}
@@ -478,7 +495,8 @@ function items(p,t){
   if(p===1){
     if(t===0)out=[{id:'resumo',kind:'resumo',q:'resumo hoje'}];
     if(t===1)out=DOC.map(function(d){return {id:d.id,kind:'doc',d:d,q:d.t}});
-    if(t===2)out=SYS.map(function(s){return {id:s.id,kind:'sys',s:s,q:s.name+' '+s.cmd}});
+    if(t===2)out=SRC.map(function(x){return {id:'src:'+x.key,kind:'src',x:x,q:x.key+' '+x.kind}});
+    if(t===3)out=SYS.map(function(s){return {id:s.id,kind:'sys',s:s,q:s.name+' '+s.cmd}});
   }
   if(p===2){var l=['mine','waiting','watching'][t];
     out=A.filter(function(a){return a.list===l&&(S.showAll||isOpen(a))}).sort(function(a,b){var oa=isOpen(a)?0:1,ob=isOpen(b)?0:1;if(oa!==ob)return oa-ob;if(!a.due&&!b.due)return a.id<b.id?-1:1;if(!a.due)return 1;if(!b.due)return -1;return a.due<b.due?-1:a.due>b.due?1:0})
@@ -521,6 +539,7 @@ function row(it){
     case 'art':return '<span class="dim">'+({reuniao:'reun',documento:'doc ',nota:'nota',conector:'conn'}[it.a.kind])+'</span><span class="tx">'+esc(it.a.title)+'</span><span class="rt">'+dm(it.a.date)+'</span>';
     case 'doc':var dd=it.d,txt=dd.t+(dd.dyn==='nodue'?'':'');if(dd.dyn==='nodue')txt=counts().nodue+' ações sem prazo (suas)';if(dd.dyn==='views')txt='views: último render '+(S.rendered?'agora':'há 21h');
       return '<span class="'+(dd.lvl==='ok'?'grn':'amb')+'">'+(dd.lvl==='ok'?'✓':'⚠')+'</span><span class="tx">'+esc(txt)+'</span>'+(dd.fix&&dd.fix.agent?'<span class="vio">⚡</span>':'');
+    case 'src':var x=it.x,mk=!x.in_watch?['◌','faint']:x.failures?['✗','red']:x.last_ok?['●','grn']:['○','amb'];return '<span class="'+mk[1]+'">'+mk[0]+'</span><span class="tx">'+esc(x.key)+' <span class="dim">'+esc([x.kind,x.window].filter(Boolean).join(' · '))+'</span></span><span class="rt">'+(x.failures?'<span class="red">'+x.failures+' falha(s)</span>':!x.in_watch?'<span class="faint">fora do watch</span>':x.last_ok?'<span class="dim">'+dm(x.last_ok.slice(0,10))+'</span>':'<span class="amb">nunca puxada</span>')+'</span>';
     case 'sys':return '<span class="dim">▸</span><span class="tx">'+esc(it.s.name)+'</span>'+(it.s.door?'<span class="tag amb">porta</span>':'')+'<span class="rt">'+(it.s.info?'info':'⏎')+'</span>';
   }
   return '';
@@ -548,8 +567,21 @@ function detail(it){
     case 'per':return dPer(it.k);
     case 'art':return dArt(it.a);
     case 'doc':return '<div class="h">'+(it.d.lvl==='ok'?'<span class="grn">✓</span> ':'<span class="amb">⚠</span> ')+'Saúde</div><p>'+esc(it.d.d)+'</p>'+(it.d.fix?sec('Como resolver')+'<div class="ln"><span class="'+(it.d.fix.agent?'vio':'cyn')+'">'+(it.d.fix.agent?'⚡':'▸')+'</span><span>'+esc(it.d.fix.label)+' · tecla <b>f</b></span></div>':'')+sec('Equivalente na CLI')+'<div class="quote cyn">$ brain doctor --online</div>';
+    case 'src':return dSrc(it.x);
     case 'sys':return '<div class="h">'+esc(it.s.name)+'</div><p>'+esc(it.s.desc)+'</p>'+(it.s.door?'<p><span class="tag amb">porta · '+it.s.door+'</span> <span class="dim">pede confirmação antes de rodar</span></p>':'')+sec('Equivalente na CLI')+'<div class="quote cyn">$ '+esc(it.s.cmd)+'</div>'+(it.s.info?'':'<div class="dim">⏎ executa e mostra a saída no log</div>');
   }
+}
+function dSrc(x){
+  var skip={key:1,kind:1,in_watch:1,last_ok:1,last_error:1,failures:1,pulls:1,last_changed:1};
+  var rows=[['kind',x.kind||'—']];Object.keys(x).forEach(function(k){if(!skip[k])rows.push([k,esc(String(x[k]))])});
+  rows.push(['último pull',x.last_ok?x.last_ok.slice(0,16).replace('T',' ')+' · '+x.pulls+' pull(s)':'<span class="amb">nunca puxada</span>'],['falhas seguidas',x.failures?'<span class="red">'+x.failures+'</span>':'0']);
+  if(x.last_error)rows.push(['último erro','<span class="red">'+esc(x.last_error)+'</span>']);
+  var h='<div class="h">'+esc(x.key)+(x.kind?' <span class="dim">· '+esc(x.kind)+'</span>':'')+'</div>';
+  if(!x.in_watch)h+='<p class="amb">Fonte puxada avulso (/connect). Não está no watch.toml, então o /update e o noturno não a puxam.</p><p class="dim">Tecla w inclui no watch.toml.</p>';
+  h+=kv(rows);
+  if(x.in_watch)h+=sec('O que acontece')+'<p>O /update lê esta fonte pelo MCP de leitura e grava com brain snapshot (hash igual = silêncio). Duas falhas seguidas pedem a sua atenção.</p><p class="dim">Tecla c puxa só esta fonte; u atualiza todas.</p>';
+  h+=sec('Arquivo')+'<p class="dim">config/watch.toml (fora do git). Fonte que não está lá NÃO é puxada.</p>'+sec('Equivalente na CLI')+'<div class="quote cyn">$ '+(x.in_watch?'brain watch edit '+esc(x.key)+' --window 7d':'brain watch add '+esc(x.key)+' --kind …')+'</div>';
+  return h;
 }
 function dResumo(){
   var c=counts(),ov=A.filter(function(a){return a.list==='mine'&&isOpen(a)&&a.due&&daysTo(a.due)<0}),wo=A.filter(function(a){return a.list==='waiting'&&isOpen(a)&&a.due&&daysTo(a.due)<0});
@@ -664,9 +696,11 @@ function keys(all){
   var add=function(k,l,fn,o){K.push(Object.assign({k:k,l:l,fn:fn},o||{}))};
   var w=function(c){return all||c};
   if(p===1){
-    if(t===0){if(w(false))add('i','primeira entrevista',function(){agent('init')},{ag:1});add('d','processar inbox',function(){agent('dump')},{ag:1});add('b','brief',function(){agent('brief')},{ag:1});add('o','painel HTML',openDash)}
+    if(t===0){if(w(false))add('i','primeira entrevista',function(){agent('init')},{ag:1});add('u','atualizar tudo',function(){agent('update')},{ag:1});add('c','puxar fonte',pickSource,{ag:1});add('d','processar inbox',function(){agent('dump')},{ag:1});add('b','brief',function(){agent('brief')},{ag:1});add('o','painel HTML',openDash)}
     if(t===1){if(w(it&&it.d&&it.d.fix))add('f','corrigir',fixDoc);add('o','testar online',function(){run('brain doctor --online','✓ 5 avisos · memória: desligada',null,true)});add('enter','ampliar',zoom)}
-    if(t===2){add('enter','executar',runSys)}
+    if(t===2){add('n','adicionar',function(){srcForm()});if(w(it&&it.x&&it.x.in_watch)){add('e','editar',function(){srcForm(it.x)});add('x','remover',srcRemove)}
+      if(w(it&&it.x&&!it.x.in_watch))add('w','incluir no watch',function(){srcForm({key:it.x.key,_inc:1})});if(w(it))add('c','puxar',function(){agentConnect(it.x.key)},{ag:1});add('u','atualizar tudo',function(){agent('update')},{ag:1})}
+    if(t===3){add('enter','executar',runSys)}
   }
   if(p===2){
     add('n','nova',newAction);
@@ -700,7 +734,7 @@ var GLOBAL=[['?','ajuda'],[':','comandos'],['/','filtrar'],['g','buscar'],['r','
 /* ---------------- ações ---------------- */
 function zoom(){S.zoom=!S.zoom;draw()}
 function openDash(){run('brain render --open','✓ painel aberto no navegador',null,true)}
-function fixDoc(){var it=cur(),f=it&&it.d&&it.d.fix;if(!f)return;if(f.agent)agent(f.agent);else if(f.sys){S.p=1;S.tab[1]=2;setSel(1,SYS.map(function(s){return s.id}).indexOf(f.sys));draw()}else if(f.go){S.p=f.go[0];S.tab[2]=f.go[1];draw()}}
+function fixDoc(){var it=cur(),f=it&&it.d&&it.d.fix;if(!f)return;if(f.agent==='connect')agentConnect(f.key);else if(f.agent)agent(f.agent);else if(f.sys){S.p=1;S.tab[1]=3;setSel(1,SYS.map(function(s){return s.id}).indexOf(f.sys));draw()}else if(f.go){S.p=f.go[0];S.tab[2]=f.go[1];draw()}}
 function runSys(){
   var it=cur();if(!it)return;var s=it.s;
   if(s.info){L('dim','$ '+s.cmd+'  (fica ouvindo em stdio; registre-o em outra IA)');draw();return}
@@ -844,10 +878,24 @@ function agent(kind){
      done:function(){S.inbox=0;A.push({id:'A-0030',title:'Enviar notas do sync de CS ao time',list:'mine',status:'aberta',due:'2026-10-17',effort:'30m',project:'P1',deliv:null,prio:'normal',people:['carla'],origin:'sync de CS (qui)',prov:'observado',source:'PROCESSED/2026/10/sync-cs-qui.md',hist:[[fmt(T0),'extraída do /dump','observado']]},{id:'A-0031',title:'Dados de contato dos três canais',list:'waiting',owner:'carla',status:'aberta',due:'2026-10-21',effort:null,project:'P2',deliv:'P2.2',prio:'normal',people:['carla'],origin:'sync de CS (qui)',prov:'observado',source:'PROCESSED/2026/10/sync-cs-qui.md',hist:[[fmt(T0),'extraída do /dump','observado']]});
        DEC.unshift({id:'D-0007',date:fmt(T0),title:'Treinamento de CS só depois da v1 do pipeline',by:['carla'],project:'P1',ctx:'sync de CS',why:'Evitar treinar duas vezes.',source:'PROCESSED/2026/10/sync-cs-qui.md',prov:'observado'})}});
   }
+  if(kind==='update')agentBox({slash:'/update',title:'Atualizar tudo (/update)',bullets:['Lê '+SRC.filter(function(x){return x.in_watch}).length+' fonte(s) do watch.toml pelo MCP de leitura: '+SRC.filter(function(x){return x.in_watch}).map(function(x){return x.key}).join(', '),'Grava cada leitura com brain snapshot (hash igual = silêncio)','Processa a inbox (/dump), roda o render e sincroniza a memória, se ligada','Precisa de permissão para as ferramentas MCP de leitura ([tui].agent_allow ou [runner].command no brain.toml)'],lines:['watch.toml: 4 fontes','slack-time-dados: 2 novidades','gmail-hoje: sem novidades','gcal-14d: sem novidades','jira-me: ⚠ token expirado (2 falhas seguidas)','/dump no que chegou','$ brain render','✓ atualizado: 1 de 4 fontes com novidade · 1 falha'],done:function(){}});
   if(kind==='init')agentBox({slash:'/init',title:'Primeira entrevista',bullets:['Pergunta quem você é, seus goals, projetos e pessoas','Monta PROFILE e PLANNING como proposta (diff)','Só grava a árvore depois do seu ok (gate)'],lines:['entrevista em 4 blocos…','proposta de PROFILE e PLANNING mostrada','aguardando o seu ok'],done:function(){}});
   if(kind==='brief')agentBox({slash:'/brief',title:'Brief do dia',bullets:['Lê FRESH/home.md e todo.md','Escreve a narrativa em FRESH/notes/brief.md (o painel exibe como está)'],lines:['lendo views…','FRESH/notes/brief.md escrito','✓ brief pronto: 1 atraso, 3 propostas, 1 plano de foco'],done:function(){}});
   if(kind==='connect')agentBox({slash:'/connect slack-dados',title:'Puxar fonte agora',bullets:['Lê o canal pelo MCP, só leitura','Grava com brain snapshot (hash igual = silêncio)','Processa a novidade'],lines:['slack_read_channel #dados','$ brain snapshot --key slack-dados --prefix slack','✓ 1 item novo na inbox'],done:function(){S.inbox++}});
 }
+function agentConnect(key){agentBox({slash:'/connect '+key,title:'Puxar a fonte '+key,bullets:['Lê a fonte pelo MCP, só leitura','Grava com brain snapshot (hash igual = silêncio)','Processa a novidade (/dump só nesse item)','Precisa de permissão para as ferramentas MCP de leitura ([tui].agent_allow ou [runner].command no brain.toml)'],lines:['mcp: leitura de '+key,'$ brain snapshot --key '+key+' --prefix nota','✓ '+key+': sem novidades (hash idêntico — nada escrito)'],done:function(){}})}
+function pickSource(){openPicker('Puxar qual fonte?','digite para filtrar…',function(qs){return SRC.filter(function(x){return !qs||(x.key+' '+x.kind).toLowerCase().indexOf(qs)>=0}).map(function(x){return {l:x.key,sub:'<span class="dim">'+esc(x.kind||'avulsa')+(x.in_watch?'':' · fora do watch')+'</span>',go:{run:'connect:'+x.key}}})})}
+function srcRemove(){var it=cur();if(!it||!it.x)return;var x=it.x;confirmBox({title:'Remover a fonte '+x.key,body:'O /update e o noturno deixam de puxá-la. Snapshots já gravados e o ledger ficam como estão.',cmd:'brain watch remove '+x.key,ok:function(){run('brain watch remove '+x.key,'✓ fonte '+x.key+' removida do watch.toml',function(){SRC.splice(SRC.indexOf(x),1)},true)}})}
+function srcForm(x){
+  var edit=x&&!x._inc,old=edit?x:{};
+  openForm({title:edit?'Editar a fonte '+x.key:'Adicionar fonte ao watch.toml',sub:edit?'Mudar a key renomeia a fonte; o histórico de pulls fica na key antiga.':'Fonte que não está no watch.toml não é puxada pelo /update nem pelo noturno.',fields:[
+    {id:'key',label:'key',req:1,value:old.key||(x&&x.key)||'',ph:'slack-time-dados',chk:function(v){return /^[a-z0-9][a-z0-9._-]{0,63}$/.test(v)?(SRC.some(function(s){return s.in_watch&&s.key===v&&s!==x})?'já existe uma fonte com essa key':''):'key: minúsculas, números, ., _ e -'}},
+    {id:'kind',label:'tipo',req:1,value:old.kind||'',ph:'gmail · slack · gcal · drive · jira'},{id:'window',label:'janela',value:old.window||'',ph:'1d · 7d · 14d'},
+    {id:'channel',label:'canal',value:old.channel||'',ph:'#time-dados (slack)'},{id:'jql',label:'jql',value:old.jql||'',ph:'consulta (jira)'},{id:'note',label:'nota',value:old.note||''}],
+   cmd:function(v){var c=edit?'brain watch edit '+x.key+(v.key!==x.key?' --rename '+v.key:''):'brain watch add '+(v.key||'…');c+=' --kind '+(v.kind||'…');if(v.window)c+=' --window '+v.window;if(v.note)c+=' --note '+q(v.note);if(v.channel)c+=' --set channel='+v.channel;if(v.jql)c+=' --set '+q('jql='+v.jql);return c},
+   ok:function(v){run(this.cmd(v),edit?'✓ fonte '+v.key+' atualizada':'✓ fonte '+v.key+' adicionada ao watch.toml — o /update passa a puxá-la',function(){
+     if(edit){Object.assign(x,{key:v.key,kind:v.kind,window:v.window,channel:v.channel,jql:v.jql,note:v.note})}else{var ex=SRC.filter(function(s){return s.key===v.key&&!s.in_watch})[0];if(ex){Object.assign(ex,{kind:v.kind,window:v.window,channel:v.channel,jql:v.jql,note:v.note,in_watch:true})}else SRC.push({key:v.key,kind:v.kind,window:v.window,channel:v.channel,jql:v.jql,note:v.note,in_watch:true,last_ok:'',pulls:0,failures:0,last_error:''})}
+     S.p=1;S.tab[1]=2;setSel(1,items(1,2).map(function(i){return i.id}).indexOf('src:'+v.key))},true)}})}
 function agentBox(o){
   S.modal={type:'agent',o:o};
   mo.hidden=false;mo.innerHTML='<div class="md agent"><div class="mt vio">⚡ '+esc(o.title)+'</div><p class="ms">Isto roda o agente fora do TUI. O que ele escreve passa pelo <code>./brain</code>.</p><div class="cmdp" style="color:var(--violet);border-color:var(--violet)">$ claude -p '+q(o.slash)+'</div><div class="dim" style="margin-top:8px">O agente vai:</div><ul class="pl">'+o.bullets.map(function(b){return '<li>'+esc(b)+'</li>'}).join('')+'</ul><div class="mf"><span><kbd>enter</kbd> rodar</span><span><kbd>esc</kbd> cancelar</span></div></div>';
@@ -906,7 +954,7 @@ function pickRun(){var m=S.modal,e=m.list[m.idx];if(!e)return;closeModal();var g
   if(g.i!=null)setSel(g.p,g.i);
   draw();if(g.k)pressKey(g.k);
 }
-function gRun(r){if(r==='render')run('brain render','✓ 18 views em 0,4s · painel atualizado',function(){S.rendered=true},true);if(r==='open')openDash();if(r==='dump')agent('dump');if(r==='brief')agent('brief');if(r==='search')searchAll()}
+function gRun(r){if(r.indexOf('connect:')===0){agentConnect(r.slice(8));return}if(r==='render')run('brain render','✓ 18 views em 0,4s · painel atualizado',function(){S.rendered=true},true);if(r==='open')openDash();if(r==='dump')agent('dump');if(r==='brief')agent('brief');if(r==='search')searchAll()}
 function helpModal(){
   S.modal={type:'help'};mo.hidden=false;var K=keys(false),pn=PANELS[S.p];
   mo.innerHTML='<div class="md"><div class="mt">Atalhos · '+esc(pn.n)+' › '+esc(pn.tabs[S.tab[S.p]])+'</div><div class="helpgrid"><div class="hh">Neste contexto</div>'+K.map(function(k){return '<div class="hr"><kbd class="'+(k.ag?'vio':'')+'">'+(k.k===' '?'space':k.k)+'</kbd><span>'+(k.ag?'⚡ ':'')+esc(k.l)+'</span></div>'}).join('')+
@@ -933,6 +981,7 @@ function panelHTML(p){
   return '<div class="pn '+(on?'on ':'')+(fill?'fill ':'')+(compact?'compact':'')+'" data-pn="'+p+'"><div class="t"><span><span class="n">['+p+']</span> '+d.n+'</span>'+tabs+'</div><div class="pb" data-pb="'+p+'">'+body+'</div>'+(!compact&&its.length?'<div class="pc">'+(idx+1)+' de '+its.length+'</div>':'')+'</div>';
 }
 function badge(p,i){if(p===4){var c=counts();if(i===0&&c.prop)return ' <span class="amb">'+c.prop+'</span>';if(i===1&&(c.draft+c.appr))return ' <span class="amb">'+(c.draft+c.appr)+'</span>';if(i===2&&F.st==='proposto')return ' <span class="amb">1</span>';if(i===3&&PUB.some(function(s){return s.st==='pedido'}))return ' <span class="amb">1</span>'}
+  if(p===1&&i===2){var nf=SRC.filter(function(x){return x.failures}).length;return nf?' <span class="amb">'+nf+'</span>':''}
   if(p===1&&i===1)return ' <span class="amb">'+DOC.filter(function(d){return d.lvl==='warn'}).length+'</span>';return ''}
 function logHTML(){return S.log.slice(-9).map(function(l){return '<div class="lg '+l.k+'"><span class="tm">'+l.t+'</span>'+esc(l.x)+'</div>'}).join('')}
 function barHTML(){
@@ -1030,7 +1079,7 @@ var cl=document.createElement('button');cl.type='button';cl.className='chip';cl.
 var th=$('#theme'),modes=['auto','escuro','claro'],mi=0;
 th.addEventListener('click',function(){mi=(mi+1)%3;var r=document.documentElement;if(mi===0)r.removeAttribute('data-theme');else r.setAttribute('data-theme',mi===1?'dark':'light');th.textContent='tema: '+modes[mi]});
 function buildKeymap(){
-  var out='',ctx=[[1,0,'Status › Resumo'],[1,1,'Status › Saúde'],[1,2,'Status › Sistema'],[2,0,'Ações'],[3,0,'Plano'],[4,0,'Aprovar › Propostas'],[4,1,'Aprovar › Outbox'],[4,2,'Aprovar › Foco'],[4,3,'Aprovar › Publicar'],[5,0,'Registro › Decisões'],[5,2,'Registro › Pessoas']];
+  var out='',ctx=[[1,0,'Status › Resumo'],[1,1,'Status › Saúde'],[1,2,'Status › Fontes'],[1,3,'Status › Sistema'],[2,0,'Ações'],[3,0,'Plano'],[4,0,'Aprovar › Propostas'],[4,1,'Aprovar › Outbox'],[4,2,'Aprovar › Foco'],[4,3,'Aprovar › Publicar'],[5,0,'Registro › Decisões'],[5,2,'Registro › Pessoas']];
   var sp=S.p,st=Object.assign({},S.tab);
   ctx.forEach(function(c){S.p=c[0];S.tab[c[0]]=c[1];out+='<section><h3>'+c[2]+'</h3>'+keys(true).map(function(k){return '<div class="kr"><span class="kb '+(k.ag?'ag':'')+'">'+(k.k===' '?'space':k.k==='enter'?'⏎':k.k)+'</span><span>'+(k.ag?'⚡ ':k.gate?'◆ ':'')+esc(k.l)+'</span></div>'}).join('')+'</section>'});
   S.p=sp;S.tab=st;

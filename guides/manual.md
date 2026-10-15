@@ -101,7 +101,7 @@ brain-v2/                      framework (vai pro git)
 | Arquivo | O que é |
 |---|---|
 | `brain.toml` | dono, expediente, foco, allowlist, memória, noturno, backup |
-| `watch.toml` | quais fontes o `/update` pode puxar |
+| `watch.toml` | quais fontes o `/update` pode puxar (edite com `brain watch` ou a aba Fontes do TUI) |
 | `.env` | segredos. O agente não imprime. Não entra no backup |
 | `.state.json` | hash do último snapshot de cada fonte |
 | `.memory-state.json` | o que já foi enviado ao Hindsight |

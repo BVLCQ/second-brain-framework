@@ -6,14 +6,14 @@ detalhe de cada fluxo, [`manual.md`](manual.md). Para operar sem decorar
 comandos, use o cockpit de terminal (`brain tui`); o guia interativo está em [`tui-mockup.html`](tui-mockup.html).
 
 > Esta referência foi gerada a partir do parser real do CLI (`brain 2.0.0`):
-> 31 comandos, com seus subcomandos. Se uma versão nova acrescentar algo,
+> 32 comandos, com seus subcomandos. Se uma versão nova acrescentar algo,
 > `brain <comando> --help` é sempre a fonte final.
 
 ## Índice
 
 1. [Como chamar](#1-como-chamar)
 2. [Conceitos que aparecem em todo comando](#2-conceitos-que-aparecem-em-todo-comando)
-3. [Instância e saúde](#3-instância-e-saúde) — `init` · `demo` · `doctor` · `validate` · `status` · `update` · `upstream` · `tui`
+3. [Instância e saúde](#3-instância-e-saúde) — `init` · `demo` · `doctor` · `validate` · `status` · `update` · `upstream` · `watch` · `tui`
 4. [Pessoas](#4-pessoas--person) — `person`
 5. [Ações](#5-ações--action) — `action`
 6. [Decisões](#6-decisões--decision) — `decision`
@@ -220,6 +220,27 @@ git add -A brainlib guides && git commit -m "Hindsight: ajusta lote de consolida
 git push                    # o hook roda a varredura; achado = push bloqueado
 ```
 
+### `brain watch`
+Edita o `config/watch.toml`, o **universo observável**: o `/update` e o noturno só puxam as fontes listadas ali.
+O comando mexe só nos blocos `[[source]]`; comentários, exemplos comentados e outras tabelas ficam como estão. Antes
+de gravar, o arquivo inteiro é relido como TOML e as keys são checadas (única, `a-z0-9._-`); se algo não parseia,
+nada é escrito. Quem *lê* as fontes é o agente (`/update`, `/connect`); o `brain snapshot` só grava o que ele leu.
+
+| Subcomando | Uso |
+|---|---|
+| `list [--json]` | fontes cadastradas |
+| `add KEY --kind K` | `--window 1d` · `--note "…"` · `--set campo=valor` (ex.: `channel=#time-dados`, `jql=…`; repita a opção) |
+| `edit KEY` | mesmas opções, mais `--rename NOVA_KEY` e `--unset CAMPO`. `key` e `kind` não saem |
+| `remove KEY` | tira do watch; snapshots já gravados e o ledger ficam |
+
+```bash
+brain watch add slack-time-dados --kind slack --window 1d --set channel=#time-dados
+brain watch edit slack-time-dados --window 7d --unset note
+brain watch list
+```
+Códigos de saída: `4` key inválida ou repetida, ou arquivo que ficaria inválido; `3` fonte inexistente. Renomear uma
+key deixa o histórico de pulls na key antiga.
+
 ### `brain tui`
 Cockpit de terminal (Textual): cinco painéis numerados (status, ações, plano, aprovações, registro), o
 detalhe do item, o log de comandos e uma barra com as teclas do contexto, como no lazygit. A leitura é
@@ -237,7 +258,9 @@ rodam o agente de `[runner]` em modo headless. O TUI se recusa a abrir com `BRAI
 brain tui --setup     # uma vez
 brain tui             # abre; usa a .venv-tui sozinho
 ```
-Sem o extra, `brain tui` sai com código 3 e a instrução. Teclas: `?` ajuda do contexto · `:` paleta de
+Sem o extra, `brain tui` sai com código 3 e a instrução. A aba **Fontes** do painel 1 gerencia o `watch.toml` (`n` adiciona, `e` edita, `x` remove, `w` inclui um pull avulso) e mostra o
+último pull e as falhas de cada fonte. `u` (`/update`) atualiza tudo e `c` (`/connect`) puxa uma fonte: rodam o agente de `[runner]`,
+que precisa de permissão para as ferramentas MCP de leitura (`[runner].command` ou `[tui].agent_allow`). Teclas: `?` ajuda do contexto · `:` paleta de
 comandos · `g` busca · `/` filtro · `1`–`5` painéis (só pelos números) · `[` `]` ou `←` `→` abas · `⏎` ou duplo clique amplia o detalhe · `ctrl+t` troca o tema · `q` sai. O mouse também funciona: clique nas abas, nas linhas e nas dicas da barra, e a roda rola a lista. O TUI relê o vault sozinho quando ele muda fora dele (agente, outro terminal). O mapa
 completo por contexto, a legenda e uma versão para experimentar com dados fictícios estão em
 [`tui-mockup.html`](tui-mockup.html). Fora do TUI ficam só o que é do agente (`init`, `snapshot`, `add`, `extract`,

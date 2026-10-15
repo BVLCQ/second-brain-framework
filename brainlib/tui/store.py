@@ -7,11 +7,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from .. import config, doctor, model, util
+from .. import config, doctor, model, util, watch
 from ..core import Brain
 
 PANELS = {
-    1: ("Status", ["Resumo", "Saúde", "Sistema"]),
+    1: ("Status", ["Resumo", "Saúde", "Fontes", "Sistema"]),
     2: ("Ações", ["mine", "waiting", "watching"]),
     3: ("Plano", ["Árvore"]),
     4: ("Aprovar", ["Propostas", "Outbox", "Foco", "Publicar"]),
@@ -103,6 +103,11 @@ class Store:
         self.by_deliv = {d["id"]: (p, d) for p in m["projects"] for d in p["deliverables"]}
         self.by_person = {p["id"]: p for p in m["people"]}
         self.by_msg = {x["id"]: x for x in m["outbox"]}
+        self.watch_error = ""
+        try:
+            self.sources = self._sources()
+        except util.BrainError as e:
+            self.sources, self.watch_error = [], str(e)
         self.sig = self.signature()
 
     def signature(self) -> tuple:
@@ -114,7 +119,22 @@ class Store:
             except OSError:
                 return (0, 0)
         inbox = sorted(p.name for p in self.inst.inbox.glob("*")) if self.inst.inbox.exists() else []
-        return (st(self.brain.ledger_path), st(self.inst.planning_file), tuple(inbox))
+        return (st(self.brain.ledger_path), st(self.inst.planning_file), st(watch.path(self.inst)), tuple(inbox))
+
+    def _sources(self) -> list[dict]:
+        """Fontes do watch.toml + o que o ledger sabe de cada pull; pulls avulsos (/connect) aparecem fora do watch."""
+        conns, out, seen = self.brain.state.connectors, [], set()
+        for s in watch.list_sources(self.inst):
+            c = conns.get(s.get("key", ""))
+            seen.add(s.get("key"))
+            out.append({**s, "in_watch": True, "last_ok": c.last_ok if c else "", "last_error": c.last_error if c else "",
+                        "failures": c.consecutive_failures if c else 0, "pulls": c.pulls if c else 0,
+                        "last_changed": c.last_changed if c else ""})
+        for k, c in conns.items():
+            if k not in seen:
+                out.append({"key": k, "kind": "", "in_watch": False, "last_ok": c.last_ok, "last_error": c.last_error,
+                            "failures": c.consecutive_failures, "pulls": c.pulls, "last_changed": c.last_changed})
+        return out
 
     def is_empty(self) -> bool:
         """Cérebro novo: sem goals e sem ninguém no ledger além do dono."""
@@ -204,6 +224,8 @@ class Store:
             elif tab == 1:
                 out = [Item(f"doc:{i}", "doc", c, q=f"{c['title']} {c['detail']}", extra={"fix": self._fix_for(c)})
                        for i, c in enumerate(self.health)]
+            elif tab == 2:
+                out = [Item(f"src:{s['key']}", "src", s, q=f"{s['key']} {s.get('kind', '')} {s.get('channel', '')}") for s in self.sources]
             else:
                 out = [Item(o["id"], "sys", o, q=f"{o['name']} {' '.join(o.get('args', []))}") for o in SYS_OPS]
         elif panel == 2:
