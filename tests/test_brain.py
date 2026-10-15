@@ -709,6 +709,13 @@ class UpstreamTests(unittest.TestCase):
         self.assertTrue(res["doctor_ok"])
         self.assertEqual(upstream.update(self.inst)["behind"], 0)
 
+    def test_update_works_when_clone_has_no_fetch_refspec(self):
+        self._git(self.b, "config", "--unset-all", "remote.origin.fetch")
+        self._upstream_release()
+        self.assertEqual(upstream.update(self.inst, check=True)["behind"], 1)
+        self.assertTrue(upstream.update(self.inst)["updated"])
+        self.assertEqual(upstream.update(self.inst, check=True)["behind"], 0)
+
     def test_update_diverged_needs_rebase(self):
         (self.b / "brainlib" / "extra.py").write_text("x = 1\n", encoding="utf-8")
         self._commit(self.b, "local")

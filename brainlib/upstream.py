@@ -77,7 +77,9 @@ def _prepare(inst: config.Instance, remote: str | None, branch: str | None, fetc
         raise util.BrainError("arquivos do dono estão rastreados pelo git (nunca devem): "
                               + ", ".join(private[:5]) + " — `git rm --cached` neles antes de continuar", 4)
     if fetch:
-        r = _git(root, "fetch", remote, branch, check=False)
+        # refspec explícito: clones feitos com `git remote add` não têm remote.origin.fetch, e aí o
+        # fetch simples só atualizaria FETCH_HEAD (origin/<branch> ficaria velho e ahead/behind mentiria)
+        r = _git(root, "fetch", remote, f"+refs/heads/{branch}:refs/remotes/{remote}/{branch}", check=False)
         if r.returncode != 0:
             raise util.BrainError(f"fetch de {remote}/{branch} falhou: {(r.stderr or r.stdout).strip()}", 4)
     ref = f"{remote}/{branch}"
