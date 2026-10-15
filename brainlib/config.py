@@ -51,6 +51,7 @@ DEFAULTS: dict = {
         "timeout_s": 180,
     },
     "runner": {"agent": "auto", "command": "", "prompt": "/update", "timeout_min": 45},
+    "tui": {"agent_allow": []},            # ferramentas extras do agente nas ações ⚡ do TUI (ex.: MCP de escrita)
     "backup": {"enabled": False, "max_file_mb": 50, "keep": 8, "weekday": 7},
     "views": {"wins_weeks": 8, "timeline_back_days": 90, "timeline_ahead_days": 45,
               "stale_project_days": 14, "aging_warn_days": 7},

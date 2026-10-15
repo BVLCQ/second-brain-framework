@@ -464,6 +464,11 @@ def cmd_backup(args, b: Brain) -> None:
     backup.cli(args, b)
 
 
+def cmd_tui(args, b) -> None:
+    from . import tui
+    tui.cli(args, b)
+
+
 def cmd_update(args, b) -> None:
     from . import upstream
     upstream.cli_update(args, b)
@@ -830,6 +835,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--dir", required=True)
     p.add_argument("--open", action="store_true")
     p.set_defaults(fn=cmd_demo, no_brain=True)
+
+    p = sub.add_parser("tui", help="cockpit de terminal (Textual, extra opcional): painéis, teclas contextuais e log da CLI")
+    p.add_argument("--setup", action="store_true", help="cria a venv .venv-tui com as dependências travadas por hash")
+    p.set_defaults(fn=cmd_tui)
     return ap
 
 

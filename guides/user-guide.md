@@ -648,6 +648,12 @@ quão fresco é o que está vendo e de onde derivou.
 
 ---
 
+Prefere o teclado ao navegador? `./brain tui` abre o mesmo retrato num cockpit de
+terminal (painéis, atalhos contextuais, paleta de comandos) e executa as escritas pelo
+`./brain`, mostrando a linha exata antes de confirmar. É opcional: `./brain tui --setup`
+instala o Textual numa venv à parte. Para experimentar com dados fictícios, abra
+`guides/tui-mockup.html` no navegador.
+
 ## 9. Editar arquivos na mão: o que é colhido e o que é descartado
 
 Pode abrir o `vault/` no editor que quiser. As regras de colheita (na

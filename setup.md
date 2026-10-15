@@ -61,6 +61,15 @@ Se `./brain doctor` reclamar de Python: `which python3` e `python3 --version`
 precisam apontar para o mise (3.12). Rode `mise exec -- ./brain doctor` como
 diagnóstico — se funcionar, o problema é o PATH do shell (revise a seção 1).
 
+### 2.1 TUI (opcional)
+
+```bash
+./brain tui --setup     # cria .venv-tui com o Textual (versões e hashes travados)
+./brain tui             # cockpit de terminal; guia: guides/tui-mockup.html
+```
+
+O núcleo do brain não depende disso. Sem o extra, `./brain tui` explica como instalar.
+
 ## 3. LM Studio (modelos locais)
 
 ```bash

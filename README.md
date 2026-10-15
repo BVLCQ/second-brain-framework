@@ -9,7 +9,8 @@ espaço do time, backup no Drive.
 A constituição é `AGENTS.md`. O manual completo é `guides/manual.md`.
 O guia de uso A a Z — cada comando, cada conexão, a rotina normal — é
 `guides/user-guide.md`. A instalação completa do stack local de IA
-(LM Studio + Hindsight) é `setup.md`.
+(LM Studio + Hindsight) é `setup.md`. O desenho da futura TUI, para
+experimentar no navegador com dados fictícios, é `guides/tui-mockup.html`.
 
 ## Como ele funciona
 

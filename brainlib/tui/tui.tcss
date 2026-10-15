@@ -1,0 +1,28 @@
+Screen { layout: vertical; background: $background; }
+#body { height: 1fr; }
+#left { width: 40%; min-width: 46; height: 100%; }
+#right { width: 1fr; height: 100%; }
+ListPanel { border: round $primary-darken-1; height: auto; min-height: 3; width: 100%; padding: 0 0; border-subtitle-color: $text-muted; }
+ListPanel.-fill { height: 1fr; min-height: 5; }
+ListPanel.-on { border: round $primary-lighten-2; border-title-color: $text; }
+#detailwrap { border: round $primary-darken-1; height: 1fr; padding: 0 1; border-subtitle-color: $text-muted; scrollbar-size-vertical: 1; }
+#detail { width: 100%; height: auto; }
+#log { border: round $primary-darken-1; height: 10; padding: 0 1; scrollbar-size-vertical: 1; }
+.-zoom #left { display: none; }
+#bar { height: 1; dock: bottom; background: $panel; }
+#hints { width: 1fr; height: 1; }
+#globals { width: auto; height: 1; }
+
+ModalScreen { align: center middle; background: $background 75%; }
+#dialog { width: 86; max-width: 96%; height: auto; max-height: 92%; border: round $primary-lighten-2; background: $surface; padding: 1 2; }
+#dialog.gate { border: round $warning; }
+#dialog.agent { border: round magenta; }
+#ms, #ms0, #mx, #mb { margin-bottom: 1; }
+.frow { height: 3; }
+.flab { width: 22; padding-top: 1; color: $text-muted; }
+.fin { width: 1fr; }
+.fres { height: auto; margin-left: 22; color: $text-muted; }
+#cmdp { background: $boost; border-left: thick $success; padding: 0 1; margin-top: 1; }
+#err { height: auto; min-height: 1; }
+#mf { margin-top: 1; }
+#pl { height: auto; max-height: 14; margin-top: 1; background: $surface; border: none; }

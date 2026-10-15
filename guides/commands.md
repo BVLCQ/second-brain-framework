@@ -2,17 +2,18 @@
 
 Todos os comandos do CLI, com todas as opções, variações e exemplos testados.
 Para o *porquê* do sistema, veja [`user-guide.md`](user-guide.md); para o
-detalhe de cada fluxo, [`manual.md`](manual.md).
+detalhe de cada fluxo, [`manual.md`](manual.md). Para operar sem decorar
+comandos, use o cockpit de terminal (`brain tui`); o guia interativo está em [`tui-mockup.html`](tui-mockup.html).
 
 > Esta referência foi gerada a partir do parser real do CLI (`brain 2.0.0`):
-> 30 comandos, com seus subcomandos. Se uma versão nova acrescentar algo,
+> 31 comandos, com seus subcomandos. Se uma versão nova acrescentar algo,
 > `brain <comando> --help` é sempre a fonte final.
 
 ## Índice
 
 1. [Como chamar](#1-como-chamar)
 2. [Conceitos que aparecem em todo comando](#2-conceitos-que-aparecem-em-todo-comando)
-3. [Instância e saúde](#3-instância-e-saúde) — `init` · `demo` · `doctor` · `validate` · `status` · `update` · `upstream`
+3. [Instância e saúde](#3-instância-e-saúde) — `init` · `demo` · `doctor` · `validate` · `status` · `update` · `upstream` · `tui`
 4. [Pessoas](#4-pessoas--person) — `person`
 5. [Ações](#5-ações--action) — `action`
 6. [Decisões](#6-decisões--decision) — `decision`
@@ -218,6 +219,31 @@ brain upstream scan
 git add -A brainlib guides && git commit -m "Hindsight: ajusta lote de consolidação"
 git push                    # o hook roda a varredura; achado = push bloqueado
 ```
+
+### `brain tui`
+Cockpit de terminal (Textual): cinco painéis numerados (status, ações, plano, aprovações, registro), o
+detalhe do item, o log de comandos e uma barra com as teclas do contexto, como no lazygit. A leitura é
+em processo; **toda escrita é `./brain …` como subprocesso**, e a linha exata aparece no formulário (antes
+de confirmar) e no log (depois). Gates e portas pedem a sua resposta digitada, e as ações do agente (⚡)
+rodam o agente de `[runner]` em modo headless. O TUI se recusa a abrir com `BRAIN_NIGHTLY=1` (código 4).
+
+É um extra **opcional**: o núcleo do brain continua só com a stdlib.
+
+| Opção | Uso |
+|---|---|
+| `--setup` | cria `.venv-tui` e instala o Textual com versões e hashes travados (`requirements-tui.txt`) |
+
+```bash
+brain tui --setup     # uma vez
+brain tui             # abre; usa a .venv-tui sozinho
+```
+Sem o extra, `brain tui` sai com código 3 e a instrução. Teclas: `?` ajuda do contexto · `:` paleta de
+comandos · `g` busca · `/` filtro · `1`–`5` painéis (só pelos números) · `[` `]` ou `←` `→` abas · `⏎` ou duplo clique amplia o detalhe · `ctrl+t` troca o tema · `q` sai. O mouse também funciona: clique nas abas, nas linhas e nas dicas da barra, e a roda rola a lista. O TUI relê o vault sozinho quando ele muda fora dele (agente, outro terminal). O mapa
+completo por contexto, a legenda e uma versão para experimentar com dados fictícios estão em
+[`tui-mockup.html`](tui-mockup.html). Fora do TUI ficam só o que é do agente (`init`, `snapshot`, `add`, `extract`,
+`proposal add`; `outbox sent` e `publish done` ele registra ao enviar e publicar) e `demo`; o teste
+`tests/test_tui.py::CoverageTest` garante que nenhum subcomando novo da CLI fique sem lugar ou sem justificativa. Em `[tui]` do `brain.toml`, `agent_allow` lista ferramentas extras que o
+agente pode usar nas ações ⚡ (por exemplo as de escrita do MCP do Slack, só para enviar uma mensagem aprovada).
 
 ---
 

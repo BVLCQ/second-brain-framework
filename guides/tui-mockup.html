@@ -1,0 +1,1044 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Brain TUI — guia interativo da interface de terminal</title>
+<!-- guides/tui-mockup.html — desenho navegável da TUI do ./brain. Arquivo único, offline, dados fictícios.
+     Os dados e o relógio (qui 15/10/2026) são do protótipo; nada aqui lê ou grava o seu vault. -->
+<style>
+/* Layout: lazygit-style cockpit. Five numbered list panels on the left, detail on the right,
+   a command log under the detail, and a contextual key bar across the bottom. */
+:root{
+  color-scheme:light;
+  --bg:#eef1f6; --term:#fafbfd; --fg:#1c2433; --dim:#66718a; --faint:#a1abbf; --line:#cfd5e2;
+  --focus:#1768d1; --sel:#dce8fb; --sel-fg:#0d2a57; --code:#eef2f9; --scrim:rgba(238,241,246,.8);
+  --red:#c23838; --amber:#9a6200; --green:#1b8348; --violet:#6445d1; --cyan:#0d7a8f;
+  --card:#ffffff;
+  --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --sans:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#090b10; --term:#10131a; --fg:#cdd5e4; --dim:#7a859b; --faint:#4b5568; --line:#262d3c;
+    --focus:#69b1ff; --sel:#1d2840; --sel-fg:#eaf2ff; --code:#171c27; --scrim:rgba(9,11,16,.8);
+    --red:#f27a82; --amber:#e8b04a; --green:#7fd29b; --violet:#b9a3ff; --cyan:#6fd0e0; --card:#10131a; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#090b10; --term:#10131a; --fg:#cdd5e4; --dim:#7a859b; --faint:#4b5568; --line:#262d3c;
+  --focus:#69b1ff; --sel:#1d2840; --sel-fg:#eaf2ff; --code:#171c27; --scrim:rgba(9,11,16,.8);
+  --red:#f27a82; --amber:#e8b04a; --green:#7fd29b; --violet:#b9a3ff; --cyan:#6fd0e0; --card:#10131a; color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.6 var(--sans);
+  padding-block:28px 72px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:1200px;margin:0 auto;display:flex;flex-direction:column;gap:28px}
+header.top{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:flex-end;justify-content:space-between}
+header.top h1{margin:0;font:600 28px/1.1 var(--sans);letter-spacing:-.01em}
+header.top p{margin:6px 0 0;color:var(--dim);max-width:62ch}
+.ctl{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.chip{font:500 12.5px/1 var(--mono);color:var(--fg);background:var(--card);border:1px solid var(--line);border-radius:5px;padding:7px 10px;cursor:pointer}
+.chip:hover{border-color:var(--focus);color:var(--focus)}
+.chip:focus-visible,.hint:focus-visible{outline:2px solid var(--focus);outline-offset:1px}
+.scenes{display:flex;flex-wrap:wrap;gap:8px;align-items:center;color:var(--dim);font-size:13px}
+.termwrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px;background:var(--term)}
+.term{position:relative;min-width:1000px;height:700px;display:grid;grid-template-rows:1fr 30px;background:var(--term);
+  font:12.5px/1.5 var(--mono);color:var(--fg);outline:none}
+.term:focus-within{box-shadow:inset 0 0 0 1px var(--focus)}
+.screen{display:grid;grid-template-columns:minmax(350px,37%) 1fr;gap:8px;padding:12px 12px 6px;min-height:0}
+.screen.zoom{grid-template-columns:1fr}.screen.zoom .left{display:none}
+.left{display:flex;flex-direction:column;gap:9px;min-height:0}
+.left .pn{flex:0 0 auto}
+.left .pn.fill{flex:1 1 0;min-height:84px}
+.left .pn:not(.fill) .pb{flex:none;overflow:hidden}
+.right{display:grid;grid-template-rows:1fr 156px;gap:9px;min-height:0;min-width:0}
+.pn{position:relative;border:1px solid var(--line);border-radius:5px;min-height:0;min-width:0;display:flex;flex-direction:column}
+.pn.on{border-color:var(--focus)}
+.pn>.t{position:absolute;top:-10px;left:8px;right:8px;background:none;white-space:nowrap;color:var(--dim);display:flex;gap:0;pointer-events:none;overflow:hidden}
+.pn>.t>span{background:var(--term);padding:0 3px;pointer-events:auto}
+.pn>.t>span:first-child{padding-left:5px}
+.pn.on>.t .n,.pn.on>.t .tab.a{color:var(--focus)}
+.tab{cursor:pointer}.tab.a{color:var(--fg);font-weight:700}.tab:hover{color:var(--focus)}
+.sep{color:var(--faint)}
+.pn>.pc{position:absolute;right:10px;bottom:-10px;background:var(--term);padding:0 6px;color:var(--dim);font-size:11px}
+.pb{overflow:auto;padding:11px 0 11px;flex:1;min-height:0;scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+.r{display:flex;gap:8px;padding:0 12px;white-space:nowrap;height:20px;align-items:center;cursor:default}
+.r .tx{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.r.sel{background:var(--sel);color:var(--sel-fg)}
+.pn:not(.on) .r.sel{background:transparent;color:inherit;box-shadow:inset 2px 0 var(--faint)}
+.r .id{color:var(--dim)}.r.sel .id{color:inherit;opacity:.75}
+.r .rt{color:var(--dim);flex:none}
+.sumline{padding:0 12px;height:20px;display:flex;gap:10px;align-items:center;white-space:nowrap;color:var(--dim)}
+.sumline b{color:var(--fg);font-weight:500}
+.red{color:var(--red)}.amb{color:var(--amber)}.grn{color:var(--green)}.vio{color:var(--violet)}.cyn{color:var(--cyan)}.dim{color:var(--dim)}.faint{color:var(--faint)}.b{font-weight:700}
+.main .pb{padding:12px 16px 10px}
+.main .pb .h{font-weight:700;font-size:13.5px;margin-bottom:2px;overflow-wrap:anywhere}
+.kv{display:grid;grid-template-columns:max-content 1fr;gap:1px 16px;margin:8px 0}
+.kv .k,.fl .k{color:var(--dim)}
+.sec{display:flex;gap:8px;color:var(--dim);margin:14px 0 5px;white-space:nowrap}
+.sec::after{content:'';flex:1;border-top:1px solid var(--line);align-self:center}
+.ln{display:flex;gap:10px;min-height:20px;align-items:baseline}
+.ln>span:first-child{flex:none}
+.ln .grow{flex:1;min-width:0;overflow-wrap:anywhere}
+.go{cursor:pointer;border-radius:3px}.go:hover{background:var(--sel)}
+.pv{font-size:11px}.pv-doc{color:var(--cyan)}.pv-observado{color:var(--violet)}.pv-declarado{color:var(--green)}.pv-sistema{color:var(--dim)}.pv-sem-fonte{color:var(--red)}
+.tag{display:inline-block;font-size:11px;border:1px solid currentColor;border-radius:3px;padding:0 5px;line-height:16px;white-space:nowrap}
+.quote{border-left:2px solid var(--focus);background:var(--code);padding:8px 12px;margin:8px 0;white-space:pre-wrap;overflow-wrap:anywhere}
+.steps{display:flex;gap:6px;align-items:center;margin:6px 0}
+.steps .st{padding:0 7px;border:1px solid var(--line);border-radius:3px;color:var(--dim)}.steps .st.d{color:var(--green);border-color:var(--green)}.steps .st.c{color:var(--focus);border-color:var(--focus);font-weight:700}
+.wk{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin:8px 0}
+.dy{border:1px solid var(--line);border-radius:4px;padding:6px 8px;min-width:0}
+.dy.s{border-color:var(--focus)}
+.dy .dn{color:var(--dim);margin-bottom:4px}.dy.s .dn{color:var(--focus);font-weight:700}
+.bk{border-left:3px solid var(--cyan);padding:1px 6px;margin:3px 0;background:var(--code);overflow:hidden}
+.bk .tm{color:var(--dim);font-size:11px}
+.log .pb{padding:11px 12px 6px}
+.lg{white-space:pre-wrap;overflow-wrap:anywhere}
+.lg .tm{color:var(--faint);margin-right:8px}
+.lg.cmd{color:var(--cyan)}.lg.ok{color:var(--green)}.lg.warn{color:var(--amber)}.lg.agent{color:var(--violet)}.lg.dim{color:var(--faint)}.lg.err{color:var(--red)}
+.bar{display:flex;gap:2px 4px;align-items:center;padding:0 12px;border-top:1px solid var(--line);overflow:hidden;white-space:nowrap}
+.hint{font:inherit;background:none;border:0;color:var(--dim);cursor:pointer;padding:3px 7px;border-radius:3px;display:inline-flex;gap:6px}
+.hint:hover{background:var(--sel);color:var(--sel-fg)}
+.hint kbd{font:inherit;font-weight:700;color:var(--focus)}
+.hint.ag kbd,.hint.ag{color:var(--violet)}.hint.ag kbd{color:var(--violet)}
+.bar .sp{flex:1}
+.bar .st{color:var(--dim);padding-left:10px}
+.mo{position:absolute;inset:0;background:var(--scrim);display:grid;place-items:center;z-index:5;padding:16px}
+.md{width:min(680px,100%);max-height:100%;overflow:auto;background:var(--term);border:1px solid var(--focus);border-radius:6px;padding:14px 18px 12px;box-shadow:0 18px 50px rgba(0,0,0,.35)}
+.md.gate{border-color:var(--amber)}.md.agent{border-color:var(--violet)}
+.mt{font-weight:700;font-size:13.5px}.ms{margin:4px 0 8px;color:var(--dim);overflow-wrap:anywhere}
+.flds{display:flex;flex-direction:column;gap:7px;margin:10px 0}
+.fl{display:grid;grid-template-columns:130px 1fr;gap:2px 12px;align-items:center}
+.fl .res{grid-column:2;font-size:11.5px;color:var(--dim);min-height:0}.fl .res:empty{display:none}
+.in{width:100%;background:var(--code);border:1px solid var(--line);color:var(--fg);font:inherit;padding:3px 8px;border-radius:3px;min-width:0}
+.in:focus{outline:none;border-color:var(--focus)}
+select.in{padding:3px 4px}
+.cmdp{background:var(--code);border-left:2px solid var(--cyan);padding:6px 10px;white-space:pre-wrap;word-break:break-word;color:var(--cyan);margin-top:8px}
+.err{color:var(--red);min-height:20px;margin-top:4px}
+.mf{display:flex;gap:16px;color:var(--dim);margin-top:2px}.mf kbd{font:inherit;color:var(--focus);font-weight:700}
+.diff{background:var(--code);padding:6px 10px;margin:8px 0;white-space:pre;overflow:auto}.diff .p{color:var(--green)}.diff .m{color:var(--red)}
+.pk{display:flex;flex-direction:column;margin-top:8px;max-height:330px;overflow:auto}
+.pk .r{height:auto;min-height:22px;padding:1px 10px;gap:12px}.pk .r .tx{white-space:nowrap}
+ul.pl{margin:6px 0 6px 18px;padding:0;color:var(--dim)}ul.pl li{margin:2px 0}
+.helpgrid{display:grid;grid-template-columns:1fr 1fr;gap:4px 28px;margin-top:8px}
+.helpgrid .hr{display:flex;gap:10px}.helpgrid kbd{font:inherit;font-weight:700;color:var(--focus);min-width:5.5ch}
+.helpgrid .hh{grid-column:1/-1;color:var(--dim);margin-top:8px}
+/* page below the terminal */
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px}
+.cols div{min-width:0}
+h2{font:600 19px/1.25 var(--sans);margin:0 0 10px;letter-spacing:-.005em}
+h3{font:600 15px/1.3 var(--sans);margin:0 0 4px}
+.note p,.note li{color:var(--dim);margin:0;max-width:68ch}
+.note h3{color:var(--fg)}
+.sect{display:flex;flex-direction:column;gap:12px}
+.tblw{overflow-x:auto;border:1px solid var(--line);border-radius:6px;background:var(--card)}
+table{border-collapse:collapse;width:100%;min-width:640px;font-size:13.5px}
+th,td{text-align:left;padding:7px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font:500 11.5px/1 var(--mono);color:var(--dim);text-transform:uppercase;letter-spacing:.06em;background:var(--code)}
+tr:last-child td{border-bottom:0}
+td code,.kb{font:500 12px var(--mono);background:var(--code);border:1px solid var(--line);border-radius:3px;padding:1px 6px;color:var(--fg);white-space:nowrap}
+.kb.ag{color:var(--violet)}
+.kmap{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+.kmap section{border:1px solid var(--line);border-radius:6px;background:var(--card);padding:10px 12px;min-width:0}
+.kmap h3{font:600 12px var(--mono);color:var(--dim);letter-spacing:.05em;text-transform:uppercase;margin-bottom:6px}
+.kmap .kr{display:flex;gap:10px;align-items:baseline;padding:2px 0;font-size:13.5px}
+.kmap .kr .kb{min-width:2.8em;text-align:center}
+.fine{margin:-14px 0 0;color:var(--dim);font-size:13px}
+.try{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px 24px}
+.try>div{min-width:0}.try p{margin:4px 0 0}
+.legend{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+.legend section{border:1px solid var(--line);border-radius:6px;background:var(--card);padding:10px 12px;min-width:0;font:12.5px/1.9 var(--mono)}
+.legend h3{font:600 12px var(--mono);color:var(--dim);letter-spacing:.05em;text-transform:uppercase;margin-bottom:4px}
+.legend .red{color:var(--red)}.legend .amb{color:var(--amber)}.legend .grn{color:var(--green)}.legend .vio{color:var(--violet)}.legend .cyn{color:var(--cyan)}.legend .dim{color:var(--dim)}.legend .faint{color:var(--faint)}
+.legend .tag{font-size:11px;border:1px solid currentColor;border-radius:3px;padding:0 5px}
+.legend .pv{font-size:11px}.legend .pv-doc{color:var(--cyan)}.legend .pv-observado{color:var(--violet)}.legend .pv-declarado{color:var(--green)}.legend .pv-sem-fonte{color:var(--red)}
+.q{display:grid;gap:12px;counter-reset:q}
+.q li{list-style:none;border-top:1px solid var(--line);padding-top:10px}
+.q b{font-weight:600}
+.q p{margin:2px 0 0;color:var(--dim);max-width:70ch}
+@media (prefers-reduced-motion: no-preference){.pn{transition:border-color .12s}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Brain TUI</h1>
+      <p>Guia interativo da TUI do <code>./brain</code> (<code>brain tui</code>). Esta página é uma maquete: clique no terminal e use o teclado ou o mouse. Nada aqui grava de verdade, os dados são fictícios e o relógio está parado em qui 15/10/2026. A TUI real lê o seu vault e executa os comandos de verdade.</p>
+    </div>
+    <div class="ctl">
+      <button class="chip" id="theme" type="button">tema: auto</button>
+    </div>
+  </header>
+
+  <div class="scenes" id="scenes"><span>Ir direto para:</span></div>
+
+  <div class="termwrap"><div class="term" id="term" tabindex="0" aria-label="Protótipo do terminal do Brain">
+    <div class="screen" id="scr"></div>
+    <div class="bar" id="bar"></div>
+    <div class="mo" id="mo" hidden></div>
+  </div></div>
+
+  <p class="fine">A tela precisa de pelo menos 1000px de largura. Em janelas estreitas, role o terminal na horizontal.</p>
+
+  <section class="sect note">
+    <h2>Como ler a tela</h2>
+    <div class="cols">
+      <div><h3>Um esqueleto, cinco painéis</h3><p>Listas à esquerda numeradas de 1 a 5, detalhe à direita, log de comandos embaixo e a barra de teclas no rodapé. A barra muda conforme o painel e a aba em foco, como no lazygit.</p></div>
+      <div><h3>Toda escrita mostra a linha da CLI</h3><p>Antes de confirmar você vê o <code>brain …</code> exato que vai rodar, e depois ele cai no log. O TUI ensina os comandos enquanto você usa, e não esconde nada.</p></div>
+      <div><h3>Portas e gates continuam explícitos</h3><p>O que sai da máquina ou muda goals e projetos pede a sua resposta literal (<code>--quote</code>). O que depende do agente aparece em violeta com ⚡ e roda via <code>claude</code>; o TUI nunca escreve no Slack ou no calendário sozinho.</p></div>
+    </div>
+  </section>
+
+  <section class="sect note">
+    <h2>Experimente isto</h2>
+    <div class="try">
+      <div><span class="kb">2</span> <span class="kb">c</span><p>Feche a ação A-0021. A linha <code>brain action close …</code> muda enquanto você digita, e o resultado cai no log.</p></div>
+      <div><span class="kb">:</span><p>Abra a paleta e digite "foco" ou "backup". Cada comando mostra a linha da CLI e a tecla que o atalha.</p></div>
+      <div><span class="kb">4</span> <span class="kb">]</span> <span class="kb">A</span><p>Aprove o rascunho para a Carla. Só a sua resposta digitada libera o texto exato.</p></div>
+      <div><span class="kb">3</span> <span class="kb">E</span><p>Veja o único gate estrutural: diff do <code>goals.md</code> e aprovação literal antes do <code>plan log</code>.</p></div>
+      <div><span class="kb ag">1</span> <span class="kb ag">d</span><p>Processe a inbox com o agente e observe as ações novas aparecerem nas listas.</p></div>
+      <div><span class="kb">?</span> <span class="kb">g</span> <span class="kb">/</span><p>Ajuda do contexto, busca em tudo e filtro da lista. <span class="kb">⏎</span> amplia o detalhe e <span class="kb">esc</span> volta. O duplo clique numa linha faz o mesmo que <span class="kb">⏎</span>.</p></div>
+    </div>
+  </section>
+
+  <section class="sect">
+    <h2>Legenda</h2>
+    <div class="legend">
+      <section><h3>Ações</h3><div><span class="dim">○</span> aberta</div><div><span class="cyn">◐</span> fazendo</div><div><span class="amb">◔</span> aguardando</div><div><span class="grn">✓</span> fechada</div><div><span class="faint">✗</span> descartada</div><div><span class="amb">⊘</span> bloqueada por outra ação</div><div><span class="red">!</span> prioridade alta</div></section>
+      <section><h3>Plano</h3><div><span class="grn">[x]</span> feito</div><div><span class="cyn">[~]</span> em andamento</div><div><span class="dim">[ ]</span> não iniciado</div><div><span class="faint">[-]</span> cancelado</div><div><span class="cyn">███░░░</span> progresso calculado</div><div><span class="faint">·45</span> progresso declarado por você</div></section>
+      <section><h3>Aprovações</h3><div><span class="amb">◆</span> aguarda a sua resposta</div><div><span class="amb">●</span> rascunho · <span class="cyn">●</span> aprovada · <span class="grn">●</span> enviada</div><div><span class="tag amb">porta</span> escreve fora da máquina</div><div><span class="vio">⚡</span> roda o agente</div></section>
+      <section><h3>Proveniência</h3><div><span class="pv pv-doc">[doc]</span> está num documento</div><div><span class="pv pv-observado">[observado]</span> extraído pelo agente</div><div><span class="pv pv-declarado">[declarado]</span> dito por você</div><div><span class="pv pv-sem-fonte">[sem-fonte]</span> sem base</div></section>
+      <section><h3>Cores</h3><div><span class="red">vermelho</span> atraso e erro</div><div><span class="amb">âmbar</span> atenção, gate e portas</div><div><span class="vio">violeta</span> agente</div><div><span class="cyn">ciano</span> linha da CLI</div></section>
+      <section><h3>Painéis</h3><div><span class="kb">[2]</span> o número é a tecla</div><div>título mostra as abas; <span class="kb">[</span> <span class="kb">]</span> trocam</div><div><span class="dim">3 de 9</span> posição na lista</div><div>borda azul é o foco</div></section>
+    </div>
+  </section>
+
+  <section class="sect">
+    <h2>Mapa de teclas por contexto</h2>
+    <div class="kmap" id="kmap"></div>
+  </section>
+
+  <section class="sect">
+    <h2>Onde cada comando da CLI aparece</h2>
+    <div class="tblw"><table>
+      <thead><tr><th>Comando</th><th>No TUI</th><th>Como chegar</th></tr></thead>
+      <tbody>
+        <tr><td><code>status</code></td><td>Painel 1, aba Resumo, sempre visível</td><td><span class="kb">1</span></td></tr>
+        <tr><td><code>doctor</code> · <code>validate</code> · <code>sync</code></td><td>Painel 1: aba Saúde (avisos, <span class="kb">o</span> testa online) e aba Sistema (validar, colher edições)</td><td><span class="kb">1</span> <span class="kb">]</span> <span class="kb">⏎</span></td></tr>
+        <tr><td><code>render</code> · <code>sync</code></td><td>Roda sozinho depois de cada escrita; manual em qualquer tela</td><td><span class="kb">r</span> · <span class="kb">o</span> abre o painel HTML</td></tr>
+        <tr><td><code>action</code> (open, update, close, drop, reopen, show, list)</td><td>Painel 2, abas mine / waiting / watching</td><td><span class="kb">2</span> <span class="kb">n</span> <span class="kb">c</span> <span class="kb">e</span> <span class="kb">s</span> <span class="kb">D</span> <span class="kb">o</span></td></tr>
+        <tr><td><code>plan</code> · <code>progress</code></td><td>Painel 3, árvore de goals, projetos e entregáveis</td><td><span class="kb">3</span> <span class="kb">space</span> <span class="kb">s</span> <span class="kb">P</span> <span class="kb">E</span></td></tr>
+        <tr><td><code>share</code></td><td>Painel 3, exporta o nó selecionado</td><td><span class="kb">S</span></td></tr>
+        <tr><td><code>proposal</code></td><td>Painel 4, aba Propostas</td><td><span class="kb">4</span> <span class="kb">a</span> <span class="kb">r</span></td></tr>
+        <tr><td><code>outbox</code></td><td>Painel 4, aba Outbox; envio pelo agente</td><td><span class="kb">n</span> <span class="kb">A</span> <span class="kb ag">S</span> <span class="kb">x</span></td></tr>
+        <tr><td><code>focus</code></td><td>Painel 4, aba Foco, grade da semana</td><td><span class="kb">p</span> <span class="kb">A</span> <span class="kb">a</span> <span class="kb">s</span></td></tr>
+        <tr><td><code>publish</code></td><td>Painel 4, aba Publicar</td><td><span class="kb">n</span> <span class="kb">A</span> <span class="kb ag">P</span> <span class="kb">x</span></td></tr>
+        <tr><td><code>decision</code> · <code>delivery</code> · <code>person</code> · <code>artifact</code></td><td>Painel 5, abas Decisões, Entregas, Pessoas (<span class="kb">n</span> <span class="kb">u</span> <span class="kb">a</span> <span class="kb">R</span> resolve um nome) e Artefatos</td><td><span class="kb">5</span> <span class="kb">n</span> <span class="kb">S</span> <span class="kb">a</span></td></tr>
+        <tr><td><code>search</code></td><td>Busca global no ledger e nos artefatos</td><td><span class="kb">g</span></td></tr>
+        <tr><td><code>memory</code> (sync, status, setup, rebuild, recall, reflect) · <code>mcp</code> · <code>backup</code> (inclui <code>--status</code>) · <code>nightly</code> · <code>schedule</code> (install, status, remove) · <code>update</code> · <code>upstream</code> (scan, hook status)</td><td>Painel 1, aba Sistema; operações perigosas e portas pedem confirmação</td><td><span class="kb">1</span> <span class="kb">]</span> <span class="kb">]</span> <span class="kb">⏎</span></td></tr>
+        <tr><td><code>init</code> · <code>snapshot</code> · <code>add</code> · <code>extract</code> · <code>proposal add</code></td><td>Só pelo agente (extrair e gravar é dele): <span class="kb ag">i</span> primeira entrevista, <span class="kb ag">d</span> processar inbox, <span class="kb ag">c</span> puxar fonte. <code>outbox sent</code> e <code>publish done</code> o agente registra ao enviar e publicar</td><td><span class="kb ag">i</span> <span class="kb ag">d</span> <span class="kb ag">S</span> <span class="kb ag">P</span></td></tr>
+        <tr><td><code>demo</code> · <code>tui</code></td><td>Fora do TUI: criam uma instância fictícia e abrem o próprio TUI</td><td>—</td></tr>
+        <tr><td>Qualquer comando</td><td>Paleta de comandos com busca; cada item mostra a linha da CLI e a tecla</td><td><span class="kb">:</span></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section class="sect note">
+    <h2>Como a TUI real funciona</h2>
+    <ol class="q" style="margin:0;padding:0">
+      <li><b>Instalação.</b><p>É um extra opcional: <code>./brain tui --setup</code> cria a venv <code>.venv-tui</code> com o Textual em versão e hashes travados (<code>requirements-tui.txt</code>), e <code>./brain tui</code> a usa sozinho. O núcleo do <code>brain</code>, o cron, o noturno e o MCP continuam só com a stdlib. Sem o extra, o comando explica como instalar.</p></li>
+      <li><b>Como grava.</b><p>Sempre chamando <code>./brain</code> como subprocesso, a mesma linha que aparece no formulário e no log. A saída que você vê no log é a da CLI de verdade, e depois de cada escrita a TUI roda <code>brain render</code> e relê tudo. Ela nunca edita <code>events.jsonl</code> nem FRESH.</p></li>
+      <li><b>Mudar a árvore do plano (E).</b><p>Abre o <code>goals.md</code> no seu <code>$EDITOR</code>, mostra o diff e só mantém a edição se você digitar a aprovação (<code>brain plan log</code>). Cancelar devolve o arquivo ao que era.</p></li>
+      <li><b>Aceitar proposta.</b><p>Registra a sua resposta (<code>proposal accept</code>) e, para <code>fechar-acao</code> e <code>reestimar</code>, executa também o comando correspondente na ação alvo. Propostas de mudança de plano pedem o gate (E) em seguida.</p></li>
+      <li><b>Ações do agente (⚡).</b><p>Rodam o agente configurado em <code>[runner]</code> do <code>brain.toml</code>, em modo headless, com a saída transmitida ao log. A tecla <code>y</code> copia o prompt para você colar no chat. Para o agente enviar uma mensagem no Slack ou publicar, liste as ferramentas de escrita necessárias em <code>[tui].agent_allow</code>.</p></li>
+      <li><b>Teclas.</b><p>Estilo vim e setas ao mesmo tempo (<code>j</code> <code>k</code> <code>h</code> <code>l</code>, <code>tab</code> entre painéis), <code>enter</code> confirma nos formulários (espaço abre uma lista de opções), e <code>T</code> alterna "todas" nas abas de Aprovar.</p></li>
+      <li><b>Noturno.</b><p>Com <code>BRAIN_NIGHTLY=1</code> a TUI se recusa a abrir, já que o ledger rejeita eventos do dono nesse modo.</p></li>
+    </ol>
+  </section>
+</div>
+
+<script>
+(function(){
+'use strict';
+var $=function(s){return document.querySelector(s)};
+var esc=function(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})};
+var DOW=['dom','seg','ter','qua','qui','sex','sáb'];
+var T0=new Date(2026,9,15);
+var pad=function(n){return String(n).padStart(2,'0')};
+var pd=function(i){var a=i.split('-').map(Number);return new Date(a[0],a[1]-1,a[2])};
+var fmt=function(d){return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())};
+var addDays=function(d,n){var x=new Date(d);x.setDate(x.getDate()+n);return x};
+var daysTo=function(i){return Math.round((pd(i)-T0)/864e5)};
+var short=function(i){var d=pd(i);return DOW[d.getDay()]+' '+pad(d.getDate())};
+var dm=function(i){var d=pd(i);return pad(d.getDate())+'/'+pad(d.getMonth()+1)};
+var clamp=function(n,a,b){return Math.max(a,Math.min(b,n))};
+var q=function(s){return '"'+String(s).replace(/"/g,'\\"')+'"'};
+function parseDue(s){
+  s=(s||'').trim().toLowerCase(); if(!s) return null;
+  if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  if(s==='hoje') return fmt(T0);
+  if(s==='amanhã'||s==='amanha') return fmt(addDays(T0,1));
+  var m=s.match(/^\+(\d+)d$/); if(m) return fmt(addDays(T0,+m[1]));
+  m=s.match(/^(\d{1,2})\/(\d{1,2})$/); if(m) return fmt(new Date(2026,m[2]-1,+m[1]));
+  var names=['dom','seg','ter','qua','qui','sex','sab'], k=names.indexOf(s.slice(0,3).replace('á','a'));
+  if(k>=0){var n=(k-T0.getDay()+7)%7; return fmt(addDays(T0,n||7));}
+  return undefined;
+}
+var dueRes=function(v){var r=parseDue(v); if(v.trim()==='') return ''; return r===undefined?'<span class="red">data não reconhecida (hoje, amanhã, sex, +3d, 20/10, 2026-10-20)</span>':'→ '+r+' ('+short(r)+')'};
+var dueChk=function(v){return parseDue(v)===undefined?'Prazo inválido.':''};
+
+/* ---------------- dados fictícios ---------------- */
+var PEOPLE={
+  voce:{name:'Você (demo)',role:'Analista de dados',rel:'dono do cérebro',email:'voce@example.com',al:['Eu']},
+  ana:{name:'Ana Ribeiro',role:'Gestora de dados',rel:'gestora',email:'ana@example.com',al:['Ana','Ana R.']},
+  bruno:{name:'Bruno Lima',role:'Analista sênior',rel:'par',email:'bruno@example.com',al:['Bruno']},
+  carla:{name:'Carla Dias',role:'CS Ops',rel:'stakeholder',email:'carla@example.com',al:['Carla']},
+  diego:{name:'Diego Alves',role:'Engenharia de IA',rel:'par',email:'diego@example.com',al:['Diego']}
+};
+var A=[
+ {id:'A-0021',title:'Enviar métricas de deflexão à Ana',list:'mine',status:'fazendo',due:'2026-10-14',effort:'4h',project:'P3',deliv:'P3.1',prio:'alta',people:['ana'],origin:'1:1 com Ana (qui 09/10)',prov:'observado',source:'PROCESSED/2026/10/reuniao-1a1-ana.md',
+  hist:[['2026-10-09','aberta a partir do 1:1: "levanta as métricas de deflexão até a próxima semana"','observado'],['2026-10-13','status → fazendo','declarado']]},
+ {id:'A-0023',title:'Validar MVP da planilha com CS',list:'mine',status:'aberta',due:'2026-10-16',effort:'1h30',project:'P2',deliv:'P2.1',prio:'normal',people:['carla'],blocked:'A-0017',origin:'Cerimônia do time de dados',prov:'observado',source:'PROCESSED/2026/10/cerimonia-migracao.md',hist:[['2026-10-11','aberta na cerimônia; depende do MVP da Carla','observado']]},
+ {id:'A-0026',title:'Preparar pauta do 1:1 com a Ana',list:'mine',status:'aberta',due:'2026-10-16',effort:'30m',project:null,deliv:null,prio:'normal',people:['ana'],origin:'chat',prov:'declarado',source:'chat',hist:[['2026-10-14','aberta por você','declarado']]},
+ {id:'A-0019',title:'Fechar plano do pipeline no padrão X',list:'mine',status:'aberta',due:'2026-10-17',effort:'3h',project:'P1',deliv:'P1.2',prio:'alta',people:['ana','bruno'],blocked:'A-0016',origin:'1:1 com Ana',prov:'observado',source:'PROCESSED/2026/10/reuniao-1a1-ana.md',hist:[['2026-10-09','aberta; depende do diagnóstico da Ana','observado']]},
+ {id:'A-0024',title:'Ler a política de dados v3',list:'mine',status:'aberta',due:'2026-10-20',effort:'1h',project:'P1',deliv:null,prio:'baixa',people:[],origin:'documento compartilhado',prov:'doc',source:'PROCESSED/2026/10/politica-dados-v3.md',hist:[['2026-10-12','aberta a partir do documento','doc']]},
+ {id:'A-0025',title:'Montar inventário de MCPs e automações',list:'mine',status:'aberta',due:'2026-10-22',effort:'2h',project:'P4',deliv:'P4.1',prio:'normal',people:['diego'],origin:'Workshop IA',prov:'observado',source:'PROCESSED/2026/10/workshop-ia.md',hist:[['2026-10-10','aberta no workshop','observado']]},
+ {id:'A-0029',title:'Definir critérios da recomendação do agente',list:'mine',status:'aberta',due:'2026-10-30',effort:'2h',project:'P3',deliv:'P3.2',prio:'normal',people:['diego'],origin:'Kickoff do agente',prov:'observado',source:'PROCESSED/2026/10/kickoff-agente.md',hist:[['2026-10-05','aberta no kickoff','observado']]},
+ {id:'A-0027',title:'Responder revisão do Bruno sobre o dicionário',list:'mine',status:'aberta',due:null,effort:null,project:'P1',deliv:null,prio:'normal',people:['bruno'],origin:'Slack #dados',prov:'observado',source:'RAW/2026/10/slack-dados.md',hist:[['2026-10-14','aberta a partir do Slack','observado']]},
+ {id:'A-0028',title:'Estimar esforço do treinamento de CS',list:'mine',status:'aberta',due:null,effort:null,project:'P1',deliv:'P1.3',prio:'normal',people:['carla'],origin:'chat',prov:'declarado',source:'chat',hist:[['2026-10-13','aberta por você','declarado']]},
+ {id:'A-0016',title:'Diagnóstico do pipeline atual',list:'waiting',owner:'ana',status:'aberta',due:'2026-10-20',effort:null,project:'P1',deliv:'P1.2',prio:'alta',people:['ana'],unblocks:'A-0019',origin:'1:1 com Ana',prov:'observado',source:'PROCESSED/2026/10/reuniao-1a1-ana.md',hist:[['2026-10-09','Ana prometeu enviar','observado']]},
+ {id:'A-0017',title:'MVP da planilha de contatos',list:'waiting',owner:'carla',status:'aberta',due:'2026-10-14',effort:null,project:'P2',deliv:'P2.1',prio:'normal',people:['carla'],unblocks:'A-0023',origin:'Cerimônia do time de dados',prov:'observado',source:'PROCESSED/2026/10/cerimonia-migracao.md',hist:[['2026-10-11','Carla assumiu a entrega','observado']]},
+ {id:'A-0018',title:'Acesso ao BigQuery do projeto',list:'waiting',owner:'diego',status:'aberta',due:'2026-10-22',effort:null,project:'P2',deliv:'P2.2',prio:'normal',people:['diego'],origin:'Slack #ops',prov:'observado',source:'RAW/2026/10/slack-ops.md',hist:[['2026-10-12','Diego vai pedir ao time de plataforma','observado']]},
+ {id:'A-0020',title:'Migração de parceiros',list:'watching',owner:'diego',status:'aberta',due:null,effort:null,project:null,deliv:null,prio:'normal',people:['diego'],origin:'Cerimônia',prov:'observado',source:'PROCESSED/2026/10/cerimonia-migracao.md',hist:[['2026-10-04','contexto: o cérebro não cobra','declarado']]},
+ {id:'A-0022',title:'Revisão de contrato do fornecedor de LLM',list:'watching',owner:'ana',status:'aberta',due:null,effort:null,project:'P3',deliv:null,prio:'baixa',people:['ana'],origin:'Slack #ops',prov:'observado',source:'RAW/2026/10/slack-ops.md',hist:[['2026-10-06','contexto','observado']]}
+];
+var PL=[
+ {id:'G1',title:'Destravar a frente de dados',status:'ativo',horizon:'2026-12-14',why:'sem dicionário comum, toda análise nasce discutida',declared:{pct:45,date:'2026-10-14',note:'dicionário andou; pipeline não'},projects:[
+   {id:'P1',title:'Padronização de métricas',owner:'voce',deliv:[
+     {id:'P1.1',title:'Dicionário de dados v1',due:'2026-10-13',w:2,st:'feito',done:'2026-10-12'},
+     {id:'P1.2',title:'Pipeline de métricas no padrão X',due:'2026-11-05',w:2,st:'em-andamento'},
+     {id:'P1.3',title:'Treinamento do time de CS no dicionário',due:'2026-11-29',w:1,st:'nao-iniciado'}]},
+   {id:'P2',title:'Base de contatos unificada',owner:'voce',deliv:[
+     {id:'P2.1',title:'MVP em planilha validado com CS',due:'2026-10-12',w:1,st:'nao-iniciado'},
+     {id:'P2.2',title:'Base no BigQuery com as três fontes',due:'2026-11-14',w:2,st:'nao-iniciado'}]}]},
+ {id:'G2',title:'Agente de suporte com qualidade',status:'ativo',horizon:'2027-02-12',why:'demanda cresce sem headcount e o agente atual resolve pouco',declared:null,projects:[
+   {id:'P3',title:'Diagnóstico do agente atual',owner:'voce',deliv:[
+     {id:'P3.1',title:'Leitura de qualidade e deflexão',due:'2026-10-20',w:1,st:'em-andamento'},
+     {id:'P3.2',title:'Recomendação: corrigir, congelar ou portar',due:'2026-11-04',w:1,st:'nao-iniciado'}]}]},
+ {id:'G3',title:'Playground de IA do time',status:'ativo',horizon:'2027-02-12',why:'automações sem dono viram risco',declared:null,projects:[
+   {id:'P4',title:'Ambiente agnóstico',owner:'voce',deliv:[
+     {id:'P4.1',title:'Inventário de automações e MCPs',due:'2026-10-25',w:1,st:'nao-iniciado'}]}]}
+];
+var R=[
+ {id:'R-0003',kind:'fechar-acao',target:'A-0017',summary:'Carla confirmou no Slack que o MVP da planilha foi enviado',evidence:'slack #dados 14/10 18:20',source:'RAW/2026/10/slack-dados.md',prov:'observado',st:'pendente'},
+ {id:'R-0004',kind:'reestimar',target:'A-0021',summary:'4h parece curto: são três fontes de métricas a consolidar',evidence:'kickoff-agente.md, linha 42',source:'PROCESSED/2026/10/kickoff-agente.md',prov:'observado',st:'pendente',newEffort:'6h'},
+ {id:'R-0005',kind:'mudar-plano',target:'G2',summary:'Criar P5 "Retenção MX" sob G2, a pedido do Diego',evidence:'reunião de planejamento 14/10',source:'PROCESSED/2026/10/kickoff-agente.md',prov:'observado',st:'pendente'}
+];
+var M=[
+ {id:'M-0003',to:'ana',chan:'slack',text:'Oi Ana, mandei as métricas de deflexão no doc. Consegue olhar até amanhã? Preciso do ok para seguir com o diagnóstico.',ref:'A-0021',why:'prazo venceu ontem',st:'aprovada',quote:'enviar 3',hash:'a1f3c9e2'},
+ {id:'M-0002',to:'carla',chan:'slack',text:'Oi Carla, tudo bem? Como está o MVP da planilha? A validação com CS é amanhã.',ref:'A-0017',why:'prazo venceu, validação amanhã',st:'rascunho',hash:'7be04d51'},
+ {id:'M-0001',to:'bruno',chan:'slack',text:'Bruno, pode revisar o draft do dicionário até quinta?',ref:'A-0014',why:'revisão técnica',st:'enviada',quote:'enviar 1',hash:'c2d9aa07',link:'https://seu-workspace.slack.com/archives/…'}
+];
+var F={id:'F-0004',st:'proposto',days:[
+ {d:'2026-10-15',b:[['14:00','16:00','A-0021','parte 1/2'],['16:15','17:45','A-0023','']]},
+ {d:'2026-10-16',b:[['09:30','11:30','A-0021','parte 2/2'],['11:30','12:00','A-0026',''],['14:00','15:30','A-0019','parte 1/2']]},
+ {d:'2026-10-19',b:[['10:00','11:00','A-0024','']]},
+ {d:'2026-10-20',b:[['14:00','16:00','A-0025','']]},
+ {d:'2026-10-21',b:[]}],
+ nofit:[['A-0019','1h30','até sex 17/10, teto de 4h por dia']]};
+var PUB=[{id:'S-0001',report:'reports/share/2026-10-14-project-p1.md',to:'slack:#time-dados',st:'pedido',hash:'5d8e1b30'}];
+var DEC=[
+ {id:'D-0006',date:'2026-10-09',title:'Dicionário sai como draft, sem esperar o pipeline',by:['ana'],project:'P1',ctx:'1:1 de quinta. O pipeline novo atrasou e o dicionário v1 estava parado.',why:'"Prefiro meio dicionário em produção do que perfeito em dezembro."',source:'PROCESSED/2026/10/reuniao-1a1-ana.md',prov:'observado'},
+ {id:'D-0005',date:'2026-10-05',title:'Congelar features novas no agente atual até o diagnóstico',by:['diego','ana'],project:'P3',ctx:'Kickoff do agente de suporte.',why:'Evitar investir num agente que talvez seja portado.',source:'PROCESSED/2026/10/kickoff-agente.md',prov:'observado'},
+ {id:'D-0004',date:'2026-10-09',title:'Bruno entra como revisor técnico do dicionário',by:['ana'],project:'P1',ctx:'1:1 de quinta.',why:'Segundo par de olhos antes da publicação.',source:'PROCESSED/2026/10/reuniao-1a1-ana.md',prov:'observado'}
+];
+var DEL=[
+ {id:'E-0002',date:'2026-10-12',title:'Dicionário de dados v1 publicado',ref:'P1.1',result:'Time de CS usando o dicionário nas reuniões',impact:'menos discussão sobre definição de métrica',evidence:'https://example.com/dicionario'},
+ {id:'E-0001',date:'2026-10-05',title:'Kickoff do agente de suporte realizado',ref:'P3',result:'Escopo e dono definidos',impact:'diagnóstico com prazo',evidence:'PROCESSED/2026/10/kickoff-agente.md'}
+];
+var ART=[
+ {id:'status-agente-v2',date:'2026-10-13',kind:'documento',title:'Status report do agente (doc)',people:['diego'],proj:['P3'],sum:'Deflexão de 17,8% em julho; proposta de portar para plataforma própria.',raw:'RAW/2026/10/status-agente-v2.md'},
+ {id:'cerimonia-migracao',date:'2026-10-11',kind:'reuniao',title:'Cerimônia do time de dados',people:['ana','bruno','carla'],proj:['P1','P2'],sum:'Bruno vira revisor técnico; Carla entrega MVP da planilha.',raw:'RAW/2026/10/cerimonia-migracao.md'},
+ {id:'reuniao-1a1-ana',date:'2026-10-09',kind:'reuniao',title:'1:1 com Ana (gestora)',people:['ana','bruno'],proj:['P1'],sum:'Dicionário sai como draft sem esperar o pipeline; Bruno revisa.',raw:'RAW/2026/10/reuniao-1a1-ana.md'},
+ {id:'kickoff-agente',date:'2026-10-05',kind:'reuniao',title:'Kickoff do agente de suporte',people:['ana','diego'],proj:['P3'],sum:'Congelar features novas no agente atual até o diagnóstico.',raw:'RAW/2026/10/kickoff-agente.md'}
+];
+var SYS=[
+ {id:'sys:render',name:'Regenerar views',cmd:'brain render',desc:'Colhe checkboxes e status editados à mão e reescreve todo o FRESH, em Markdown e no painel HTML. Roda sozinho depois de cada escrita feita aqui.',door:null},
+ {id:'sys:validate',name:'Validar ledger',cmd:'brain validate',desc:'Relê o livro-razão inteiro, o PLANNING e os aliases. Sai com código 4 se achar inconsistência.',door:null},
+ {id:'sys:update',name:'Atualizar framework',cmd:'brain update --check',desc:'git pull seguro, sem tocar no vault nem na config. Mostra primeiro o que chegou.',door:null,confirm:'brain update'},
+ {id:'sys:upstream',name:'Varredura upstream',cmd:'brain upstream scan',desc:'Procura dado pessoal em melhorias locais antes de elas subirem ao repositório público.',door:null},
+ {id:'sys:memory',name:'Memória: sincronizar',cmd:'brain memory sync',desc:'Envia ao Hindsight só o que mudou. O vault continua sendo a verdade.',door:null},
+ {id:'sys:backup',name:'Backup do vault',cmd:'brain backup',desc:'Zip do vault para a pasta de backup no Drive (escopo drive.file). Retenção de 8 cópias.',door:'backup · Drive',confirm:'brain backup'},
+ {id:'sys:nightly',name:'Rotina noturna agora',cmd:'brain nightly --skip-agent',desc:'render, foco sync, memória, backup (se for o dia) e render final. Com o agente completo, use sem --skip-agent.',door:null,confirm:'brain nightly --skip-agent'},
+ {id:'sys:schedule',name:'Agendar o noturno',cmd:'brain schedule install --time 05:00',desc:'Instala a entrada no crontab. Hoje o noturno nunca rodou.',door:null,confirm:'brain schedule install --time 05:00'},
+ {id:'sys:sync',name:'Colher edições do dono',cmd:'brain sync',desc:'Só colhe o que você editou à mão (checkbox em todo.md, status: na ficha da ação, goals.md), sem redesenhar as views.',door:null},
+ {id:'sys:doctor',name:'Saúde online',cmd:'brain doctor --online',desc:'O mesmo que a aba Saúde, mais o teste do servidor de memória, se estiver ligado.',door:null},
+ {id:'sys:hook',name:'Hook pre-push: status',cmd:'brain upstream hook status',desc:'Mostra se o hook que roda a varredura antes do push está instalado.',door:null},
+ {id:'sys:memstatus',name:'Memória: status',cmd:'brain memory status',desc:'Estado dos bancos brain-mem e brain-raw e o que está pendente.',door:null},
+ {id:'sys:recall',name:'Memória: perguntar',cmd:'brain memory recall|reflect "…"',desc:'recall devolve os trechos; reflect pede uma resposta sintetizada. Confirme no arquivo do vault antes de afirmar.',door:null},
+ {id:'sys:memsetup',name:'Memória: criar bancos',cmd:'brain memory setup',desc:'Cria ou atualiza os bancos brain-mem e brain-raw no servidor.',door:null,confirm:'brain memory setup'},
+ {id:'sys:memrebuild',name:'Memória: reconstruir tudo',cmd:'brain memory rebuild',desc:'APAGA os dois bancos e reenvia tudo a partir do vault. O vault não é tocado.',door:null,confirm:'brain memory rebuild'},
+ {id:'sys:backupst',name:'Backup: ver últimos',cmd:'brain backup --status',desc:'Mostra o último backup e o total na pasta do Drive.',door:null},
+ {id:'sys:schedst',name:'Agendamento: ver',cmd:'brain schedule status',desc:'Mostra a linha do crontab, se houver.',door:null},
+ {id:'sys:unsched',name:'Agendamento: remover',cmd:'brain schedule remove',desc:'Remove a entrada do noturno do crontab.',door:null,confirm:'brain schedule remove'},
+ {id:'sys:mcp',name:'Servidor MCP (somente leitura)',cmd:'brain mcp',desc:'Expõe o cérebro por stdio para outras IAs consultarem. Nenhuma ferramenta escreve. Registre com: claude mcp add segundo-cerebro -- brain mcp',door:null,info:true}
+];
+var DOC=[
+ {id:'doc:ledger',lvl:'ok',t:'ledger: 118 eventos íntegros',d:'Todas as linhas do events.jsonl validam. Último evento hoje às 09:02.'},
+ {id:'doc:inbox',lvl:'warn',t:'inbox: 2 itens parados há 1 dia',d:'Existem arquivos em vault/RAW/inbox/ sem artefato. O /dump arquiva e extrai.',fix:{label:'processar com o agente',agent:'dump'}},
+ {id:'doc:noturno',lvl:'warn',t:'noturno: nunca rodou',d:'Sem entrada no crontab. As views só atualizam quando você roda render.',fix:{label:'agendar',sys:'sys:schedule'}},
+ {id:'doc:nodue',lvl:'warn',t:'ações sem prazo',dyn:'nodue',d:'O foco não agenda ações sem data. Dê um prazo com t (prazo) no painel 2.',fix:{label:'ir às ações',go:[2,0]}},
+ {id:'doc:src1',lvl:'ok',t:'fonte slack-dados: último pull 14/10 18:51',d:'Fonte listada em config/watch.toml. Rode /connect para puxar agora.',fix:{label:'puxar agora',agent:'connect'}},
+ {id:'doc:src2',lvl:'ok',t:'fonte gcal-14d: último pull 14/10 18:51',d:'Agenda dos próximos 14 dias, usada pelo planejador de foco.'},
+ {id:'doc:views',lvl:'ok',t:'views: último render',dyn:'views',d:'FRESH/ é 100% derivado. Pode reescrever à vontade.'},
+ {id:'doc:mem',lvl:'ok',t:'memória: Hindsight em localhost:8888',d:'0 documentos do vault ainda não enviados.'},
+ {id:'doc:fw',lvl:'ok',t:'framework: em dia com o upstream',d:'Sem rede nesta checagem. Use Atualizar framework para buscar.'}
+];
+var CMDS=[
+ ['Nova ação','brain action open "…" --by owner',{p:2,t:0,k:'n'}],
+ ['Fechar ação','brain action close A-#### --how "…"',{p:2,t:0,k:'c'}],
+ ['Editar ação','brain action update A-#### …',{p:2,t:0,k:'e'}],
+ ['Descartar ação','brain action drop A-#### --reason "…"',{p:2,t:0,k:'D'}],
+ ['Reabrir ação','brain action reopen A-#### --reason "…"',{p:2,t:0,k:'o'}],
+ ['O que me devem','brain action list --list waiting',{p:2,t:1}],
+ ['Ver ficha da ação','brain action show A-####',{p:2,t:0}],
+ ['Árvore do plano','brain plan show',{p:3,t:0}],
+ ['Marcar entregável','brain plan deliverable P#.n --status …',{p:3,t:0,k:' '}],
+ ['Declarar progresso','brain progress G1 45',{p:3,t:0,k:'P'}],
+ ['Mudança estrutural (gate)','brain plan log --diff … --approval "ok"',{p:3,t:0,k:'E'}],
+ ['Exportar para colega','brain share project P1',{p:3,t:0,k:'S'}],
+ ['Propostas pendentes','brain proposal list',{p:4,t:0}],
+ ['Aceitar proposta','brain proposal accept R-#### --quote "…"',{p:4,t:0,k:'a'}],
+ ['Rejeitar proposta','brain proposal reject R-#### --quote "…"',{p:4,t:0,k:'r'}],
+ ['Rascunhar mensagem','brain outbox draft --to … --text "…"',{p:4,t:1,k:'n'}],
+ ['Aprovar mensagem','brain outbox approve M-#### --quote "enviar N"',{p:4,t:1,k:'A'}],
+ ['Enviar mensagem aprovada','agente → Slack MCP → brain outbox sent',{p:4,t:1,k:'S'}],
+ ['Planejar foco','brain focus plan --days 5',{p:4,t:2,k:'p'}],
+ ['Aprovar plano de foco','brain focus approve F-#### --quote "ok"',{p:4,t:2,k:'A'}],
+ ['Aplicar foco na agenda','brain focus apply F-#### --mode ics|google',{p:4,t:2,k:'a'}],
+ ['Pedir publicação','brain publish request … --to slack:#canal',{p:4,t:3,k:'n'}],
+ ['Nova decisão','brain decision add "…" --decided-by …',{p:5,t:0,k:'n'}],
+ ['Registrar entrega','brain delivery "…" --ref …',{p:5,t:1,k:'n'}],
+ ['Nova pessoa','brain person add "…" --id …',{p:5,t:2,k:'n'}],
+ ['Quem é "…"?','brain person resolve "…"',{p:5,t:2}],
+ ['Saúde da instância','brain doctor --online',{p:1,t:1}],
+ ['Validar ledger','brain validate',{p:1,t:2,i:1,k:'enter'}],
+ ['Regenerar views','brain render',{run:'render'}],
+ ['Abrir painel HTML','brain render --open',{run:'open'}],
+ ['Backup do vault','brain backup',{p:1,t:2,i:5,k:'enter'}],
+ ['Atualizar framework','brain update --check',{p:1,t:2,i:2,k:'enter'}],
+ ['Varredura upstream','brain upstream scan',{p:1,t:2,i:3,k:'enter'}],
+ ['Memória: sincronizar','brain memory sync',{p:1,t:2,i:4,k:'enter'}],
+ ['Memória: perguntar','brain memory recall "…"',{p:1,t:2,i:4}],
+ ['Processar a inbox','agente: /dump',{run:'dump'}],
+ ['Brief do dia','agente: /brief',{run:'brief'}],
+ ['Buscar no ledger','brain search "…"',{run:'search'}]
+];
+
+/* ---------------- estado ---------------- */
+var S={p:2,tab:{1:0,2:0,3:0,4:0,5:0},sel:{},collapsed:{},showAll:false,win:{},filter:'',modal:null,zoom:false,clock:[9,14],rendered:false,inbox:2,nextA:30,nextE:3,nextD:7,nextM:4,nextS:2,nextF:5,log:[
+ {t:'09:02',k:'cmd',x:'$ brain doctor --online'},{t:'09:02',k:'warn',x:'⚠ 3 avisos · ledger íntegro'},{t:'09:03',k:'cmd',x:'$ brain render'},{t:'09:03',k:'ok',x:'✓ 18 views em 0,4s'}]};
+var PANELS={1:{n:'Status',tabs:['Resumo','Saúde','Sistema']},2:{n:'Ações',tabs:['mine','waiting','watching']},3:{n:'Plano',tabs:['Árvore']},4:{n:'Aprovar',tabs:['Propostas','Outbox','Foco','Publicar']},5:{n:'Registro',tabs:['Decisões','Entregas','Pessoas','Artefatos']}};
+var term=$('#term'),scr=$('#scr'),bar=$('#bar'),mo=$('#mo');
+
+function L(k,x){S.clock[1]++;if(S.clock[1]>=60){S.clock[1]=0;S.clock[0]++}S.log.push({t:pad(S.clock[0])+':'+pad(S.clock[1]),k:k,x:x});if(S.log.length>60)S.log.shift()}
+function renderLine(){L('dim','↻ brain render · 18 views, painel atualizado');S.rendered=true}
+function run(cmd,ok,mut,noR){L('cmd','$ '+cmd);if(mut)mut();L('ok',ok);if(!noR)renderLine();draw()}
+var isOpen=function(a){return a.status!=='fechada'&&a.status!=='descartada'};
+var getA=function(id){return A.filter(function(a){return a.id===id})[0]};
+var who=function(id){return (PEOPLE[id]||{name:id}).name};
+var first=function(id){return who(id).split(' ')[0]};
+
+/* ---------------- cálculo (o CLI faria isto) ---------------- */
+function prog(ds){var d=ds.filter(function(x){return x.st!=='cancelado'});var t=d.reduce(function(s,x){return s+x.w},0),f=d.filter(function(x){return x.st==='feito'}).reduce(function(s,x){return s+x.w},0);return {pct:t?Math.round(100*f/t):0,f:f,t:t}}
+function gDel(g){return [].concat.apply([],g.projects.map(function(p){return p.deliv}))}
+function late(ds){return ds.filter(function(d){return d.st!=='feito'&&d.st!=='cancelado'&&daysTo(d.due)<0})}
+var barTxt=function(p,w){w=w||12;var n=Math.round(p*w/100);return '█'.repeat(n)+'░'.repeat(w-n)};
+function counts(){
+  var mine=A.filter(function(a){return a.list==='mine'&&isOpen(a)});
+  return {mine:mine.length,over:mine.filter(function(a){return a.due&&daysTo(a.due)<0}).length,d7:mine.filter(function(a){return a.due&&daysTo(a.due)>=0&&daysTo(a.due)<=7}).length,nodue:mine.filter(function(a){return !a.due}).length,
+    wait:A.filter(function(a){return a.list==='waiting'&&isOpen(a)}).length,prop:R.filter(function(r){return r.st==='pendente'}).length,draft:M.filter(function(m){return m.st==='rascunho'}).length,
+    appr:M.filter(function(m){return m.st==='aprovada'}).length,wins:DEL.length,waitOver:A.filter(function(a){return a.list==='waiting'&&isOpen(a)&&a.due&&daysTo(a.due)<0}).length}}
+function blockedBy(a){var b=a.blocked&&getA(a.blocked);return b&&isOpen(b)?b:null}
+function dueTag(a){if(!a.due)return '<span class="faint">sem prazo</span>';var n=daysTo(a.due);if(!isOpen(a))return '<span class="faint">'+dm(a.due)+'</span>';
+  if(n<0)return '<span class="red">'+(-n)+'d atraso</span>';if(n===0)return '<span class="amb">hoje</span>';if(n===1)return '<span class="amb">amanhã</span>';return '<span class="dim">'+short(a.due)+'</span>'}
+var GL={aberta:'○',fazendo:'◐',aguardando:'◔',fechada:'✓',descartada:'✗'};
+var provT=function(p){return '<span class="pv pv-'+p+'">['+p+']</span>'};
+var effortMin=function(e){if(!e)return 0;var m=0,x;if((x=e.match(/(\d+)h/)))m+=60*x[1];if((x=e.match(/h(\d+)$/)))m+=+x[1];if((x=e.match(/^(\d+)m$/)))m+=+x[1];return m};
+
+/* ---------------- itens por painel/aba ---------------- */
+var cur=function(){return items(S.p,S.tab[S.p])[selOf(S.p)]};
+function selOf(p){var k=p+'.'+S.tab[p],n=items(p,S.tab[p]).length;return clamp(S.sel[k]||0,0,Math.max(0,n-1))}
+function setSel(p,i){S.sel[p+'.'+S.tab[p]]=i}
+function items(p,t){
+  var out=[];
+  if(p===1){
+    if(t===0)out=[{id:'resumo',kind:'resumo',q:'resumo hoje'}];
+    if(t===1)out=DOC.map(function(d){return {id:d.id,kind:'doc',d:d,q:d.t}});
+    if(t===2)out=SYS.map(function(s){return {id:s.id,kind:'sys',s:s,q:s.name+' '+s.cmd}});
+  }
+  if(p===2){var l=['mine','waiting','watching'][t];
+    out=A.filter(function(a){return a.list===l&&(S.showAll||isOpen(a))}).sort(function(a,b){var oa=isOpen(a)?0:1,ob=isOpen(b)?0:1;if(oa!==ob)return oa-ob;if(!a.due&&!b.due)return a.id<b.id?-1:1;if(!a.due)return 1;if(!b.due)return -1;return a.due<b.due?-1:a.due>b.due?1:0})
+      .map(function(a){return {id:a.id,kind:'action',a:a,q:a.id+' '+a.title+' '+(a.project||'')}});}
+  if(p===3){PL.forEach(function(g){out.push({id:g.id,kind:'g',g:g,lvl:0,q:g.id+' '+g.title});if(S.collapsed[g.id])return;
+    g.projects.forEach(function(pr){out.push({id:pr.id,kind:'p',p:pr,g:g,lvl:1,q:pr.id+' '+pr.title});if(S.collapsed[pr.id])return;
+      pr.deliv.forEach(function(d){out.push({id:d.id,kind:'d',d:d,p:pr,g:g,lvl:2,q:d.id+' '+d.title})})})})}
+  if(p===4){
+    if(t===0)out=R.filter(function(r){return S.showAll||r.st==='pendente'}).map(function(r){return {id:r.id,kind:'prop',r:r,q:r.id+' '+r.kind+' '+r.summary}});
+    if(t===1)out=M.map(function(m){return {id:m.id,kind:'msg',m:m,q:m.id+' '+m.to+' '+m.text}});
+    if(t===2){out=F.days.map(function(d){return {id:'d:'+d.d,kind:'fday',day:d,q:d.d}});out.push({id:'f:warn',kind:'fwarn',q:'não cabe sem prazo'})}
+    if(t===3)out=PUB.map(function(s){return {id:s.id,kind:'pub',s:s,q:s.id+' '+s.report+' '+s.to}});
+  }
+  if(p===5){
+    if(t===0)out=DEC.map(function(d){return {id:d.id,kind:'dec',d:d,q:d.id+' '+d.title}});
+    if(t===1)out=DEL.map(function(d){return {id:d.id,kind:'del',d:d,q:d.id+' '+d.title}});
+    if(t===2)out=Object.keys(PEOPLE).map(function(k){return {id:k,kind:'per',k:k,q:k+' '+PEOPLE[k].name}});
+    if(t===3)out=ART.map(function(a){return {id:a.id,kind:'art',a:a,q:a.title+' '+a.kind}});
+  }
+  if(S.filter)out=out.filter(function(i){return i.q.toLowerCase().indexOf(S.filter.toLowerCase())>=0});
+  return out;
+}
+
+/* ---------------- linhas das listas ---------------- */
+function row(it){
+  switch(it.kind){
+    case 'action':var a=it.a,bl=blockedBy(a);return '<span class="'+(a.status==='fazendo'?'cyn':a.status==='aguardando'?'amb':a.status==='fechada'?'grn':'dim')+'">'+GL[a.status]+'</span><span class="id">'+a.id+'</span><span class="tx">'+(a.prio==='alta'?'<span class="red">!</span> ':'')+esc(a.title)+'</span>'+(bl?'<span class="amb" title="bloqueada">⊘</span>':'')+'<span class="rt">'+dueTag(a)+'</span>';
+    case 'g':var gp=prog(gDel(it.g));return '<span class="dim">'+(S.collapsed[it.id]?'▸':'▾')+'</span><span class="id">'+it.id+'</span><span class="tx b">'+esc(it.g.title)+'</span><span class="rt">'+gp.pct+'%'+(it.g.declared?' <span class="faint">·'+it.g.declared.pct+'</span>':'')+'</span>';
+    case 'p':var pp=prog(it.p.deliv),lt=late(it.p.deliv).length;return '<span style="width:1.5ch"></span><span class="dim">'+(S.collapsed[it.id]?'▸':'▾')+'</span><span class="id">'+it.id+'</span><span class="tx">'+esc(it.p.title)+'</span><span class="rt">'+(lt?'<span class="red">⚠'+lt+'</span> ':'')+'<span class="'+(pp.pct===100?'grn':'dim')+'">'+barTxt(pp.pct,6)+' '+pp.pct+'%</span></span>';
+    case 'd':var d=it.d,g={feito:'[x]','em-andamento':'[~]','nao-iniciado':'[ ]',cancelado:'[-]'}[d.st],cl={feito:'grn','em-andamento':'cyn','nao-iniciado':'dim',cancelado:'faint'}[d.st];var ov=d.st!=='feito'&&d.st!=='cancelado'&&daysTo(d.due)<0;
+      return '<span style="width:4.5ch"></span><span class="'+cl+'">'+g+'</span><span class="id">'+d.id+'</span><span class="tx">'+esc(d.title)+'</span><span class="rt '+(ov?'red':'')+'">'+(d.st==='feito'?dm(d.done):dm(d.due))+'</span>';
+    case 'prop':return '<span class="'+(it.r.st==='pendente'?'amb':'faint')+'">◆</span><span class="id">'+it.r.id+'</span><span class="tx">'+esc(it.r.summary)+'</span><span class="rt">'+(it.r.st==='pendente'?esc(it.r.kind):'<span class="faint">'+it.r.st+'</span>')+'</span>';
+    case 'msg':var mc={rascunho:'amb',aprovada:'cyn',enviada:'grn',cancelada:'faint'}[it.m.st];return '<span class="'+mc+'">●</span><span class="id">'+it.m.id+'</span><span class="tx">→ '+esc(first(it.m.to))+' · '+esc(it.m.text)+'</span><span class="rt '+mc+'">'+it.m.st+'</span>';
+    case 'fday':var h=it.day.b.reduce(function(s,b){return s+hm(b[1])-hm(b[0])},0);return '<span class="id">'+short(it.day.d)+'</span><span class="tx">'+(it.day.b.length?it.day.b.length+' bloco'+(it.day.b.length>1?'s':''):'<span class="faint">livre</span>')+'</span><span class="rt cyn">'+barTxt(Math.min(100,h/240*100),8)+' '+(h/60).toFixed(1).replace('.',',')+'h</span>';
+    case 'fwarn':return '<span class="amb">⚠</span><span class="tx">não cabe: '+F.nofit.length+' · sem prazo: '+A.filter(function(a){return a.list==='mine'&&isOpen(a)&&!a.due}).length+'</span>';
+    case 'pub':return '<span class="amb">●</span><span class="id">'+it.s.id+'</span><span class="tx">'+esc(it.s.to)+' · '+esc(it.s.report.split('/').pop())+'</span><span class="rt amb">'+it.s.st+'</span>';
+    case 'dec':return '<span class="id">'+it.d.id+'</span><span class="rt dim" style="order:3">'+dm(it.d.date)+'</span><span class="tx">'+esc(it.d.title)+'</span>';
+    case 'del':return '<span class="id">'+it.d.id+'</span><span class="tx">'+esc(it.d.title)+'</span><span class="rt">'+dm(it.d.date)+'</span>';
+    case 'per':var pe=PEOPLE[it.k];return '<span class="id">'+it.k+'</span><span class="tx">'+esc(pe.name)+'</span><span class="rt">'+esc(pe.rel)+'</span>';
+    case 'art':return '<span class="dim">'+({reuniao:'reun',documento:'doc ',nota:'nota',conector:'conn'}[it.a.kind])+'</span><span class="tx">'+esc(it.a.title)+'</span><span class="rt">'+dm(it.a.date)+'</span>';
+    case 'doc':var dd=it.d,txt=dd.t+(dd.dyn==='nodue'?'':'');if(dd.dyn==='nodue')txt=counts().nodue+' ações sem prazo (suas)';if(dd.dyn==='views')txt='views: último render '+(S.rendered?'agora':'há 21h');
+      return '<span class="'+(dd.lvl==='ok'?'grn':'amb')+'">'+(dd.lvl==='ok'?'✓':'⚠')+'</span><span class="tx">'+esc(txt)+'</span>'+(dd.fix&&dd.fix.agent?'<span class="vio">⚡</span>':'');
+    case 'sys':return '<span class="dim">▸</span><span class="tx">'+esc(it.s.name)+'</span>'+(it.s.door?'<span class="tag amb">porta</span>':'')+'<span class="rt">'+(it.s.info?'info':'⏎')+'</span>';
+  }
+  return '';
+}
+var hm=function(s){var a=s.split(':');return +a[0]*60+ +a[1]};
+
+/* ---------------- detalhe (painel principal) ---------------- */
+var kv=function(r){return '<div class="kv">'+r.filter(Boolean).map(function(x){return '<span class="k">'+x[0]+'</span><span>'+x[1]+'</span>'}).join('')+'</div>'};
+var sec=function(t){return '<div class="sec"><span>'+t+'</span></div>'};
+var goA=function(id,txt){return '<span class="go" data-go="'+id+'">'+txt+'</span>'};
+function projLabel(id){if(!id)return '<span class="faint">—</span>';for(var i=0;i<PL.length;i++)for(var j=0;j<PL[i].projects.length;j++)if(PL[i].projects[j].id===id)return goA(id,id)+' '+esc(PL[i].projects[j].title);return id}
+
+function detail(it){
+  if(!it)return '<div class="dim">Nada aqui'+(S.filter?' para o filtro "'+esc(S.filter)+'"':'')+'.</div>';
+  switch(it.kind){
+    case 'resumo':return dResumo();
+    case 'action':return dAction(it.a);
+    case 'g':case 'p':case 'd':return dPlan(it);
+    case 'prop':return dProp(it.r);
+    case 'msg':return dMsg(it.m);
+    case 'fday':case 'fwarn':return dFocus(it);
+    case 'pub':return dPub(it.s);
+    case 'dec':return dDec(it.d);
+    case 'del':return dDel(it.d);
+    case 'per':return dPer(it.k);
+    case 'art':return dArt(it.a);
+    case 'doc':return '<div class="h">'+(it.d.lvl==='ok'?'<span class="grn">✓</span> ':'<span class="amb">⚠</span> ')+'Saúde</div><p>'+esc(it.d.d)+'</p>'+(it.d.fix?sec('Como resolver')+'<div class="ln"><span class="'+(it.d.fix.agent?'vio':'cyn')+'">'+(it.d.fix.agent?'⚡':'▸')+'</span><span>'+esc(it.d.fix.label)+' · tecla <b>f</b></span></div>':'')+sec('Equivalente na CLI')+'<div class="quote cyn">$ brain doctor --online</div>';
+    case 'sys':return '<div class="h">'+esc(it.s.name)+'</div><p>'+esc(it.s.desc)+'</p>'+(it.s.door?'<p><span class="tag amb">porta · '+it.s.door+'</span> <span class="dim">pede confirmação antes de rodar</span></p>':'')+sec('Equivalente na CLI')+'<div class="quote cyn">$ '+esc(it.s.cmd)+'</div>'+(it.s.info?'':'<div class="dim">⏎ executa e mostra a saída no log</div>');
+  }
+}
+function dResumo(){
+  var c=counts(),ov=A.filter(function(a){return a.list==='mine'&&isOpen(a)&&a.due&&daysTo(a.due)<0}),wo=A.filter(function(a){return a.list==='waiting'&&isOpen(a)&&a.due&&daysTo(a.due)<0});
+  var h='<div class="h">Hoje · qui 15 out 2026</div><div class="dim">views geradas '+(S.rendered?'agora':'há 21h')+' · fontes: PLANNING + ledger</div>';
+  h+=sec('Precisa de você');
+  var n=0;
+  ov.forEach(function(a){n++;h+='<div class="ln go" data-go="'+a.id+'"><span class="red">⚠</span><span class="grow"><b>'+a.id+'</b> '+esc(a.title)+' <span class="red">'+(-daysTo(a.due))+'d de atraso</span></span></div>'});
+  wo.forEach(function(a){n++;h+='<div class="ln go" data-go="'+a.id+'"><span class="amb">⚠</span><span class="grow">cobrar <b>'+first(a.owner)+'</b>: '+a.id+' '+esc(a.title)+' <span class="amb">'+(-daysTo(a.due))+'d</span></span></div>'});
+  if(c.prop){n++;h+='<div class="ln go" data-go="R-0005"><span class="amb">◆</span><span class="grow"><b>'+c.prop+'</b> proposta'+(c.prop>1?'s':'')+' aguardando resposta</span></div>'}
+  if(c.draft){n++;h+='<div class="ln go" data-go="M-0002"><span class="amb">●</span><span class="grow"><b>'+c.draft+'</b> rascunho para aprovar</span></div>'}
+  if(c.appr){n++;h+='<div class="ln go" data-go="M-0003"><span class="cyn">●</span><span class="grow"><b>'+c.appr+'</b> mensagem aprovada aguardando envio <span class="vio">⚡ S</span></span></div>'}
+  if(F.st==='proposto'){n++;h+='<div class="ln go" data-go="d:2026-10-15"><span class="amb">◆</span><span class="grow">plano de foco <b>'+F.id+'</b> aguardando seu ok</span></div>'}
+  if(S.inbox){n++;h+='<div class="ln"><span class="vio">⚡</span><span class="grow"><b>'+S.inbox+'</b> itens na inbox · tecla <b class="vio">d</b> para processar</span></div>'}
+  if(!n)h+='<div class="dim">Nada aguardando você.</div>';
+  h+=sec('Foco de hoje');
+  var td=F.days[0].b;if(!td.length)h+='<div class="dim">Sem blocos.</div>';
+  td.forEach(function(b){var a=getA(b[2]);h+='<div class="bk"><span class="tm">'+b[0]+'–'+b[1]+'</span> <b>'+b[2]+'</b> '+esc(a?a.title:'')+' <span class="dim">'+b[3]+'</span></div>'});
+  h+=sec('Próximos 3 dias');
+  A.filter(function(a){return isOpen(a)&&a.due&&daysTo(a.due)>=1&&daysTo(a.due)<=3}).sort(function(a,b){return a.due<b.due?-1:1}).forEach(function(a){h+='<div class="ln go" data-go="'+a.id+'"><span class="dim">'+short(a.due)+'</span><span class="grow">'+a.id+' '+esc(a.title)+(a.list==='waiting'?' <span class="dim">('+first(a.owner)+')</span>':'')+'</span></div>'});
+  var g=PL[0],gp=prog(gDel(g));
+  h+=sec('Goal em foco');
+  h+='<div class="ln go" data-go="G1"><span class="b">G1</span><span class="grow">'+esc(g.title)+'<br><span class="cyn">'+barTxt(gp.pct,20)+'</span> '+gp.pct+'% calculado · <span class="dim">'+g.declared.pct+'% declarado</span></span></div>';
+  return h;
+}
+function dAction(a){
+  var bl=blockedBy(a),un=a.unblocks&&getA(a.unblocks);
+  var h='<div class="h">'+a.id+' · '+esc(a.title)+'</div>';
+  h+=kv([['lista',a.list+(a.owner?' · dono '+esc(who(a.owner)):'')],['status','<span class="'+(a.status==='fazendo'?'cyn':a.status==='fechada'?'grn':'')+'">'+GL[a.status]+' '+a.status+'</span>'+(a.prio==='alta'?' <span class="tag red">alta</span>':'')],
+    ['prazo',a.due?a.due+' · '+short(a.due)+' · '+dueTag(a):'<span class="amb">sem prazo · o foco ignora esta ação</span>'],['esforço',a.effort||'<span class="faint">—</span>'],
+    ['projeto',projLabel(a.project)+(a.deliv?' · '+goA(a.deliv,a.deliv):'')],
+    ['pessoas',a.people.length?a.people.map(function(p){return esc(first(p))}).join(', '):'<span class="faint">—</span>'],
+    bl?['bloqueada por',goA(bl.id,'<span class="amb">⊘ '+bl.id+'</span>')+' '+esc(bl.title)]:null,
+    un?['destrava',goA(un.id,un.id)+' '+esc(un.title)]:null,
+    ['origem',esc(a.origin)+' '+provT(a.prov)],['fonte','<span class="dim">'+esc(a.source)+'</span>']]);
+  h+=sec('Histórico');
+  a.hist.slice().reverse().forEach(function(x){h+='<div class="ln"><span class="dim">'+dm(x[0])+'</span><span class="grow">'+esc(x[1])+' '+provT(x[2])+'</span></div>'});
+  if(a.closedHow)h=h.replace('<div class="h">','<div class="h"><span class="grn">✓</span> ')+'<div class="ln"><span class="dim">'+dm(fmt(T0))+'</span><span class="grow">fechada: '+esc(a.closedHow)+' '+provT('declarado')+'</span></div>';
+  h+=sec('Equivalente na CLI')+'<div class="quote cyn">$ brain action show '+a.id+'</div>';
+  return h;
+}
+function dPlan(it){
+  var h='';
+  if(it.kind==='g'){var g=it.g,gp=prog(gDel(g));
+    h+='<div class="h">'+g.id+' · '+esc(g.title)+'</div>'+kv([['status',g.status],['horizonte',g.horizon+' · '+Math.round(daysTo(g.horizon)/7)+' semanas'],['por quê',esc(g.why)],
+      ['progresso','<span class="cyn">'+barTxt(gp.pct,20)+'</span> '+gp.pct+'% <span class="dim">('+gp.f+' de '+gp.t+' pesos feitos)</span>'],
+      g.declared?['declarado','<span class="grn">'+g.declared.pct+'%</span> em '+dm(g.declared.date)+' <span class="dim">"'+esc(g.declared.note)+'"</span>']:null]);
+    h+=sec('Projetos');g.projects.forEach(function(p){var pp=prog(p.deliv),lt=late(p.deliv).length;h+='<div class="ln go" data-go="'+p.id+'"><span class="b">'+p.id+'</span><span class="grow">'+esc(p.title)+' <span class="cyn">'+barTxt(pp.pct,10)+'</span> '+pp.pct+'%'+(lt?' <span class="red">⚠ '+lt+' atrasado</span>':' <span class="grn">no prazo</span>')+'</span></div>'});
+  }
+  if(it.kind==='p'){var p=it.p,pp=prog(p.deliv),lt=late(p.deliv);
+    h+='<div class="h">'+p.id+' · '+esc(p.title)+'</div>'+kv([['goal',goA(it.g.id,it.g.id)+' '+esc(it.g.title)],['dono',esc(who(p.owner))],['progresso','<span class="cyn">'+barTxt(pp.pct,20)+'</span> '+pp.pct+'%'],
+      ['saúde',lt.length?'<span class="red">⚠ atrasado: '+lt.map(function(d){return d.id+' ('+(-daysTo(d.due))+'d)'}).join(', ')+'</span>':'<span class="grn">no prazo</span>']]);
+    h+=sec('Entregáveis');p.deliv.forEach(function(d){var g={feito:'[x]','em-andamento':'[~]','nao-iniciado':'[ ]',cancelado:'[-]'}[d.st];h+='<div class="ln go" data-go="'+d.id+'"><span class="'+(d.st==='feito'?'grn':'dim')+'">'+g+'</span><span class="grow"><b>'+d.id+'</b> '+esc(d.title)+' <span class="dim">· prazo '+dm(d.due)+' · peso '+d.w+'</span></span></div>'});
+    h+=sec('Ações abertas ligadas');var ac=A.filter(function(a){return a.project===p.id&&isOpen(a)});if(!ac.length)h+='<div class="dim">Nenhuma.</div>';ac.forEach(function(a){h+='<div class="ln go" data-go="'+a.id+'"><span class="dim">'+GL[a.status]+'</span><span class="grow">'+a.id+' '+esc(a.title)+' '+dueTag(a)+'</span></div>'});
+  }
+  if(it.kind==='d'){var d=it.d;
+    h+='<div class="h">'+d.id+' · '+esc(d.title)+'</div>'+kv([['projeto',goA(it.p.id,it.p.id)+' '+esc(it.p.title)],['estado',d.st],['prazo',d.due+' · '+short(d.due)+(d.st!=='feito'&&daysTo(d.due)<0?' <span class="red">'+(-daysTo(d.due))+'d de atraso</span>':'')],['peso',d.w],d.done?['feito em',d.done]:null]);
+    h+=sec('Ações ligadas');var ac2=A.filter(function(a){return a.deliv===d.id});if(!ac2.length)h+='<div class="amb">Nenhuma ação aponta para este entregável.</div>';ac2.forEach(function(a){h+='<div class="ln go" data-go="'+a.id+'"><span class="dim">'+GL[a.status]+'</span><span class="grow">'+a.id+' '+esc(a.title)+' '+dueTag(a)+'</span></div>'});
+    h+='<p class="dim">Marcar estado é um fato, não um gate: <b>space</b> ou <b>s</b>. Criar, renomear ou fechar goal e projeto é gate: <b>E</b>.</p>';
+  }
+  return h;
+}
+function dProp(r){
+  var eff={ 'fechar-acao':'brain action close '+r.target+' --how "'+r.summary+'" --by owner','reestimar':'brain action update '+r.target+' --effort '+(r.newEffort||'?')+' --by owner','mudar-plano':'abre o gate: brain plan log --diff … --approval "…"'}[r.kind]||'';
+  var h='<div class="h">'+r.id+' · '+esc(r.kind)+(r.st!=='pendente'?' · <span class="faint">'+r.st+'</span>':'')+'</div><p>'+esc(r.summary)+'</p>';
+  h+=kv([['alvo',goA(r.target,r.target)],['evidência',esc(r.evidence)+' '+provT(r.prov)],['fonte','<span class="dim">'+esc(r.source)+'</span>']]);
+  h+=sec('Se você aceitar')+'<div class="quote cyn">$ '+esc(eff)+'</div>';
+  h+=r.kind==='mudar-plano'?'<p class="amb">Mudança de árvore é o único gate estrutural. Você vai ver o diff e digitar a aprovação.</p>':'<p class="dim">O cérebro não fecha nem altera sozinho. Rejeitada, a proposta só volta com evidência nova.</p>';
+  return h;
+}
+function dMsg(m){
+  var steps=['rascunho','aprovada','enviada'],ix=steps.indexOf(m.st),allow=['ana','carla','bruno','#time-dados'];
+  var h='<div class="h">'+m.id+' → '+esc(who(m.to))+' <span class="dim">· '+m.chan+'</span></div>';
+  h+='<div class="steps">'+steps.map(function(s,i){return '<span class="st '+(i<ix||m.st==='enviada'?'d':i===ix?'c':'')+'">'+s+'</span>'}).join('<span class="dim">→</span>')+'</div>';
+  h+='<div class="dim">Texto exato que será enviado:</div><div class="quote">'+esc(m.text)+'</div>';
+  h+=kv([['ref',goA(m.ref,m.ref)+' <span class="dim">· '+esc(m.why)+'</span>'],['destinatário',allow.indexOf(m.to)>=0?'<span class="grn">✓</span> em [outbound].allow':'<span class="red">✗ fora da allowlist</span>'],['teto diário','<span class="dim">1 de 5 hoje</span>'],
+    ['trava','<span class="dim">sha256:'+m.hash+'…</span> '+(m.st==='rascunho'?'<span class="faint">(travada na aprovação)</span>':'<span class="grn">travada</span>')],
+    m.quote?['aprovação','<span class="grn">"'+esc(m.quote)+'"</span>']:null,m.link?['permalink','<span class="dim">'+esc(m.link)+'</span>']:null]);
+  h+=m.st==='rascunho'?'<p class="dim">Mudou uma vírgula? Cancele e rascunhe de novo: a aprovação não é herdada.</p>':m.st==='aprovada'?'<p class="vio">⚡ O agente envia pelo Slack MCP como você e registra o permalink com <b>S</b>. O TUI não envia sozinho.</p>':'';
+  return h;
+}
+function dFocus(it){
+  var h='<div class="h">'+F.id+' · plano de foco · '+F.st+'</div><div class="dim">EDF nas suas ações mine com prazo · expediente 09:00–18:00 · almoço 12:00–13:00 · teto 4h/dia</div>';
+  var sel=it.kind==='fday'?it.day.d:null;
+  h+='<div class="wk">'+F.days.map(function(d){var t=d.b.reduce(function(s,b){return s+hm(b[1])-hm(b[0])},0);return '<div class="dy '+(d.d===sel?'s':'')+'"><div class="dn">'+short(d.d)+' · '+(t/60).toFixed(1).replace('.',',')+'h</div>'+(d.b.length?d.b.map(function(b){return '<div class="bk"><span class="tm">'+b[0]+'–'+b[1]+'</span><br><b>'+b[2]+'</b>'+(b[3]?' <span class="dim">'+b[3]+'</span>':'')+'</div>'}).join(''):'<div class="faint">livre</div>')+'</div>'}).join('')+'</div>';
+  h+=sec('Não cabe');F.nofit.forEach(function(n){h+='<div class="ln go" data-go="'+n[0]+'"><span class="amb">⚠</span><span class="grow"><b>'+n[0]+'</b> faltam '+n[1]+' · '+esc(n[2])+'</span></div>'});if(!F.nofit.length)h+='<div class="dim">Tudo coube.</div>';
+  var nd=A.filter(function(a){return a.list==='mine'&&isOpen(a)&&!a.due});
+  h+=sec('Sem prazo, ignoradas pelo foco');nd.forEach(function(a){h+='<div class="ln go" data-go="'+a.id+'"><span class="faint">○</span><span class="grow">'+a.id+' '+esc(a.title)+'</span></div>'});
+  h+='<p class="dim">Para mudar um horário, altere o prazo ou o esforço da ação e planeje de novo.</p>';
+  return h;
+}
+function dPub(s){
+  var h='<div class="h">'+s.id+' · publicação</div>'+kv([['report',esc(s.report)],['destino',esc(s.to)+' <span class="grn">✓ em [publish].destinations</span>'],['estado','<span class="amb">'+s.st+'</span>'],['trava','<span class="dim">sha256:'+s.hash+'…</span> conteúdo travado na aprovação']]);
+  h+=sec('Fluxo')+'<div class="steps"><span class="st d">report</span><span class="dim">→</span><span class="st '+(s.st==='pedido'?'c':'d')+'">pedido</span><span class="dim">→</span><span class="st '+(s.st==='aprovado'?'c':'')+'">aprovado</span><span class="dim">→</span><span class="st '+(s.st==='publicado'?'d':'')+'">publicado</span></div>';
+  h+='<p class="dim">Se o arquivo mudar depois da aprovação, o pedido precisa ser refeito.</p>'+(s.st==='aprovado'?'<p class="vio">⚡ O agente posta no destino e registra o link com P.</p>':'');
+  return h;
+}
+function dDec(d){return '<div class="h">'+d.id+' · '+esc(d.title)+'</div>'+kv([['data',d.date+' · '+short(d.date)],['quem decidiu',d.by.map(function(x){return esc(who(x))}).join(', ')],['projeto',projLabel(d.project)],['contexto',esc(d.ctx)],['porquê',esc(d.why)],['fonte','<span class="dim">'+esc(d.source)+'</span> '+provT(d.prov)]])+sec('Equivalente na CLI')+'<div class="quote cyn">$ brain decision list --project '+d.project+'</div>'}
+function dDel(d){return '<div class="h">'+d.id+' · '+esc(d.title)+'</div>'+kv([['data',d.date],['ligada a',projLabel(d.ref)],['resultado',esc(d.result)],['impacto',esc(d.impact)],['evidência','<span class="dim">'+esc(d.evidence)+'</span>']])+'<p class="dim">Entregas alimentam o /recap e o /week. Fechar uma ação com --outcome cria uma automaticamente.</p>'}
+function dPer(k){
+  var p=PEOPLE[k],mine=A.filter(function(a){return isOpen(a)&&a.list==='mine'&&a.people.indexOf(k)>=0}),ow=A.filter(function(a){return isOpen(a)&&a.owner===k});
+  var h='<div class="h">'+esc(p.name)+' <span class="dim">· '+k+'</span></div>'+kv([['papel',esc(p.role)],['relação',esc(p.rel)],['e-mail',esc(p.email)],['aliases',p.al.map(esc).join(', ')]]);
+  h+=sec('Ela te deve / ele te deve');if(!ow.length)h+='<div class="dim">Nada em aberto.</div>';ow.forEach(function(a){h+='<div class="ln go" data-go="'+a.id+'"><span class="grow">'+a.id+' '+esc(a.title)+' '+dueTag(a)+'</span></div>'});
+  h+=sec('Você tem com '+esc(first(k)));if(!mine.length)h+='<div class="dim">Nada em aberto.</div>';mine.forEach(function(a){h+='<div class="ln go" data-go="'+a.id+'"><span class="grow">'+a.id+' '+esc(a.title)+' '+dueTag(a)+'</span></div>'});
+  h+=sec('Últimas interações');ART.filter(function(a){return a.people.indexOf(k)>=0}).slice(0,3).forEach(function(a){h+='<div class="ln"><span class="dim">'+dm(a.date)+'</span><span class="grow">'+esc(a.title)+'</span></div>'});
+  return h;
+}
+function dArt(a){return '<div class="h">'+esc(a.title)+'</div>'+kv([['tipo',a.kind],['data',a.date],['pessoas',a.people.map(function(x){return esc(first(x))}).join(', ')],['projetos',a.proj.join(', ')],['resumo',esc(a.sum)],['fonte RAW','<span class="dim">'+esc(a.raw)+'</span> · imutável']])+'<p class="dim">Artefatos são append-only. Para a letra exata, abra o RAW com <b>o</b> no seu editor.</p>'}
+
+/* ---------------- teclas por contexto ---------------- */
+function keys(all){
+  var p=S.p,t=S.tab[p],it=all?null:cur(),K=[];
+  var add=function(k,l,fn,o){K.push(Object.assign({k:k,l:l,fn:fn},o||{}))};
+  var w=function(c){return all||c};
+  if(p===1){
+    if(t===0){if(w(false))add('i','primeira entrevista',function(){agent('init')},{ag:1});add('d','processar inbox',function(){agent('dump')},{ag:1});add('b','brief',function(){agent('brief')},{ag:1});add('o','painel HTML',openDash)}
+    if(t===1){if(w(it&&it.d&&it.d.fix))add('f','corrigir',fixDoc);add('o','testar online',function(){run('brain doctor --online','✓ 5 avisos · memória: desligada',null,true)});add('enter','ampliar',zoom)}
+    if(t===2){add('enter','executar',runSys)}
+  }
+  if(p===2){
+    add('n','nova',newAction);
+    if(w(it&&it.a&&isOpen(it.a))){add('c','fechar',closeAction);add('e','editar',editAction);add('s','status',cycleStatus);add('t','prazo',editDue);add('D','descartar',dropAction)}
+    if(t===1&&w(it&&it.a))add('m','cobrar',chase);
+    if(w(it&&it.a&&!isOpen(it.a)))add('o','reabrir',reopen);
+    add('a',S.showAll?'só abertas':'todas',function(){S.showAll=!S.showAll;draw()});add('enter','ficha',zoom);
+  }
+  if(p===3){
+    if(w(it&&it.kind==='d')){add('space','feito',toggleDone);add('s','estado',setDelivState)}
+    if(w(it&&it.kind!=='d'))add('enter','recolher',function(){if(it){S.collapsed[it.id]=!S.collapsed[it.id];draw()}});
+    if(w(it&&it.kind!=='d'))add('P','progresso',declareProgress);
+    add('E','mudar árvore',function(){gateForm()},{gate:1});add('S','exportar',shareNode);
+  }
+  if(p===4){
+    if(t===0&&w(it&&it.r&&it.r.st==='pendente')){add('a','aceitar',acceptProp);add('r','rejeitar',rejectProp)}
+    if(t===1){add('n','rascunhar',newMsg);if(w(it&&it.m&&it.m.st==='rascunho'))add('A','aprovar',approveMsg,{gate:1});if(w(it&&it.m&&it.m.st==='aprovada'))add('S','enviar',sendMsg,{ag:1});if(w(it&&it.m&&(it.m.st==='rascunho'||it.m.st==='aprovada')))add('x','cancelar',cancelMsg)}
+    if(t===2){add('p','planejar',planFocus);if(w(F.st==='proposto'))add('A','aprovar',approveFocus,{gate:1});if(w(F.st==='aprovado'))add('a','aplicar',applyFocus,{gate:1});add('s','sync',syncFocus)}
+    if(t===3){add('n','pedir',newPub);if(w(it&&it.s&&it.s.st==='pedido'))add('A','aprovar',approvePub,{gate:1});if(w(it&&it.s&&it.s.st==='aprovado'))add('P','publicar',pubPost,{ag:1});if(w(it&&it.s&&(it.s.st==='pedido'||it.s.st==='aprovado')))add('x','cancelar',cancelPub)}
+  }
+  if(p===5){
+    if(t===0){add('n','nova',newDecision);add('S','superar',supersede)}
+    if(t===1)add('n','nova',newDelivery);
+    if(t===2){add('n','nova',newPerson);if(w(it))add('u','editar',editPerson);if(w(it))add('a','alias',addAlias);add('R','resolver nome',resolvePerson)}
+    if(t===3)add('o','abrir RAW',function(){var i=cur();if(i){L('cmd','$ $EDITOR vault/'+i.a.raw);L('dim','(editor externo; o RAW é imutável, só leitura)');draw()}});
+  }
+  return K;
+}
+var GLOBAL=[['?','ajuda'],[':','comandos'],['/','filtrar'],['g','buscar'],['r','render'],['q','sair']];
+
+/* ---------------- ações ---------------- */
+function zoom(){S.zoom=!S.zoom;draw()}
+function openDash(){run('brain render --open','✓ painel aberto no navegador',null,true)}
+function fixDoc(){var it=cur(),f=it&&it.d&&it.d.fix;if(!f)return;if(f.agent)agent(f.agent);else if(f.sys){S.p=1;S.tab[1]=2;setSel(1,SYS.map(function(s){return s.id}).indexOf(f.sys));draw()}else if(f.go){S.p=f.go[0];S.tab[2]=f.go[1];draw()}}
+function runSys(){
+  var it=cur();if(!it)return;var s=it.s;
+  if(s.info){L('dim','$ '+s.cmd+'  (fica ouvindo em stdio; registre-o em outra IA)');draw();return}
+  var RES={'sys:render':'✓ 18 views em 0,4s · painel atualizado','sys:validate':'✓ ledger íntegro (118 eventos)','sys:update':'✓ em dia com o upstream · nada a puxar',
+    'sys:upstream':'✓ 0 arquivos pendentes · 0 achados','sys:memory':'✓ 3 documentos enviados ao Hindsight','sys:backup':'✓ brain-backup-2026-10-15.zip → Drive · 8 cópias retidas',
+    'sys:nightly':'✓ render · memória · render final (41s)','sys:schedule':'✓ crontab: 0 5 * * * brain nightly','sys:sync':'nenhuma edição do dono para colher',
+    'sys:doctor':'✓ 5 avisos · memória: desligada','sys:hook':'hook pre-push: instalado','sys:memstatus':'memória: desligada ([memory] engine = none)',
+    'sys:recall':'memória desligada: ponha [memory] engine = "hindsight" no brain.toml','sys:memsetup':'✓ bancos prontos: brain-mem, brain-raw',
+    'sys:memrebuild':'✓ 118 documentos enviados','sys:backupst':'último: brain-backup-2026-10-12.zip (2026-10-12) · total 8','sys:schedst':'não agendado — `./brain schedule install --time 05:00`',
+    'sys:unsched':'✓ agendamento removido'};
+  var go=function(){
+    run(s.cmd,RES[s.id]||'✓ concluído',s.id==='sys:render'?function(){S.rendered=true}:null,true);
+  };
+  if(s.confirm)confirmBox({title:s.name,door:s.door,body:s.desc,cmd:s.confirm,ok:go});else go();
+}
+function newAction(extra){
+  var ow=S.tab[2]===1?'carla':'';var l=['mine','waiting','watching'][S.tab[2]];
+  openForm({title:'Nova ação',sub:'Equivalente ao /todo, sem o agente. A data aceita "sex", "amanhã", "+3d" ou "20/10".',fields:[
+    {id:'title',label:'título',req:1,ph:'o que precisa acontecer'},
+    {id:'due',label:'prazo',ph:'sex',res:dueRes,chk:dueChk},
+    {id:'effort',label:'esforço',ph:'90m · 2h · 1h30 · 1d'},
+    {id:'project',label:'projeto',choice:['—','P1','P2','P3','P4']},
+    {id:'prio',label:'prioridade',choice:['normal','alta','baixa']},
+    {id:'list',label:'lista',choice:['mine','waiting','watching'],value:l},
+    {id:'owner',label:'dono',ph:'você (ou id da pessoa)',value:ow}],
+   cmd:function(v){var d=parseDue(v.due);return 'brain action open '+q(v.title||'…')+' --by owner'+(v.list!=='mine'?' --list '+v.list:'')+(v.owner?' --owner '+v.owner:'')+(d?' --due '+d:'')+(v.effort?' --effort '+v.effort:'')+(v.project&&v.project!=='—'?' --project '+v.project:'')+(v.prio!=='normal'?' --priority '+v.prio:'')},
+   ok:function(v){var id='A-'+String(S.nextA++).padStart(4,'0');var d=parseDue(v.due);
+     run(this.cmd(v),'✓ '+id+' aberta'+(d?' · prazo '+short(d):' · sem prazo (o foco vai ignorar)'),function(){A.push({id:id,title:v.title,list:v.list,owner:v.owner||undefined,status:'aberta',due:d,effort:v.effort||null,project:v.project==='—'?null:v.project,deliv:null,prio:v.prio,people:[],origin:'chat',prov:'declarado',source:'chat',hist:[[fmt(T0),'aberta por você','declarado']]});S.p=2;S.tab[2]=['mine','waiting','watching'].indexOf(v.list);setSel(2,items(2,S.tab[2]).map(function(i){return i.id}).indexOf(id))})}});
+}
+function closeAction(){var it=cur(),a=it&&it.a;if(!a)return;
+  var un=A.filter(function(x){return x.blocked===a.id&&isOpen(x)});
+  openForm({title:'Fechar '+a.id,sub:esc(a.title),fields:[{id:'how',label:'como foi',req:1,ph:'enviei o draft, Bruno confirmou'},{id:'outcome',label:'resultado',ph:'opcional: resultado observável (vira entrega E-####)'}],
+   cmd:function(v){return 'brain action close '+a.id+' --how '+q(v.how||'…')+(v.outcome?' --outcome '+q(v.outcome):'')+' --by owner'},
+   ok:function(v){run(this.cmd(v),'✓ '+a.id+' fechada'+(un.length?' · destravou '+un.map(function(x){return x.id}).join(', ')+' (não fecha sozinha)':'')+(v.outcome&&a.project?' · E-'+String(S.nextE).padStart(4,'0')+' registrada':''),function(){a.status='fechada';a.closedHow=v.how;a.hist.push([fmt(T0),'fechada: '+v.how,'declarado']);
+     if(v.outcome&&a.project)DEL.unshift({id:'E-'+String(S.nextE++).padStart(4,'0'),date:fmt(T0),title:v.outcome,ref:a.project,result:v.outcome,impact:'—',evidence:a.id})})}});}
+function editAction(){var it=cur(),a=it&&it.a;if(!a)return;
+  openForm({title:'Editar '+a.id,fields:[{id:'title',label:'título',value:a.title,req:1},{id:'due',label:'prazo',value:a.due||'',res:dueRes,chk:dueChk},{id:'effort',label:'esforço',value:a.effort||''},{id:'prio',label:'prioridade',choice:['normal','alta','baixa'],value:a.prio},{id:'note',label:'nota',ph:'vai para o histórico da ação'}],
+   cmd:function(v){var d=parseDue(v.due),c='brain action update '+a.id;if(v.title!==a.title)c+=' --title '+q(v.title);if(d&&d!==a.due)c+=' --due '+d;if(!v.due.trim()&&a.due)c+=' --clear-due';if(v.effort!==(a.effort||''))c+=' --effort '+v.effort;if(v.prio!==a.prio)c+=' --priority '+v.prio;if(v.note)c+=' --note '+q(v.note);return c+' --by owner'},
+   ok:function(v){run(this.cmd(v),'✓ '+a.id+' atualizada',function(){a.title=v.title;a.due=parseDue(v.due)||null;a.effort=v.effort||null;a.prio=v.prio;a.hist.push([fmt(T0),'editada'+(v.note?': '+v.note:''),'declarado'])})}});}
+function editDue(){var it=cur(),a=it&&it.a;if(!a)return;
+  openForm({title:'Prazo de '+a.id,sub:'Deixe em branco para remover o prazo.',fields:[{id:'due',label:'prazo',value:a.due||'',ph:'sex',res:dueRes,chk:dueChk}],
+   cmd:function(v){var d=parseDue(v.due);return 'brain action update '+a.id+(d?' --due '+d:' --clear-due')+' --by owner'},
+   ok:function(v){var d=parseDue(v.due);run(this.cmd(v),'✓ '+a.id+(d?' · prazo '+short(d):' · prazo removido'),function(){a.due=d||null;a.hist.push([fmt(T0),d?'prazo → '+d:'prazo removido','declarado'])})}});}
+function cycleStatus(){var it=cur(),a=it&&it.a;if(!a||!isOpen(a))return;var n={aberta:'fazendo',fazendo:'aguardando',aguardando:'aberta'}[a.status];
+  run('brain action update '+a.id+' --status '+n+' --by owner','✓ '+a.id+' → '+n,function(){a.status=n;a.hist.push([fmt(T0),'status → '+n,'declarado'])})}
+function dropAction(){var it=cur(),a=it&&it.a;if(!a)return;
+  openForm({title:'Descartar '+a.id,sub:'Não foi feita e não será. O histórico fica no ledger.',fields:[{id:'reason',label:'motivo',req:1,ph:'projeto cancelado'}],
+   cmd:function(v){return 'brain action drop '+a.id+' --reason '+q(v.reason||'…')+' --by owner'},
+   ok:function(v){run(this.cmd(v),'✓ '+a.id+' descartada',function(){a.status='descartada';a.hist.push([fmt(T0),'descartada: '+v.reason,'declarado'])})}});}
+function reopen(){var it=cur(),a=it&&it.a;if(!a)return;
+  openForm({title:'Reabrir '+a.id,fields:[{id:'reason',label:'motivo',req:1,ph:'faltou a parte do México'}],cmd:function(v){return 'brain action reopen '+a.id+' --reason '+q(v.reason||'…')+' --by owner'},
+   ok:function(v){run(this.cmd(v),'✓ '+a.id+' reaberta',function(){a.status='aberta';a.hist.push([fmt(T0),'reaberta: '+v.reason,'declarado'])})}});}
+function chase(){var it=cur(),a=it&&it.a;if(!a)return;
+  S.p=4;S.tab[4]=1;newMsg({to:a.owner,text:'Oi '+first(a.owner)+', como está "'+a.title+'"?',ref:a.id,why:a.due&&daysTo(a.due)<0?'prazo venceu':'acompanhamento'})}
+function toggleDone(){var it=cur(),d=it&&it.d;if(!d||it.kind!=='d')return;
+  if(d.st==='feito'){run('brain plan deliverable '+d.id+' --status nao-iniciado --by owner','✓ '+d.id+' reaberto · progresso recalculado',function(){d.st='nao-iniciado';d.done=null});return}
+  openForm({title:'Marcar '+d.id+' como feito',sub:esc(d.title),fields:[{id:'ev',label:'evidência',ph:'subiu em produção'}],cmd:function(v){return 'brain plan deliverable '+d.id+' --status feito'+(v.ev?' --evidence '+q(v.ev):'')+' --by owner'},
+   ok:function(v){var p=prog(it.p.deliv);run(this.cmd(v),'✓ '+d.id+' feito · '+it.p.id+' agora em '+prog(it.p.deliv.map(function(x){return x===d?Object.assign({},x,{st:'feito'}):x})).pct+'%',function(){d.st='feito';d.done=fmt(T0)})}});}
+function setDelivState(){var it=cur(),d=it&&it.d;if(!d||it.kind!=='d')return;
+  openForm({title:'Estado de '+d.id,fields:[{id:'st',label:'estado',choice:['nao-iniciado','em-andamento','feito','cancelado'],value:d.st}],cmd:function(v){return 'brain plan deliverable '+d.id+' --status '+v.st+' --by owner'},
+   ok:function(v){run(this.cmd(v),'✓ '+d.id+' → '+v.st,function(){d.st=v.st;d.done=v.st==='feito'?fmt(T0):null})}});}
+function declareProgress(){var it=cur();if(!it||it.kind==='d')return;var id=it.id;
+  openForm({title:'Declarar progresso de '+id,sub:'Aparece ao lado do calculado; nunca o substitui.',fields:[{id:'pct',label:'percentual',req:1,ph:'0 a 100',chk:function(v){return /^\d{1,3}$/.test(v)&&+v<=100?'':'Use um número de 0 a 100.'}},{id:'note',label:'nota',ph:'dicionário andou; pipeline não'}],
+   cmd:function(v){return 'brain progress '+id+' '+(v.pct||'…')+(v.note?' --note '+q(v.note):'')},
+   ok:function(v){run(this.cmd(v),'✓ '+id+' declarado em '+v.pct+'%',function(){if(it.g&&it.kind==='g')it.g.declared={pct:+v.pct,date:fmt(T0),note:v.note||''}})}});}
+function shareNode(){var it=cur();var def=it?(it.kind==='g'?'goal':it.kind==='p'?'project':'status'):'status';var tg=it&&(it.kind==='g'||it.kind==='p')?it.id:'';
+  openForm({title:'Exportar para um colega',sub:'Gera um documento autocontido, sem jargão interno, em vault/reports/share/.',fields:[{id:'kind',label:'tipo',choice:['project','goal','status','period'],value:def},{id:'target',label:'alvo',value:tg,ph:'P1 · G1 · 2026-09-01:2026-09-30'},{id:'fmt',label:'formato',choice:['md','html']}],
+   cmd:function(v){return 'brain share '+v.kind+(v.target&&v.kind!=='status'?' '+v.target:'')+' --format '+v.fmt},
+   ok:function(v){run(this.cmd(v),'✓ reports/share/2026-10-15-'+v.kind+(v.target?'-'+v.target.toLowerCase():'')+'.'+v.fmt+' · peça publicação na aba Publicar',null,true)}});}
+function gateForm(pre){
+  pre=pre||{};
+  openForm({gate:1,title:'Mudança na árvore do plano',sub:'Este é o único gate estrutural. Criar, renomear ou fechar goal e projeto exige a sua aprovação explícita.',
+   extra:'<div class="diff"><span class="dim">vault/PLANNING/goals.md</span>\n<span class="dim"> ## G2 — Agente de suporte com qualidade</span>\n<span class="p">+### P5 — Retenção MX</span>\n<span class="p">+- status: ativo</span>\n<span class="p">+- dono: voce</span>\n<span class="p">+- [ ] P5.1 Mapa de churn por canal · prazo: 2026-11-20</span></div>',
+   fields:[{id:'diff',label:'resumo do diff',value:pre.diff||'P5 nasce sob G2',req:1},{id:'reason',label:'motivo',value:pre.reason||'nova frente de retenção MX',req:1},{id:'ev',label:'evidência',value:pre.ev||'reunião de planejamento 14/10'},{id:'quote',label:'sua aprovação',req:1,ph:'digite a resposta literal, ex.: ok'}],
+   cmd:function(v){return 'brain plan log --diff '+q(v.diff||'…')+' --reason '+q(v.reason||'…')+(v.ev?' --evidence '+q(v.ev):'')+' --approval '+q(v.quote||'…')},
+   ok:function(v){run(this.cmd(v),'✓ plan.changed registrado · goals.md atualizado · log.md +1 linha',function(){if(pre.done)pre.done();
+     if(!PL[1].projects.some(function(p){return p.id==='P5'}))PL[1].projects.push({id:'P5',title:'Retenção MX',owner:'voce',deliv:[{id:'P5.1',title:'Mapa de churn por canal',due:'2026-11-20',w:1,st:'nao-iniciado'}]})})}});}
+function acceptProp(){var it=cur(),r=it&&it.r;if(!r||r.st!=='pendente')return;
+  if(r.kind==='mudar-plano'){gateForm({done:function(){r.st='aceita';L('cmd','$ brain proposal accept '+r.id+' --quote "ok"')}});return}
+  openForm({gate:1,title:'Aceitar '+r.id,sub:esc(r.summary),fields:[{id:'quote',label:'sua resposta',req:1,ph:'ok, pode fechar'}],
+   cmd:function(v){return 'brain proposal accept '+r.id+' --quote '+q(v.quote||'…')+'\n'+(r.kind==='fechar-acao'?'brain action close '+r.target+' --how '+q(r.summary)+' --by owner':'brain action update '+r.target+' --effort '+r.newEffort+' --by owner')},
+   ok:function(v){var a=getA(r.target);run('brain proposal accept '+r.id+' --quote '+q(v.quote),'✓ '+r.id+' aceita · '+(r.kind==='fechar-acao'?r.target+' fechada':r.target+' reestimada para '+r.newEffort),function(){r.st='aceita';
+     if(r.kind==='fechar-acao'){a.status='fechada';a.closedHow=r.summary;a.hist.push([fmt(T0),'fechada via '+r.id,'declarado'])}else{a.effort=r.newEffort;a.hist.push([fmt(T0),'esforço → '+r.newEffort+' via '+r.id,'declarado'])}})}});}
+function rejectProp(){var it=cur(),r=it&&it.r;if(!r||r.st!=='pendente')return;
+  openForm({title:'Rejeitar '+r.id,sub:esc(r.summary),fields:[{id:'quote',label:'sua resposta',req:1,ph:'não, ainda falta o México'}],cmd:function(v){return 'brain proposal reject '+r.id+' --quote '+q(v.quote||'…')},
+   ok:function(v){run(this.cmd(v),'✓ '+r.id+' rejeitada · só volta com evidência nova',function(){r.st='rejeitada'})}});}
+var ALLOW=['ana','carla','bruno','#time-dados'];
+function newMsg(pre){pre=pre&&pre.to?pre:{};
+  openForm({title:'Rascunhar mensagem no Slack',sub:'O agente enviará depois da sua aprovação, como você. O texto aprovado fica travado por hash.',fields:[
+    {id:'to',label:'para',req:1,value:pre.to||'',ph:'id da pessoa ou #canal',chk:function(v){return ALLOW.indexOf(v)<0?'Destinatário fora de [outbound].allow. Edite config/brain.toml para liberar.':''}},
+    {id:'text',label:'texto',req:1,value:pre.text||'',ph:'Oi …'},{id:'ref',label:'ref',value:pre.ref||'',ph:'A-####'},{id:'why',label:'por quê',value:pre.why||''}],
+   cmd:function(v){return 'brain outbox draft --to '+(v.to||'…')+' --text '+q(v.text||'…')+(v.ref?' --ref '+v.ref:'')+(v.why?' --why '+q(v.why):'')},
+   ok:function(v){var id='M-'+String(S.nextM++).padStart(4,'0');run(this.cmd(v),'✓ '+id+' rascunhada · aguardando sua aprovação',function(){M.unshift({id:id,to:v.to,chan:'slack',text:v.text,ref:v.ref||'—',why:v.why||'—',st:'rascunho',hash:Math.random().toString(16).slice(2,10)});S.p=4;S.tab[4]=1;setSel(4,0)})}});}
+function approveMsg(){var it=cur(),m=it&&it.m;if(!m||m.st!=='rascunho')return;var n=m.id.slice(-1);
+  openForm({gate:1,title:'Aprovar '+m.id+' → '+who(m.to),sub:'Você aprova este texto exato. Se mudar uma palavra, a aprovação cai.',extra:'<div class="quote">'+esc(m.text)+'</div>',fields:[{id:'quote',label:'sua aprovação',req:1,ph:'enviar '+n}],
+   cmd:function(v){return 'brain outbox approve '+m.id+' --quote '+q(v.quote||'…')},
+   ok:function(v){run(this.cmd(v),'✓ '+m.id+' aprovada · trava sha256:'+m.hash+'… · envie com S',function(){m.st='aprovada';m.quote=v.quote})}});}
+function sendMsg(){var it=cur(),m=it&&it.m;if(!m||m.st!=='aprovada')return;
+  agentBox({slash:'outbox send '+m.id,title:'Enviar '+m.id+' pelo Slack',bullets:['Confere que o texto ainda bate com o hash aprovado','Envia pelo Slack MCP como você para '+who(m.to),'Registra o permalink: brain outbox sent '+m.id+' --link …'],
+   lines:['conferindo hash sha256:'+m.hash+'… ✓','destinatário '+m.to+' ∈ [outbound].allow ✓','slack_send_message → '+m.to,'$ brain outbox sent '+m.id+' --link https://seu-workspace.slack.com/archives/…','✓ '+m.id+' enviada'],done:function(){m.st='enviada';m.link='https://seu-workspace.slack.com/archives/…'}})}
+function cancelMsg(){var it=cur(),m=it&&it.m;if(!m)return;
+  openForm({title:'Cancelar '+m.id,fields:[{id:'reason',label:'motivo',ph:'opcional'}],cmd:function(v){return 'brain outbox cancel '+m.id+(v.reason?' --reason '+q(v.reason):'')},ok:function(v){run(this.cmd(v),'✓ '+m.id+' cancelada',function(){m.st='cancelada'})}});}
+function planFocus(){openForm({title:'Planejar foco',sub:'Blocos EDF nas suas ações mine com prazo. Nada vai ao calendário ainda.',fields:[{id:'days',label:'horizonte (dias)',value:'5'}],cmd:function(v){return 'brain focus plan --days '+v.days},
+  ok:function(v){var id='F-'+String(S.nextF++).padStart(4,'0');run(this.cmd(v),'✓ '+id+' · 8 blocos · 1 não cabe · 2 sem prazo',function(){F.id=id;F.st='proposto'})}})}
+function approveFocus(){openForm({gate:1,title:'Aprovar plano '+F.id,sub:'Um "ok" libera o lote inteiro. Só depois dele o aplicar vira possível.',fields:[{id:'quote',label:'sua aprovação',req:1,ph:'ok'}],cmd:function(v){return 'brain focus approve '+F.id+' --quote '+q(v.quote||'…')},
+  ok:function(v){run(this.cmd(v),'✓ '+F.id+' aprovado · aplique com a',function(){F.st='aprovado'})}})}
+function applyFocus(){openForm({gate:1,title:'Aplicar '+F.id,sub:'No modo google, cria só eventos marcados brain_focus=1 no calendário primário. No modo ics, gera um arquivo e não toca na API.',fields:[{id:'mode',label:'modo',choice:['ics','google']}],cmd:function(v){return 'brain focus apply '+F.id+' --mode '+v.mode},
+  ok:function(v){run(this.cmd(v),v.mode==='ics'?'✓ FRESH/focus/'+F.id+'.ics gerado · importe no calendário':'✓ 8 eventos criados no calendário primário',function(){F.st='aplicado'})}})}
+function syncFocus(){run('brain focus sync --dry-run','✓ nenhum bloco futuro de ação fechada para remover',null,true)}
+function newPub(){openForm({title:'Pedir publicação',sub:'Uma aprovação por publicação. O conteúdo fica travado por hash.',fields:[{id:'report',label:'report',req:1,value:'reports/share/2026-10-15-status.md'},{id:'to',label:'destino',req:1,value:'slack:#time-dados',chk:function(v){return v==='slack:#time-dados'?'':'Destino fora de [publish].destinations.'}}],
+  cmd:function(v){return 'brain publish request '+v.report+' --to '+q(v.to)},ok:function(v){var id='S-'+String(S.nextS++).padStart(4,'0');run(this.cmd(v),'✓ '+id+' pedido · aguardando aprovação',function(){PUB.unshift({id:id,report:v.report,to:v.to,st:'pedido',hash:Math.random().toString(16).slice(2,10)});setSel(4,0)})}})}
+function approvePub(){var it=cur(),s=it&&it.s;if(!s)return;openForm({gate:1,title:'Aprovar '+s.id,sub:'Publicar '+esc(s.report)+' em '+esc(s.to),fields:[{id:'quote',label:'sua aprovação',req:1,ph:'ok, publica'}],cmd:function(v){return 'brain publish approve '+s.id+' --quote '+q(v.quote||'…')},ok:function(v){run(this.cmd(v),'✓ '+s.id+' aprovado · publique com P',function(){s.st='aprovado'})}})}
+function pubPost(){var it=cur(),s=it&&it.s;if(!s||s.st!=='aprovado')return;agentBox({slash:'publish '+s.id,title:'Publicar '+s.id,bullets:['Confere o hash do report','Cria o canvas no destino '+s.to,'Registra o link: brain publish done '+s.id+' --link …'],lines:['hash ✓','slack_create_canvas → '+s.to,'$ brain publish done '+s.id+' --link https://…','✓ '+s.id+' publicado'],done:function(){s.st='publicado'}})}
+function cancelPub(){var it=cur(),s=it&&it.s;if(!s)return;run('brain publish cancel '+s.id,'✓ '+s.id+' cancelado',function(){s.st='cancelado'})}
+function newDecision(){openForm({title:'Registrar decisão',fields:[{id:'title',label:'título',req:1},{id:'by',label:'quem decidiu',req:1,ph:'ana, diego'},{id:'project',label:'projeto',choice:['—','P1','P2','P3','P4']},{id:'why',label:'porquê',ph:'opcional'}],
+  cmd:function(v){return 'brain decision add '+q(v.title||'…')+' --decided-by '+(v.by||'…')+(v.project&&v.project!=='—'?' --project '+v.project:'')+(v.why?' --rationale '+q(v.why):'')+' --by owner'},
+  ok:function(v){var id='D-'+String(S.nextD++).padStart(4,'0');run(this.cmd(v),'✓ '+id+' registrada',function(){DEC.unshift({id:id,date:fmt(T0),title:v.title,by:v.by.split(/[ ,]+/).filter(Boolean),project:v.project==='—'?null:v.project,ctx:'—',why:v.why||'—',source:'chat',prov:'declarado'});S.p=5;S.tab[5]=0;setSel(5,0)})}})}
+function supersede(){var it=cur(),d=it&&it.d;if(!d)return;openForm({title:'Superar '+d.id,fields:[{id:'reason',label:'motivo',req:1}],cmd:function(v){return 'brain decision supersede '+d.id+' --reason '+q(v.reason||'…')+' --by owner'},ok:function(v){run(this.cmd(v),'✓ '+d.id+' marcada como superada',null)}})}
+function newDelivery(){openForm({title:'Registrar entrega',sub:'Conquista com resultado, sem precisar fechar uma ação.',fields:[{id:'title',label:'título',req:1},{id:'ref',label:'ligada a',ph:'P2 · A-#### · G1'},{id:'result',label:'resultado'},{id:'impact',label:'impacto'}],
+  cmd:function(v){return 'brain delivery '+q(v.title||'…')+(v.ref?' --ref '+v.ref:'')+(v.result?' --result '+q(v.result):'')+(v.impact?' --impact '+q(v.impact):'')+' --by owner'},
+  ok:function(v){var id='E-'+String(S.nextE++).padStart(4,'0');run(this.cmd(v),'✓ '+id+' registrada',function(){DEL.unshift({id:id,date:fmt(T0),title:v.title,ref:v.ref||null,result:v.result||'—',impact:v.impact||'—',evidence:'chat'});setSel(5,0)})}})}
+function newPerson(){openForm({title:'Nova pessoa',fields:[{id:'name',label:'nome',req:1},{id:'id',label:'id curto',ph:'derivado do nome'},{id:'alias',label:'aliases',ph:'Lu, Lu M.'},{id:'role',label:'papel'},{id:'rel',label:'relação',choice:['par','gestor','stakeholder','time']}],
+  cmd:function(v){return 'brain person add '+q(v.name||'…')+(v.id?' --id '+v.id:'')+(v.alias?v.alias.split(',').map(function(a){return ' --alias '+q(a.trim())}).join(''):'')+(v.role?' --role '+q(v.role):'')+' --relation '+v.rel+' --by owner'},
+  ok:function(v){var id=v.id||v.name.split(' ')[0].toLowerCase();run(this.cmd(v),'✓ '+id+' adicionada',function(){PEOPLE[id]={name:v.name,role:v.role||'—',rel:v.rel,email:'—',al:v.alias?v.alias.split(',').map(function(s){return s.trim()}):[]}})}})}
+function editPerson(){var it=cur();if(!it||it.kind!=='per')return;var pe=PEOPLE[it.k];
+  openForm({title:'Editar '+it.k,sub:'Para aliases novos use a. A CLI não apaga campos, só os troca.',fields:[{id:'name',label:'nome',value:pe.name,req:1},{id:'role',label:'papel',value:pe.role},{id:'rel',label:'relação',value:pe.rel},{id:'email',label:'e-mail',value:pe.email}],
+   cmd:function(v){var c='brain person update '+it.k;if(v.name!==pe.name)c+=' --name '+q(v.name);if(v.role!==pe.role)c+=' --role '+q(v.role);if(v.rel!==pe.rel)c+=' --relation '+q(v.rel);if(v.email!==pe.email)c+=' --email '+q(v.email);return c+' --by owner'},
+   ok:function(v){run(this.cmd(v),'✓ '+it.k+' atualizado',function(){pe.name=v.name;pe.role=v.role;pe.rel=v.rel;pe.email=v.email})}})}
+function resolvePerson(){openForm({title:'Quem é…?',sub:'Diz a quem o texto se refere, sem gravar nada. Ambíguo vira erro 2: a pergunta é sua.',fields:[{id:'text',label:'nome ou alias',req:1,ph:'a Ana'}],
+  cmd:function(v){return 'brain person resolve '+q(v.text||'…')},
+  ok:function(v){var f=Object.keys(PEOPLE).filter(function(k){return PEOPLE[k].al.concat([PEOPLE[k].name]).some(function(a){return v.text.toLowerCase().indexOf(a.toLowerCase())>=0})});
+    run(this.cmd(v),f.length?f[0]+'  '+PEOPLE[f[0]].name+'  '+PEOPLE[f[0]].role:'não encontrado: '+v.text,null,true)}})}
+function addAlias(){var it=cur();if(!it||it.kind!=='per')return;openForm({title:'Alias para '+it.k,sub:'Evita uma segunda ficha para a mesma pessoa.',fields:[{id:'al',label:'aliases',req:1,ph:'Aninha, A. Ribeiro'}],cmd:function(v){return 'brain person alias '+it.k+(v.al?v.al.split(',').map(function(a){return ' '+q(a.trim())}).join(''):'')+' --by owner'},ok:function(v){run(this.cmd(v),'✓ aliases adicionados a '+it.k,function(){PEOPLE[it.k].al=PEOPLE[it.k].al.concat(v.al.split(',').map(function(s){return s.trim()}))})}})}
+
+/* ---------------- agente ⚡ ---------------- */
+function agent(kind){
+  if(kind==='dump'){
+    if(!S.inbox){L('dim','inbox vazia, nada a processar');draw();return}
+    agentBox({slash:'/dump',title:'Processar a inbox',bullets:['Arquiva '+S.inbox+' itens em RAW/2026/10/ (mover, nunca editar)','Extrai decisões, ações e fatos com proveniência','Grava tudo pelo ./brain e regenera as views'],
+     lines:['lendo vault/RAW/inbox/ · '+S.inbox+' itens','arquivando em RAW/2026/10/','classificando: reunião "sync-cs-qui", nota "ideias-agente"','$ brain add lote.json','✓ A-0030 · A-0031 · D-0007','$ brain render','inbox: 0 restantes'],
+     done:function(){S.inbox=0;A.push({id:'A-0030',title:'Enviar notas do sync de CS ao time',list:'mine',status:'aberta',due:'2026-10-17',effort:'30m',project:'P1',deliv:null,prio:'normal',people:['carla'],origin:'sync de CS (qui)',prov:'observado',source:'PROCESSED/2026/10/sync-cs-qui.md',hist:[[fmt(T0),'extraída do /dump','observado']]},{id:'A-0031',title:'Dados de contato dos três canais',list:'waiting',owner:'carla',status:'aberta',due:'2026-10-21',effort:null,project:'P2',deliv:'P2.2',prio:'normal',people:['carla'],origin:'sync de CS (qui)',prov:'observado',source:'PROCESSED/2026/10/sync-cs-qui.md',hist:[[fmt(T0),'extraída do /dump','observado']]});
+       DEC.unshift({id:'D-0007',date:fmt(T0),title:'Treinamento de CS só depois da v1 do pipeline',by:['carla'],project:'P1',ctx:'sync de CS',why:'Evitar treinar duas vezes.',source:'PROCESSED/2026/10/sync-cs-qui.md',prov:'observado'})}});
+  }
+  if(kind==='init')agentBox({slash:'/init',title:'Primeira entrevista',bullets:['Pergunta quem você é, seus goals, projetos e pessoas','Monta PROFILE e PLANNING como proposta (diff)','Só grava a árvore depois do seu ok (gate)'],lines:['entrevista em 4 blocos…','proposta de PROFILE e PLANNING mostrada','aguardando o seu ok'],done:function(){}});
+  if(kind==='brief')agentBox({slash:'/brief',title:'Brief do dia',bullets:['Lê FRESH/home.md e todo.md','Escreve a narrativa em FRESH/notes/brief.md (o painel exibe como está)'],lines:['lendo views…','FRESH/notes/brief.md escrito','✓ brief pronto: 1 atraso, 3 propostas, 1 plano de foco'],done:function(){}});
+  if(kind==='connect')agentBox({slash:'/connect slack-dados',title:'Puxar fonte agora',bullets:['Lê o canal pelo MCP, só leitura','Grava com brain snapshot (hash igual = silêncio)','Processa a novidade'],lines:['slack_read_channel #dados','$ brain snapshot --key slack-dados --prefix slack','✓ 1 item novo na inbox'],done:function(){S.inbox++}});
+}
+function agentBox(o){
+  S.modal={type:'agent',o:o};
+  mo.hidden=false;mo.innerHTML='<div class="md agent"><div class="mt vio">⚡ '+esc(o.title)+'</div><p class="ms">Isto roda o agente fora do TUI. O que ele escreve passa pelo <code>./brain</code>.</p><div class="cmdp" style="color:var(--violet);border-color:var(--violet)">$ claude -p '+q(o.slash)+'</div><div class="dim" style="margin-top:8px">O agente vai:</div><ul class="pl">'+o.bullets.map(function(b){return '<li>'+esc(b)+'</li>'}).join('')+'</ul><div class="mf"><span><kbd>enter</kbd> rodar</span><span><kbd>esc</kbd> cancelar</span></div></div>';
+}
+function startAgent(){
+  var o=S.modal.o;closeModal();L('agent','⚡ claude -p '+q(o.slash));draw();
+  var i=0;(function step(){if(i<o.lines.length){var l=o.lines[i++];L(l.charAt(0)==='$'?'cmd':l.charAt(0)==='✓'?'ok':'agent',l.charAt(0)==='$'||l.charAt(0)==='✓'?l:'  '+l);draw();setTimeout(step,420)}else{o.done&&o.done();renderLine();draw()}})();
+}
+function confirmBox(o){
+  S.modal={type:'confirm',o:o};mo.hidden=false;
+  mo.innerHTML='<div class="md '+(o.door?'gate':'')+'"><div class="mt">'+esc(o.title)+'</div><p class="ms">'+esc(o.body)+'</p>'+(o.door?'<p><span class="tag amb">porta · '+esc(o.door)+'</span></p>':'')+'<div class="cmdp">$ '+esc(o.cmd)+'</div><div class="mf" style="margin-top:10px"><span><kbd>enter</kbd> confirmar</span><span><kbd>esc</kbd> cancelar</span></div></div>';
+}
+
+/* ---------------- modais: formulário, picker, ajuda ---------------- */
+function closeModal(){S.modal=null;mo.hidden=true;mo.innerHTML='';term.focus({preventScroll:true})}
+function openForm(o){
+  S.modal={type:'form',o:o};mo.hidden=false;
+  var f=o.fields.map(function(fd){
+    var ctl=fd.choice?'<select class="in" id="f_'+fd.id+'" data-f="'+fd.id+'">'+fd.choice.map(function(c){return '<option'+(c===fd.value?' selected':'')+'>'+esc(c)+'</option>'}).join('')+'</select>':'<input class="in" id="f_'+fd.id+'" data-f="'+fd.id+'" value="'+esc(fd.value||'')+'" placeholder="'+esc(fd.ph||'')+'" autocomplete="off" spellcheck="false">';
+    return '<label class="fl" for="f_'+fd.id+'"><span class="k">'+esc(fd.label)+(fd.req?' <b class="red">*</b>':'')+'</span>'+ctl+'<span class="res" data-res="'+fd.id+'"></span></label>';
+  }).join('');
+  mo.innerHTML='<div class="md '+(o.gate?'gate':'')+'"><div class="mt">'+(o.gate?'<span class="amb">◆ aprovação · </span>':'')+esc(o.title)+'</div>'+(o.sub?'<p class="ms">'+o.sub+'</p>':'')+(o.extra||'')+'<div class="flds">'+f+'</div><div class="cmdp" id="cp"></div><div class="err" id="er"></div><div class="mf"><span><kbd>enter</kbd> confirmar</span><span><kbd>tab</kbd> próximo campo</span><span><kbd>esc</kbd> cancelar</span></div></div>';
+  updForm();var i=mo.querySelector('input,select');if(i)i.focus();
+}
+function formVals(){var v={};mo.querySelectorAll('[data-f]').forEach(function(e){v[e.dataset.f]=e.value});return v}
+function updForm(){
+  var o=S.modal.o,v=formVals();
+  o.fields.forEach(function(fd){var r=mo.querySelector('[data-res="'+fd.id+'"]');if(r)r.innerHTML=fd.res?fd.res(v[fd.id]||''):''});
+  $('#cp').textContent='$ '+o.cmd(v);$('#er').textContent='';
+}
+function submitForm(){
+  var o=S.modal.o,v=formVals();
+  for(var i=0;i<o.fields.length;i++){var fd=o.fields[i],val=(v[fd.id]||'').trim();
+    if(fd.req&&!val){$('#er').textContent='Preencha "'+fd.label+'".';var e=mo.querySelector('[data-f="'+fd.id+'"]');e&&e.focus();return}
+    if(fd.chk&&val){var m=fd.chk(val);if(m){$('#er').textContent=m;mo.querySelector('[data-f="'+fd.id+'"]').focus();return}}}
+  Object.keys(v).forEach(function(k){v[k]=v[k].trim()});
+  closeModal();o.ok(v);
+}
+function openPicker(title,ph,source){
+  S.modal={type:'pick',source:source,idx:0,list:[]};mo.hidden=false;
+  mo.innerHTML='<div class="md"><div class="mt">'+esc(title)+'</div><input class="in" id="pq" placeholder="'+esc(ph)+'" autocomplete="off" spellcheck="false" style="margin-top:8px"><div class="pk" id="pl"></div><div class="mf" style="margin-top:8px"><span><kbd>↑↓</kbd> escolher</span><span><kbd>enter</kbd> abrir</span><span><kbd>esc</kbd> fechar</span></div></div>';
+  var inp=$('#pq');inp.focus();inp.addEventListener('input',function(){S.modal.idx=0;pickDraw()});pickDraw();
+}
+function pickDraw(){var m=S.modal;m.list=m.source($('#pq').value.trim().toLowerCase());m.idx=clamp(m.idx,0,Math.max(0,m.list.length-1));
+  $('#pl').innerHTML=m.list.length?m.list.map(function(e,i){return '<div class="r '+(i===m.idx?'sel':'')+'" data-pi="'+i+'"><span class="tx">'+esc(e.l)+'</span><span class="rt">'+(e.sub||'')+'</span></div>'}).join(''):'<div class="dim" style="padding:6px 10px">Nada encontrado. "Não consta" também é resposta.</div>';
+  var s=$('#pl .sel');s&&s.scrollIntoView({block:'nearest'})}
+function palette(){openPicker('Comandos','digite para buscar: fechar, foco, backup…',function(qs){return CMDS.filter(function(c){return !qs||qs.split(/\s+/).every(function(t){return (c[0]+' '+c[1]).toLowerCase().indexOf(t)>=0})}).map(function(c){return {l:c[0],sub:'<span class="cyn">'+esc(c[1])+'</span>'+(c[2].k?' <span class="kb">'+(c[2].k===' '?'space':c[2].k)+'</span>':''),go:c[2]}})})}
+function searchAll(){openPicker('Buscar no ledger e nos artefatos','brain search …',function(qs){var out=[];if(!qs)return out;
+  var add=function(t,l,s,go){if((l+' '+s).toLowerCase().indexOf(qs)>=0)out.push({l:l,sub:t,go:go})};
+  A.forEach(function(a){add('ação','A '+a.id+' '+a.title,'',{p:2,t:['mine','waiting','watching'].indexOf(a.list),id:a.id,all:!isOpen(a)})});DEC.forEach(function(d){add('decisão',d.id+' '+d.title,'',{p:5,t:0,id:d.id})});DEL.forEach(function(d){add('entrega',d.id+' '+d.title,'',{p:5,t:1,id:d.id})});ART.forEach(function(a){add('artefato',a.title,a.sum,{p:5,t:3,id:a.id})});Object.keys(PEOPLE).forEach(function(k){add('pessoa',PEOPLE[k].name,k,{p:5,t:2,id:k})});
+  return out.slice(0,12).map(function(o){o.l=o.l.replace(/^A /,'');return o})})}
+function pickRun(){var m=S.modal,e=m.list[m.idx];if(!e)return;closeModal();var g=e.go;
+  if(g.run){gRun(g.run);return}
+  S.p=g.p;if(g.t!=null)S.tab[g.p]=g.t;S.filter='';
+  if(g.id){if(g.all)S.showAll=true;var ix=items(g.p,S.tab[g.p]).map(function(i){return i.id}).indexOf(g.id);if(ix>=0)setSel(g.p,ix)}
+  if(g.i!=null)setSel(g.p,g.i);
+  draw();if(g.k)pressKey(g.k);
+}
+function gRun(r){if(r==='render')run('brain render','✓ 18 views em 0,4s · painel atualizado',function(){S.rendered=true},true);if(r==='open')openDash();if(r==='dump')agent('dump');if(r==='brief')agent('brief');if(r==='search')searchAll()}
+function helpModal(){
+  S.modal={type:'help'};mo.hidden=false;var K=keys(false),pn=PANELS[S.p];
+  mo.innerHTML='<div class="md"><div class="mt">Atalhos · '+esc(pn.n)+' › '+esc(pn.tabs[S.tab[S.p]])+'</div><div class="helpgrid"><div class="hh">Neste contexto</div>'+K.map(function(k){return '<div class="hr"><kbd class="'+(k.ag?'vio':'')+'">'+(k.k===' '?'space':k.k)+'</kbd><span>'+(k.ag?'⚡ ':'')+esc(k.l)+'</span></div>'}).join('')+
+  '<div class="hh">Navegação</div><div class="hr"><kbd>j k</kbd><span>mover na lista (ou ↑ ↓)</span></div><div class="hr"><kbd>1-5</kbd><span>ir ao painel</span></div><div class="hr"><kbd>[ ] ← →</kbd><span>aba anterior / próxima (h l também)</span></div><div class="hr"><kbd>esc</kbd><span>voltar</span></div>'+
+  '<div class="hh">Em qualquer tela</div>'+GLOBAL.map(function(g){return '<div class="hr"><kbd>'+g[0]+'</kbd><span>'+g[1]+'</span></div>'}).join('')+'<div class="hr"><kbd>o</kbd><span>painel HTML (no Resumo)</span></div></div><div class="mf" style="margin-top:12px"><span><kbd>esc</kbd> fechar</span><span class="vio">⚡ = roda o agente</span><span class="amb">◆ = pede aprovação</span></div></div>';
+}
+
+/* ---------------- desenho ---------------- */
+var UCAP=3;
+function fillPanel(){return S.p===1&&S.tab[1]===0?2:S.p}
+function winStart(p,t,idx,cap,n){var key=p+'.'+t,w=S.win[key]||0;if(idx<w)w=idx;if(idx>=w+cap)w=idx-cap+1;w=clamp(w,0,Math.max(0,n-cap));S.win[key]=w;return w}
+function bodyRows(p,cap){
+  var t=S.tab[p],its=items(p,t),idx=selOf(p),on=S.p===p;
+  if(!its.length)return '<div class="sumline">'+(S.filter?'nada para "'+esc(S.filter)+'"':'vazio')+'</div>';
+  var w=cap>=999?(S.win[p+'.'+t]||0):winStart(p,t,idx,cap,its.length);
+  return its.slice(w,w+cap).map(function(it,j){var i=w+j;return '<div class="r '+(i===idx?'sel':'')+'" data-p="'+p+'" data-i="'+i+'">'+row(it)+'</div>'}).join('');
+}
+function panelHTML(p){
+  var d=PANELS[p],t=S.tab[p],its=items(p,t),idx=selOf(p),on=S.p===p,compact=p===1&&t===0,fill=fillPanel()===p&&!compact;
+  var tabs=d.tabs.length>1?'<span class="sep">›</span>'+d.tabs.map(function(n,i){return '<span class="tab '+(i===t?'a':'')+'" data-tab="'+p+'.'+i+'">'+esc(i===t||d.tabs.length<4?n:n.slice(0,3))+badge(p,i)+'</span>'}).join('<span class="sep">·</span>'):'';
+  var body;
+  if(compact){var c=counts();body='<div class="sumline"><span><b>'+c.mine+'</b> minhas</span>'+(c.over?'<span class="red">⚠ '+c.over+' atrasada'+(c.over>1?'s':'')+'</span>':'')+'<span><b>'+c.d7+'</b> em 7d</span></div><div class="sumline"><span><b>'+c.wait+'</b> aguardando</span><span class="'+(c.prop?'amb':'')+'"><b>'+c.prop+'</b> propostas</span><span><b>'+c.draft+'</b> rascunho'+(c.draft===1?'':'s')+'</span></div><div class="sumline"><span class="'+(S.inbox?'vio':'')+'"><b>'+S.inbox+'</b> inbox'+(S.inbox?' ⚡':'')+'</span><span><b>'+c.wins+'</b> conquistas</span><span class="'+(c.nodue?'amb':'')+'"><b>'+c.nodue+'</b> sem prazo</span></div>'}
+  else body=bodyRows(p,fill?999:UCAP);
+  return '<div class="pn '+(on?'on ':'')+(fill?'fill ':'')+(compact?'compact':'')+'" data-pn="'+p+'"><div class="t"><span><span class="n">['+p+']</span> '+d.n+'</span>'+tabs+'</div><div class="pb" data-pb="'+p+'">'+body+'</div>'+(!compact&&its.length?'<div class="pc">'+(idx+1)+' de '+its.length+'</div>':'')+'</div>';
+}
+function badge(p,i){if(p===4){var c=counts();if(i===0&&c.prop)return ' <span class="amb">'+c.prop+'</span>';if(i===1&&(c.draft+c.appr))return ' <span class="amb">'+(c.draft+c.appr)+'</span>';if(i===2&&F.st==='proposto')return ' <span class="amb">1</span>';if(i===3&&PUB.some(function(s){return s.st==='pedido'}))return ' <span class="amb">1</span>'}
+  if(p===1&&i===1)return ' <span class="amb">'+DOC.filter(function(d){return d.lvl==='warn'}).length+'</span>';return ''}
+function logHTML(){return S.log.slice(-9).map(function(l){return '<div class="lg '+l.k+'"><span class="tm">'+l.t+'</span>'+esc(l.x)+'</div>'}).join('')}
+function barHTML(){
+  var K=keys(false);
+  var h=K.map(function(k){return '<button type="button" class="hint '+(k.ag?'ag':'')+'" data-k="'+esc(k.k)+'"><kbd>'+(k.k===' '?'space':k.k)+'</kbd>'+(k.ag?'⚡ ':k.gate?'◆ ':'')+esc(k.l)+'</button>'}).join('');
+  h+='<span class="sp"></span>'+GLOBAL.map(function(g){return '<button type="button" class="hint" data-k="'+esc(g[0])+'"><kbd>'+g[0]+'</kbd>'+g[1]+'</button>'}).join('');
+  return h;
+}
+function draw(){
+  var it=cur();
+  scr.className='screen'+(S.zoom?' zoom':'');
+  var tabsM=S.filter?'<span class="amb">filtro: '+esc(S.filter)+'</span>':'';
+  scr.innerHTML='<div class="left">'+[1,2,3,4,5].map(panelHTML).join('')+'</div><div class="right"><div class="pn main"><div class="t"><span>Detalhe</span>'+(S.zoom?'<span class="dim">ampliado · esc volta</span>':'')+(S.filter?'<span>'+tabsM+'</span>':'')+'</div><div class="pb" id="mainpb">'+detail(it)+'</div></div><div class="pn log"><div class="t"><span>Log de comandos</span></div><div class="pb" id="logpb">'+logHTML()+'</div></div></div>';
+  bar.innerHTML=barHTML();
+  var lp=$('#logpb');lp.scrollTop=lp.scrollHeight;
+  var fp=fillPanel(),fb=scr.querySelector('.pb[data-pb="'+fp+'"]');
+  if(fb&&!(fp===1&&S.tab[1]===0)&&fb.clientHeight>0){var cap=Math.max(1,Math.floor((fb.clientHeight-22)/20));fb.innerHTML=bodyRows(fp,cap)}
+}
+
+/* ---------------- entrada ---------------- */
+function move(n){var p=S.p,l=items(p,S.tab[p]).length;if(!l)return;if(S.zoom){$('#mainpb').scrollTop+=n*60;return}setSel(p,clamp(selOf(p)+n,0,l-1));draw()}
+function goPanel(p){S.p=((p-1+5)%5)+1;S.filter='';draw()}
+function tabMove(n){var d=PANELS[S.p];S.tab[S.p]=clamp(S.tab[S.p]+n,0,d.tabs.length-1);draw()}
+function pressKey(k){
+  if(k==='enter'&&S.p===1&&S.tab[1]===0){return}
+  var K=keys(false).filter(function(x){return x.k===k})[0];if(K){K.fn();return true}
+}
+function onKey(e){
+  if(e.metaKey||e.altKey)return;
+  var tg=e.target,inInput=tg&&(tg.tagName==='INPUT'||tg.tagName==='SELECT'||tg.tagName==='TEXTAREA');
+  if(S.modal){
+    var t=S.modal.type;
+    if(e.key==='Escape'){e.preventDefault();closeModal();return}
+    if(t==='form'){if(e.key==='Enter'){e.preventDefault();submitForm()}return}
+    if(t==='pick'){var m=S.modal;if(e.key==='ArrowDown'){e.preventDefault();m.idx=Math.min(m.idx+1,m.list.length-1);pickDraw()}else if(e.key==='ArrowUp'){e.preventDefault();m.idx=Math.max(m.idx-1,0);pickDraw()}else if(e.key==='Enter'){e.preventDefault();pickRun()}return}
+    if(t==='agent'&&e.key==='Enter'){e.preventDefault();startAgent();return}
+    if(t==='confirm'&&e.key==='Enter'){e.preventDefault();var o=S.modal.o;closeModal();o.ok();return}
+    return;
+  }
+  if(inInput)return;
+  var k=e.key;if(e.ctrlKey&&k==='p'){e.preventDefault();palette();return}if(e.ctrlKey)return;
+  var h=true;
+  if(k==='j'||k==='ArrowDown')move(1);
+  else if(k==='k'||k==='ArrowUp')move(-1);
+  else if(k==='Home')move(-999);else if(k==='End')move(999);
+  else if(/^[1-5]$/.test(k))goPanel(+k);
+  else if(k==='h'||k==='ArrowLeft'||k==='['){tabMove(-1)}else if(k==='l'||k==='ArrowRight'||k===']'){tabMove(1)}
+  else if(k==='?')helpModal();
+  else if(k===':')palette();
+  else if(k==='g')searchAll();
+  else if(k==='/'){openFilter()}
+  else if(k==='r'){gRun('render')}
+  else if(k==='q'){L('dim','(mock) q fecharia o TUI e devolveria o terminal');draw()}
+  else if(k==='Escape'){if(S.zoom){S.zoom=false;draw()}else if(S.filter){S.filter='';draw()}}
+  else if(k==='Enter'){if(!pressKey('enter')&&!(S.p===1&&S.tab[1]===0))zoom()}
+  else if(k===' '){pressKey(' ')}
+  else if(!pressKey(k))h=false;
+  if(h)e.preventDefault();
+}
+function openFilter(){
+  S.modal={type:'filter'};mo.hidden=false;
+  mo.innerHTML='<div class="md"><div class="mt">Filtrar lista</div><input class="in" id="fq" value="'+esc(S.filter)+'" placeholder="texto, id ou projeto" autocomplete="off" spellcheck="false" style="margin-top:8px"><div class="mf" style="margin-top:8px"><span><kbd>enter</kbd> manter</span><span><kbd>esc</kbd> limpar</span></div></div>';
+  var i=$('#fq');i.focus();i.addEventListener('input',function(){S.filter=i.value;draw()});
+  S.modal.type='pick-filter';
+}
+term.addEventListener('keydown',function(e){
+  if(S.modal&&S.modal.type==='pick-filter'){if(e.key==='Escape'){S.filter='';closeModal();draw()}else if(e.key==='Enter'){closeModal();draw()}return}
+  onKey(e);
+});
+term.addEventListener('input',function(e){if(S.modal&&S.modal.type==='form')updForm()});
+term.addEventListener('change',function(e){if(S.modal&&S.modal.type==='form')updForm()});
+term.addEventListener('click',function(e){
+  var t=e.target;
+  if(S.modal){if(t.closest&&t.closest('[data-pi]')){S.modal.idx=+t.closest('[data-pi]').dataset.pi;pickRun()}else if(t===mo)closeModal();return}
+  var tab=t.closest('[data-tab]');if(tab){var a=tab.dataset.tab.split('.');S.p=+a[0];S.tab[S.p]=+a[1];draw();term.focus({preventScroll:true});return}
+  var hint=t.closest('.hint');if(hint){var k=hint.dataset.k;term.focus({preventScroll:true});if(k==='?')helpModal();else if(k===':')palette();else if(k==='/')openFilter();else if(k==='g')searchAll();else if(k==='r')gRun('render');else if(k==='q'){L('dim','(mock) q fecharia o TUI');draw()}else if(k==='enter'){if(!pressKey('enter'))zoom()}else pressKey(k);return}
+  var go=t.closest('[data-go]');if(go){jump(go.dataset.go);term.focus({preventScroll:true});return}
+  var r=t.closest('.r[data-p]');if(r){S.p=+r.dataset.p;setSel(S.p,+r.dataset.i);draw();term.focus({preventScroll:true});return}
+  var pn=t.closest('.pn[data-pn]');if(pn){S.p=+pn.dataset.pn;draw()}
+  term.focus({preventScroll:true});
+});
+term.addEventListener('wheel',function(e){var b=e.target.closest&&e.target.closest('.pb[data-pb]');if(!b||S.modal)return;e.preventDefault();var p=+b.dataset.pb;if(p===1&&S.tab[1]===0)return;S.p=p;move(e.deltaY>0?1:-1)},{passive:false});
+term.addEventListener('dblclick',function(e){if(!S.modal&&e.target.closest('.r[data-p]')){if(!pressKey('enter'))zoom()}});
+function jump(id){
+  var map=[[/^A-/,function(){var a=getA(id);return {p:2,t:['mine','waiting','watching'].indexOf(a.list),all:!isOpen(a)}}],[/^[GP]\d/,function(){return {p:3,t:0}}],[/^R-/,function(){return {p:4,t:0}}],[/^M-/,function(){return {p:4,t:1}}],[/^d:/,function(){return {p:4,t:2}}],[/^S-/,function(){return {p:4,t:3}}]];
+  for(var i=0;i<map.length;i++)if(map[i][0].test(id)){var g=map[i][1]();S.p=g.p;S.tab[g.p]=g.t;if(g.all)S.showAll=true;S.filter='';S.collapsed={};var ix=items(g.p,g.t).map(function(x){return x.id}).indexOf(id);if(ix<0&&/^R-/.test(id)){S.showAll=true;ix=items(g.p,g.t).map(function(x){return x.id}).indexOf(id)}if(ix>=0)setSel(g.p,ix);draw();return}
+}
+
+/* ---------------- cenas, tema, mapa de teclas ---------------- */
+var SCENES=[['Hoje',function(){S.p=1;S.tab[1]=0},0],['Ficha de uma ação',function(){jump('A-0021')}],['Árvore do plano',function(){jump('P2')}],['Aprovar mensagem',function(){jump('M-0002')}],['Foco da semana',function(){jump('d:2026-10-16')}],['Saúde',function(){S.p=1;S.tab[1]=1;setSel(1,1)}]];
+var sc=$('#scenes');
+SCENES.forEach(function(s){var b=document.createElement('button');b.type='button';b.className='chip';b.textContent=s[0];b.addEventListener('click',function(){if(S.modal)closeModal();S.zoom=false;s[1]();draw();term.focus({preventScroll:true})});sc.appendChild(b)});
+var pal=document.createElement('button');pal.type='button';pal.className='chip';pal.textContent='Paleta de comandos (:)';pal.addEventListener('click',function(){S.zoom=false;palette()});sc.appendChild(pal);
+var cl=document.createElement('button');cl.type='button';cl.className='chip';cl.textContent='Fechar uma ação (c)';cl.addEventListener('click',function(){if(S.modal)closeModal();S.zoom=false;jump('A-0021');closeAction()});sc.appendChild(cl);
+var th=$('#theme'),modes=['auto','escuro','claro'],mi=0;
+th.addEventListener('click',function(){mi=(mi+1)%3;var r=document.documentElement;if(mi===0)r.removeAttribute('data-theme');else r.setAttribute('data-theme',mi===1?'dark':'light');th.textContent='tema: '+modes[mi]});
+function buildKeymap(){
+  var out='',ctx=[[1,0,'Status › Resumo'],[1,1,'Status › Saúde'],[1,2,'Status › Sistema'],[2,0,'Ações'],[3,0,'Plano'],[4,0,'Aprovar › Propostas'],[4,1,'Aprovar › Outbox'],[4,2,'Aprovar › Foco'],[4,3,'Aprovar › Publicar'],[5,0,'Registro › Decisões'],[5,2,'Registro › Pessoas']];
+  var sp=S.p,st=Object.assign({},S.tab);
+  ctx.forEach(function(c){S.p=c[0];S.tab[c[0]]=c[1];out+='<section><h3>'+c[2]+'</h3>'+keys(true).map(function(k){return '<div class="kr"><span class="kb '+(k.ag?'ag':'')+'">'+(k.k===' '?'space':k.k==='enter'?'⏎':k.k)+'</span><span>'+(k.ag?'⚡ ':k.gate?'◆ ':'')+esc(k.l)+'</span></div>'}).join('')+'</section>'});
+  S.p=sp;S.tab=st;
+  out+='<section><h3>Em qualquer tela</h3>'+[['1-5','ir ao painel'],['clique','seleciona; duplo clique = ⏎'],['j k','mover na lista (↑ ↓ também)'],['[ ] ← →','trocar de aba (h l também)'],['⏎','ampliar o detalhe'],['esc','voltar'],['/','filtrar a lista'],['g','buscar em tudo'],[':','paleta de comandos'],['?','ajuda do contexto'],['r','regenerar views'],['q','sair']].map(function(k){return '<div class="kr"><span class="kb">'+k[0]+'</span><span>'+k[1]+'</span></div>'}).join('')+'<div class="kr dim" style="margin-top:6px">⚡ roda o agente · ◆ pede aprovação digitada</div></section>';
+  $('#kmap').innerHTML=out;
+}
+buildKeymap();draw();
+})();
+</script>
+</body>
+</html>

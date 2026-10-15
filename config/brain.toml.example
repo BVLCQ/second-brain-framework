@@ -66,6 +66,11 @@ command = ""                    # se preenchido, substitui o preset (use {prompt
 prompt = "/update"
 timeout_min = 45
 
+[tui]
+# Ferramentas extras que o agente (claude) pode usar nas ações ⚡ do `brain tui` — por exemplo as
+# ferramentas de ESCRITA do MCP do Slack, só para enviar uma mensagem já aprovada. Vazio = só leitura.
+agent_allow = []
+
 [backup]
 enabled = false
 max_file_mb = 50                # arquivos maiores entram só no manifesto

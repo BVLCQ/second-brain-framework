@@ -76,7 +76,8 @@ variável `BRAIN_HOME`, o diretório atual se nele (ou num pai) existir
 ```
 brain-v2/                      framework (vai pro git)
 ├── brain                      comando
-├── brainlib/                  motor
+├── brainlib/                  motor (brainlib/tui/ é o cockpit opcional)
+├── requirements-tui.txt       dependências travadas do TUI (opcional)
 ├── commands/                  o que o agente faz em cada /comando
 ├── guides/                    este manual e os guias curtos
 ├── config/*.example           modelos; os arquivos reais não vão pro git

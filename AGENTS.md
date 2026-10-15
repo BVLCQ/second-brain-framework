@@ -226,6 +226,10 @@ apontar, trate como pista e confirme no arquivo.
   e `status:` na ficha da ação são colhidos no próximo render.
 - **MCP somente-leitura** — `./brain mcp` (stdio). Outras IAs consultam;
   nenhuma ferramenta escreve. Para escrever, usam o agente desta instância.
+- **TUI** — `./brain tui` (extra opcional, Textual). Cockpit de teclado: lê em processo
+  e escreve **só chamando `./brain`**, com a linha exata no log. Gates e portas pedem a
+  resposta literal do dono; ações do agente (⚡) rodam o runner configurado. Recusa abrir
+  com `BRAIN_NIGHTLY=1`. Guia: `guides/tui-mockup.html`.
 
 ## Memória para IA (Hindsight)
 
