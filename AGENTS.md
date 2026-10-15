@@ -82,6 +82,26 @@ somente-leitura para o mundo.
    `[publish].destinations` (Slack canvas / Drive) e registra o link.
 4. **Backup** — `brain backup`. Única escrita no Drive: cria/apaga os próprios
    `brain-backup-*.zip` na pasta `GOOGLE_BACKUP_FOLDER_ID`. Escopo `drive.file`.
+5. **Framework (upstream)** — git puro, com hook. Esta instância é um clone do
+   repo público do framework; `vault/` e a config pessoal são cegos pro git.
+   **Toda melhoria de código ou estrutura** feita aqui — `brainlib/`,
+   `commands/`, `guides/`, `template/`, `tests/`, `services/`, `scripts/` —
+   volta ao repo para as outras instâncias se beneficiarem:
+   - **Mesma sessão.** Ao terminar uma mudança de framework, rode
+     `./brain upstream scan`. Pendência não dorme: o agente propõe ao dono,
+     no fim da sessão, os arquivos, a mensagem do commit e o resultado da
+     varredura.
+   - **Generalize antes de subir.** O repo é público. Nada do dono vai pra lá:
+     nomes, e-mails, pessoas do ledger, canais do Slack, caminhos da máquina,
+     segredos. Use exemplos genéricos (`ana`, `example.com`, `#seu-canal`) ou
+     deixe em `scripts/local/` / `config/`. A varredura não substitui ler o
+     diff.
+   - **Gate.** O dono aprova com "ok"; só então `git add` dos arquivos
+     específicos, `commit` e `push`. O hook `pre-push` roda a varredura e
+     barra achados. Nunca `--force`, nunca `--no-verify`, nunca `vault/` ou
+     `config/.env`. O noturno nunca sobe.
+   - **Descer.** `./brain update` traz melhorias do framework (`--check`
+     antes, se quiser). Se o upstream andou, `update` vem antes do push.
 
 O noturno roda com `BRAIN_NIGHTLY=1`: o ledger **recusa** qualquer evento do
 dono, aprovação, envio, publicação ou `focus.apply` no Google. Não há dono
@@ -223,8 +243,8 @@ texto original; `brain-mem` = fatos extraídos). O vault continua a verdade.
 - O dono pode pedir análise de conteúdo confidencial de trabalho: normal
   para uso pessoal interno; o agente não classifica, apenas organiza.
 - **O vault não sai da máquina**, salvo pelas portas `share` / `publish` /
-  `backup` (com gate). Nunca commitar, nunca pushar, nunca colar conteúdo
-  de zona em canal externo sem passar pela porta.
+  `backup` (com gate). Conteúdo de zona nunca é commitado nem pushado. Código
+  e estrutura do framework são a exceção, e sobem só pela porta `upstream`.
 
 ## Datas e linguagem
 

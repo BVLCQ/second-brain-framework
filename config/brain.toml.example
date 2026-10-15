@@ -38,7 +38,7 @@ daily_max = 10
 
 [publish]
 # Destinos do espaço do time. Cada publicação exige aprovação explícita.
-# Exemplos: "slack:#gtm-retention" · "drive:<folder-id>"
+# Exemplos: "slack:#seu-canal" · "drive:<folder-id>"
 destinations = []
 
 [extractor]

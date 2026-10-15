@@ -7,7 +7,7 @@
 
     ### P1 — Nome do projeto
     - status: ativo
-    - dono: vini
+    - dono: ana
     - [ ] P1.1 Entregável · prazo: 2026-10-30 · peso: 2
     - [x] P1.2 Entregável · prazo: 2026-11-15 · feito: 2026-11-10
     - [-] P1.3 Entregável cancelado

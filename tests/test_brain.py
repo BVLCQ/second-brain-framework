@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -14,7 +15,7 @@ sys.path.insert(0, str(ROOT))
 
 os.environ.setdefault("BRAIN_NOW", "2026-10-09T10:00:00-03:00")
 
-from brainlib import config, extract as extract_mod, focus, harvest, mcp_server, outbox, planning, people, render, schema, share, snapshot, util
+from brainlib import config, doctor, extract as extract_mod, focus, harvest, mcp_server, memory, outbox, planning, people, render, schema, share, snapshot, upstream, util
 from brainlib.core import Brain
 from brainlib.gcal import GoogleCalendar
 from brainlib import demo as demo_mod
@@ -460,6 +461,354 @@ class ExtractTests(unittest.TestCase):
             b.inst.cfg["extractor"]["model"] = "m"
             with self.assertRaises(util.BrainError):
                 extract_mod.extract(b, outside)
+
+
+class FakeHindsight(memory.Hindsight):
+    """Hindsight em memória: retain assíncrono abre uma operação; o teste decide como ela termina."""
+
+    def __init__(self):
+        super().__init__("http://fake")
+        self.ops: dict[str, dict] = {}   # op_id → {bank, document_id, status, created_at, updated_at}
+        self.sent: list[tuple[str, str]] = []
+        self.calls = 0
+        self.clock = 0
+        self.bank_stats: dict[str, dict] = {}   # bank → campos extras de /stats (pending_consolidation…)
+
+    def _add(self, bank: str, doc: str, status: str = "processing", op_type: str = "retain") -> str:
+        self.clock += 1
+        op_id = f"op-{len(self.ops) + 1}"
+        t = (datetime(2026, 10, 9, 9, 0) + timedelta(minutes=self.clock)).isoformat() + "+00:00"
+        self.ops[op_id] = {"id": op_id, "bank": bank, "document_id": doc, "status": status,
+                           "operation_type": op_type, "created_at": t, "updated_at": t}
+        return op_id
+
+    def health(self):
+        return {"status": "healthy"}
+
+    def stats(self, bank):
+        return {"bank_id": bank, **self.bank_stats.get(bank, {})}
+
+    def retain(self, bank, items, async_=True):
+        self.calls += 1
+        self.sent.append((bank, items[0]["document_id"]))
+        return {"success": True, "bank_id": bank, "items_count": 1, "async": True,
+                "operation_id": self._add(bank, items[0]["document_id"])}
+
+    def operation(self, bank, op_id):
+        o = self.ops.get(op_id)
+        return {"operation_id": op_id, "status": o["status"]} if o else {"operation_id": op_id, "status": "not_found"}
+
+    def operations(self, bank, status, page=100, max_pages=20):
+        return [dict(o) for o in self.ops.values() if o["bank"] == bank and o["status"] == status]
+
+    def finish(self, doc: str, status: str, bank: str = "brain-mem"):
+        for o in self.ops.values():
+            if o["bank"] == bank and o["document_id"] == doc and o["status"] == "processing":
+                o["status"] = status
+
+
+class MemorySyncTests(unittest.TestCase):
+    def _setup(self, td):
+        b = _brain(Path(td))
+        return b, FakeHindsight()
+
+    def test_sync_records_operation_ids(self):
+        with tempfile.TemporaryDirectory() as td:
+            b, hs = self._setup(td)
+            res = memory.sync(b, hs=hs)
+            self.assertGreater(res["sent"], 0)
+            self.assertEqual(res["remaining"], 0)
+            state = util.read_json(memory._state_path(b), {})
+            self.assertTrue(state[memory.OPS_KEY]["mem"]["PLANNING/goals.md"]["ids"])
+
+    def test_failed_async_retain_is_resent(self):
+        with tempfile.TemporaryDirectory() as td:
+            b, hs = self._setup(td)
+            memory.sync(b, hs=hs)
+            hs.finish("PLANNING/goals.md", "failed")
+            for o in hs.ops.values():
+                if o["status"] == "processing":
+                    o["status"] = "completed"
+            hs.sent.clear()
+            res = memory.sync(b, hs=hs)
+            self.assertEqual(res["resent"], ["mem:PLANNING/goals.md"])
+            self.assertEqual(hs.sent, [("brain-mem", "PLANNING/goals.md")])
+            self.assertEqual(res["remaining"], 0)
+            # o reenvio ainda em andamento não dispara novo reenvio
+            hs.sent.clear()
+            self.assertEqual(memory.sync(b, hs=hs)["resent"], [])
+            self.assertEqual(hs.sent, [])
+
+    def test_legacy_state_uses_failed_list(self):
+        """Estado de antes do rastreio (sem _ops): a lista status=failed do servidor decide."""
+        with tempfile.TemporaryDirectory() as td:
+            b, hs = self._setup(td)
+            memory.sync(b, hs=hs)
+            for o in hs.ops.values():
+                o["status"] = "completed"
+            hs._add("brain-mem", "PLANNING/goals.md", "failed")   # falha mais nova que o retain concluído
+            hs._add("brain-mem", "profile-velho.md", "failed")    # documento fora do estado: ignorado
+            state = util.read_json(memory._state_path(b), {})
+            state.pop(memory.OPS_KEY)
+            util.write_json(memory._state_path(b), state)
+            hs.sent.clear()
+            res = memory.sync(b, hs=hs)
+            self.assertEqual(res["resent"], ["mem:PLANNING/goals.md"])
+            self.assertEqual(hs.sent, [("brain-mem", "PLANNING/goals.md")])
+
+    def test_old_failure_superseded_by_later_success_is_ignored(self):
+        with tempfile.TemporaryDirectory() as td:
+            b, hs = self._setup(td)
+            hs._add("brain-mem", "PLANNING/goals.md", "failed")
+            memory.sync(b, hs=hs)
+            for o in hs.ops.values():
+                o["status"] = "completed" if o["status"] == "processing" else o["status"]
+            hs.sent.clear()
+            res = memory.sync(b, hs=hs)
+            self.assertEqual(res["resent"], [])
+            self.assertEqual(memory.op_problems(b, hs)["failed"], [])
+
+    def test_gives_up_after_max_tries(self):
+        with tempfile.TemporaryDirectory() as td:
+            b, hs = self._setup(td)
+            memory.sync(b, hs=hs)
+            for _ in range(memory.MAX_TRIES):
+                hs.finish("PLANNING/goals.md", "failed")
+                self.assertEqual(memory.sync(b, hs=hs)["resent"], ["mem:PLANNING/goals.md"])
+            hs.finish("PLANNING/goals.md", "failed")
+            res = memory.sync(b, hs=hs)
+            self.assertEqual(res["resent"], [])
+            self.assertEqual(res["gave_up"], ["mem:PLANNING/goals.md"])
+            self.assertEqual(memory.op_problems(b)["gave_up"], ["mem:PLANNING/goals.md"])
+
+    def test_dry_run_does_not_touch_server(self):
+        with tempfile.TemporaryDirectory() as td:
+            b, hs = self._setup(td)
+            res = memory.sync(b, dry_run=True, hs=hs)
+            self.assertTrue(res["would_send"])
+            self.assertEqual(hs.calls, 0)
+
+    def test_status_and_doctor_warn_on_failed_and_stuck(self):
+        with tempfile.TemporaryDirectory() as td:
+            b, hs = self._setup(td)
+            b.inst.cfg["memory"]["engine"] = "hindsight"
+            memory.sync(b, hs=hs)
+            for o in hs.ops.values():
+                o["status"] = "completed"
+            self.assertEqual(memory.status(b, online=True, hs=hs)["level"], "ok")
+            # falha no servidor, ainda sem ter passado por um sync
+            hs._add("brain-mem", "PLANNING/goals.md", "failed")
+            s = memory.status(b, online=True, hs=hs)
+            self.assertEqual(s["level"], "warn")
+            self.assertIn("mem:PLANNING/goals.md", s["detail"])
+            # operação parada em processing há mais de 2h (BRAIN_NOW = 2026-10-09T10:00-03:00 = 13:00Z)
+            hs.ops[hs._add("brain-raw", "RAW/x.md", "processing")]["updated_at"] = "2026-10-09T10:30:00+00:00"
+            s = memory.status(b, online=True, hs=hs)
+            self.assertEqual(len(s["problems"]["stuck"]), 1)
+            self.assertIn("processamento há mais de 2h", s["detail"])
+            hs.ops[hs._add("brain-raw", "RAW/y.md", "processing")]["updated_at"] = "2026-10-09T12:30:00+00:00"
+            self.assertEqual(len(memory.status(b, online=True, hs=hs)["problems"]["stuck"]), 1)
+
+    def test_status_shows_queue(self):
+        with tempfile.TemporaryDirectory() as td:
+            b, hs = self._setup(td)
+            b.inst.cfg["memory"]["engine"] = "hindsight"
+            memory.sync(b, hs=hs)
+            for o in hs.ops.values():
+                o["status"] = "completed"
+            s = memory.status(b, online=True, hs=hs)
+            self.assertIn("fila: vazia — LLM livre", s["queue_text"])
+            hs._add("brain-mem", None, "processing", "consolidation")
+            hs._add("brain-mem", None, "pending", "consolidation")
+            hs._add("brain-raw", "RAW/x.md", "pending")
+            hs.bank_stats["brain-mem"] = {"pending_consolidation": 12, "failed_consolidation": 3}
+            s = memory.status(b, online=True, hs=hs)
+            self.assertEqual(s["queue"]["brain-mem"]["ops"]["consolidation"], {"processing": 1, "pending": 1})
+            self.assertIn("fila: ocupada", s["queue_text"])
+            self.assertIn("consolidation 1 rodando + 1 na fila", s["queue_text"])
+            self.assertIn("12 memórias aguardando consolidação", s["queue_text"])
+            self.assertIn("brain-raw: retain 1 na fila", s["queue_text"])
+            # consolidação que desistiu vira aviso
+            self.assertEqual(s["level"], "warn")
+            self.assertIn("brain-mem 3", s["detail"])
+
+    def test_doctor_warns_offline_from_recorded_failures(self):
+        with tempfile.TemporaryDirectory() as td:
+            b, hs = self._setup(td)
+            b.inst.cfg["memory"]["engine"] = "hindsight"
+            memory.sync(b, hs=hs)
+            hs.finish("PLANNING/goals.md", "failed")
+            state = util.read_json(memory._state_path(b), {})
+            memory.reconcile(b, hs, state)
+            util.write_json(memory._state_path(b), state)
+            mem_check = [c for c in doctor.checks(b) if c["title"] == "memória"][0]
+            self.assertEqual(mem_check["level"], "warn")
+            self.assertIn("retain falho", mem_check["detail"])
+
+
+class UpstreamTests(unittest.TestCase):
+    """update/upstream contra repos git locais: um remoto bare, um mantenedor (A) e uma instância (B)."""
+
+    def setUp(self):
+        self._env = {k: os.environ.get(k) for k in ("GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_NAME",
+                                                    "GIT_COMMITTER_EMAIL", "BRAIN_NIGHTLY")}
+        os.environ.update(GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@example.org",
+                          GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@example.org")
+        os.environ.pop("BRAIN_NIGHTLY", None)
+        self._td = tempfile.TemporaryDirectory()
+        tmp = Path(self._td.name)
+        self.remote, self.a, self.b = tmp / "remote.git", tmp / "a", tmp / "b"
+        self._git(tmp, "init", "-q", "--bare", "-b", "main", str(self.remote))
+        self._git(tmp, "clone", "-q", str(self.remote), str(self.a))
+        (self.a / "brainlib").mkdir()
+        (self.a / "brainlib" / "__init__.py").write_text('__version__ = "1.0.0"\n', encoding="utf-8")
+        (self.a / "brain").write_text("print('doctor ok')\n", encoding="utf-8")
+        (self.a / "template" / "PROFILE").mkdir(parents=True)
+        (self.a / "template" / "PROFILE" / "me.md").write_text("modelo v1\n", encoding="utf-8")
+        (self.a / ".gitignore").write_text("/vault/\nconfig/brain.toml\nconfig/.env\n", encoding="utf-8")
+        self._commit(self.a, "base")
+        self._git(self.a, "push", "-q", "origin", "HEAD:main")
+        self._git(tmp, "clone", "-q", str(self.remote), str(self.b))
+        (self.b / "config").mkdir()
+        (self.b / "config" / "brain.toml").write_text('[owner]\nid = "dona"\nname = "Fulana Quiteria"\n', encoding="utf-8")
+        (self.b / "vault" / "PROFILE").mkdir(parents=True)
+        (self.b / "vault" / "PROFILE" / "me.md").write_text("meu texto\n", encoding="utf-8")
+        self.inst = config.load(self.b)
+
+    def tearDown(self):
+        for k, v in self._env.items():
+            os.environ.pop(k, None) if v is None else os.environ.__setitem__(k, v)
+        self._td.cleanup()
+
+    @staticmethod
+    def _git(cwd, *args):
+        return subprocess.run(["git", "-C", str(cwd), *args], check=True, capture_output=True, text=True).stdout
+
+    def _commit(self, repo, msg):
+        self._git(repo, "add", "-A")
+        self._git(repo, "commit", "-q", "-m", msg)
+
+    def _upstream_release(self):
+        (self.a / "template" / "PROFILE" / "me.md").write_text("modelo v2\n", encoding="utf-8")
+        (self.a / "template" / "PROFILE" / "novo.md").write_text("novo\n", encoding="utf-8")
+        (self.a / "brainlib" / "__init__.py").write_text('__version__ = "1.1.0"\n', encoding="utf-8")
+        self._commit(self.a, "v1.1")
+        self._git(self.a, "push", "-q", "origin", "HEAD:main")
+
+    def test_update_check_does_nothing_then_apply_seeds_without_overwriting(self):
+        self._upstream_release()
+        res = upstream.update(self.inst, check=True)
+        self.assertEqual((res["behind"], res["updated"]), (1, False))
+        self.assertEqual(_read(self.b / "brainlib" / "__init__.py"), '__version__ = "1.0.0"\n')
+        res = upstream.update(self.inst)
+        self.assertTrue(res["updated"])
+        self.assertEqual((res["version_before"], res["version_after"]), ("1.0.0", "1.1.0"))
+        self.assertEqual(_read(self.b / "vault" / "PROFILE" / "novo.md"), "novo\n")
+        self.assertEqual(_read(self.b / "vault" / "PROFILE" / "me.md"), "meu texto\n")
+        self.assertEqual(res["template_diverged"], ["vault/PROFILE/me.md"])
+        self.assertTrue(res["doctor_ok"])
+        self.assertEqual(upstream.update(self.inst)["behind"], 0)
+
+    def test_update_diverged_needs_rebase(self):
+        (self.b / "brainlib" / "extra.py").write_text("x = 1\n", encoding="utf-8")
+        self._commit(self.b, "local")
+        self._upstream_release()
+        with self.assertRaises(util.BrainError) as cm:
+            upstream.update(self.inst)
+        self.assertEqual(cm.exception.code, 2)
+        res = upstream.update(self.inst, rebase=True)
+        self.assertEqual((res["updated"], res["ahead"]), (True, 1))
+        self.assertTrue((self.b / "brainlib" / "extra.py").exists())
+        self.assertEqual(upstream.upstream_scan(self.inst)["ahead"], 1)
+
+    def test_update_refuses_when_vault_is_tracked(self):
+        self._git(self.b, "add", "-f", "vault/PROFILE/me.md")
+        with self.assertRaises(util.BrainError) as cm:
+            upstream.update(self.inst, check=True)
+        self.assertIn("vault/PROFILE/me.md", str(cm.exception))
+
+    def _leaky_file(self):
+        home_path = "/" + "Users" + "/alguem/projeto"
+        token = "xox" + "b-" + "1234567890-abcdef"
+        (self.b / "brainlib" / "leak.py").write_text(
+            f"# feito por Fulana Quiteria\nPATH = '{home_path}'\nTOKEN = '{token}'\n", encoding="utf-8")
+
+    def test_scan_clean_change_has_no_findings(self):
+        (self.b / "brainlib" / "feature.py").write_text("x = 1\n", encoding="utf-8")
+        st = upstream.upstream_scan(self.inst)
+        self.assertEqual((st["findings"], st["new"]), ([], ["brainlib/feature.py"]))
+
+    def test_scan_flags_personal_data_secret_and_machine_path(self):
+        self._leaky_file()
+        rules = {f["rule"] for f in upstream.upstream_scan(self.inst)["findings"]}
+        self.assertEqual(rules, {"dado pessoal (dono)", "caminho da máquina", "token do Slack"})
+
+    def test_scan_ignores_placeholders_and_container_paths(self):
+        (self.b / "doc.md").write_text(
+            "https://seu-workspace.slack.com/archives/C1\n/home/postgres/data\n/" + "Users" + "/you/x\n", encoding="utf-8")
+        self.assertEqual(upstream.upstream_scan(self.inst)["findings"], [])
+
+    def test_scan_covers_commit_messages_and_committed_mode_skips_worktree(self):
+        (self.b / "brainlib" / "ok.py").write_text("x = 1\n", encoding="utf-8")
+        self._commit(self.b, "ajuste pedido por Fulana Quiteria")
+        self._leaky_file()
+        self.assertEqual({f["file"] for f in upstream.upstream_scan(self.inst, committed=True)["findings"]},
+                         {"(mensagem de commit)"})
+        self.assertIn("brainlib/leak.py", {f["file"] for f in upstream.upstream_scan(self.inst)["findings"]})
+
+    def test_committed_scan_sees_leak_even_if_a_later_commit_removes_it(self):
+        (self.b / "doc.md").write_text("contato: Fulana Quiteria\n", encoding="utf-8")
+        self._commit(self.b, "adiciona")
+        (self.b / "doc.md").write_text("contato: alguem\n", encoding="utf-8")
+        self._commit(self.b, "limpa")
+        self.assertEqual(upstream.upstream_scan(self.inst)["findings"], [])  # diff líquido está limpo
+        found = upstream.upstream_scan(self.inst, committed=True)["findings"]
+        self.assertEqual(len(found), 1)
+        self.assertIn("commit", found[0]["file"])
+
+    def test_hook_blocks_real_git_push_with_leak_and_allows_clean(self):
+        self.assertEqual(upstream.hook(self.inst, "install"), "instalado")
+        hook = upstream._hook_path(self.b)
+        self.assertTrue(os.access(hook, os.X_OK))
+        # o hook chama ./brain da instância: aponta para o CLI real deste repo
+        (self.b / "brain").write_text(
+            f"#!/bin/sh\nBRAIN_HOME={self.b} exec {sys.executable} {ROOT / 'brain'} \"$@\"\n", encoding="utf-8")
+        (self.b / "brain").chmod(0o755)
+        self._git(self.b, "update-index", "--assume-unchanged", "brain")
+        (self.b / "brainlib" / "leak.py").write_text("# Fulana Quiteria\n", encoding="utf-8")
+        self._commit(self.b, "vaza")
+        bad = subprocess.run(["git", "-C", str(self.b), "push", "origin", "HEAD:main"], capture_output=True, text=True)
+        self.assertNotEqual(bad.returncode, 0)
+        self.assertIn("push bloqueado", bad.stderr)
+        self._git(self.b, "reset", "-q", "--hard", "origin/main")
+        (self.b / "brainlib" / "feature.py").write_text("x = 1\n", encoding="utf-8")
+        self._commit(self.b, "ok")
+        good = subprocess.run(["git", "-C", str(self.b), "push", "origin", "HEAD:main"], capture_output=True, text=True)
+        self.assertEqual(good.returncode, 0, good.stderr)
+
+    def test_hook_install_respects_foreign_hook_and_remove(self):
+        path = upstream._hook_path(self.b)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("#!/bin/sh\necho meu\n", encoding="utf-8")
+        self.assertEqual(upstream.hook(self.inst, "install"), "de-outro")
+        self.assertIn("echo meu", _read(path))
+        path.unlink()
+        self.assertEqual(upstream.hook(self.inst, "install"), "instalado")
+        self.assertEqual(upstream.hook(self.inst, "remove"), "ausente")
+
+    def test_doctor_reports_pending_and_missing_hook(self):
+        (self.b / "brainlib" / "feature.py").write_text("x = 1\n", encoding="utf-8")
+        got = {c["title"]: c["level"] for c in upstream.doctor_checks(self.inst)}
+        self.assertEqual(got, {"framework": "warn", "hook pre-push": "warn"})
+        self._git(self.b, "add", "-A")
+        self._git(self.b, "commit", "-q", "-m", "x")
+        self._git(self.b, "push", "-q", "origin", "HEAD:main")
+        upstream.hook(self.inst, "install")
+        self.assertEqual({c["level"] for c in upstream.doctor_checks(self.inst)}, {"ok"})
+
+
+def _read(path: Path) -> str:
+    return path.read_text(encoding="utf-8")
 
 
 class SchemaCoverageTests(unittest.TestCase):

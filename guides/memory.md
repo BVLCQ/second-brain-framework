@@ -62,6 +62,17 @@ url = "http://localhost:8888"
 ./brain memory recall "quem decidiu congelar o agente?"
 ```
 
+O retain do Hindsight é assíncrono: o `sync` guarda o `operation_id` de cada documento em
+`config/.memory-state.json` (`_ops`) e, no sync seguinte, consulta o servidor — documento cujo retain
+falhou (ex.: timeout do LLM) sai do estado e é reenviado (até 3 vezes; depois `doctor` avisa).
+`brain memory status` / `brain doctor --online` também avisam de retains falhos sem retain posterior
+bem-sucedido e de operações em `processing` há mais de 2h.
+
+`brain memory status` mostra ainda a **fila** de cada banco (retain/consolidação rodando ou na fila,
+memórias aguardando consolidação). `fila: vazia — LLM livre` = o Hindsight não está usando o LLM nem
+o embedding; `ocupada` = não descarregue os modelos nem pese a máquina agora. Memórias que desistiram
+da consolidação (`failed_consolidation`) viram aviso. `--json` traz os números em `queue`.
+
 O noturno chama `sync` sozinho. Após um `/dump` pesado, rode `./brain memory
 sync` para o índice ficar fresco no mesmo dia. `rebuild` apaga os dois bancos
 e reconstrói — use quando mudar o mission ou suspeitar de lixo.

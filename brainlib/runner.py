@@ -93,7 +93,8 @@ def nightly(brain, skip_agent: bool = False) -> dict:
         step("foco", lambda: f"{len(focus.sync(brain))} blocos de ações fechadas removidos")
     if brain.inst.cfg["memory"]["engine"] == "hindsight":
         from . import memory
-        step("memória", lambda: (lambda r: f"{r['sent']} enviados, {r['remaining']} pendentes")(memory.sync(brain)))
+        step("memória", lambda: (lambda r: f"{r['sent']} enviados, {r['remaining']} pendentes"
+                                                   + (f", {len(r['resent'])} reenviados por retain falho" if r.get("resent") else ""))(memory.sync(brain)))
     bk = brain.inst.cfg["backup"]
     if bk["enabled"] and util.today().isoweekday() == bk["weekday"]:
         from . import backup
@@ -125,6 +126,9 @@ def schedule_cli(args, brain) -> None:
     if args.action == "install":
         hh, mm = args.time.split(":")
         root = shlex.quote(str(brain.inst.root))
-        lines.append(f"{int(mm)} {int(hh)} * * * cd {root} && ./brain nightly >> vault/logs/cron.log 2>&1 {MARK}")
+        # cron roda com PATH mínimo (python do sistema, sem mise/agente) — fixa o PATH de quem instalou
+        path = shlex.quote(os.environ.get("PATH", "/usr/bin:/bin"))
+        lines.append(f"{int(mm)} {int(hh)} * * * cd {root} && PATH={path} ./brain nightly "
+                     f">> vault/logs/cron.log 2>&1 {MARK}")
     subprocess.run(["crontab", "-"], input="\n".join(lines) + "\n", text=True, check=True)
     print(f"✓ noturno agendado às {args.time} (crontab)" if args.action == "install" else "✓ agendamento removido")

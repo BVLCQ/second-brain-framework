@@ -232,6 +232,8 @@ def selftest(brain: Brain) -> dict:
         target = Path(td) / "demo"
         demo_mod.build(target)
         demo_brain = Brain(_load_inst(target))
+        # o demo nasce com o extrator desligado — o selftest testa o extrator da instância real
+        demo_brain.inst.cfg["extractor"] = dict(brain.inst.cfg["extractor"])
         raws = sorted((target / "vault" / "RAW").rglob("*.md"))
         raws = [r for r in raws if r.name != ".keep.md"]
         # prefere uma reunião de verdade para provar o funil completo

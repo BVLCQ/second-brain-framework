@@ -859,10 +859,16 @@ contrário. Guia curto: `guides/backup.md`.
 
 ### Atualizar o framework (`/upgrade`)
 
-`git pull --ff-only`. Arquivo novo de `template/` que falte no vault é
-copiado; o que já é seu não é sobrescrito. Se o pull brigar com uma edição
-local do agente, ele te mostra o diff: ou a mudança sobe para o framework,
-ou se descarta. Nunca commita `vault/` nem `.env`.
+`./brain update` traz as melhorias do framework: `git pull --ff-only --autostash`, semeia
+arquivo novo de `template/` que falte no vault (o que já é seu não é sobrescrito), avisa se um
+template que você já tem mudou, e roda o `doctor`. `--check` só mostra o que chegou; `--rebase`
+re-aplica commits locais por cima. Se o pull brigar com uma edição local do agente, ele te mostra
+o diff: ou a mudança sobe para o framework, ou se descarta. Nunca commita `vault/` nem `.env`.
+
+O caminho de volta é git puro (`add`/`commit`/`push`): toda melhoria de código ou estrutura feita
+na instância sobe ao repo do framework, depois do seu "ok". Um hook `pre-push` (instalado por
+`brain update`/`brain init`) roda `./brain upstream scan --committed` e barra o push se achar dado
+pessoal ou segredo; o `doctor` avisa do que ainda não subiu.
 
 ---
 

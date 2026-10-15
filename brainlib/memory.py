@@ -15,11 +15,15 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from . import config, model, util
 
 STATE_NAME = ".memory-state.json"
+OPS_KEY = "_ops"          # no state: {bank: {doc_id: {ids, sha, ts, tries, failed}}} — rastro dos retains assíncronos
+MAX_TRIES = 3             # depois disso o documento deixa de ser reenviado sozinho (o doctor segue avisando)
+STUCK_HOURS = 2           # operação em `processing` sem andar há mais que isso é suspeita
 RAW_TEXT = {".md", ".txt", ".csv", ".json", ".html", ".htm", ".vtt", ".srt", ".tsv"}
 RAW_FILES = {".pdf", ".docx", ".pptx", ".xlsx", ".doc", ".ppt", ".xls", ".odt", ".rtf"}
 
@@ -28,7 +32,9 @@ MEM_MISSION = ("Memória de trabalho de {owner}: goals, projetos, decisões (que
                "O document_id de cada memória é o caminho do arquivo no vault — cite-o ao responder.")
 RETAIN_MISSION = ("Extraia fatos duráveis: decisões e quem decidiu, compromissos com dono e prazo, entregas e "
                   "resultados, mudanças de plano, papéis e preferências observadas das pessoas. Preserve datas, "
-                  "nomes e números exatamente. Ignore logística de reunião, cumprimentos e conversa social.")
+                  "nomes e números exatamente. Ignore logística de reunião, cumprimentos e conversa social. "
+                  "Escreva cada fato no MESMO idioma do documento de origem (pt-BR, es ou en) — nunca "
+                  "traduza; termos internos e citações ficam como no original.")
 OBS_MISSION = "Observações são fatos estáveis sobre pessoas, projetos e o modo de trabalho do dono."
 
 
@@ -99,6 +105,20 @@ class Hindsight:
 
     def stats(self, bank: str) -> dict:
         return self._req("GET", self._bank(bank) + "/stats")
+
+    def operation(self, bank: str, op_id: str) -> dict:
+        return self._req("GET", self._bank(bank) + f"/operations/{urllib.parse.quote(op_id)}")
+
+    def operations(self, bank: str, status: str, page: int = 100, max_pages: int = 20) -> list[dict]:
+        """Todas as operações com esse status (pagina; o servidor limita `limit`)."""
+        out: list[dict] = []
+        for i in range(max_pages):
+            res = self._req("GET", self._bank(bank) + "/operations?" + urllib.parse.urlencode(
+                {"status": status, "limit": page, "offset": i * page}))
+            out += res.get("operations", [])
+            if len(out) >= res.get("total", 0) or not res.get("operations"):
+                break
+        return out
 
 
 def client(brain) -> Hindsight:
@@ -212,37 +232,129 @@ def setup(brain, hs: Hindsight | None = None) -> list[str]:
     return [mem["mem_bank"], mem["raw_bank"]]
 
 
+def _op_ids(res: dict) -> list[str]:
+    """IDs das operações assíncronas que o servidor abriu (retain: operation_id[s]; arquivo: operation_ids)."""
+    ids = [i for i in (res.get("operation_ids") or []) if isinstance(i, str)]
+    first = res.get("operation_id")
+    if isinstance(first, str) and first not in ids:
+        ids.insert(0, first)
+    return ids
+
+
+def _banks(brain) -> dict[str, str]:
+    mem = brain.inst.cfg["memory"]
+    return {"mem": mem["mem_bank"], "raw": mem["raw_bank"]}
+
+
+def failed_docs(hs: Hindsight, bank: str) -> dict[str, dict]:
+    """document_id → última operação falha, só dos documentos cuja ÚLTIMA tentativa falhou.
+
+    Falha antiga já superada por um retain posterior (concluído, pendente ou em andamento) não conta."""
+    failed = [o for o in hs.operations(bank, "failed") if o.get("document_id") and o.get("created_at")]
+    if not failed:
+        return {}
+    latest_ok: dict[str, datetime] = {}
+    for status in ("completed", "pending", "processing"):
+        for o in hs.operations(bank, status):
+            if o.get("document_id") and o.get("created_at"):
+                t = util.parse_dt(o["created_at"])
+                latest_ok[o["document_id"]] = max(latest_ok.get(o["document_id"], t), t)
+    out: dict[str, dict] = {}
+    for o in failed:
+        doc, t = o["document_id"], util.parse_dt(o["created_at"])
+        if t >= latest_ok.get(doc, t) and (doc not in out or t >= util.parse_dt(out[doc]["created_at"])):
+            out[doc] = o
+    return out
+
+
+def stuck_ops(hs: Hindsight, bank: str) -> list[dict]:
+    """Operações em `processing` sem atualização há mais de STUCK_HOURS."""
+    limit = util.now() - timedelta(hours=STUCK_HOURS)
+    return [o for o in hs.operations(bank, "processing")
+            if (o.get("updated_at") or o.get("created_at")) and util.parse_dt(o.get("updated_at") or o["created_at"]) < limit]
+
+
+def reconcile(brain, hs: Hindsight, state: dict) -> dict:
+    """Confere os retains assíncronos já aceitos e tira do estado os que falharam (viram pendentes de novo).
+
+    1) operações que nós abrimos (state[_ops]) são consultadas uma a uma até assentarem;
+    2) rede de segurança: falhas no servidor sem rastro nosso (estado antigo; retain de arquivo, onde
+       a falha é de uma operação filha) pelo `status=failed`. Depois de MAX_TRIES reenvios, desiste e avisa."""
+    dropped, gave_up = [], []
+    ops = state.setdefault(OPS_KEY, {})
+    for key, bank in _banks(brain).items():
+        tracked, done = ops.setdefault(key, {}), state.setdefault(key, {})
+        bad: set[str] = set()
+        for doc, t in list(tracked.items()):
+            if t.get("failed"):
+                continue  # já retirado do estado; espera o reenvio
+            statuses = [hs.operation(bank, i).get("status") for i in t.get("ids", [])]
+            if "failed" in statuses:
+                bad.add(doc)
+            elif not any(x in ("pending", "processing") for x in statuses):
+                del tracked[doc]  # tudo concluído (ou o servidor já esqueceu): nada mais a vigiar
+        bad |= {doc for doc in failed_docs(hs, bank) if doc in done}
+        for doc in sorted(bad):
+            t = tracked.setdefault(doc, {"ids": [], "sha": done.get(doc), "tries": 0})
+            if t.get("tries", 0) >= MAX_TRIES:
+                gave_up.append(f"{key}:{doc}")
+                continue
+            done.pop(doc, None)
+            t["failed"] = True
+            dropped.append(f"{key}:{doc}")
+    return {"dropped": dropped, "gave_up": gave_up}
+
+
 def sync(brain, limit: int | None = None, dry_run: bool = False, hs: Hindsight | None = None) -> dict:
+    if dry_run:
+        todo = pending(brain)[:limit] if limit else pending(brain)
+        return {"would_send": [f"{d['bank']}:{d['id']}" for d in todo], "sent": 0}
+    hs = hs or client(brain)
+    banks = _banks(brain)
+    state = util.read_json(_state_path(brain), {})
+    sent, errors = 0, []
+    try:
+        rec = reconcile(brain, hs, state)
+    except util.BrainError as e:
+        if "fora do ar" in str(e):
+            return {"sent": 0, "errors": [str(e)], "remaining": len(pending(brain)), "resent": [], "gave_up": []}
+        rec = {"dropped": [], "gave_up": []}
+        errors.append(f"conferência das operações: {e}")
+    util.write_json(_state_path(brain), state)  # o que falhou já volta a ser pendente
     todo = pending(brain)
     if limit:
         todo = todo[:limit]
-    if dry_run:
-        return {"would_send": [f"{d['bank']}:{d['id']}" for d in todo], "sent": 0}
-    hs = hs or client(brain)
-    mem = brain.inst.cfg["memory"]
-    banks = {"mem": mem["mem_bank"], "raw": mem["raw_bank"]}
-    state = util.read_json(_state_path(brain), {})
-    sent, errors = 0, []
+    tracked_all = state.setdefault(OPS_KEY, {})
     for d in todo:
         meta = {"document_id": d["id"], "tags": d["tags"], "metadata": {"vault_path": d["id"]}}
         if d.get("date"):
             meta["timestamp"] = f"{d['date']}T12:00:00"
         try:
             if "file" in d:
-                hs.retain_file(banks[d["bank"]], d["file"], meta)
+                res = hs.retain_file(banks[d["bank"]], d["file"], meta)
             else:
-                hs.retain(banks[d["bank"]], [{"content": d["text"], "context": d["id"], **meta}])
+                res = hs.retain(banks[d["bank"]], [{"content": d["text"], "context": d["id"], **meta}])
         except util.BrainError as e:
             errors.append(f"{d['id']}: {e}")
             if "fora do ar" in str(e):
                 break
             continue
         state.setdefault(d["bank"], {})[d["id"]] = d["sha"]
+        tracked = tracked_all.setdefault(d["bank"], {})
+        prev = tracked.get(d["id"])
+        tries = prev.get("tries", 0) + 1 if prev and prev.get("failed") and prev.get("sha") == d["sha"] else 0
+        ids = _op_ids(res if isinstance(res, dict) else {})
+        if ids or tries:
+            tracked[d["id"]] = {"ids": ids, "sha": d["sha"], "ts": util.now().isoformat(timespec="seconds"),
+                                "tries": tries}
+        else:
+            tracked.pop(d["id"], None)
         sent += 1
         if sent % 20 == 0:
             util.write_json(_state_path(brain), state)
     util.write_json(_state_path(brain), state)
-    return {"sent": sent, "errors": errors, "remaining": len(pending(brain))}
+    return {"sent": sent, "errors": errors, "remaining": len(pending(brain)),
+            "resent": rec["dropped"], "gave_up": rec["gave_up"]}
 
 
 def rebuild(brain, limit: int | None = None, dry_run: bool = False) -> dict:
@@ -261,19 +373,101 @@ def rebuild(brain, limit: int | None = None, dry_run: bool = False) -> dict:
     return sync(brain, limit, hs=hs)
 
 
-def status(brain, online: bool = False) -> dict:
+def op_problems(brain, hs: Hindsight | None = None) -> dict:
+    """Retains assíncronos com problema. Sem servidor (hs=None) só o que o último sync/reconcile registrou."""
+    state = util.read_json(_state_path(brain), {})
+    failed, gave_up, stuck = set(), set(), []
+    for key, tracked in state.get(OPS_KEY, {}).items():
+        for doc, t in tracked.items():
+            if t.get("failed"):
+                failed.add(f"{key}:{doc}")
+            elif t.get("tries", 0) >= MAX_TRIES:
+                gave_up.add(f"{key}:{doc}")
+    if hs is not None:
+        mine = {(d["bank"], d["id"]) for d in documents(brain)}
+        for key, bank in _banks(brain).items():
+            # só documentos que ainda existem no vault — falha de documento removido não é acionável
+            failed |= {f"{key}:{doc}" for doc in failed_docs(hs, bank) if (key, doc) in mine}
+            stuck += [{"bank": bank, "id": o.get("id"), "doc": o.get("document_id")} for o in stuck_ops(hs, bank)]
+    failed -= gave_up
+    return {"failed": sorted(failed), "gave_up": sorted(gave_up), "stuck": stuck}
+
+
+def _problems_text(p: dict) -> str:
+    out = []
+    if p["failed"]:
+        out.append(f"{len(p['failed'])} documentos com retain falho no Hindsight ({', '.join(p['failed'][:3])}"
+                   f"{'…' if len(p['failed']) > 3 else ''}) — rode `brain memory sync` para reenviar")
+    if p["gave_up"]:
+        out.append(f"{len(p['gave_up'])} documentos falharam mesmo após {MAX_TRIES} reenvios "
+                   f"({', '.join(p['gave_up'][:3])}) — veja os logs do servidor")
+    if p["stuck"]:
+        out.append(f"{len(p['stuck'])} operações em processamento há mais de {STUCK_HOURS}h "
+                   f"(ex.: {p['stuck'][0]['doc'] or p['stuck'][0]['id']})")
+    return " · ".join(out)
+
+
+def queue(brain, hs: Hindsight) -> dict:
+    """Fila de trabalho do Hindsight por banco: o que está usando (ou vai usar) o LLM/embedding agora."""
+    out = {}
+    for key, bank in _banks(brain).items():
+        st = hs.stats(bank)
+        by_type: dict[str, dict[str, int]] = {}
+        for status_ in ("processing", "pending"):
+            for o in hs.operations(bank, status_):
+                t = o.get("operation_type") or "?"
+                by_type.setdefault(t, {"processing": 0, "pending": 0})[status_] += 1
+        out[bank] = {"ops": by_type,
+                     "pending_consolidation": int(st.get("pending_consolidation") or 0),
+                     "failed_consolidation": int(st.get("failed_consolidation") or 0)}
+    return out
+
+
+def _queue_text(q: dict) -> str:
+    parts, busy = [], False
+    for bank, b in q.items():
+        ops = [f"{t} {c['processing']} rodando" + (f" + {c['pending']} na fila" if c["pending"] else "")
+               if c["processing"] else f"{t} {c['pending']} na fila"
+               for t, c in sorted(b["ops"].items())]
+        if b["pending_consolidation"]:
+            ops.append(f"{b['pending_consolidation']} memórias aguardando consolidação")
+        busy |= bool(ops)
+        parts.append(f"{bank}: {', '.join(ops) if ops else 'ociosa'}")
+    head = "fila: ocupada — LLM/embedding em uso" if busy else "fila: vazia — LLM livre"
+    return head + " (" + " · ".join(parts) + ")"
+
+
+def status(brain, online: bool = False, hs: Hindsight | None = None) -> dict:
     mem = brain.inst.cfg["memory"]
     if mem["engine"] != "hindsight":
         return {"level": "ok", "detail": "desligada ([memory] engine = \"none\") — /ask usa índice → artefato → RAW"}
     n = len(pending(brain))
     detail = f"Hindsight em {mem['url']} · {n} documentos do vault ainda não enviados"
-    if online:
-        try:
-            client(brain).health()
+    warn = n > 50
+    if warn:
+        detail += " — rode `brain memory sync`"
+    try:
+        if online:
+            hs = hs or client(brain)
+            hs.health()
             detail += " · servidor no ar"
-        except util.BrainError as e:
-            return {"level": "error", "detail": str(e)}
-    return {"level": "warn" if n > 50 else "ok", "detail": detail + ("" if n <= 50 else " — rode `brain memory sync`")}
+        problems = op_problems(brain, hs if online else None)
+        q = queue(brain, hs) if online else None
+    except util.BrainError as e:
+        return {"level": "error", "detail": str(e)}
+    text = _problems_text(problems)
+    failed_cons = {b: v["failed_consolidation"] for b, v in (q or {}).items() if v["failed_consolidation"]}
+    if failed_cons:
+        text = " · ".join(filter(None, [text, "memórias que desistiram da consolidação: " + ", ".join(
+            f"{b} {n}" for b, n in failed_cons.items())
+            + " — POST /v1/default/banks/<banco>/consolidation/recover recoloca na fila"]))
+    if text:
+        detail += " · ⚠ " + text
+    res = {"level": "warn" if warn or text else "ok", "detail": detail, "problems": problems}
+    if q is not None:
+        res["queue"] = q
+        res["queue_text"] = _queue_text(q)
+    return res
 
 
 def cli(args, brain) -> None:
@@ -293,10 +487,18 @@ def cli(args, brain) -> None:
             print(f"{len(res['would_send'])} documentos seriam enviados:\n  " + "\n  ".join(res["would_send"][:50]))
         else:
             print(f"✓ {res['sent']} documentos enviados · {res['remaining']} pendentes"
+                  + (f" · {len(res['resent'])} reenviados por retain falho" if res.get("resent") else "")
+                  + (f" · {len(res['gave_up'])} desistidos após {MAX_TRIES} reenvios: {', '.join(res['gave_up'][:3])}"
+                     if res.get("gave_up") else "")
                   + (f" · {len(res['errors'])} erros (ex.: {res['errors'][0]})" if res["errors"] else ""))
     elif c == "status":
         s = status(brain, online=True)
+        if args.json:
+            print(json.dumps(s, ensure_ascii=False, indent=2))
+            return
         print(("✓ " if s["level"] == "ok" else "⚠ ") + s["detail"])
+        if s.get("queue_text"):
+            print("  " + s["queue_text"])
     elif c in ("recall", "reflect"):
         hs = client(brain)
         bank = mem["mem_bank"] if args.bank == "mem" else mem["raw_bank"]

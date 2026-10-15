@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 
-from . import config, people, util
+from . import config, people, upstream, util
 
 
 def _c(level: str, title: str, detail: str) -> dict:
@@ -98,6 +98,7 @@ def checks(brain, online: bool = False) -> list[dict]:
         mb = sum(p.stat().st_size for p in big) / 2**20
         out.append(_c("ok", "arquivos grandes", f"{len(big)} arquivos > 50 MB no RAW ({mb:.0f} MB) — "
                                                 "fora do backup e da memória por padrão"))
+    out.extend(upstream.doctor_checks(inst))
     return out
 
 

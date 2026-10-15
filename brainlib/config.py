@@ -32,7 +32,7 @@ DEFAULTS: dict = {
         "decline_message": "Em bloco de foco planejado.",
     },
     "outbound": {"allow": [], "daily_max": 10},
-    "publish": {"destinations": []},       # ["slack:#gtm-retention", "drive:<folder-id>"]
+    "publish": {"destinations": []},       # ["slack:#seu-canal", "drive:<folder-id>"]
     "memory": {
         "engine": "none",                  # "hindsight" quando o servidor estiver no ar
         "url": "http://localhost:8888",

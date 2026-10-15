@@ -154,7 +154,7 @@ agente: *"execute o setup.md"* resolve.
 No terminal, na pasta do repo:
 
 ```bash
-./brain init --owner-id vini --owner-name "Vinicius"
+./brain init --owner-id ana --owner-name "Ana Souza"
 ```
 
 Isso semeia o `vault/` vazio a partir do template. Nada de conteúdo falso,
@@ -448,8 +448,8 @@ em outros agentes, o texto é entendido do mesmo jeito.)
   escala para você em vez de fingir que está tudo bem.
 
 #### `/connect` — uma fonte, agora
-- **Quando:** "puxa o #gtm-retention antes da reunião".
-- **Digita:** `/connect slack-#gtm-retention` (a key do watch ou algo ad hoc)
+- **Quando:** "puxa o #seu-canal antes da reunião".
+- **Digita:** `/connect slack-#seu-canal` (a key do watch ou algo ad hoc)
 - **Recebe:** o snapshot processado na hora, só dessa fonte.
 - **Pegadinha:** não confundir com `/update` (todas as fontes).
 
@@ -583,13 +583,15 @@ em outros agentes, o texto é entendido do mesmo jeito.)
 #### `/init` — nascer (uma vez por instância)
 Já coberto na seção 3. Gatilho: PROFILE e PLANNING vazios.
 
-#### `/upgrade` — atualizar o framework sem perder o vault
-- **Quando:** "atualiza o brain" / depois de um `git pull` que brigou.
-- **Por dentro:** o repo (framework) anda; o seu vault/config não tocam no
-  git. Ele faz pull com autostash, classifica divergências — *drift*
-  (edição de agente não pedida: reverte e anota) vs. *edit* (você pediu:
-  pergunta se gradua pro upstream ou descarta) — semeia arquivos novos de
-  template sem sobrescrever nada seu, e roda o doctor no fim.
+#### `/upgrade` — o framework anda nos dois sentidos
+- **Quando:** "atualiza o brain" / "sobe isso pro framework" / depois de um `git pull` que brigou.
+- **Descer (`./brain update`):** o repo (framework) anda; o seu vault/config não tocam no git.
+  Faz pull em avanço rápido com autostash, semeia arquivos novos de template sem sobrescrever
+  nada seu, avisa quando um template que você já tem mudou e roda o doctor no fim.
+- **Subir (git puro):** melhoria de código ou estrutura nascida na sua instância volta ao repo do
+  framework com `git add`/`commit`/`push`, depois do seu "ok". Um hook `pre-push` roda
+  `./brain upstream scan` e barra o envio se houver dado pessoal (nome, e-mail, pessoas do ledger,
+  caminho da máquina, tokens) — o repo é público.
 - **Pegadinha:** nunca force-push; nunca commitar `vault/` ou `.env`.
 
 ### Direto no terminal (sem agente)

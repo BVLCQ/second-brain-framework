@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Descarrega modelos ociosos do LM Studio (services/idle_unload.py), a cada minuto.
+     O caminho da instância entra no lugar do placeholder da raiz ao instalar — este arquivo não é
+     válido como está. Passo a passo: guides/commands.md, seção "Serviços desta máquina".
+     Ajustes: descomente EnvironmentVariables antes de instalar. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.segundo-cerebro.idle</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/python3</string>
+    <string>__BRAIN_DIR__/services/idle_unload.py</string>
+    <string>__BRAIN_DIR__/vault/logs/idle-state.json</string>
+  </array>
+  <!--
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>BRAIN_IDLE_LLM_MIN</key><string>5</string>
+    <key>BRAIN_IDLE_EMBED_MIN</key><string>15</string>
+  </dict>
+  -->
+  <key>StartInterval</key>
+  <integer>60</integer>
+  <key>StandardOutPath</key>
+  <string>__BRAIN_DIR__/vault/logs/idle.log</string>
+  <key>StandardErrorPath</key>
+  <string>__BRAIN_DIR__/vault/logs/idle.log</string>
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>LowPriorityIO</key>
+  <true/>
+</dict>
+</plist>

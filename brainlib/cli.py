@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import shutil
 import sys
 from pathlib import Path
 
@@ -64,17 +63,10 @@ def _effort(b: Brain, v):
 
 # ── comandos ────────────────────────────────────────────────────────────────
 def cmd_init(args, b: Brain) -> None:
+    from . import upstream
     inst = b.inst
-    tpl = inst.root / "template"
-    created = []
-    for src in sorted(tpl.rglob("*")):
-        if src.is_dir():
-            continue
-        dst = inst.vault / src.relative_to(tpl)
-        if not dst.exists():
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src, dst)
-            created.append(inst.rel(dst))
+    created = upstream.seed_template(inst)
+    upstream.hook(inst, "install")
     inst.config_dir.mkdir(parents=True, exist_ok=True)
     for name in ("brain.toml", "watch.toml", ".env"):
         dst = inst.config_dir / name
@@ -472,6 +464,16 @@ def cmd_backup(args, b: Brain) -> None:
     backup.cli(args, b)
 
 
+def cmd_update(args, b) -> None:
+    from . import upstream
+    upstream.cli_update(args, b)
+
+
+def cmd_upstream(args, b) -> None:
+    from . import upstream
+    upstream.cli_upstream(args, b)
+
+
 # ── parser ──────────────────────────────────────────────────────────────────
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(prog="brain", description="Segundo Cérebro v2 — livro-razão, views e portas.")
@@ -803,6 +805,26 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--status", action="store_true")
     p.add_argument("--local", help="grava o zip numa pasta local em vez do Drive")
     p.set_defaults(fn=cmd_backup)
+
+    p = sub.add_parser("update", help="traz melhorias do framework (git pull seguro) sem tocar no vault")
+    p.add_argument("--check", action="store_true", help="só mostra o que há de novo; não altera nada")
+    p.add_argument("--rebase", action="store_true", help="re-aplica seus commits locais por cima do upstream")
+    p.add_argument("--remote", help="padrão: origin")
+    p.add_argument("--branch", help="padrão: o branch atual")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(fn=cmd_update, no_brain=True)
+
+    p = sub.add_parser("upstream", help="guarda o caminho de volta ao repo público: varredura de dado pessoal + hook pre-push")
+    us = p.add_subparsers(dest="ucmd", required=True)
+    x = us.add_parser("scan", help="varre o que ainda não foi enviado ao framework; código 4 se achar dado pessoal/segredo")
+    x.add_argument("--committed", action="store_true", help="só commits (o que um git push enviaria) — usado pelo hook")
+    x.add_argument("--fetch", action="store_true", help="atualiza o remoto antes (padrão: sem rede)")
+    x.add_argument("--remote", help="padrão: origin")
+    x.add_argument("--branch", help="padrão: o branch atual")
+    x.add_argument("--json", action="store_true")
+    x = us.add_parser("hook", help="instala/remove o hook pre-push que roda a varredura")
+    x.add_argument("action", choices=["install", "remove", "status"])
+    p.set_defaults(fn=cmd_upstream, no_brain=True)
 
     p = sub.add_parser("demo", help="cria uma instância fictícia para ver o painel (não toca no seu vault)")
     p.add_argument("--dir", required=True)

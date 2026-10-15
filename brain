@@ -1,7 +1,18 @@
 #!/usr/bin/env python3
 """Segundo Cérebro v2 — CLI. Rode da raiz da instância: ./brain --help"""
+import os
+import shutil
 import sys
 from pathlib import Path
+
+# shell sem mise ativo (cron, terminal não-login) cai no python do sistema: reexecuta pelo mise
+if sys.version_info < (3, 11) and not os.environ.get("BRAIN_MISE_REEXEC"):
+    _mise = shutil.which("mise") or next((p for p in ("/opt/homebrew/bin/mise", "/usr/local/bin/mise")
+                                         if os.path.exists(p)), None)
+    if _mise:
+        os.environ["BRAIN_MISE_REEXEC"] = "1"
+        _here = str(Path(__file__).resolve())
+        os.execv(_mise, [_mise, "-C", os.path.dirname(_here), "exec", "--", "python3", _here] + sys.argv[1:])
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
