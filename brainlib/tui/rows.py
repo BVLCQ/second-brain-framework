@@ -262,6 +262,19 @@ def notes_section(doc: Doc, store, link: str) -> None:
             doc.lines.append(Text.assemble(("▌ ", CYN), ln))
 
 
+def decisions_section(doc: Doc, store, node: str) -> None:
+    """Decisões ligadas ao nó (goal: as dos seus projetos; entregável: as do projeto), para achar o porquê junto do plano."""
+    ds = store.decisions_of(node)
+    doc.sec("Decisões" + (" do projeto" if node in store.by_deliv else ""))
+    if not ds:
+        doc.p(("Nenhuma decisão ligada.", DIM))
+    for d in ds:
+        live = d["status"] == "ativa"
+        doc.p(link(d["id"], d["id"], "bold" if live else FAINT), " ", (d["title"], "" if live else FAINT),
+              (f" · {util.fmt_date(d['date'])}" + (f" · {d['project']}" if node in store.by_goal and d["project"] else "")
+               + ("" if live else f" · {d['status']}"), DIM))
+
+
 def d_doc(store, it) -> Doc:
     c = it.data
     mark, st = {"ok": ("✓", GRN), "warn": ("⚠", AMB), "error": ("✗", RED)}[c["level"]]
@@ -440,6 +453,7 @@ def d_plan(store, it) -> Doc:
             late = sum(1 for x in p["deliverables"] if x["overdue_days"])
             doc.p(link(pid, pid, "bold"), f" {p['title']} ", (bar(p["progress"]["pct"], 10), CYN), f" {pct_txt(p['progress'])} ",
                   (f"⚠ {late} atrasado" if late else p["health"]["label"], RED if late else GRN))
+        decisions_section(doc, store, d["id"])
     elif k == "p":
         late = [x for x in d["deliverables"] if x["overdue_days"]]
         doc.h(f"{d['id']} · {d['title']}")
@@ -457,6 +471,7 @@ def d_plan(store, it) -> Doc:
         for i in ids:
             a = store.by_action[i]
             doc.p(link(i, i, "bold"), f" {a['title']} ", due_tag(a))
+        decisions_section(doc, store, d["id"])
     else:
         p, g = it.extra["project"], it.extra["goal"]
         doc.h(f"{d['id']} · {d['title']}")
@@ -470,9 +485,11 @@ def d_plan(store, it) -> Doc:
             doc.p(("Nenhuma ação aponta para este entregável.", AMB))
         for a in ac:
             doc.p(link(a["id"], a["id"], "bold"), f" {a['title']} ", due_tag(a))
+        decisions_section(doc, store, d["id"])
         doc.blank().p(("Marcar estado é um fato, não um gate: space ou s. Criar, renomear ou fechar goal e projeto é gate: E.", DIM))
     hint = {"g": "n cria um projeto neste goal · G cria um goal (gate)", "p": "n cria um entregável neste projeto · G cria um goal (gate)",
             "d": "n cria uma ação ligada a este entregável · G cria um goal (gate)"}[k]
+    hint += " · / com um id (A-####, P#, P#.n…) mostra tudo que está associado"
     doc.blank().p((hint, DIM))
     notes_section(doc, store, d["id"])
     return doc

@@ -4,6 +4,8 @@ Nada aqui escreve. O TUI recarrega depois de cada comando que ele mesmo dispara.
 """
 from __future__ import annotations
 
+import re
+from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -104,6 +106,7 @@ class Store:
         self.by_deliv = {d["id"]: (p, d) for p in m["projects"] for d in p["deliverables"]}
         self.by_person = {p["id"]: p for p in m["people"]}
         self.by_msg = {x["id"]: x for x in m["outbox"]}
+        self._build_graph(m)
         self.notes = notes_mod.scan(self.inst)
         self.notes_by_link: dict[str, list[notes_mod.Note]] = {}
         for n in self.notes:
@@ -146,6 +149,100 @@ class Store:
         return not self.m["goals"] and len(self.m["people"]) <= 1 and not self.m["actions"]
 
     # ── apoio ──────────────────────────────────────────────────────────────
+    # ── associações: o que está ligado a quê ──────────────────────────────
+    ID_RE = re.compile(r"^(?:[ADERMS]-\d{4,}|G\d+|P\d+(?:\.\d+)?)$")
+
+    def _build_graph(self, m: dict) -> None:
+        adj: dict[str, set[str]] = defaultdict(set)
+
+        def link(a, b) -> None:
+            if a and b and a != b:
+                adj[a].add(b)
+                adj[b].add(a)
+
+        for a in m["actions"]:
+            link(a["id"], a["project"])
+            link(a["id"], a["deliverable"])
+            for x in [*(a["blocked_by_all"] or []), *(a["unblocks"] or []), *a["people"], a["owner"]]:
+                link(a["id"], x)
+        for d in m["decisions"]:
+            link(d["id"], d["project"])
+            for x in [*d["decided_by"], d["supersedes"], d["superseded_by"]]:
+                link(d["id"], x)
+        for e in m["deliveries"]:
+            link(e["id"], e["ref"])
+            link(e["id"], e["project"])
+        for a in m["artifacts"]:
+            for x in [*a["projects"], *a["people"]]:
+                link(a["id"], x)
+        for r in m["proposals"]:
+            link(r["id"], r["target"])
+        for x in m["outbox"]:
+            link(x["id"], x["ref"])
+            link(x["id"], x["to"])
+        self.adj = adj
+        self.all_ids = ({a["id"] for a in m["actions"]} | {d["id"] for d in m["decisions"]} | {e["id"] for e in m["deliveries"]}
+                        | {r["id"] for r in m["proposals"]} | {x["id"] for x in m["outbox"]} | {x["id"] for x in m["shares"]})
+        self.plan_nodes = set(self.by_goal) | set(self.by_project) | set(self.by_deliv)
+
+    def tree_up(self, node: str) -> set[str]:
+        """Ancestrais na árvore do plano: P1.2 → P1, G1."""
+        out: set[str] = set()
+        if node in self.by_deliv:
+            node = self.by_deliv[node][0]["id"]
+            out.add(node)
+        if node in self.by_project:
+            out.add(self.by_project[node]["goal"])
+        return out
+
+    def tree_down(self, node: str) -> set[str]:
+        if node in self.by_goal:
+            projs = self.by_goal[node]["projects"]
+            return set(projs) | {d["id"] for p in projs for d in self.by_project[p]["deliverables"]}
+        if node in self.by_project:
+            return {d["id"] for d in self.by_project[node]["deliverables"]}
+        return set()
+
+    def node_for(self, text: str) -> str | None:
+        """O texto do filtro é exatamente um id (A-####, D-####, G#, P#, P#.n…)? Devolve o id no formato do ledger."""
+        t = notes_mod.normalize_link((text or "").strip())
+        t = t.upper()
+        if not self.ID_RE.match(t):
+            return None
+        return t if t in self.plan_nodes | self.all_ids else None
+
+    def related(self, node: str) -> set[str]:
+        """Tudo que está associado a `node`, para o filtro: no plano, o próprio nó, os de cima e os de baixo com tudo
+        que se liga a eles (ações, decisões, entregas…); nos demais, os vizinhos diretos e a árvore acima deles."""
+        if node in self.plan_nodes:
+            below = self.tree_down(node)
+            res = {node} | self.tree_up(node) | below
+            for x in {node} | below:
+                res |= self.adj[x]
+            if node in self.by_deliv:                               # decisões são do projeto
+                proj = self.by_deliv[node][0]["id"]
+                res |= {x for x in self.adj[proj] if x.startswith("D-")}
+        else:
+            res = {node} | self.adj[node]
+            for x in list(res):
+                res |= self.tree_up(x)
+                if x in self.by_deliv or x in self.by_project:
+                    res.add(x)
+        res |= {p for x in list(res) for p in self.adj[x] if p in self.by_person}
+        return res
+
+    def decisions_of(self, node: str) -> list[dict]:
+        """Decisões ligadas a um goal (via seus projetos), projeto ou entregável (via o projeto), da mais nova para a mais antiga."""
+        if node in self.by_goal:
+            pids = set(self.by_goal[node]["projects"])
+        elif node in self.by_project:
+            pids = {node}
+        elif node in self.by_deliv:
+            pids = {self.by_deliv[node][0]["id"]}
+        else:
+            return []
+        return sorted((d for d in self.m["decisions"] if d["project"] in pids), key=lambda d: d["date"] or "", reverse=True)
+
     def notes_of(self, link: str) -> list[notes_mod.Note]:
         """Notas vinculadas a A-####/G#/P#/P#.n, da mais nova para a mais antiga."""
         return self.notes_by_link.get(link, [])
@@ -225,7 +322,7 @@ class Store:
     # ── listas por painel ──────────────────────────────────────────────────
     def items(self, panel: int, tab: int, show_all: bool = False, filt: str = "",
               collapsed: set[str] | None = None) -> list[Item]:
-        m, collapsed = self.m, collapsed or set()
+        m, collapsed = self.m, (set() if filt else collapsed or set())     # filtrando, a árvore abre sozinha
         out: list[Item] = []
         if panel == 1:
             if tab == 0:
@@ -279,9 +376,20 @@ class Store:
             else:
                 out = [Item(a["id"], "art", a, q=f"{a['title']} {a['kind']} {a['summary']}") for a in m["artifacts"]]
         if filt:
-            f = util.fold(filt)
-            out = [i for i in out if f in util.fold(i.q)]
+            f, node = util.fold(filt), self.node_for(filt)
+            if node:                                  # filtro é um id: mostra tudo que está associado a ele
+                rel = self.related(node)
+                out = [i for i in out if self._shown(i, rel, f)]
+            else:
+                out = [i for i in out if f in util.fold(i.q)]
         return out
+
+    def _shown(self, it: Item, rel: set[str], f: str) -> bool:
+        if it.kind in ("action", "g", "p", "d", "prop", "msg", "dec", "del", "per", "art"):
+            return it.id in rel
+        if it.kind == "fday":
+            return any(b["action"] in rel for b in it.data["blocks"])
+        return f in util.fold(it.q)
 
     def locate(self, node: str) -> tuple[int, int] | None:
         """Onde um id aparece: (painel, aba). Usado nos links do detalhe, na busca e na paleta."""

@@ -1031,6 +1031,60 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(app.cur().id, g.id)
             self.assertIn(g.id, (self.inst.planning_log).read_text(encoding="utf-8"))
 
+    # ── decisões no detalhe do plano e filtro por associação ───────────────
+    async def test_plan_detail_shows_decisions_of_goal_project_and_deliverable(self):
+        app = self.app()
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause(0.4)
+            st = app.store
+            pid = next(p for p in st.by_project if st.decisions_of(p))
+            deliv = st.by_project[pid]["deliverables"][0]["id"]
+            goal = st.by_project[pid]["goal"]
+            ids = [d["id"] for d in st.decisions_of(pid)]
+            for node in (pid, deliv, goal):
+                self._select3(app, node)
+                text = self.text_of(app.query_one("#detail"))
+                self.assertIn("Decisões", text)
+                for did in ids:
+                    self.assertIn(did, text)
+            self._select3(app, deliv)
+            self.assertIn("Decisões do projeto", self.text_of(app.query_one("#detail")))
+
+    async def test_filter_by_id_shows_everything_associated(self):
+        app = self.app()
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause(0.4)
+            st = app.store
+            pid = next(p for p in st.by_project if st.decisions_of(p))
+            goal = st.by_project[pid]["goal"]
+            deliv_ids = {d["id"] for d in st.by_project[pid]["deliverables"]}
+
+            def shown(panel, tab, text):
+                app.filt = (panel, tab, text)
+                app._items = {}
+                app.tab[panel] = tab
+                return {i.id for i in app.items(panel)}
+
+            # plano: o projeto, o goal acima e os entregáveis abaixo — mesmo com o goal recolhido
+            app.collapsed.add(goal)
+            self.assertEqual(shown(3, 0, pid), {pid, goal} | deliv_ids)
+            # decisões do projeto e só elas
+            self.assertEqual(shown(5, 0, pid), {d["id"] for d in st.decisions_of(pid)})
+            # ações: as do projeto ou dos seus entregáveis (inclusive fechadas, em todas as listas)
+            want = {a["id"] for a in st.m["actions"] if a["project"] == pid or a["deliverable"] in deliv_ids}
+            got = set()
+            for t in (0, 1, 2):
+                app.show_all = True
+                got |= shown(2, t, pid)
+            self.assertEqual(got, want)
+            # de uma ação para cima: seu entregável, projeto e goal aparecem no plano
+            a = next(a for a in st.m["actions"] if a["deliverable"])
+            self.assertEqual(shown(3, 0, a["id"]), {a["deliverable"], a["project"] or st.by_deliv[a["deliverable"]][0]["id"],
+                                                       st.by_project[st.by_deliv[a["deliverable"]][0]["id"]]["goal"]})
+            # P1 não pega P10: filtro por id é exato; texto livre continua sendo substring
+            self.assertNotIn("P10", shown(3, 0, "P1"))
+            app.filt = None
+
 
 class CoverageTest(unittest.TestCase):
     """Todo subcomando da CLI tem tecla no TUI ou uma razão explícita para não ter."""
