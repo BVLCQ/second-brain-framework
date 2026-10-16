@@ -24,6 +24,12 @@ Toda entidade (ação, decisão, pessoa, artefato) entra pelo `./brain` — nunc
 - esforço (`90m`, `2h`) se alguém falou tempo
 - **não feche** ação só porque o texto "parece" resolver — abra `brain proposal add --kind fechar-acao` com a evidência
 
+**Notas do dono (`<A-####|G#|P#|P#.n|note>-AAAA-MM-DD-note.md`)** — criadas pelo TUI (`N`) ou por
+`./brain note add`. O frontmatter traz `vinculo:` e `criada:`. Trate como **nota** sem reclassificar: arquive
+no RAW **sem renomear** (o TUI as acha pelo nome, no detalhe do vínculo) e registre o artefato com
+`--projects` = o projeto do vínculo (`P#`/`P#.n` → `P#`; `A-####` → o projeto da ação; goal → deixe vazio e cite
+o `G#` no resumo). Extraia ações/decisões só do que a nota afirmar; o vínculo já é a ligação.
+
 Regras transversais: proveniência em toda extração · `brain person resolve` antes de qualquer menção · IDs só o CLI numera.
 
 ## Como gravar

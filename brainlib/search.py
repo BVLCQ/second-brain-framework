@@ -5,7 +5,9 @@ A camada de memória (Hindsight) é a busca semântica; esta é a rede de segura
 """
 from __future__ import annotations
 
-from . import model, util
+from pathlib import Path
+
+from . import model, notes, util
 
 
 def _score(terms: list[str], title: str, body: str = "") -> int:
@@ -46,5 +48,7 @@ def search(brain, query: str, limit: int = 20) -> list[dict]:
         path = vault / a["id"]
         body = path.read_text(encoding="utf-8", errors="replace") if path.suffix == ".md" and path.exists() else ""
         add("artefato", a["id"], a["title"], f"{a['summary']} {body}", a["date"], a["id"])
+    for n in notes.scan(brain.inst):          # notas avulsas (inbox + RAW); o id leva ao alvo do vínculo
+        add("nota", n.link or Path(n.path).name, n.title, f"{n.link} {n.text}", n.created[:10], n.path)
     hits.sort(key=lambda h: (-h["score"], h.get("date") or ""), reverse=False)
     return hits[:limit]

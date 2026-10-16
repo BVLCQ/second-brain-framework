@@ -246,6 +246,22 @@ def detail(store, it) -> Text:
     return fn(store, it).text()
 
 
+def notes_section(doc: Doc, store, link: str) -> None:
+    """Notas vinculadas, abaixo do histórico: data e hora de cada uma e o texto inteiro."""
+    doc.sec("Notas")
+    ns = store.notes_of(link)
+    if not ns:
+        doc.p(("Nenhuma. N cria uma nota ligada a " + link + ".", DIM))
+        return
+    for i, n in enumerate(ns):
+        if i:
+            doc.blank()
+        doc.p((n.created, "bold"), ("  " + ("arquivada no RAW" if n.archived else "na inbox, o /dump arquiva")
+                                    + (f" · editada {n.edited}" if n.edited else ""), DIM))
+        for ln in n.text.splitlines() or [""]:
+            doc.lines.append(Text.assemble(("▌ ", CYN), ln))
+
+
 def d_doc(store, it) -> Doc:
     c = it.data
     mark, st = {"ok": ("✓", GRN), "warn": ("⚠", AMB), "error": ("✗", RED)}[c["level"]]
@@ -391,12 +407,19 @@ def d_action(store, it) -> Doc:
             ("fonte", Text(a["source_label"], DIM))]
     doc.kv(rows)
     doc.sec("Histórico")
-    for h in reversed(a["history"]):
+    entries: list[tuple[str, Text]] = []
+    for h in a["history"]:
         kind = {"opened": "aberta", "updated": "atualizada", "closed": "fechada", "dropped": "descartada", "reopened": "reaberta"}.get(h["type"], h["type"])
         by = {"owner": "declarado", "agent": "observado", "system": "sistema"}.get(h["by"], h["by"])
-        doc.p((util.fmt_date(h["date"]) + " ", DIM), f"{kind}: {h['note']}" if h["note"] else kind, " ", prov(by))
+        when = (h.get("ts") or "")[:16].replace("T", " ") or f"{h['date']} 00:00"
+        entries.append((when, Text.assemble((util.fmt_date(h["date"]) + " ", DIM), f"{kind}: {h['note']}" if h["note"] else kind, " ", prov(by))))
+    for n in store.notes_of(a["id"]):
+        entries.append((n.created, Text.assemble((n.created + " ", DIM), "nota: ", n.title)))
+    for _, line in sorted(entries, key=lambda e: e[0], reverse=True):
+        doc.lines.append(line)
     if a["how"]:
         doc.p((util.fmt_date(a["closed"]) + " ", DIM), f"fechada: {a['how']}")
+    notes_section(doc, store, a["id"])
     return doc.sec("Equivalente na CLI").cmd(f"brain action show {a['id']}")
 
 
@@ -448,6 +471,7 @@ def d_plan(store, it) -> Doc:
         for a in ac:
             doc.p(link(a["id"], a["id"], "bold"), f" {a['title']} ", due_tag(a))
         doc.blank().p(("Marcar estado é um fato, não um gate: space ou s. Criar, renomear ou fechar goal e projeto é gate: E.", DIM))
+    notes_section(doc, store, d["id"])
     return doc
 
 

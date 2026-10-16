@@ -429,6 +429,11 @@ def cmd_snapshot(args, b: Brain) -> None:
     snapshot.cli(args, b)
 
 
+def cmd_note(args, b: Brain) -> None:
+    from . import notes
+    notes.cli(args, b)
+
+
 def cmd_doctor(args, b: Brain) -> None:
     from . import doctor
     doctor.cli(args, b)
@@ -769,6 +774,21 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--fail", metavar="ERRO", help="registra falha do pull em vez de conteúdo")
     p.add_argument("--json", action="store_true")
     p.set_defaults(fn=cmd_snapshot)
+
+    p = sub.add_parser("note", help="notas avulsas na inbox, com vínculo opcional a A-####/G#/P#/P#.n")
+    ns = p.add_subparsers(dest="ncmd", required=True)
+    x = ns.add_parser("add", help="cria AAAA…-note.md na inbox (o /dump arquiva)")
+    x.add_argument("--link", help="A-#### · G# · P# · P#.n (opcional)")
+    x.add_argument("--text", help="texto da nota (padrão: stdin)")
+    x.add_argument("--json", action="store_true")
+    x = ns.add_parser("edit", help="reescreve o texto de uma nota que ainda está na inbox")
+    x.add_argument("path", help="RAW/inbox/….md (relativo ao vault)")
+    x.add_argument("--text", help="novo texto (padrão: stdin)")
+    x.add_argument("--json", action="store_true")
+    x = ns.add_parser("list", help="notas na inbox e no RAW")
+    x.add_argument("--link")
+    x.add_argument("--json", action="store_true")
+    p.set_defaults(fn=cmd_note)
 
     p = sub.add_parser("doctor", help="saúde da instância")
     p.add_argument("--json", action="store_true")

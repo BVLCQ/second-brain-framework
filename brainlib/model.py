@@ -71,7 +71,7 @@ class ModelBuilder:
             "people": a.people, "link": a.link, "origin": a.origin,
             "source": a.source, "source_label": self.source_label(a.source), "prov": a.prov,
             "opened": _iso(a.opened), "closed": _iso(a.closed), "how": a.how, "outcome": a.outcome,
-            "history": [{"date": e.get("date"), "type": e["type"].split(".")[1],
+            "history": [{"date": e.get("date"), "ts": e.get("ts"), "type": e["type"].split(".")[1],
                          "by": e.get("by"), "note": self._note(e)} for e in a.history],
         }
 

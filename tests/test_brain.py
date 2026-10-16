@@ -15,7 +15,7 @@ sys.path.insert(0, str(ROOT))
 
 os.environ.setdefault("BRAIN_NOW", "2026-10-09T10:00:00-03:00")
 
-from brainlib import config, doctor, extract as extract_mod, focus, harvest, mcp_server, memory, outbox, planning, people, render, schema, share, snapshot, upstream, util
+from brainlib import config, doctor, notes as notes_mod, extract as extract_mod, focus, harvest, mcp_server, memory, outbox, planning, people, render, schema, share, snapshot, upstream, util
 from brainlib.core import Brain
 from brainlib.gcal import GoogleCalendar
 from brainlib import demo as demo_mod
@@ -271,6 +271,80 @@ class SnapshotTests(unittest.TestCase):
             self.assertFalse(r2["changed"])
             r3 = snapshot.take(b, "gmail-today", "assunto Y\n")
             self.assertTrue(r3["changed"])
+
+
+class NoteTests(unittest.TestCase):
+    def test_names_links_and_collisions(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            b.record_one({"type": "action.opened", "by": "owner", "data": {"title": "x", "owner": "eu"}})
+            names = [notes_mod.create(b, "t", link).name for link in ("a-1", "G1", "P1", "P1.2", "", "P1")]
+            self.assertEqual(names, ["A-0001-2026-10-09-note.md", "G1-2026-10-09-note.md", "P1-2026-10-09-note.md",
+                                     "P1.2-2026-10-09-note.md", "note-2026-10-09-note.md", "P1-2026-10-09-note-2.md"])
+            got = {n.path.split("/")[-1]: n for n in notes_mod.scan(b.inst)}
+            n = got["A-0001-2026-10-09-note.md"]
+            self.assertEqual((n.link, n.kind, n.created, n.text, n.archived), ("A-0001", "ação", "2026-10-09 10:00", "t", False))
+            self.assertEqual(got["note-2026-10-09-note.md"].link, "")
+            self.assertEqual(got["P1.2-2026-10-09-note.md"].kind, "entregável")
+
+    def test_rejects_unknown_link_empty_text_and_nightly(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            for text, link in (("x", "A-0009"), ("x", "P9"), ("x", "../x"), ("  \n", "")):
+                with self.assertRaises(util.BrainError):
+                    notes_mod.create(b, text, link)
+            os.environ["BRAIN_NIGHTLY"] = "1"
+            try:
+                with self.assertRaises(util.BrainError):
+                    notes_mod.create(b, "x", "")
+            finally:
+                os.environ.pop("BRAIN_NIGHTLY", None)
+            self.assertEqual(list(b.inst.inbox.glob("*")), [])
+
+    def test_archived_notes_in_raw_are_still_found_and_searchable(self):
+        from brainlib import search
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            src = notes_mod.create(b, "decidimos usar parquet no pipeline", "P1")
+            dest = b.inst.vault / "RAW" / "2026" / "10"
+            dest.mkdir(parents=True)
+            src.rename(dest / src.name)                       # o que o /dump faz: mover sem renomear
+            (n,) = notes_mod.scan(b.inst)
+            self.assertTrue(n.archived)
+            self.assertEqual((n.link, n.created), ("P1", "2026-10-09 10:00"))
+            hits = search.search(b, "parquet")
+            self.assertEqual([(h["kind"], h["id"]) for h in hits], [("nota", "P1")])
+
+    def test_edit_only_while_in_inbox(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            path = notes_mod.create(b, "antes", "P1")
+            self.assertEqual(notes_mod.editable_today(b.inst, "P1").path, b.inst.rel(path))
+            self.assertIsNone(notes_mod.editable_today(b.inst, ""))
+            notes_mod.update(b, b.inst.rel(path), "depois\n\ncom mais")
+            (n,) = notes_mod.scan(b.inst)
+            self.assertEqual((n.text, n.created, n.edited, n.link), ("depois\n\ncom mais", "2026-10-09 10:00", "2026-10-09 10:00", "P1"))
+            with self.assertRaises(util.BrainError):
+                notes_mod.update(b, "PLANNING/goals.md", "x")           # só nota da inbox
+            with self.assertRaises(util.BrainError):
+                notes_mod.update(b, "RAW/inbox/../../config/brain.toml", "x")
+            dest = b.inst.vault / "RAW" / "2026" / "10"
+            dest.mkdir(parents=True)
+            path.rename(dest / path.name)
+            self.assertIsNone(notes_mod.editable_today(b.inst, "P1"))   # RAW é imutável
+            with self.assertRaises(util.BrainError):
+                notes_mod.update(b, f"RAW/2026/10/{path.name}", "x")
+
+    def test_cli_add_and_list(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            env = {**os.environ, "BRAIN_HOME": td}
+            run = lambda *a: subprocess.run([sys.executable, str(ROOT / "brain"), *a], capture_output=True, text=True, env=env)  # noqa: E731
+            r = run("note", "add", "--link", "P1", "--text", "oi")
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertIn("P1-2026-10-09-note.md", r.stdout)
+            self.assertIn("P1-2026-10-09-note.md", run("note", "list", "--link", "p1").stdout)
+            self.assertEqual(run("note", "add", "--link", "G9", "--text", "x").returncode, 3)
 
 
 class GcalTests(unittest.TestCase):

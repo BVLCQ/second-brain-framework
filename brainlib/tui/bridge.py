@@ -31,8 +31,13 @@ class Result:
         return self.rc == 0
 
 
+MAX_ARG = 300
+
+
 def display(args: list[str]) -> str:
-    return "brain " + shlex.join(args)
+    """A linha que o dono veria no terminal. Argumento enorme (texto de nota) é encurtado só na exibição."""
+    shown = [a if len(a) <= MAX_ARG else f"{a[:MAX_ARG - 30]}…(+{len(a) - MAX_ARG + 30} caracteres)" for a in args]
+    return "brain " + shlex.join(shown)
 
 
 def _env(inst) -> dict:

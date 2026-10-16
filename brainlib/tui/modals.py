@@ -10,7 +10,7 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
-from textual.widgets import Input, Label, OptionList, Select, Static
+from textual.widgets import Input, Label, OptionList, Select, Static, TextArea
 from textual.widgets._select import SelectOverlay
 from textual.widgets.option_list import Option
 
@@ -27,6 +27,7 @@ class Field:
     req: bool = False
     check: Callable[[str], str] | None = None        # devolve a mensagem de erro, ou ""
     res: Callable[[str], str] | None = None          # texto de apoio ao lado do campo (ex.: data resolvida)
+    multi: bool = False                              # caixa de texto grande (várias linhas); enter quebra a linha
 
 
 @dataclass
@@ -41,6 +42,7 @@ class FormSpec:
     after: Callable[[], None] | None = None
     render: bool = True
     show: str | None = None                          # abre a saída inteira num modal (ex.: memória)
+    intercept: Callable[[dict], bool] | None = None  # roda ao confirmar; True = assumiu o fluxo (ex.: perguntar antes de gravar)
 
 
 @dataclass
@@ -62,6 +64,7 @@ def preview(cmds: list[list[str]]) -> Text:
 class FormModal(ModalScreen):
     # enter confirma em qualquer campo (inclusive nas listas); espaço/seta abre a lista de um campo de escolha
     BINDINGS = [Binding("escape", "cancel", "Cancelar"), Binding("ctrl+s", "submit", "Confirmar"),
+                Binding("ctrl+o", "external_edit", "Abrir no editor", show=False),
                 Binding("enter", "enter_submit", priority=True, show=False)]
 
     def __init__(self, spec: FormSpec):
@@ -77,9 +80,11 @@ class FormModal(ModalScreen):
             if s.extra is not None:
                 yield Static(s.extra, id="mx")
             for f in s.fields:
-                with Horizontal(classes="frow"):
+                with Horizontal(classes="frow big" if f.multi else "frow"):
                     yield Label(Text.assemble(f.label, (" *", "red") if f.req else ""), classes="flab")
-                    if f.choice:
+                    if f.multi:
+                        yield TextArea(f.value, placeholder=f.ph, id=f"f_{f.id}", classes="fin")
+                    elif f.choice:
                         val = f.value if f.value in f.choice else f.choice[0]
                         yield Select([(c, c) for c in f.choice], value=val, allow_blank=False, id=f"f_{f.id}", classes="fin")
                     else:
@@ -87,11 +92,13 @@ class FormModal(ModalScreen):
                 yield Static("", id=f"r_{f.id}", classes="fres")
             yield Static("", id="cmdp")
             yield Static("", id="err")
-            yield Static(Text("enter confirmar · tab próximo campo · espaço abre a lista · esc cancelar", "dim"), id="mf")
+            multi = any(f.multi for f in s.fields)
+            yield Static(Text("ctrl+s confirmar · ctrl+o abrir no seu editor (markdown) · enter quebra a linha · tab próximo campo · esc cancelar" if multi else
+                              "enter confirmar · tab próximo campo · espaço abre a lista · esc cancelar", "dim"), id="mf")
 
     def on_mount(self) -> None:
         self._update()
-        first = self.query("Input, Select")
+        first = self.query("Input, Select, TextArea")
         if first:
             first.first().focus()
 
@@ -99,7 +106,7 @@ class FormModal(ModalScreen):
         out = {}
         for f in self.spec.fields:
             w = self.query_one(f"#f_{f.id}")
-            v = w.value
+            v = w.text if isinstance(w, TextArea) else w.value
             out[f.id] = "" if v is Select.BLANK else str(v).strip()
         return out
 
@@ -119,12 +126,15 @@ class FormModal(ModalScreen):
     def on_select_changed(self, _e) -> None:
         self._update()
 
+    def on_text_area_changed(self, _e) -> None:
+        self._update()
+
     def on_input_submitted(self, _e) -> None:
         self.action_submit()
 
     def check_action(self, action: str, parameters) -> bool | None:
-        if action == "enter_submit":                       # lista aberta: enter escolhe a opção, não confirma
-            return not isinstance(self.focused, SelectOverlay)
+        if action == "enter_submit":                       # lista aberta: enter escolhe a opção; caixa grande: enter quebra a linha
+            return not isinstance(self.focused, (SelectOverlay, TextArea))
         return True
 
     def action_enter_submit(self) -> None:
@@ -145,8 +155,52 @@ class FormModal(ModalScreen):
                     return
         self.dismiss(v)
 
+    def action_external_edit(self) -> None:
+        """Abre o texto da caixa grande no $VISUAL/$EDITOR (vim, nano, code --wait…) e traz o resultado de volta."""
+        areas = self.query(TextArea)
+        if not areas:
+            return
+        ta = self.focused if isinstance(self.focused, TextArea) else areas.first()
+        new = self.app.edit_in_editor(ta.text)
+        if new is not None:
+            ta.text = new
+            ta.move_cursor(ta.document.end)
+        ta.focus()
+
     def action_cancel(self) -> None:
         self.dismiss(None)
+
+
+class ChoiceModal(ModalScreen):
+    """Pergunta com poucas saídas: seta + enter, ou a letra de cada opção. Esc devolve ''."""
+    BINDINGS = [Binding("escape", "pick('')", "Voltar")]
+
+    def __init__(self, title: str, body: Text, options: list[tuple[str, str, str]]):
+        super().__init__()
+        self.title_, self.body, self.options = title, body, options       # (tecla, valor, rótulo)
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="dialog", classes="gate"):
+            yield Static(Text(self.title_, "bold"), id="mt")
+            yield Static(self.body, id="mb")
+            yield OptionList(*[Option(Text.assemble((f"{k}  ", "bold cyan"), lab), id=val) for k, val, lab in self.options], id="pl")
+            yield Static(Text("↑↓ enter escolher · " + " · ".join(f"{k} {lab.split(' ')[0].lower()}" for k, _, lab in self.options) + " · esc volta", "dim"), id="mf")
+
+    def on_mount(self) -> None:
+        self.query_one("#pl", OptionList).focus()
+
+    def on_key(self, e) -> None:
+        for k, val, _ in self.options:
+            if e.key == k:
+                e.stop()
+                self.dismiss(val)
+                return
+
+    def on_option_list_option_selected(self, e: OptionList.OptionSelected) -> None:
+        self.dismiss(e.option.id)
+
+    def action_pick(self, value: str) -> None:
+        self.dismiss(value)
 
 
 class PickerModal(ModalScreen):

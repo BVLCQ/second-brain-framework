@@ -776,12 +776,193 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             await app._watch()
             self.assertIn("jira-me", [x["key"] for x in app.store.sources])
 
+    # ── painel 6 (log) e notas ─────────────────────────────────────────────
+    async def test_log_is_panel_six_and_expands_when_selected(self):
+        app = self.app()
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause(0.4)
+            log, detail = app.query_one("#log"), app.query_one("#detailwrap")
+            small = log.outer_size.height
+            self.assertEqual(small, 10)                                # fechado: o mesmo tamanho de sempre
+            await pilot.press("6")
+            await pilot.pause(0.2)
+            self.assertEqual(app.p, 6)
+            self.assertGreater(log.outer_size.height, small)                 # selecionado: expande
+            self.assertLess(detail.outer_size.height, 10)
+            self.assertTrue(log.has_class("-on"))
+            self.assertIn("[6]", str(log.border_title))
+            self.assertEqual(app.query_one("#p2").size.height > 3, True)   # a lista da esquerda continua preenchida
+            await pilot.press("c")                                     # tecla do contexto do log
+            await pilot.pause(0.1)
+            self.assertEqual(len(app.query_one("#log").lines), 0)
+            await pilot.press("2")
+            await pilot.pause(0.2)
+            self.assertEqual(log.outer_size.height, small)                   # volta ao tamanho original
+            await pilot.click("#log")                                  # clique também seleciona
+            self.assertEqual(app.p, 6)
+
+    async def test_note_form_creates_file_in_inbox_linked_and_shows_in_detail(self):
+        app = self.app()
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause(0.4)
+            aid = app.cur().id
+            await pilot.press("N")
+            await pilot.pause(0.3)
+            self.assertEqual(type(app.screen).__name__, "FormModal")
+            ta = app.screen.query_one("#f_text")
+            self.assertEqual(type(ta).__name__, "TextArea")
+            self.assertEqual(app.screen.query_one("#f_link").value, aid)       # vem da seleção
+            await pilot.press(*"linha", "enter", *"dois")                        # enter quebra a linha, não confirma
+            await pilot.pause(0.1)
+            self.assertEqual(type(app.screen).__name__, "FormModal")
+            self.assertEqual(ta.text, "linha\ndois")
+            await pilot.press("ctrl+s")
+            await self.settle(app, pilot)
+        files = sorted(p.name for p in self.inst.inbox.glob("*-note.md"))
+        self.assertEqual(files, [f"{aid}-2026-10-09-note.md"])
+        body = (self.inst.inbox / files[0]).read_text(encoding="utf-8")
+        self.assertIn(f"vinculo: {aid}", body)
+        self.assertIn("criada: 2026-10-09 10:00", body)
+        self.assertTrue(body.endswith("linha\ndois\n"))
+        app2 = self.app()
+        async with app2.run_test(size=(140, 44)) as pilot:
+            await pilot.pause(0.4)
+            target = [it.id for it in app2.items(2)]
+            app2.set_sel(2, target.index(aid))
+            app2.redraw()
+            text = self.text_of(app2.query_one("#detail"))
+            self.assertIn("2026-10-09 10:00", text)
+            self.assertIn("nota: linha", text)                       # linha no histórico, com data e hora
+            self.assertLess(text.index("Histórico"), text.index("Notas"))
+            self.assertIn("▌ dois", text)
+
+    async def test_note_without_link_and_invalid_link(self):
+        app = self.app()
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause(0.4)
+            await pilot.press("3", "N")
+            await pilot.pause(0.3)
+            app.screen.query_one("#f_text").text = "ideia solta"
+            app.screen.query_one("#f_link").value = "A-9999"
+            await pilot.press("ctrl+s")
+            await pilot.pause(0.2)
+            self.assertEqual(type(app.screen).__name__, "FormModal")            # vínculo inexistente barra
+            self.assertIn("não encontrada", self.text_of(app.screen.query_one("#err")))
+            app.screen.query_one("#f_link").value = ""
+            await pilot.press("ctrl+s")
+            await self.settle(app, pilot)
+            self.assertTrue((self.inst.inbox / "note-2026-10-09-note.md").exists())
+
+    async def test_plan_detail_lists_notes_under_goal_project_and_deliverable(self):
+        from brainlib import notes
+        from brainlib.core import Brain
+        b = Brain(self.inst)
+        for link in ("G1", "P1", "P1.1"):
+            notes.create(b, f"nota de {link}", link)
+        app = self.app()
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause(0.4)
+            await pilot.press("3")
+            for it in app.items(3):
+                if it.id in ("G1", "P1", "P1.1"):
+                    app.set_sel(3, [i.id for i in app.items(3)].index(it.id))
+                    app.redraw()
+                    self.assertIn(f"▌ nota de {it.id}", self.text_of(app.query_one("#detail")))
+
+    async def test_second_note_same_day_asks_edit_or_new(self):
+        from brainlib import notes
+        from brainlib.core import Brain
+        b = Brain(self.inst)
+        notes.create(b, "primeira", "P1")
+        app = self.app()
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause(0.4)
+            await pilot.press("3")
+            app.set_sel(3, [i.id for i in app.items(3)].index("P1"))
+            app.redraw()
+            # 1) editar a existente: o texto novo entra no fim e o arquivo é reescrito
+            await pilot.press("N")
+            await pilot.pause(0.3)
+            app.screen.query_one("#f_text").text = "segunda"
+            await pilot.press("ctrl+s")
+            await pilot.pause(0.3)
+            self.assertEqual(type(app.screen).__name__, "ChoiceModal")
+            await pilot.press("e")
+            await pilot.pause(0.3)
+            self.assertEqual(type(app.screen).__name__, "FormModal")
+            self.assertEqual(app.screen.query_one("#f_text").text, "primeira\n\nsegunda")
+            app.screen.query_one("#f_text").text = "primeira, revisada\n\nsegunda"
+            await pilot.press("ctrl+s")
+            await self.settle(app, pilot)
+            files = sorted(p.name for p in self.inst.inbox.glob("*-note*.md"))
+            self.assertEqual(files, ["P1-2026-10-09-note.md"])
+            body = (self.inst.inbox / files[0]).read_text(encoding="utf-8")
+            self.assertIn("primeira, revisada", body)
+            self.assertIn("editada: 2026-10-09 10:00", body)
+            self.assertIn("criada: 2026-10-09 10:00", body)
+            # 2) criar nova: vira -note-2
+            await pilot.press("N")
+            await pilot.pause(0.3)
+            app.screen.query_one("#f_text").text = "outra coisa"
+            await pilot.press("ctrl+s")
+            await pilot.pause(0.3)
+            await pilot.press("n")
+            await self.settle(app, pilot)
+            self.assertEqual(sorted(p.name for p in self.inst.inbox.glob("*-note*.md")),
+                             ["P1-2026-10-09-note-2.md", "P1-2026-10-09-note.md"])
+            # 3) esc volta ao formulário com o que foi digitado
+            await pilot.press("N")
+            await pilot.pause(0.3)
+            app.screen.query_one("#f_text").text = "rascunho"
+            await pilot.press("ctrl+s")
+            await pilot.pause(0.3)
+            await pilot.press("escape")
+            await pilot.pause(0.3)
+            self.assertEqual(type(app.screen).__name__, "FormModal")
+            self.assertEqual(app.screen.query_one("#f_text").text, "rascunho")
+
+    async def test_archived_note_is_not_offered_for_edit(self):
+        from brainlib import notes
+        from brainlib.core import Brain
+        b = Brain(self.inst)
+        src = notes.create(b, "já arquivada", "P1")
+        dest = self.inst.vault / "RAW" / "2026" / "10"
+        dest.mkdir(parents=True, exist_ok=True)
+        src.rename(dest / src.name)
+        app = self.app()
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause(0.4)
+            await pilot.press("3", "N")
+            await pilot.pause(0.3)
+            app.screen.query_one("#f_text").text = "nova"
+            app.screen.query_one("#f_link").value = "P1"
+            await pilot.press("ctrl+s")
+            await self.settle(app, pilot)                      # sem pergunta: RAW é imutável
+        self.assertTrue((self.inst.inbox / "P1-2026-10-09-note-2.md").exists())
+
+    async def test_note_text_can_be_edited_in_the_external_editor(self):
+        editor = Path(self.tmp.name) / "fake_editor.py"
+        editor.write_text("import sys\np = sys.argv[1]\nt = open(p, encoding='utf-8').read()\n"
+                          "open(p, 'w', encoding='utf-8').write('# Título\\n\\n- item\\n' + t)\n", encoding="utf-8")
+        os.environ["EDITOR"] = f"{sys.executable} {editor}"
+        self.addCleanup(os.environ.pop, "EDITOR", None)
+        app = self.app()
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause(0.4)
+            await pilot.press("N")
+            await pilot.pause(0.3)
+            ta = app.screen.query_one("#f_text")
+            ta.text = "corpo"
+            await pilot.press("ctrl+o")
+            await pilot.pause(0.5)
+            self.assertEqual(ta.text, "# Título\n\n- item\ncorpo")
+
 
 class CoverageTest(unittest.TestCase):
     """Todo subcomando da CLI tem tecla no TUI ou uma razão explícita para não ter."""
     READ_ONLY_VIEWS = {   # a leitura já está num painel (modelo em processo), sem precisar chamar a CLI
         "person list", "action show", "action list", "decision list", "plan show", "focus show", "outbox show",
-        "outbox list", "proposal list", "publish list", "doctor", "search", "status", "artifact", "watch list"}
+        "outbox list", "proposal list", "publish list", "doctor", "search", "status", "artifact", "watch list", "note list"}
     AGENT_ONLY = {        # quem escreve é o agente (extração, snapshot, envio), conforme a Constituição
         "init", "add", "snapshot", "extract", "proposal add", "outbox sent", "outbox failed", "publish done"}
     NOT_IN_TUI = {"demo", "tui"}

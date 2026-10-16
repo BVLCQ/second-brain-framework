@@ -1,7 +1,7 @@
 """BrainApp — o cockpit de terminal do ./brain (Textual).
 
-Cinco painéis numerados à esquerda, detalhe à direita, log de comandos embaixo e a barra de teclas
-contextual no rodapé. Leitura é em processo (view model); toda escrita é `./brain <args>` como
+Cinco painéis numerados à esquerda, detalhe à direita, o log de comandos (painel 6) embaixo dele e a barra
+de teclas contextual no rodapé. Leitura é em processo (view model); toda escrita é `./brain <args>` como
 subprocesso, e a linha exata aparece no log. O desenho está em guides/tui-mockup.html.
 """
 from __future__ import annotations
@@ -11,6 +11,7 @@ import difflib
 import os
 import shlex
 import subprocess
+import tempfile
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -24,11 +25,12 @@ from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.widget import Widget
 from textual.widgets import RichLog, Static
 
+from .. import notes as notes_mod
 from .. import people as people_mod
 from .. import search as search_mod
 from .. import util
 from . import bridge, dates, rows
-from .modals import (AgentModal, ConfirmModal, Field, FilterModal, FormModal, FormSpec, PickerModal,
+from .modals import (AgentModal, ChoiceModal, ConfirmModal, Field, FilterModal, FormModal, FormSpec, PickerModal,
                      PickItem, TextModal)
 from .store import PANELS, SYS_OPS, Item, Store
 
@@ -88,6 +90,8 @@ CMD_CATALOG = [               # paleta de comandos: nome, linha da CLI, (painel,
     ("Processar a inbox", "agente: /dump", (1, 0, "d")),
     ("Brief do dia", "agente: /brief", (1, 0, "b")),
     ("Buscar no ledger", 'brain search "…"', (None, None, "g")),
+    ("Nova nota", 'brain note add --link A-#### --text "…"', (None, None, "N")),
+    ("Ver o log de comandos", "painel 6", (6, 0, None)),
 ]
 
 
@@ -130,6 +134,9 @@ class Detail(VerticalScroll):
 class Log(RichLog):
     can_focus = False
 
+    def on_click(self, event: events.Click) -> None:
+        self.app.goto_panel(6)
+
 
 class BrainApp(App):
     CSS_PATH = "tui.tcss"
@@ -140,8 +147,9 @@ class BrainApp(App):
         super().__init__()
         self.inst = inst
         self.store: Store | None = None
+        self.lp = 2                   # último painel de lista (1-5) em foco; o log (6) mantém o detalhe dele
         self.p = 2
-        self.tab = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
+        self.tab = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0}
         self.sel_idx: dict[tuple[int, int], int] = {}
         self.sel_id: dict[tuple[int, int], str] = {}
         self.win: dict[tuple[int, int], int] = {}
@@ -153,6 +161,16 @@ class BrainApp(App):
         self._lock: asyncio.Lock | None = None
         self.busy = ""
         self._quit_armed = False
+
+    @property
+    def p(self) -> int:
+        return self._p
+
+    @p.setter
+    def p(self, v: int) -> None:
+        self._p = v
+        if v != 6:
+            self.lp = v
 
     # ── estrutura ──────────────────────────────────────────────────────────
     def compose(self) -> ComposeResult:
@@ -171,7 +189,6 @@ class BrainApp(App):
     async def on_mount(self) -> None:
         self._lock = asyncio.Lock()
         self.query_one("#detailwrap").border_title = "Detalhe"
-        self.query_one("#log").border_title = "Log de comandos"
         for pid in (1, 2, 3, 4, 5):
             self.query_one(f"#p{pid}").border_subtitle_align = "right"
         try:
@@ -224,11 +241,12 @@ class BrainApp(App):
         self.sel_idx[key], self.sel_id[key] = i, its[i].id
 
     def cur(self) -> Item | None:
-        its = self.items(self.p)
-        return its[self.sel_index(self.p)] if its else None
+        p = self.lp if self.p == 6 else self.p
+        its = self.items(p)
+        return its[self.sel_index(p)] if its else None
 
     def fill_panel(self) -> int:
-        return 2 if (self.p == 1 and self.tab[1] == 0) else self.p
+        return 2 if (self.lp == 1 and self.tab[1] == 0) else self.lp
 
     # ── desenho ────────────────────────────────────────────────────────────
     def panel_body(self, pid: int, width: int, height: int) -> Text:
@@ -357,6 +375,11 @@ class BrainApp(App):
         self.query_one("#detail", Static).update(rows.detail(self.store, self.cur()) if self.store else Text(""))
         self.query_one("#detailwrap").scroll_home(animate=False)
         self.query_one("#detailwrap").border_subtitle = self._detail_subtitle()
+        log, on = self.query_one("#log"), self.p == 6
+        log.set_class(on, "-on")
+        self.query_one("#detailwrap").set_class(on, "-small")
+        log.border_title = Text.assemble((" [6] ", "bold"), ("Log de comandos ", "bold"))
+        log.border_subtitle = " j k rolam · c limpa · 1-5 voltam " if on else ""
         self.set_class(self.zoom, "-zoom")
         self.refresh_hints()
 
@@ -381,7 +404,7 @@ class BrainApp(App):
         for k in self.ctx_keys():
             hint(left, k.k, k.label, "magenta" if k.agent else ("yellow" if k.gate else "cyan"), "⚡ " if k.agent else "◆ " if k.gate else "")
         right = Text(no_wrap=True)
-        for k, lab in (("?", "ajuda"), (":", "comandos"), ("/", "filtrar"), ("g", "buscar"), ("r", "render"), ("q", "sair")):
+        for k, lab in (("?", "ajuda"), (":", "comandos"), ("N", "nota"), ("/", "filtrar"), ("g", "buscar"), ("r", "render"), ("q", "sair")):
             hint(right, k, lab, "cyan")
         self.query_one("#hints", Static).update(left)
         g = self.query_one("#globals", Static)
@@ -453,7 +476,7 @@ class BrainApp(App):
             self.move(-9999 if k == "home" else 9999)
         elif k in ("pagedown", "pageup"):
             self.move(8 if k == "pagedown" else -8)
-        elif k in "12345" and len(k) == 1:
+        elif k in "123456" and len(k) == 1:
             self.goto_panel(int(k))
         elif k in ("l", "right"):                  # trocar de painel é só pelos números 1-5
             self.tab_move(1)
@@ -473,6 +496,8 @@ class BrainApp(App):
             self.open_filter()
         elif k == "r":
             self.do_render()
+        elif k == "N":
+            self.f_note()
         elif k == "q":
             if self.busy and not self._quit_armed:
                 self._quit_armed = True
@@ -495,7 +520,7 @@ class BrainApp(App):
 
     def press(self, k: str) -> bool:
         k = "enter" if k == "\r" else k
-        if k == "enter" and self.p == 1 and self.tab[1] == 0:
+        if k == "enter" and (self.p == 6 or (self.p == 1 and self.tab[1] == 0)):
             return False
         for key in self.ctx_keys():
             if key.k == k:
@@ -508,7 +533,9 @@ class BrainApp(App):
         return False
 
     def goto_panel(self, p: int) -> None:
-        self.p = ((p - 1) % 5) + 1
+        self.p = ((p - 1) % 6) + 1
+        if self.p == 6:
+            self.zoom = False
         self.redraw()
 
     def tab_move(self, d: int) -> None:
@@ -517,6 +544,13 @@ class BrainApp(App):
         self.redraw()
 
     def move(self, d: int) -> None:
+        if self.p == 6:
+            log = self.query_one("#log")
+            if abs(d) >= 9999:
+                log.scroll_home(animate=False) if d < 0 else log.scroll_end(animate=False)
+            else:
+                log.scroll_relative(y=d, animate=False)
+            return
         if self.zoom:
             w = self.query_one("#detailwrap")
             w.scroll_relative(y=d * 3, animate=False)
@@ -644,6 +678,8 @@ class BrainApp(App):
                     add("P", "publicar", self.agent_publish, agent=True)
                 if w(it and it.data["status"] in ("solicitada", "aprovada")):
                     add("x", "cancelar", self.pub_cancel)
+        elif p == 6:
+            add("c", "limpar o log", self.clear_log)
         elif p == 5:
             if t == 0:
                 add("n", "nova", self.f_decision)
@@ -727,6 +763,8 @@ class BrainApp(App):
                 if spec.on_cancel:
                     spec.on_cancel()
                 return
+            if spec.intercept and spec.intercept(vals):
+                return
             self.exec(spec.build(vals), render=spec.render, after=spec.after, show=spec.show)
         self.push_screen(FormModal(spec), done)
 
@@ -804,6 +842,71 @@ class BrainApp(App):
             Field("blocked", "bloqueada por", ph="A-#### (opcional)"),
             Field("link", "link", ph="URL (opcional)")],
             build, sub="Equivalente ao /todo, sem o agente."))
+
+    def clear_log(self) -> None:
+        self.query_one("#log", RichLog).clear()
+
+    def f_note(self, pre: dict | None = None) -> None:
+        """Nota avulsa: vira um .md na inbox (a porta única); o /dump arquiva no RAW. Vínculo opcional.
+        Se já existe nota de hoje para o mesmo vínculo (ainda na inbox), pergunta: editar a existente ou criar outra."""
+        it = self.cur()
+        link0 = it.id if it and it.kind in ("action", "g", "p", "d") else ""
+        pre = pre or {}
+        brain, today = self.store.brain, util.today().isoformat()
+
+        def err(v: str) -> str:
+            return notes_mod.check_link(brain, notes_mod.normalize_link(v))
+
+        def res(v: str) -> str:
+            link = notes_mod.normalize_link(v)
+            if err(v):
+                return err(v)
+            a = self.store.by_action.get(link)
+            title = a["title"] if a else brain.plan.title(link)
+            return f"{notes_mod.kind_of(link)} · {title} → {notes_mod.filename(self.inst, link, today)}"
+
+        def build(v):
+            c = ["note", "add"]
+            if v["link"]:
+                c += ["--link", notes_mod.normalize_link(v["link"])]
+            return [c + ["--text", v["text"] or "…"]]
+
+        def intercept(v: dict) -> bool:
+            link = notes_mod.normalize_link(v["link"])
+            ex = notes_mod.editable_today(self.inst, link)
+            if ex is None:
+                return False
+            peek = ex.text.splitlines()
+            body = Text.assemble((f"{link}: já existe uma nota de hoje, criada {ex.created[11:]}"
+                                  + (f" e editada {ex.edited[11:]}" if ex.edited else "") + ", ainda na inbox.\n\n", "dim"),
+                                 "\n".join("▌ " + ln for ln in peek[:4]) + ("\n▌ …" if len(peek) > 4 else ""))
+
+            def chose(c: str) -> None:
+                if c == "edit":
+                    self.f_note_edit(ex, v["text"])
+                elif c == "new":
+                    self.exec(build(v), render=False)
+                else:
+                    self.f_note(pre=v)
+            self.push_screen(ChoiceModal("Editar a nota de hoje ou criar outra?", body, [
+                ("e", "edit", "Editar a existente (o que você digitou entra no fim do texto dela)"),
+                ("n", "new", f"Nova nota ({notes_mod.filename(self.inst, link, today)})")]), chose)
+            return True
+
+        self.form(FormSpec("Nova nota", [
+            Field("text", "nota", value=pre.get("text", ""), req=True, multi=True, ph="escreva à vontade: ideias, contexto, o que ouviu…"),
+            Field("link", "vínculo", value=pre.get("link", link0), ph="A-#### · G# · P# · P#.n (opcional)", check=err, res=res)],
+            build, render=False, intercept=intercept,
+            sub="Cai na inbox como arquivo .md (nome: vínculo-data-note). O /dump arquiva no RAW; até lá e depois, "
+                "a nota aparece no detalhe do vínculo, abaixo do histórico. Markdown: ctrl+o abre no seu editor."))
+
+    def f_note_edit(self, note: notes_mod.Note, extra: str = "") -> None:
+        merged = note.text + (f"\n\n{extra}" if extra else "")
+        self.form(FormSpec(f"Editar {Path(note.path).name}", [
+            Field("text", "nota", value=merged, req=True, multi=True)],
+            lambda v: [["note", "edit", note.path, "--text", v["text"] or "…"]], render=False,
+            sub=f"Reescreve o arquivo na inbox (criada {note.created}); vínculo e hora de criação ficam. "
+                "Depois do /dump a nota vira RAW e não se edita mais. ctrl+o abre no seu editor."))
 
     def f_close_action(self) -> None:
         a = self.cur().data
@@ -940,6 +1043,21 @@ class BrainApp(App):
                 subprocess.run(argv, check=False)
         except SuspendNotSupported:           # driver sem suspensão (testes headless): roda sem terminal
             subprocess.run(argv, check=False, stdin=subprocess.DEVNULL)
+
+    def edit_in_editor(self, text: str) -> str | None:
+        """Edita `text` num arquivo .md temporário com o $VISUAL/$EDITOR; devolve o resultado (None se o editor falhou)."""
+        editor = shlex.split(os.environ.get("VISUAL") or os.environ.get("EDITOR") or "vi")
+        fd, name = tempfile.mkstemp(suffix=".md", prefix="brain-nota-")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                fh.write(text + "\n")
+            self.external([*editor, name])
+            return Path(name).read_text(encoding="utf-8").strip("\n")
+        except (OSError, ValueError) as e:
+            self.log_line(f"não consegui abrir o editor: {e}", "red")
+            return None
+        finally:
+            Path(name).unlink(missing_ok=True)
 
     def edit_plan(self) -> None:
         """Gate estrutural: edita goals.md, mostra o diff e só mantém com a sua aprovação digitada."""
@@ -1455,6 +1573,8 @@ class BrainApp(App):
         if p is None:
             if k == "g":
                 self.search()
+            elif k == "N":
+                self.f_note()
             return
         self.p, self.tab[p] = p, t
         self.filt = None
@@ -1477,7 +1597,7 @@ class BrainApp(App):
         self.push_screen(PickerModal("Buscar no ledger e nos artefatos", "brain search …", source, empty="Nada encontrado. “Não consta” também é resposta."), done)
 
     def open_filter(self) -> None:
-        if self.p == 1 and self.tab[1] == 0:
+        if self.p == 6 or (self.p == 1 and self.tab[1] == 0):
             return
         key = (self.p, self.tab[self.p])
 
@@ -1494,12 +1614,12 @@ class BrainApp(App):
             body.append(f"  {('space' if k.k == ' ' else k.k):<7}", "bold cyan")
             body.append(("⚡ " if k.agent else "◆ " if k.gate else "") + k.label + "\n")
         body.append("\nNavegação\n", "dim")
-        for k, d in (("j k ↑ ↓", "mover na lista"), ("1-5", "ir ao painel"), ("[ ] ← →", "aba anterior / próxima (h l também)"),
+        for k, d in (("j k ↑ ↓", "mover na lista"), ("1-6", "ir ao painel (6 = log)"), ("[ ] ← →", "aba anterior / próxima (h l também)"),
                      ("enter", "ampliar o detalhe"), ("esc", "voltar")):
             body.append(f"  {k:<9}", "bold cyan")
             body.append(d + "\n")
         body.append("\nEm qualquer tela\n", "dim")
-        for k, d in (("?", "esta ajuda"), (":", "paleta de comandos"), ("/", "filtrar a lista"), ("g", "buscar em tudo"), ("r", "regenerar views"),
+        for k, d in (("?", "esta ajuda"), (":", "paleta de comandos"), ("/", "filtrar a lista"), ("g", "buscar em tudo"), ("N", "nova nota na inbox"), ("r", "regenerar views"),
                      ("ctrl+t", "tema claro / escuro"), ("q", "sair")):
             body.append(f"  {k:<9}", "bold cyan")
             body.append(d + "\n")

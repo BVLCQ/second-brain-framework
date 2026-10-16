@@ -243,7 +243,7 @@ key deixa o histórico de pulls na key antiga.
 
 ### `brain tui`
 Cockpit de terminal (Textual): cinco painéis numerados (status, ações, plano, aprovações, registro), o
-detalhe do item, o log de comandos e uma barra com as teclas do contexto, como no lazygit. A leitura é
+detalhe do item, o log de comandos (o painel `6`, que expande quando selecionado) e uma barra com as teclas do contexto, como no lazygit. A leitura é
 em processo; **toda escrita é `./brain …` como subprocesso**, e a linha exata aparece no formulário (antes
 de confirmar) e no log (depois). Gates e portas pedem a sua resposta digitada, e as ações do agente (⚡)
 rodam o agente de `[runner]` em modo headless. O TUI se recusa a abrir com `BRAIN_NIGHTLY=1` (código 4).
@@ -261,12 +261,29 @@ brain tui             # abre; usa a .venv-tui sozinho
 Sem o extra, `brain tui` sai com código 3 e a instrução. A aba **Fontes** do painel 1 gerencia o `watch.toml` (`n` adiciona, `e` edita, `x` remove, `w` inclui um pull avulso) e mostra o
 último pull e as falhas de cada fonte. `u` (`/update`) atualiza tudo e `c` (`/connect`) puxa uma fonte: rodam o agente de `[runner]`,
 que precisa de permissão para as ferramentas MCP de leitura (`[runner].command` ou `[tui].agent_allow`). Teclas: `?` ajuda do contexto · `:` paleta de
-comandos · `g` busca · `/` filtro · `1`–`5` painéis (só pelos números) · `[` `]` ou `←` `→` abas · `⏎` ou duplo clique amplia o detalhe · `ctrl+t` troca o tema · `q` sai. O mouse também funciona: clique nas abas, nas linhas e nas dicas da barra, e a roda rola a lista. O TUI relê o vault sozinho quando ele muda fora dele (agente, outro terminal). O mapa
+comandos · `g` busca · `/` filtro · `N` nova nota (veja `brain note`) · `1`–`6` painéis (só pelos números; `6` é o log: `j` `k` rolam, `c` limpa) · `[` `]` ou `←` `→` abas · `⏎` ou duplo clique amplia o detalhe · `ctrl+t` troca o tema · `q` sai. O mouse também funciona: clique nas abas, nas linhas e nas dicas da barra, e a roda rola a lista. O TUI relê o vault sozinho quando ele muda fora dele (agente, outro terminal). O mapa
 completo por contexto, a legenda e uma versão para experimentar com dados fictícios estão em
 [`tui-mockup.html`](tui-mockup.html). Fora do TUI ficam só o que é do agente (`init`, `snapshot`, `add`, `extract`,
 `proposal add`; `outbox sent` e `publish done` ele registra ao enviar e publicar) e `demo`; o teste
 `tests/test_tui.py::CoverageTest` garante que nenhum subcomando novo da CLI fique sem lugar ou sem justificativa. Em `[tui]` do `brain.toml`, `agent_allow` lista ferramentas extras que o
 agente pode usar nas ações ⚡ (por exemplo as de escrita do MCP do Slack, só para enviar uma mensagem aprovada).
+
+### `brain note add` · `brain note edit` · `brain note list`
+Notas avulsas do dono. `add` grava `<VÍNCULO>-AAAA-MM-DD-note.md` na **inbox** (a porta única): `A-0146-…`, `G1-…`,
+`P2-…`, `P2.1-…`; sem vínculo, `note-…`; no mesmo dia e alvo vem o sufixo `-note-2.md`. O arquivo abre com um
+frontmatter (`vinculo:`, `criada: AAAA-MM-DD HH:mm`) e depois o texto. O `/dump` arquiva em `RAW/<ano>/<mês>/` sem
+renomear, então o TUI acha a nota (inbox ou RAW) e a mostra no detalhe do vínculo, abaixo do histórico, com data e hora.
+No TUI, `N` abre o formulário (caixa grande, vínculo opcional já preenchido com o item selecionado); `ctrl+o` abre o texto no seu `$VISUAL`/`$EDITOR` como Markdown e traz o resultado de volta. Se já existe nota **de hoje** para o mesmo vínculo e ela ainda está na inbox, o TUI pergunta: editar a existente (`brain note edit`, o texto novo entra no fim) ou criar outra (`…-note-2.md`). Nota já arquivada no RAW é imutável: só cria outra.
+
+| Opção | Uso |
+|---|---|
+| `--link ID` | `A-####`, `G#`, `P#` ou `P#.n` (opcional; precisa existir). Em `list`, filtra |
+| `--text TEXTO` | conteúdo da nota (padrão: stdin) |
+| `--json` | saída em JSON |
+
+`edit CAMINHO --text …` reescreve só nota ainda na inbox (`RAW/inbox/….md`), mantém vínculo e `criada:` e grava `editada:`.
+
+Códigos de saída: `3` vínculo inexistente, nota vazia ou nota fora da inbox; `4` com `BRAIN_NIGHTLY=1` (nota é do dono). Não escreve no ledger.
 
 ---
 

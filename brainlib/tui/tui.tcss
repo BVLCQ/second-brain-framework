@@ -7,7 +7,9 @@ ListPanel.-fill { height: 1fr; min-height: 5; }
 ListPanel.-on { border: round $primary-lighten-2; border-title-color: $text; }
 #detailwrap { border: round $primary-darken-1; height: 1fr; padding: 0 1; border-subtitle-color: $text-muted; scrollbar-size-vertical: 1; }
 #detail { width: 100%; height: auto; }
-#log { border: round $primary-darken-1; height: 10; padding: 0 1; scrollbar-size-vertical: 1; }
+#log { border: round $primary-darken-1; height: 10; padding: 0 1; scrollbar-size-vertical: 1; border-subtitle-color: $text-muted; }
+#log.-on { border: round $primary-lighten-2; border-title-color: $text; height: 1fr; }
+#detailwrap.-small { height: 8; }
 .-zoom #left { display: none; }
 #bar { height: 1; dock: bottom; background: $panel; }
 #hints { width: 1fr; height: 1; }
@@ -19,6 +21,8 @@ ModalScreen { align: center middle; background: $background 75%; }
 #dialog.agent { border: round magenta; }
 #ms, #ms0, #mx, #mb { margin-bottom: 1; }
 .frow { height: 3; }
+.frow.big { height: 14; }
+.frow.big .fin { height: 14; }
 .flab { width: 22; padding-top: 1; color: $text-muted; }
 .fin { width: 1fr; }
 .fres { height: auto; margin-left: 22; color: $text-muted; }

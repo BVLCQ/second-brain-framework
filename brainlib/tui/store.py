@@ -7,7 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from .. import config, doctor, model, util, watch
+from .. import config, doctor, model, notes as notes_mod, util, watch
 from ..core import Brain
 
 PANELS = {
@@ -16,6 +16,7 @@ PANELS = {
     3: ("Plano", ["Árvore"]),
     4: ("Aprovar", ["Propostas", "Outbox", "Foco", "Publicar"]),
     5: ("Registro", ["Decisões", "Entregas", "Pessoas", "Artefatos"]),
+    6: ("Log de comandos", ["Log"]),
 }
 
 SYS_OPS = [
@@ -103,6 +104,10 @@ class Store:
         self.by_deliv = {d["id"]: (p, d) for p in m["projects"] for d in p["deliverables"]}
         self.by_person = {p["id"]: p for p in m["people"]}
         self.by_msg = {x["id"]: x for x in m["outbox"]}
+        self.notes = notes_mod.scan(self.inst)
+        self.notes_by_link: dict[str, list[notes_mod.Note]] = {}
+        for n in self.notes:
+            self.notes_by_link.setdefault(n.link, []).append(n)
         self.watch_error = ""
         try:
             self.sources = self._sources()
@@ -141,6 +146,10 @@ class Store:
         return not self.m["goals"] and len(self.m["people"]) <= 1 and not self.m["actions"]
 
     # ── apoio ──────────────────────────────────────────────────────────────
+    def notes_of(self, link: str) -> list[notes_mod.Note]:
+        """Notas vinculadas a A-####/G#/P#/P#.n, da mais nova para a mais antiga."""
+        return self.notes_by_link.get(link, [])
+
     def person_name(self, pid: str) -> str:
         if pid.startswith("#"):
             return pid
