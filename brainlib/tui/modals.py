@@ -1,6 +1,7 @@
 """Telas modais do TUI: formulário com preview da CLI, seletor (paleta/busca), confirmação, agente, ajuda."""
 from __future__ import annotations
 
+import inspect
 import shlex
 from dataclasses import dataclass, field
 from typing import Callable
@@ -17,6 +18,12 @@ from textual.widgets.option_list import Option
 from . import bridge
 
 
+def _call(fn: Callable, value: str, vals: dict) -> str:
+    """check/res com um argumento (o valor) ou dois obrigatórios (o valor e todos os campos, para campos que dependem de outros)."""
+    required = [p for p in inspect.signature(fn).parameters.values() if p.default is p.empty]
+    return fn(value, vals) if len(required) >= 2 else fn(value)
+
+
 @dataclass
 class Field:
     id: str
@@ -25,8 +32,8 @@ class Field:
     ph: str = ""
     choice: list[str] | None = None
     req: bool = False
-    check: Callable[[str], str] | None = None        # devolve a mensagem de erro, ou ""
-    res: Callable[[str], str] | None = None          # texto de apoio ao lado do campo (ex.: data resolvida)
+    check: Callable[..., str] | None = None          # (valor) ou (valor, campos) → mensagem de erro, ou ""
+    res: Callable[..., str] | None = None            # (valor) ou (valor, campos) → texto de apoio (ex.: data resolvida)
     multi: bool = False                              # caixa de texto grande (várias linhas); enter quebra a linha
 
 
@@ -113,7 +120,7 @@ class FormModal(ModalScreen):
     def _update(self) -> None:
         v = self.vals()
         for f in self.spec.fields:
-            self.query_one(f"#r_{f.id}", Static).update(Text(f.res(v[f.id]), "dim") if f.res and v[f.id] else "")
+            self.query_one(f"#r_{f.id}", Static).update(Text(_call(f.res, v[f.id], v), "dim") if f.res and v[f.id] else "")
         try:
             self.query_one("#cmdp", Static).update(preview(self.spec.build(v)))
         except Exception as e:  # noqa: BLE001 — o preview nunca derruba o formulário
@@ -148,7 +155,7 @@ class FormModal(ModalScreen):
                 self.query_one(f"#f_{f.id}").focus()
                 return
             if f.check and v[f.id]:
-                msg = f.check(v[f.id])
+                msg = _call(f.check, v[f.id], v)
                 if msg:
                     self.query_one("#err", Static).update(Text(msg, "red"))
                     self.query_one(f"#f_{f.id}").focus()

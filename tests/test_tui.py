@@ -1085,6 +1085,49 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn("P10", shown(3, 0, "P1"))
             app.filt = None
 
+    async def test_deliverable_by_number_inside_the_project(self):
+        app = self.app()
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause(0.4)
+            st = app.store
+            a = next(a for a in st.m["actions"] if a["open"] and a["mine"] and a["list"] == "mine" and a["deliverable"])
+            proj = a["deliverable"].split(".")[0]
+            others = [d["id"].split(".")[1] for d in st.by_project[proj]["deliverables"] if d["id"] != a["deliverable"]]
+            self.assertTrue(others)
+            n = others[0]
+            app.set_sel(2, [i.id for i in app.items(2)].index(a["id"]))
+            app.redraw()
+            await pilot.press("e")
+            await pilot.pause(0.3)
+            f = app.screen.query_one("#f_deliv")
+            self.assertEqual(f.value, a["deliverable"].split(".")[1])         # P1.2 aparece só como 2
+            await self.fill(pilot, deliv="99")
+            await pilot.press("ctrl+s")
+            await pilot.pause(0.2)
+            self.assertEqual(type(app.screen).__name__, "FormModal")
+            self.assertIn("não existe", self.text_of(app.screen.query_one("#err")))
+            await self.fill(pilot, deliv=n)
+            self.assertIn(f"→ {proj}.{n}", self.text_of(app.screen.query_one("#r_deliv")))
+            self.assertIn(f"--deliverable {proj}.{n}", self.text_of(app.screen.query_one("#cmdp")))
+            await pilot.press("ctrl+s")
+            await self.settle(app, pilot)
+            self.assertEqual(self.state(app).actions[a["id"]].deliverable, f"{proj}.{n}")
+            # ação nova: o número vale para o projeto escolhido no formulário
+            await pilot.press("n")
+            await pilot.pause(0.3)
+            await self.fill(pilot, title="Com número", deliv="1")
+            await pilot.press("ctrl+s")                                        # sem projeto, só o número não resolve
+            await pilot.pause(0.2)
+            self.assertEqual(type(app.screen).__name__, "FormModal")
+            self.assertIn("escolha o projeto", self.text_of(app.screen.query_one("#err")))
+            app.screen.query_one("#f_project").value = proj
+            await pilot.pause(0.2)
+            self.assertIn(f"--deliverable {proj}.1", self.text_of(app.screen.query_one("#cmdp")))
+            await pilot.press("ctrl+s")
+            await self.settle(app, pilot)
+            b = next(x for x in self.state(app).actions.values() if x.title == "Com número")
+            self.assertEqual(b.deliverable, f"{proj}.1")
+
 
 class CoverageTest(unittest.TestCase):
     """Todo subcomando da CLI tem tecla no TUI ou uma razão explícita para não ter."""

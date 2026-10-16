@@ -36,6 +36,15 @@ from .modals import (AgentModal, ChoiceModal, ConfirmModal, Field, FilterModal, 
 from .store import PANELS, SYS_OPS, Item, Store
 
 UCAP = 3                      # linhas visíveis de um painel sem foco
+
+
+def _editor_argv() -> list[str]:
+    """$VISUAL/$EDITOR como argv. Cursor e VS Code voltam na hora sem --wait: forçamos a espera."""
+    argv = shlex.split(os.environ.get("VISUAL") or os.environ.get("EDITOR") or "vi")
+    if argv and Path(argv[0]).name in {"cursor", "code"} and not {"--wait", "-w"} & set(argv):
+        argv.append("--wait")
+    return argv
+
 CMD_CATALOG = [               # paleta de comandos: nome, linha da CLI, (painel, aba, tecla)
     ("Nova ação", 'brain action open "…" --by owner', (2, 0, "n")),
     ("Fechar ação", 'brain action close A-#### --how "…"', (2, 0, "c")),
@@ -894,6 +903,30 @@ class BrainApp(App):
             sub=f"{proj['id']} · {proj['title']}. Entregável não é goal nem projeto: entra no goals.md sem gate (o título não pode ter “·”).",
             after=lambda: self.jump(nid)))
 
+    # entregável por número: dentro do projeto P1, "9" vale P1.9
+    @staticmethod
+    def _deliv_id(raw: str, project: str) -> str:
+        r = (raw or "").strip().upper().lstrip(".")
+        if r.isdigit():
+            return f"{project}.{int(r)}" if project and project != "—" else ""
+        return r
+
+    def _deliv_check(self, raw: str, vals: dict) -> str:
+        proj = vals.get("project", "")
+        full = self._deliv_id(raw, proj)
+        if not full:
+            return "Só o número precisa do campo projeto: escolha o projeto ou escreva P#.n por inteiro."
+        if full in self.store.by_deliv:
+            return ""
+        p = full.split(".")[0]
+        nums = [d["id"].split(".")[1] for d in self.store.by_project[p]["deliverables"]] if p in self.store.by_project else []
+        return f"{full} não existe" + (f" (os de {p} são {', '.join(nums)})" if nums else "")
+
+    def _deliv_res(self, raw: str, vals: dict) -> str:
+        full = self._deliv_id(raw, vals.get("project", ""))
+        hit = self.store.by_deliv.get(full)
+        return f"→ {full} · {hit[1]['title']}" if hit else ""
+
     def f_new_action(self, pre: dict | None = None) -> None:
         pre = pre or {}
         lst = ["mine", "waiting", "watching"][self.tab[2]] if self.p == 2 else "mine"
@@ -912,7 +945,9 @@ class BrainApp(App):
                 a += ["--project", v["project"]]
             if v["prio"] != "normal":
                 a += ["--priority", v["prio"]]
-            for opt, key in (("--deliverable", "deliv"), ("--people", "people"), ("--blocked-by", "blocked"), ("--link", "link")):
+            if v["deliv"]:
+                a += ["--deliverable", self._deliv_id(v["deliv"], v["project"]) or v["deliv"]]
+            for opt, key in (("--people", "people"), ("--blocked-by", "blocked"), ("--link", "link")):
                 if v[key]:
                     a += [opt, v[key]]
             return [a]
@@ -925,7 +960,8 @@ class BrainApp(App):
             Field("prio", "prioridade", choice=["normal", "alta", "baixa"]),
             Field("list", "lista", choice=["mine", "waiting", "watching"], value=lst),
             Field("owner", "dono", ph="você (ou id/alias da pessoa)", value=owner),
-            Field("deliv", "entregável", ph="P#.n (opcional)", value=pre.get("deliv", "")),
+            Field("deliv", "entregável", ph="9 (do projeto escolhido) ou P#.n · opcional", value=pre.get("deliv", ""),
+                  check=self._deliv_check, res=self._deliv_res),
             Field("people", "pessoas", ph="ana, bruno (opcional)"),
             Field("blocked", "bloqueada por", ph="A-#### (opcional)"),
             Field("link", "link", ph="URL (opcional)")],
@@ -1012,6 +1048,7 @@ class BrainApp(App):
         eff0 = util.fmt_duration(a["effort_min"]) if a["effort_min"] else ""
         deliv0, blocked0 = a["deliverable"] or "", ",".join(a["blocked_by_all"] or [])
         proj0 = a["project"] or "—"
+        deliv_shown = deliv0.split(".", 1)[1] if proj0 != "—" and deliv0.startswith(proj0 + ".") else deliv0   # P1.9 aparece como 9
         owner0 = "" if a["mine"] else a["owner"]
 
         def build(v):
@@ -1026,8 +1063,9 @@ class BrainApp(App):
                 c += ["--priority", v["prio"]]
             if v["project"] != proj0 and v["project"] != "—":
                 c += ["--project", v["project"]]
-            if v["deliv"] and v["deliv"] != deliv0:
-                c += ["--deliverable", v["deliv"]]
+            deliv = self._deliv_id(v["deliv"], v["project"]) or v["deliv"]
+            if deliv and deliv != deliv0:
+                c += ["--deliverable", deliv]
             if v["blocked"] and v["blocked"].replace(" ", "") != blocked0:
                 c += ["--blocked-by", v["blocked"].replace(" ", "")]
             new_people = [p.strip() for p in v["people"].split(",") if p.strip() and p.strip() not in a["people"]]
@@ -1047,7 +1085,8 @@ class BrainApp(App):
             Field("effort", "esforço", value=eff0, check=self._effort_check),
             Field("prio", "prioridade", choice=["normal", "alta", "baixa"], value=a["priority"] or "normal"),
             Field("project", "projeto", choice=["—"] + self.store.project_ids(), value=proj0),
-            Field("deliv", "entregável", value=deliv0, ph="P#.n"),
+            Field("deliv", "entregável", value=deliv_shown, ph="só o número, no projeto escolhido (9 → P1.9), ou P#.n",
+                  check=self._deliv_check, res=self._deliv_res),
             Field("blocked", "bloqueada por", value=blocked0, ph="A-#### (a CLI não remove bloqueio)"),
             Field("people", "pessoas", ph="adiciona: ana, bruno"),
             Field("list", "lista", choice=["mine", "waiting", "watching"], value=a["list"]),
@@ -1134,7 +1173,7 @@ class BrainApp(App):
 
     def edit_in_editor(self, text: str) -> str | None:
         """Edita `text` num arquivo .md temporário com o $VISUAL/$EDITOR; devolve o resultado (None se o editor falhou)."""
-        editor = shlex.split(os.environ.get("VISUAL") or os.environ.get("EDITOR") or "vi")
+        editor = _editor_argv()
         fd, name = tempfile.mkstemp(suffix=".md", prefix="brain-nota-")
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as fh:
@@ -1151,7 +1190,7 @@ class BrainApp(App):
         """Gate estrutural: edita goals.md, mostra o diff e só mantém com a sua aprovação digitada."""
         path = self.inst.planning_file
         before = path.read_text(encoding="utf-8") if path.exists() else ""
-        editor = shlex.split(os.environ.get("VISUAL") or os.environ.get("EDITOR") or "vi")
+        editor = _editor_argv()
         self.external([*editor, str(path)])
         after = path.read_text(encoding="utf-8") if path.exists() else ""
         if after == before:
