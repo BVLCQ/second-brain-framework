@@ -568,6 +568,21 @@ O **único gate estrutural**: registra uma mudança **já aprovada** de goal/pro
 brain plan log --diff "P5 nasce sob G2" --reason "nova frente de retenção MX" --approval "ok"
 ```
 
+### `brain plan add-goal` · `add-project` · `add-deliverable`
+Criam nós em `PLANNING/goals.md` com o próximo id livre (`G#`, `P#`, `P#.n`; nunca reaproveitam número) e o texto no formato do
+parser, no fim da seção certa. Se o arquivo não ficar válido, nada é gravado.
+
+| Comando | Gate | Efeito |
+|---|---|---|
+| `plan add-goal TÍTULO [--horizon DATA] [--why TEXTO]` | **sim** | goal novo no fim do arquivo |
+| `plan add-project G# TÍTULO [--owner PESSOA]` | **sim** | projeto no fim do goal |
+| `plan add-deliverable P# TÍTULO [--due DATA] [--weight N]` | não | entregável no fim do projeto (título sem `·`) |
+
+Goal e projeto são mudança estrutural: exigem `--approval "ok"` (resposta literal do dono) e gravam `plan.changed` no ledger e uma
+linha em `PLANNING/log.md`; `--reason` e `--evidence` são opcionais. Entregável não é goal nem projeto: entra com uma linha no log, sem gate.
+Código `4` sem `--approval` ou com `BRAIN_NIGHTLY=1`; `3` para pai inexistente ou título inválido. No TUI, no painel 3, `n` cria o que
+o item selecionado comporta (goal → projeto, projeto → entregável, entregável → ação ligada a ele) e `G` cria um goal.
+
 ### `brain progress NÓ PCT`
 Seu percentual "de feeling" para um goal/projeto. Aparece **ao lado** do calculado, nunca o substitui.
 ```bash

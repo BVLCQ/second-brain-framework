@@ -304,3 +304,103 @@ def set_deliverable(path: Path, did: str, status: str, when: date | None) -> boo
     lines[d.line_no - 1] = new
     util.atomic_write(path, "".join(lines))
     return True
+
+
+# ── criar nós (goal, projeto, entregável) ────────────────────────────────────
+def _next(prefix: str, ids) -> int:
+    nums = [int(m.group(1)) for i in ids if (m := re.fullmatch(prefix + r"(\d+)", i))]
+    return max(nums, default=0) + 1
+
+
+def next_goal_id(plan: Plan) -> str:
+    return f"G{_next('G', plan.goals)}"
+
+
+def next_project_id(plan: Plan) -> str:
+    return f"P{_next('P', plan.projects)}"
+
+
+def next_deliverable_id(plan: Plan, project_id: str) -> str:
+    return f"{project_id}.{_next(re.escape(project_id) + r'[.]', plan.deliverables)}"
+
+
+def _clean(value: str, what: str, forbid: str = "") -> str:
+    v = (value or "").strip()
+    if not v or "\n" in v or "\r" in v:
+        raise util.BrainError(f"{what}: use uma linha só, não vazia", code=3)
+    if forbid and forbid in v:
+        raise util.BrainError(f"{what}: não pode conter {forbid!r} (o parser usa como separador)", code=3)
+    return v
+
+
+def _section_end(lines: list[str], start: int, stop_levels: tuple[str, ...]) -> int:
+    """Índice logo depois da última linha com conteúdo da seção que começa em `start` (títulos dentro de comentário não contam)."""
+    clean = _strip_comments(lines)
+    end = len(lines)
+    for i in range(start + 1, len(lines)):
+        if clean[i].startswith(stop_levels):
+            end = i
+            break
+    while end > start + 1 and not lines[end - 1].strip():
+        end -= 1
+    return end
+
+
+def _insert(path: Path, new_id: str, anchor: str | None, block: list[str], stop: tuple[str, ...], rx: re.Pattern | None) -> None:
+    text = path.read_text(encoding="utf-8") if path.exists() else ""
+    lines = text.splitlines()
+    if anchor is None:
+        at = len(lines)
+        while at and not lines[at - 1].strip():
+            at -= 1
+    else:
+        clean = _strip_comments(lines)
+        start = next((i for i, ln in enumerate(clean) if (m := rx.match(ln)) and m.group(1) == anchor), None)
+        if start is None:
+            raise util.BrainError(f"{anchor} não encontrado em {path.name}", code=3)
+        at = _section_end(lines, start, stop)
+    new = lines[:at] + block + lines[at:]
+    out = "\n".join(new) + "\n"
+    if not parse(out).has(new_id):                 # nunca deixa o arquivo num estado que o parser não entende
+        raise util.BrainError(f"não consegui inserir {new_id} em {path.name} no formato do parser — arquivo intacto", code=5)
+    util.atomic_write(path, out)
+
+
+def add_goal(path: Path, title: str, horizon: str = "", why: str = "") -> str:
+    plan = load(path)
+    gid = next_goal_id(plan)
+    block = ["", f"## {gid} — {_clean(title, 'título')}", "- status: ativo"]
+    if horizon:
+        block.append(f"- horizonte: {util.parse_date(horizon).isoformat()}")
+    if why:
+        block.append(f"- por quê: {_clean(why, 'por quê')}")
+    _insert(path, gid, None, block, (), None)
+    return gid
+
+
+def add_project(path: Path, goal_id: str, title: str, owner: str = "") -> str:
+    plan = load(path)
+    if goal_id not in plan.goals:
+        raise util.BrainError(f"goal {goal_id} não existe em {path.name}", code=3)
+    pid = next_project_id(plan)
+    block = ["", f"### {pid} — {_clean(title, 'título')}", "- status: ativo"]
+    if owner:
+        block.append(f"- dono: {_clean(owner, 'dono')}")
+    _insert(path, pid, goal_id, block, ("## ",), GOAL_RE)
+    return pid
+
+
+def add_deliverable(path: Path, project_id: str, title: str, due: str = "", weight: int = 1) -> str:
+    plan = load(path)
+    if project_id not in plan.projects:
+        raise util.BrainError(f"projeto {project_id} não existe em {path.name}", code=3)
+    if weight < 1:
+        raise util.BrainError("peso: use um inteiro a partir de 1", code=3)
+    did = next_deliverable_id(plan, project_id)
+    line = f"- [ ] {did} {_clean(title, 'título', '·')}"
+    if due:
+        line += f" · prazo: {util.parse_date(due).isoformat()}"
+    if weight != 1:
+        line += f" · peso: {weight}"
+    _insert(path, did, project_id, [line], ("## ", "### "), PROJ_RE)
+    return did

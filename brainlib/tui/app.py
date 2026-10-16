@@ -27,6 +27,7 @@ from textual.widgets import RichLog, Static
 
 from .. import notes as notes_mod
 from .. import people as people_mod
+from .. import planning
 from .. import search as search_mod
 from .. import util
 from . import bridge, dates, rows
@@ -48,6 +49,8 @@ CMD_CATALOG = [               # paleta de comandos: nome, linha da CLI, (painel,
     ("Marcar entregável", "brain plan deliverable P#.n --status …", (3, 0, "space")),
     ("Declarar progresso", "brain progress G1 45", (3, 0, "P")),
     ("Mudança estrutural (gate)", 'brain plan log --diff … --approval "ok"', (3, 0, "E")),
+    ("Novo goal (gate)", 'brain plan add-goal "…" --approval "ok"', (3, 0, "G")),
+    ("Novo projeto / entregável / ação no item (n)", "brain plan add-project|add-deliverable · brain action open", (3, 0, "n")),
     ("Exportar para colega", "brain share project P1", (3, 0, "S")),
     ("Propostas pendentes", "brain proposal list", (4, 0, None)),
     ("Aceitar proposta", 'brain proposal accept R-#### --quote "…"', (4, 0, "a")),
@@ -639,6 +642,10 @@ class BrainApp(App):
             add("a", "só abertas" if self.show_all else "todas", self.toggle_all)
             add("enter", "ficha", self.toggle_zoom)
         elif p == 3:
+            kind = it.kind if it else ""
+            add("n", {"g": "novo projeto", "p": "novo entregável", "d": "nova ação"}.get(kind, "novo goal ou filho"),
+                self.f_new_child, gate=kind in ("g", "") and not every)
+            add("G", "novo goal", self.f_new_goal, gate=True)
             if w(it and it.kind == "d"):
                 add("space", "feito", self.toggle_done)
                 add("s", "estado", self.f_deliv_state)
@@ -807,7 +814,88 @@ class BrainApp(App):
             return []
         return ["--due", d.isoformat()] if d else []
 
-    def f_new_action(self) -> None:
+    def f_new_child(self) -> None:
+        """Painel 3, `n`: o que nasce depende do item. Goal → projeto, projeto → entregável, entregável → ação."""
+        it = self.cur()
+        if it is None:
+            self.f_new_goal()
+        elif it.kind == "g":
+            self.f_new_project(it.data)
+        elif it.kind == "p":
+            self.f_new_deliverable(it.data)
+        else:
+            self.f_new_action({"project": it.extra["project"]["id"], "deliv": it.id})
+
+    @staticmethod
+    def _iso(v: str) -> str:
+        try:
+            d = dates.parse_due(v)
+        except ValueError:
+            return ""
+        return d.isoformat() if d else ""
+
+    def _gate_fields(self, why_ph: str) -> list[Field]:
+        return [Field("reason", "motivo", ph=why_ph), Field("quote", "sua aprovação", req=True, ph="digite a resposta literal, ex.: ok")]
+
+    def f_new_goal(self) -> None:
+        nid = planning.next_goal_id(self.store.brain.plan)
+
+        def build(v):
+            c = ["plan", "add-goal", v["title"] or "…"]
+            for opt, k in (("--why", "why"), ("--reason", "reason")):
+                if v[k]:
+                    c += [opt, v[k]]
+            if self._iso(v["horizon"]):
+                c += ["--horizon", self._iso(v["horizon"])]
+            return [c + ["--approval", v["quote"] or "…"]]
+
+        self.form(FormSpec(f"Novo goal {nid}", [
+            Field("title", "título", req=True, ph="Marketing com IA onde faz sentido"),
+            Field("horizon", "horizonte", ph=dates.HELP, check=self._due_check, res=dates.describe),
+            Field("why", "por quê", ph="o que isto destrava"),
+            *self._gate_fields("opcional: por que agora")], build,
+            sub="Criar goal é mudança estrutural: único gate do sistema. Nasce em PLANNING/goals.md, com linha em PLANNING/log.md e no ledger.",
+            gate=True, after=lambda: self.jump(nid)))
+
+    def f_new_project(self, goal: dict) -> None:
+        nid = planning.next_project_id(self.store.brain.plan)
+
+        def build(v):
+            c = ["plan", "add-project", goal["id"], v["title"] or "…"]
+            if v["owner"]:
+                c += ["--owner", v["owner"]]
+            if v["reason"]:
+                c += ["--reason", v["reason"]]
+            return [c + ["--approval", v["quote"] or "…"]]
+
+        self.form(FormSpec(f"Novo projeto {nid} em {goal['id']}", [
+            Field("title", "título", req=True, ph="Padronização de métricas"),
+            Field("owner", "dono", ph="id ou alias da pessoa (opcional)"),
+            *self._gate_fields("opcional: por que agora")], build,
+            sub=f"{goal['id']} · {goal['title']}. Criar projeto é mudança estrutural: pede a sua aprovação digitada.",
+            gate=True, after=lambda: self.jump(nid)))
+
+    def f_new_deliverable(self, proj: dict) -> None:
+        nid = planning.next_deliverable_id(self.store.brain.plan, proj["id"])
+        chk = lambda v: "" if v.isdigit() and int(v) >= 1 else "Use um inteiro a partir de 1."  # noqa: E731
+
+        def build(v):
+            c = ["plan", "add-deliverable", proj["id"], v["title"] or "…"]
+            if self._iso(v["due"]):
+                c += ["--due", self._iso(v["due"])]
+            if v["weight"] not in ("", "1"):
+                c += ["--weight", v["weight"]]
+            return [c]
+
+        self.form(FormSpec(f"Novo entregável {nid} em {proj['id']}", [
+            Field("title", "título", req=True, ph="Dicionário de dados v1"),
+            Field("due", "prazo", ph=dates.HELP, check=self._due_check, res=dates.describe),
+            Field("weight", "peso", value="1", ph="1 · 2 · 3…", check=chk)], build,
+            sub=f"{proj['id']} · {proj['title']}. Entregável não é goal nem projeto: entra no goals.md sem gate (o título não pode ter “·”).",
+            after=lambda: self.jump(nid)))
+
+    def f_new_action(self, pre: dict | None = None) -> None:
+        pre = pre or {}
         lst = ["mine", "waiting", "watching"][self.tab[2]] if self.p == 2 else "mine"
         owner = ""
 
@@ -829,15 +917,15 @@ class BrainApp(App):
                     a += [opt, v[key]]
             return [a]
 
-        self.form(FormSpec("Nova ação", [
+        self.form(FormSpec(f"Nova ação em {pre['deliv']}" if pre.get("deliv") else "Nova ação", [
             Field("title", "título", req=True, ph="o que precisa acontecer"),
             Field("due", "prazo", ph=dates.HELP, check=self._due_check, res=dates.describe),
             Field("effort", "esforço", ph="90m · 2h · 1h30 · 1d", check=self._effort_check),
-            Field("project", "projeto", choice=["—"] + self.store.project_ids()),
+            Field("project", "projeto", choice=["—"] + self.store.project_ids(), value=pre.get("project", "—")),
             Field("prio", "prioridade", choice=["normal", "alta", "baixa"]),
             Field("list", "lista", choice=["mine", "waiting", "watching"], value=lst),
             Field("owner", "dono", ph="você (ou id/alias da pessoa)", value=owner),
-            Field("deliv", "entregável", ph="P#.n (opcional)"),
+            Field("deliv", "entregável", ph="P#.n (opcional)", value=pre.get("deliv", "")),
             Field("people", "pessoas", ph="ana, bruno (opcional)"),
             Field("blocked", "bloqueada por", ph="A-#### (opcional)"),
             Field("link", "link", ph="URL (opcional)")],

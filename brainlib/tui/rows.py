@@ -471,6 +471,9 @@ def d_plan(store, it) -> Doc:
         for a in ac:
             doc.p(link(a["id"], a["id"], "bold"), f" {a['title']} ", due_tag(a))
         doc.blank().p(("Marcar estado é um fato, não um gate: space ou s. Criar, renomear ou fechar goal e projeto é gate: E.", DIM))
+    hint = {"g": "n cria um projeto neste goal · G cria um goal (gate)", "p": "n cria um entregável neste projeto · G cria um goal (gate)",
+            "d": "n cria uma ação ligada a este entregável · G cria um goal (gate)"}[k]
+    doc.blank().p((hint, DIM))
     notes_section(doc, store, d["id"])
     return doc
 

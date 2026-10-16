@@ -347,6 +347,46 @@ class NoteTests(unittest.TestCase):
             self.assertEqual(run("note", "add", "--link", "G9", "--text", "x").returncode, 3)
 
 
+class PlanAddTests(unittest.TestCase):
+    def _run(self, td, *a):
+        env = {**os.environ, "BRAIN_HOME": td}
+        return subprocess.run([sys.executable, str(ROOT / "brain"), *a], capture_output=True, text=True, env=env)
+
+    def test_ids_placement_and_gate(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            goals = b.inst.planning_file
+            self.assertEqual(self._run(td, "plan", "add-project", "G1", "Sem ok").returncode, 4)   # gate sem aprovação
+            self.assertNotIn("Sem ok", goals.read_text(encoding="utf-8"))
+            r = self._run(td, "plan", "add-project", "G1", "Segundo", "--approval", "ok")
+            self.assertEqual(r.returncode, 0, r.stderr)
+            r = self._run(td, "plan", "add-goal", "Outro goal", "--horizon", "2027-01-01", "--approval", "ok")
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertEqual(self._run(td, "plan", "add-deliverable", "P2", "Algo", "--due", "2026-12-01", "--weight", "2").returncode, 0)
+            self.assertEqual(self._run(td, "plan", "add-deliverable", "P1", "Terceiro").returncode, 0)
+            self.assertEqual(self._run(td, "plan", "add-deliverable", "P1", "x · y").returncode, 3)
+            self.assertEqual(self._run(td, "plan", "add-project", "G9", "x", "--approval", "ok").returncode, 3)
+            plan = planning.load(goals)
+            self.assertEqual(plan.warnings, [])
+            self.assertEqual((plan.projects["P2"].goal_id, plan.deliverables["P2.1"].weight), ("G1", 2))
+            self.assertEqual(plan.deliverables["P1.3"].project_id, "P1")             # entra no fim do P1, antes do P2
+            self.assertEqual(plan.goals["G2"].title, "Outro goal")
+            self.assertEqual(list(plan.projects), ["P1", "P2"])
+            self.assertEqual(Brain(b.inst).validate_all(), [])
+            log = b.inst.planning_log.read_text(encoding="utf-8")
+            self.assertIn('P2 projeto criado sob G1', log)
+            self.assertIn('aprovado: "ok"', log)
+            self.assertEqual(sum(1 for e in Brain(b.inst).read_events() if e["type"] == "plan.changed"), 2)
+
+    def test_nightly_refuses(self):
+        with tempfile.TemporaryDirectory() as td:
+            _brain(Path(td))
+            env = {**os.environ, "BRAIN_HOME": td, "BRAIN_NIGHTLY": "1"}
+            r = subprocess.run([sys.executable, str(ROOT / "brain"), "plan", "add-goal", "x", "--approval", "ok"],
+                               capture_output=True, text=True, env=env)
+            self.assertEqual(r.returncode, 4)
+
+
 class GcalTests(unittest.TestCase):
     def test_delete_without_mark_refused(self):
         calls = []
