@@ -15,6 +15,7 @@ No noturno (`BRAIN_NIGHTLY=1`) isto é o único comando largo permitido. Sem apr
 ```
 
 (stdin = o conteúdo; ou `--file`). Vazio → `--fail "MCP não devolveu nada"`.
+Fonte com `folder = …`: siga o protocolo de pasta de `commands/drive/SKILL.md` — um `--item` por arquivo e por subpasta (hash próprio), `--rev` + `--check` antes de ler. Pasta sem item novo é silêncio, não falha.
 2+ falhas seguidas da mesma key → **escalar ao dono** (`brain doctor`).
 3. `/dump` no que chegou.
 4. `./brain render`.

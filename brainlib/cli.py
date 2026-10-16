@@ -842,6 +842,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--ext", default="md", choices=["md", "json", "txt", "csv"])
     p.add_argument("--file", help="conteúdo (padrão: stdin)")
     p.add_argument("--fail", metavar="ERRO", help="registra falha do pull em vez de conteúdo")
+    p.add_argument("--item", help="arquivo/subpasta de uma pasta observada (id estável, ex.: id do Drive): hash próprio por item")
+    p.add_argument("--rev", help="revisão do item (ex.: modifiedTime do Drive); igual ao último pull = nada a ler")
+    p.add_argument("--name", help="nome legível do item (só para o nome do arquivo na inbox)")
+    p.add_argument("--check", action="store_true", help="só pergunta se --rev já foi lido (não grava, não lê conteúdo)")
     p.add_argument("--json", action="store_true")
     p.set_defaults(fn=cmd_snapshot)
 

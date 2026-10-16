@@ -9,3 +9,16 @@ description: "Docs vivos do Drive via MCP de leitura: snapshot datado na inbox �
 2. `./brain snapshot --key gdoc-<id-ou-slug> --prefix gdoc`.
 3. `/dump`. Primeira vez = estado inicial; seguintes = o que mudou.
 4. Nunca crie, edite, comente ou compartilhe pelo MCP. Publicar um report no Drive é `/publish` (porta com gate).
+
+## Pasta observada (`folder = "<id>"` no `watch.toml`)
+
+Cada arquivo **e cada subpasta** é um *item* da fonte, com hash próprio — só o que mudou entra na inbox. A chave é a da fonte (`key`); o item é o id do Drive:
+
+1. Liste a pasta e **desça em todas as subpastas** (a data de modificação de uma pasta não muda quando um arquivo dentro de uma subpasta é editado).
+2. Para cada arquivo, antes de ler o conteúdo:
+   `./brain snapshot --key <key> --item <id> --rev <modifiedTime> --check` → `inalterado` = pule, não gaste leitura MCP.
+3. `mudou`: leia o arquivo (Markdown/texto) e grave
+   `./brain snapshot --key <key> --item <id> --rev <modifiedTime> --name "<título>" --prefix drive --ext md`.
+4. Cada subpasta vira um item de listagem (ids, nomes e `modifiedTime` dos filhos): `--item <id-da-pasta>`, mesmo fluxo.
+5. Atalhos do Drive (`shortcut`) apontam para o arquivo-alvo: resolva o alvo e use o **id do alvo** como item. Conteúdo igual já guardado sob outra chave ou item não duplica — o CLI avisa "mesmo conteúdo já guardado" e não escreve nada.
+6. Sem item novo em nenhuma subpasta = silêncio; não grave snapshot "vazio" nem `--fail` (nada mudou não é falha).

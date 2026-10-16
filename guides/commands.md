@@ -792,12 +792,22 @@ idêntico ao anterior não grava nada (dedup por hash).
 | `--ext md\|json\|txt\|csv` | padrão `md` |
 | `--file ARQUIVO` | conteúdo (padrão: entrada padrão) |
 | `--fail "ERRO"` | registra falha do pull em vez de conteúdo |
+| `--item ID` | arquivo ou subpasta de uma **pasta observada** (id do Drive): hash próprio por item |
+| `--rev REV` | revisão do item (ex.: `modifiedTime`); igual à do último pull = nada a ler nem gravar |
+| `--name TÍTULO` | nome legível do item (só para o nome do arquivo na inbox) |
+| `--check` | só pergunta se `--rev` já foi lido (`inalterado` / `mudou`), sem ler nem gravar |
 
 ```bash
 echo "# notas" | brain snapshot --key notas-1on1 --prefix nota
 brain snapshot --key gcal-14d --prefix gcal --ext json --file agenda.json
 brain snapshot --key slack-gtm --fail "token expirado"
+# pasta do Drive: um item por arquivo/subpasta
+brain snapshot --key drive-reunioes --item 1AbC --rev 2026-10-15T18:02:11Z --check
+brain snapshot --key drive-reunioes --item 1AbC --rev 2026-10-15T18:02:11Z --name "Ata 15/10" --prefix drive --file ata.md
 ```
+Em pasta observada só o item que mudou gera arquivo. O mesmo conteúdo já guardado sob outra
+chave ou item (atalho, arquivo movido de subpasta, chave antiga) não é duplicado. O `doctor`
+continua vendo uma fonte só (a `--key`).
 Depois: `/dump` no agente para processar.
 
 ### `brain extract [ARQUIVO]`

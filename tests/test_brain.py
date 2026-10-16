@@ -272,6 +272,45 @@ class SnapshotTests(unittest.TestCase):
             r3 = snapshot.take(b, "gmail-today", "assunto Y\n")
             self.assertTrue(r3["changed"])
 
+    def test_folder_items_have_their_own_hash(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            a1 = snapshot.take(b, "drive-pasta", "ata A\n", item="idA", rev="t1", name="Ata A")
+            b1 = snapshot.take(b, "drive-pasta", "ata B\n", item="idB", rev="t1")
+            self.assertTrue(a1["changed"] and b1["changed"])
+            self.assertNotEqual(a1["path"], b1["path"])
+            # B muda; A continua igual: só B gera arquivo novo
+            self.assertFalse(snapshot.take(b, "drive-pasta", "ata A\n", item="idA", rev="t1")["changed"])
+            b2 = snapshot.take(b, "drive-pasta", "ata B v2\n", item="idB", rev="t2")
+            self.assertTrue(b2["changed"])
+            self.assertEqual(len(list(b.inst.inbox.glob("*.md"))), 3)
+
+    def test_rev_skips_reading(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            snapshot.take(b, "drive-pasta", "ata A\n", item="idA", rev="t1")
+            self.assertTrue(snapshot.unchanged(b, "drive-pasta", "t1", "idA"))
+            self.assertFalse(snapshot.unchanged(b, "drive-pasta", "t2", "idA"))
+            r = snapshot.take(b, "drive-pasta", "", item="idA", rev="t1")   # sem conteúdo: nem foi lido
+            self.assertEqual((r["changed"], r["failed"], r["why"]), (False, False, "rev"))
+            # revisão nova, mesmo texto: sem arquivo novo, e a revisão nova fica guardada
+            r = snapshot.take(b, "drive-pasta", "ata A\n", item="idA", rev="t2")
+            self.assertFalse(r["changed"])
+            self.assertTrue(snapshot.unchanged(b, "drive-pasta", "t2", "idA"))
+
+    def test_same_content_under_another_item_or_key_is_not_duplicated(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            first = snapshot.take(b, "drive-meet-1ab", "mesma ata\n")          # chave antiga, por documento
+            self.assertTrue(first["changed"])
+            r = snapshot.take(b, "drive-meet", "mesma ata\n", item="1abFULL")  # agora como item da pasta
+            self.assertEqual((r["changed"], r["why"]), (False, "alias"))
+            shortcut = snapshot.take(b, "drive-meet", "mesma ata\n", item="atalho")
+            self.assertFalse(shortcut["changed"])
+            self.assertEqual(len(list(b.inst.inbox.glob("*.md"))), 1)
+            # chaves sem --item não se fundem: fontes diferentes com texto igual continuam separadas
+            self.assertTrue(snapshot.take(b, "gmail-x", "mesma ata\n")["changed"])
+
 
 class NoteTests(unittest.TestCase):
     def test_names_links_and_collisions(self):

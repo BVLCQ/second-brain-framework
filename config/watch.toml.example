@@ -22,6 +22,14 @@
 # channel = "#time-dados"
 # window = "1d"
 
+# Pasta do Drive: cada arquivo e subpasta tem hash próprio (`snapshot --item … --rev …`);
+# só o que mudou entra na inbox. Ver commands/drive/SKILL.md.
+# [[source]]
+# key = "drive-reunioes"
+# kind = "drive"
+# folder = "<id da pasta>"
+# window = "1d"
+
 # [[source]]
 # key = "jira-me"
 # kind = "jira"
