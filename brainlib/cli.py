@@ -485,6 +485,11 @@ def cmd_note(args, b: Brain) -> None:
     notes.cli(args, b)
 
 
+def cmd_pdf(args, b: Brain) -> None:
+    from . import pdf
+    pdf.cli(args, b)
+
+
 def cmd_doctor(args, b: Brain) -> None:
     from . import doctor
     doctor.cli(args, b)
@@ -850,6 +855,18 @@ def build_parser() -> argparse.ArgumentParser:
                    help="a leitura funcionou e a janela não tem nada novo (window=auto): registra o pull sem gravar arquivo")
     p.add_argument("--json", action="store_true")
     p.set_defaults(fn=cmd_snapshot)
+
+    p = sub.add_parser("pdf", help="lê um PDF sem poppler: texto por página ou PNGs (pdftotext/pdftoppm → PDFKit do macOS → pypdf)")
+    ps = p.add_subparsers(dest="pcmd", required=True)
+    x = ps.add_parser("text", help="texto, com `=== PÁGINA n ===` entre as páginas")
+    x.add_argument("file")
+    x.add_argument("--pages", help="ex.: 1-3,5 (padrão: todas)")
+    x = ps.add_parser("render", help="PNG de cada página, para PDF escaneado (o agente lê a imagem)")
+    x.add_argument("file")
+    x.add_argument("--pages", help="ex.: 1-3,5 (padrão: todas)")
+    x.add_argument("--out", help="pasta de saída (padrão: temporária)")
+    x.add_argument("--dpi", type=int, default=110)
+    p.set_defaults(fn=cmd_pdf)
 
     p = sub.add_parser("note", help="notas avulsas na inbox, com vínculo opcional a A-####/G#/P#/P#.n")
     ns = p.add_subparsers(dest="ncmd", required=True)

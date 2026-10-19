@@ -36,6 +36,8 @@ Regras transversais: proveniência em toda extração · `brain person resolve` 
 
 Para cada item da inbox (ignore `.keep.md`):
 
+> **PDF:** `./brain pdf text <arquivo> [--pages 1-3]` devolve o texto por página (sem precisar de poppler; no macOS usa o PDFKit). Se vier vazio, o PDF é escaneado: `./brain pdf render <arquivo> --pages 1-3` gera PNGs que você lê como imagem. Nome com espaço ou acento: passe entre aspas, o arquivo no RAW não é renomeado.
+
 0. **Atalho opcional** — se `[extractor]` estiver ligado (LM Studio), rode
    `./brain extract vault/RAW/<ano>/<mês>/<arquivo>`: o modelo local devolve
    um rascunho **já validado** (pessoas resolvidas, datas, escopo). Revise,

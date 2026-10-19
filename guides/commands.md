@@ -274,6 +274,14 @@ completo por contexto, a legenda e uma versão para experimentar com dados fict�
 `tests/test_tui.py::CoverageTest` garante que nenhum subcomando novo da CLI fique sem lugar ou sem justificativa. `[runner].allow` do `brain.toml` lista as ferramentas MCP de leitura do agente headless (noturno e TUI). Em `[tui]`, `model` e `effort` escolhem o modelo e o esforço do claude nas ações ⚡ (ex.: `claude-haiku-5-5` · `high`; vazio = padrão; não valem com `[runner].command`), e `agent_allow` lista ferramentas extras, só do TUI, que o
 agente pode usar nas ações ⚡ (por exemplo as de escrita do MCP do Slack, só para enviar uma mensagem aprovada).
 
+### `brain pdf text` · `brain pdf render`
+Leitura de PDF para o `/dump`, sem instalar nada obrigatório e sem tocar no vault (a saída vai para o stdout ou para uma pasta temporária).
+```bash
+brain pdf text "vault/RAW/inbox/glossario.pdf" --pages 1-3     # texto, com `=== PÁGINA n ===` entre as páginas
+brain pdf render "vault/RAW/inbox/escaneado.pdf" --pages 1-2   # PNGs (--out DIR · --dpi 110); o agente lê a imagem
+```
+Ordem de leitores — texto: `pdftotext` (poppler) → PDFKit do macOS (via `swift`; o programa é compilado uma vez e fica em `~/Library/Caches/segundo-cerebro`) → `pypdf`, se instalado. Imagem: `pdftoppm` → PDFKit. Sem nenhum, sai com código 3 e a dica (`brew install poppler` ou `xcode-select --install`). Texto vazio = PDF escaneado: use `render` e leia as páginas como imagem.
+
 ### `brain note add` · `brain note edit` · `brain note list`
 Notas avulsas do dono. `add` grava `<VÍNCULO>-AAAA-MM-DD-note.md` na **inbox** (a porta única): `A-0146-…`, `G1-…`,
 `P2-…`, `P2.1-…`; sem vínculo, `note-…`; no mesmo dia e alvo vem o sufixo `-note-2.md`. O arquivo abre com um

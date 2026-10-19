@@ -1154,7 +1154,8 @@ class CoverageTest(unittest.TestCase):
         "outbox list", "proposal list", "publish list", "doctor", "search", "status", "artifact", "watch list", "watch since",
         "note list"}
     AGENT_ONLY = {        # quem escreve é o agente (extração, snapshot, envio), conforme a Constituição
-        "init", "add", "snapshot", "extract", "proposal add", "outbox sent", "outbox failed", "publish done"}
+        "init", "add", "snapshot", "extract", "proposal add", "outbox sent", "outbox failed", "publish done",
+        "pdf text", "pdf render"}
     NOT_IN_TUI = {"demo", "tui"}
     DYNAMIC = {"memory recall", "memory reflect"}      # o formulário "Memória: perguntar" monta o subcomando
 

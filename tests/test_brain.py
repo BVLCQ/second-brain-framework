@@ -979,6 +979,63 @@ class SchemaCoverageTests(unittest.TestCase):
                 b.record_one({"type": "action.exploded", "by": "owner", "data": {}})
 
 
+class PdfTest(unittest.TestCase):
+    @staticmethod
+    def _pdf(path: Path, text: str) -> None:
+        stream = f"BT /F1 24 Tf 72 700 Td ({text}) Tj ET".encode("latin-1")
+        objs = [b"<< /Type /Catalog /Pages 2 0 R >>",
+                b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+                b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
+                b"<< /Length %d >>\nstream\n" % len(stream) + stream + b"\nendstream",
+                b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"]
+        out, offs = b"%PDF-1.4\n", []
+        for i, o in enumerate(objs, 1):
+            offs.append(len(out))
+            out += b"%d 0 obj\n" % i + o + b"\nendobj\n"
+        xref = len(out)
+        out += b"xref\n0 %d\n0000000000 65535 f \n" % (len(objs) + 1)
+        out += b"".join(b"%010d 00000 n \n" % o for o in offs)
+        out += b"trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n" % (len(objs) + 1, xref)
+        path.write_bytes(out)
+
+    def test_parse_pages(self):
+        from brainlib import pdf
+        self.assertEqual(pdf.parse_pages("1-3,5"), [1, 2, 3, 5])
+        self.assertEqual(pdf.parse_pages(None), [])
+        for bad in ("0", "3-1", "a", "1-"):
+            with self.assertRaises(util.BrainError, msg=bad):
+                pdf.parse_pages(bad)
+
+    def test_missing_file_and_no_reader_give_clear_errors(self):
+        from unittest import mock
+        from brainlib import pdf
+        with self.assertRaises(util.BrainError) as cm:
+            pdf.text("/nao/existe.pdf")
+        self.assertEqual(cm.exception.code, 3)
+        with tempfile.TemporaryDirectory() as td:
+            f = Path(td) / "a.pdf"
+            self._pdf(f, "Ola")
+            with mock.patch("shutil.which", return_value=None), mock.patch.object(pdf, "_swift_tool", return_value=None), \
+                 mock.patch.dict(sys.modules, {"pypdf": None}):
+                with self.assertRaises(util.BrainError) as cm:
+                    pdf.text(f)
+            self.assertIn("poppler", str(cm.exception))
+
+    @unittest.skipUnless(sys.platform == "darwin" and __import__("shutil").which("swiftc"), "precisa de macOS com swiftc")
+    def test_pdfkit_fallback_reads_text_and_renders_png(self):
+        from unittest import mock
+        from brainlib import pdf
+        with tempfile.TemporaryDirectory() as td:
+            f = Path(td) / " Glossário teste.pdf"       # espaço no começo e acento: o arquivo do RAW nunca é renomeado
+            self._pdf(f, "Glossario Exemplo")
+            with mock.patch("shutil.which", side_effect=lambda n: {"swiftc": "/usr/bin/swiftc", "swift": "/usr/bin/swift"}.get(n)):
+                self.assertIn("=== PÁGINA 1 ===", pdf.text(f))
+                self.assertIn("Glossario Exemplo", pdf.text(f, [1]))
+                pngs = pdf.render(f, [1], Path(td) / "out", dpi=40)
+            self.assertEqual([p.name for p in pngs], ["pagina-001.png"])
+            self.assertTrue(pngs[0].read_bytes().startswith(b"\x89PNG"))
+
+
 class SnapshotEmptyTest(unittest.TestCase):
     def test_empty_window_counts_as_a_successful_pull_not_a_failure(self):
         import argparse
