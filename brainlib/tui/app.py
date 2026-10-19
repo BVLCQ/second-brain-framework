@@ -1582,7 +1582,7 @@ class BrainApp(App):
 
         return [Field("key", "key", value=src.get("key", ""), req=True, ph="slack-time-dados", check=key_check),
                 Field("kind", "tipo", value=src.get("kind", ""), req=True, ph="gmail · slack · gcal · drive · jira"),
-                Field("window", "janela", value=src.get("window", ""), ph="1d · 7d · 14d"),
+                Field("window", "janela", value=src.get("window", ""), ph="auto · 1d · 7d"),
                 Field("channel", "canal", value=src.get("channel", ""), ph="#time-dados (slack)"),
                 Field("jql", "jql", value=src.get("jql", ""), ph="consulta (jira)"),
                 Field("note", "nota", value=src.get("note", ""), ph="para que serve esta fonte"),

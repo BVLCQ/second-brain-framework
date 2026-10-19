@@ -979,6 +979,20 @@ class SchemaCoverageTests(unittest.TestCase):
                 b.record_one({"type": "action.exploded", "by": "owner", "data": {}})
 
 
+class SnapshotEmptyTest(unittest.TestCase):
+    def test_empty_window_counts_as_a_successful_pull_not_a_failure(self):
+        import argparse
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            ns = dict(key="slack-x", prefix=None, ext="md", file=None, fail=None, item=None, rev=None, name=None,
+                      check=False, empty=True, json=False)
+            snapshot.cli(argparse.Namespace(**ns), b)
+            c = b.state.connectors["slack-x"]
+            self.assertTrue(c.last_ok)
+            self.assertEqual(c.consecutive_failures, 0)
+            self.assertEqual(list(b.inst.inbox.glob("*slack*")), [])
+
+
 class RunnerTest(unittest.TestCase):
     def test_nightly_claude_gets_only_runner_allow(self):
         from unittest import mock

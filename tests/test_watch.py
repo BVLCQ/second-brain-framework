@@ -17,7 +17,7 @@ from brainlib import config, util, watch
 EXAMPLE = (ROOT / "config" / "watch.toml.example").read_text(encoding="utf-8")
 
 
-class WatchTest(unittest.TestCase):
+class _WatchBase(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
@@ -33,6 +33,9 @@ class WatchTest(unittest.TestCase):
 
     def keys(self) -> list[str]:
         return [s["key"] for s in watch.list_sources(self.inst)]
+
+
+class WatchTest(_WatchBase):
 
     def test_add_creates_the_file_with_the_header(self):
         self.assertEqual(watch.list_sources(self.inst), [])
@@ -122,6 +125,47 @@ class WatchTest(unittest.TestCase):
         self.assertEqual((bad.returncode, "já existe" in bad.stderr), (4, True))
         self.assertEqual(run("remove", "slack-dados").returncode, 0)
         self.assertEqual(run("remove", "slack-dados").returncode, 3)
+
+
+class WatchSinceTest(_WatchBase):
+    """`brain watch since`: o início da janela é do cérebro, não do LLM."""
+    NOW = "2026-10-19T10:00:00-03:00"
+
+    def brain(self, last_ok: str = ""):
+        from types import SimpleNamespace
+        from brainlib import state
+        conns = {"slack-x": state.Connector("slack-x", last_ok=last_ok)} if last_ok else {}
+        return SimpleNamespace(inst=self.inst, state=SimpleNamespace(connectors=conns))
+
+    def since(self, window: str, last_ok: str = "") -> dict:
+        watch.add(self.inst, "slack-x", {"kind": "slack", "window": window})
+        old = os.environ.get("BRAIN_NOW")
+        os.environ["BRAIN_NOW"] = self.NOW
+        try:
+            return watch.since(self.brain(last_ok), "slack-x")
+        finally:
+            os.environ.pop("BRAIN_NOW") if old is None else os.environ.__setitem__("BRAIN_NOW", old)
+
+    def test_fixed_window_counts_back_from_now(self):
+        r = self.since("1d")
+        self.assertEqual((r["hours"], r["since"]), (24.0, "2026-10-18T10:00:00-03:00"))
+
+    def test_auto_first_pull_looks_back_seven_days(self):
+        self.assertEqual(self.since("auto")["hours"], 7 * 24.0)
+
+    def test_auto_starts_at_last_ok_minus_overlap(self):
+        r = self.since("auto", last_ok="2026-10-19T07:00:00-03:00")
+        self.assertEqual(r["since"], "2026-10-19T05:00:00-03:00")
+        self.assertEqual(r["hours"], 5.0)
+
+    def test_auto_is_capped_after_a_long_gap(self):
+        self.assertEqual(self.since("auto", last_ok="2026-08-01T07:00:00-03:00")["hours"], 14 * 24.0)
+
+    def test_invalid_window_is_refused(self):
+        for bad in ("2 dias", "0d", "d", "1m"):
+            with self.assertRaises(util.BrainError, msg=bad):
+                watch.add(self.inst, "slack-y", {"kind": "slack", "window": bad})
+        self.assertNotIn("slack-y", self.keys())
 
 
 if __name__ == "__main__":

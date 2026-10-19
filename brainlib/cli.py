@@ -846,6 +846,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--rev", help="revisão do item (ex.: modifiedTime do Drive); igual ao último pull = nada a ler")
     p.add_argument("--name", help="nome legível do item (só para o nome do arquivo na inbox)")
     p.add_argument("--check", action="store_true", help="só pergunta se --rev já foi lido (não grava, não lê conteúdo)")
+    p.add_argument("--empty", action="store_true",
+                   help="a leitura funcionou e a janela não tem nada novo (window=auto): registra o pull sem gravar arquivo")
     p.add_argument("--json", action="store_true")
     p.set_defaults(fn=cmd_snapshot)
 
@@ -942,7 +944,7 @@ def build_parser() -> argparse.ArgumentParser:
     x = ws.add_parser("add")
     x.add_argument("key", help="identidade estável da fonte (ex.: slack-time-dados)")
     x.add_argument("--kind", required=True, help="gmail · slack · gcal · drive · jira …")
-    x.add_argument("--window", help="janela de leitura (ex.: 1d, 7d, 14d)")
+    x.add_argument("--window", help="janela de leitura: auto (desde o último pull) · 12h · 1d · 7d")
     x.add_argument("--note")
     x.add_argument("--set", action="append", metavar="CAMPO=VALOR", help="outro campo (channel, jql, …); repita a opção")
     x = ws.add_parser("edit")
@@ -955,6 +957,9 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--unset", action="append", metavar="CAMPO", help="remove um campo opcional")
     x = ws.add_parser("remove")
     x.add_argument("key")
+    x = ws.add_parser("since", help="início da janela de leitura da fonte (o agente não calcula datas)")
+    x.add_argument("key")
+    x.add_argument("--json", action="store_true")
     p.set_defaults(fn=cmd_watch)
 
     p = sub.add_parser("tui", help="cockpit de terminal (Textual, extra opcional): painéis, teclas contextuais e log da CLI")

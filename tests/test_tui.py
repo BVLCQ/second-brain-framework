@@ -1141,7 +1141,8 @@ class CoverageTest(unittest.TestCase):
     """Todo subcomando da CLI tem tecla no TUI ou uma razão explícita para não ter."""
     READ_ONLY_VIEWS = {   # a leitura já está num painel (modelo em processo), sem precisar chamar a CLI
         "person list", "action show", "action list", "decision list", "plan show", "focus show", "outbox show",
-        "outbox list", "proposal list", "publish list", "doctor", "search", "status", "artifact", "watch list", "note list"}
+        "outbox list", "proposal list", "publish list", "doctor", "search", "status", "artifact", "watch list", "watch since",
+        "note list"}
     AGENT_ONLY = {        # quem escreve é o agente (extração, snapshot, envio), conforme a Constituição
         "init", "add", "snapshot", "extract", "proposal add", "outbox sent", "outbox failed", "publish done"}
     NOT_IN_TUI = {"demo", "tui"}

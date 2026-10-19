@@ -11,6 +11,7 @@ import os
 import re
 import tomllib
 from dataclasses import dataclass
+from datetime import timedelta
 from pathlib import Path
 
 from . import util
@@ -26,6 +27,11 @@ FIELD_ORDER = ["key", "kind", "window", "channel", "jql", "note"]
 SOURCE_RE = re.compile(r"^\[\[source\]\]\s*(#.*)?$")
 TABLE_RE = re.compile(r"^\s*\[")
 ASSIGN_RE = re.compile(r"^(\s*)([A-Za-z0-9_.-]+)(\s*=\s*)(.*)$")
+WINDOW_RE = re.compile(r"^(\d{1,3})([hdw])$")
+WINDOW_UNITS = {"h": "hours", "d": "days", "w": "weeks"}
+AUTO_FIRST = timedelta(days=7)       # fonte nunca puxada
+AUTO_MAX = timedelta(days=14)        # teto: Mac parado semanas não vira uma leitura gigante
+AUTO_OVERLAP = timedelta(hours=2)    # o pull só é registrado depois da leitura — sobrepõe para não perder o que chegou no meio
 
 
 def path(inst) -> Path:
@@ -85,7 +91,44 @@ def _clean(fields: dict) -> dict:
         if not FIELD_RE.match(k):
             raise util.BrainError(f"campo inválido: {k!r} (minúsculas, números e _)", code=4)
         out[k] = str(v).strip()
+        if k == "window":
+            parse_window(out[k])
     return out
+
+
+def parse_window(value: str) -> timedelta | None:
+    """'auto' → None (desde o último pull); '1d' · '12h' · '2w' → o intervalo fixo."""
+    v = str(value).strip().lower()
+    if v == "auto":
+        return None
+    m = WINDOW_RE.match(v)
+    if not m or int(m.group(1)) == 0:
+        raise util.BrainError(f"window inválida: {value!r} (use auto, 12h, 1d, 2w…)", code=4)
+    return timedelta(**{WINDOW_UNITS[m.group(2)]: int(m.group(1))})
+
+
+def since(brain, key: str) -> dict:
+    """Início da janela de leitura de uma fonte — o LLM não calcula datas, pergunta aqui.
+
+    window = "auto": desde o último pull bem-sucedido (menos a sobreposição), com teto; falhas seguidas
+    alargam a janela sozinhas porque só um pull ok move o `last_ok`. Janela fixa: agora − janela.
+    """
+    src = next((s for s in list_sources(brain.inst) if s.get("key") == key), None)
+    if src is None:
+        raise util.BrainError(f"fonte '{key}' não está no watch.toml", code=3)
+    spec = str(src.get("window") or "1d")
+    delta, now = parse_window(spec), util.now()
+    if delta is not None:
+        start, why = now - delta, f"janela fixa {spec}"
+    else:
+        c = brain.state.connectors.get(key)
+        if c and c.last_ok:
+            start = max(util.parse_dt(c.last_ok) - AUTO_OVERLAP, now - AUTO_MAX)
+            why = f"desde o último pull ({c.last_ok[:16].replace('T', ' ')}), com {int(AUTO_OVERLAP.total_seconds() // 3600)}h de sobreposição"
+        else:
+            start, why = now - AUTO_FIRST, f"primeiro pull — {AUTO_FIRST.days}d para trás"
+    return {"key": key, "window": spec, "since": start.isoformat(timespec="seconds"), "epoch": int(start.timestamp()),
+            "jql": start.strftime("%Y/%m/%d %H:%M"), "hours": round((now - start).total_seconds() / 3600, 1), "why": why}
 
 
 def _split_value(rhs: str) -> tuple[str, str]:
@@ -218,6 +261,12 @@ def cli(args, brain) -> None:
         for s in rows:
             rest = " · ".join(f"{k}={v}" for k, v in s.items() if k not in ("key", "kind"))
             print(f"{s['key']}\t{s.get('kind', '?')}\t{rest}")
+    elif c == "since":
+        r = since(brain, args.key)
+        if args.json:
+            print(json.dumps(r, ensure_ascii=False, indent=2))
+        else:
+            print(f"since={r['since']} · epoch={r['epoch']} · jql=\"{r['jql']}\" · {r['hours']}h · {r['why']}")
     elif c == "add":
         f = {"kind": args.kind, "window": args.window, "note": args.note, **parse_pairs(args.set)}
         add(inst, args.key, f)

@@ -229,7 +229,8 @@ nada é escrito. Quem *lê* as fontes é o agente (`/update`, `/connect`); o `br
 | Subcomando | Uso |
 |---|---|
 | `list [--json]` | fontes cadastradas |
-| `add KEY --kind K` | `--window 1d` · `--note "…"` · `--set campo=valor` (ex.: `channel=#time-dados`, `jql=…`; repita a opção) |
+| `since KEY [--json]` | início da janela de leitura da fonte (`since`, `epoch`, `jql`) — é o que o agente usa; ele não calcula datas |
+| `add KEY --kind K` | `--window auto\|12h\|1d\|2w` · `--note "…"` · `--set campo=valor` (ex.: `channel=#time-dados`, `jql=…`; repita a opção) |
 | `edit KEY` | mesmas opções, mais `--rename NOVA_KEY` e `--unset CAMPO`. `key` e `kind` não saem |
 | `remove KEY` | tira do watch; snapshots já gravados e o ledger ficam |
 
@@ -237,7 +238,12 @@ nada é escrito. Quem *lê* as fontes é o agente (`/update`, `/connect`); o `br
 brain watch add slack-time-dados --kind slack --window 1d --set channel=#time-dados
 brain watch edit slack-time-dados --window 7d --unset note
 brain watch list
+brain watch since slack-time-dados
 ```
+`window = "auto"` lê **desde o último pull bem-sucedido** (menos 2h de sobreposição; primeiro pull 7d; teto 14d), então
+nada se repete e uma noite perdida é coberta sozinha. Pull sem novidade é `brain snapshot --key K --empty` (conta como
+ok; vazio por erro do MCP continua sendo `--fail`). Janela fixa (`1d`, `7d`…) relê tudo a cada pull e repete mensagens
+no RAW. `gcal` usa janela à frente e `drive` hash por arquivo — `auto` vale para slack, gmail e jira.
 Códigos de saída: `4` key inválida ou repetida, ou arquivo que ficaria inválido; `3` fonte inexistente. Renomear uma
 key deixa o histórico de pulls na key antiga.
 

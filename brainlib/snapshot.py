@@ -7,6 +7,8 @@ evento: 2+ falhas seguidas aparecem no doctor e devem ser escaladas ao dono.
 
 Pastas observadas (Drive): cada arquivo e cada subpasta é um **item** da fonte
 (`--item <id>`), com o próprio hash. Só o que mudou vira arquivo na inbox:
+  · `--empty`: janela `auto` sem nada novo — o pull conta como ok (move o `last_ok`), sem arquivo;
+    conteúdo vazio vindo do MCP continua sendo falha;
   · `--rev` (ex.: modifiedTime do Drive) igual ao último pull do item → nada a ler;
     `--check` pergunta isso antes de o agente gastar uma leitura MCP;
   · mesmo conteúdo já guardado sob outra chave/item (atalho, arquivo movido de
@@ -115,6 +117,10 @@ def cli(args, brain) -> None:
         c = brain.state.connectors[args.key]
         print(f"✓ falha registrada em {args.key} ({c.consecutive_failures} seguidas)"
               + (" — ESCALAR ao dono" if c.consecutive_failures >= 2 else ""))
+        return
+    if args.empty:
+        _pulled(brain, args.key, item, False, empty=True)
+        print(f"✓ {label}: janela sem novidades (pull registrado, nada escrito)")
         return
     skip_read = bool(args.rev) and unchanged(brain, args.key, args.rev, item)
     content = "" if skip_read else (Path(args.file).read_text(encoding="utf-8") if args.file else sys.stdin.read())

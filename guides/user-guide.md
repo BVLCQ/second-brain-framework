@@ -280,14 +280,14 @@ estado ficou congelado e citável.
 [[source]]
 key = "gmail-today"        # nome estável (o snapshot deduplica por ele)
 kind = "gmail"
-window = "1d"
+window = "auto"            # desde o último pull (ou 1d, 7d… fixo — relê e repete mensagens)
 note = "digest do dia"
 
 [[source]]
 key = "slack-time-dados"
 kind = "slack"
 channel = "#time-dados"
-window = "1d"
+window = "auto"            # lê também as threads; resposta nova em thread dos últimos 7d entra
 
 [[source]]
 key = "gcal-primary"
