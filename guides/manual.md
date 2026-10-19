@@ -811,9 +811,14 @@ Detalhe em `guides/mcp.md`.
 ./brain schedule remove
 ```
 
-Isso põe uma linha no seu crontab (precisa do comando `crontab`). No macOS,
-sem crontab, o `schedule` explica e para — o equivalente é um launchd; o
-comando a agendar é `./brain nightly`.
+No macOS isso instala um LaunchAgent (`com.segundo-cerebro.nightly`) e remove a
+linha antiga do crontab, se houver: o cron roda fora da sessão de login e o agente
+(`claude -p`) sai com "Not logged in". O launchd também executa na volta o horário
+perdido com o Mac dormindo. Nos demais sistemas, entra uma linha no crontab.
+
+O agente headless não tem como pedir permissão: liste em `[runner].allow` do
+`config/brain.toml` as ferramentas MCP de **leitura** que ele pode usar
+(`mcp__<servidor>__<ferramenta>`). Sem isso o `/update` sai com "negado" em toda fonte.
 
 Cada madrugada, isolando falha (um passo quebrado não cancela os outros):
 

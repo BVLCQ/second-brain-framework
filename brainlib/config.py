@@ -50,7 +50,8 @@ DEFAULTS: dict = {
         "max_tokens": 4096,
         "timeout_s": 180,
     },
-    "runner": {"agent": "auto", "command": "", "prompt": "/update", "timeout_min": 45},
+    "runner": {"agent": "auto", "command": "", "prompt": "/update", "timeout_min": 45,
+               "allow": []},              # ferramentas MCP de LEITURA do agente headless (noturno e TUI)
     "tui": {"agent_allow": []},            # ferramentas extras do agente nas ações ⚡ do TUI (ex.: MCP de escrita)
     "backup": {"enabled": False, "max_file_mb": 50, "keep": 8, "weekday": 7},
     "views": {"wins_weeks": 8, "timeline_back_days": 90, "timeline_ahead_days": 45,

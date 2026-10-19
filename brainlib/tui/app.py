@@ -1513,7 +1513,7 @@ class BrainApp(App):
     def agent_brief(self) -> None:
         self.ask_agent("Brief do dia", ["Lê FRESH/home.md e todo.md", "Escreve a narrativa em FRESH/notes/ (o painel exibe como está)"], "/brief")
 
-    MCP_NOTE = "Precisa de permissão para as ferramentas MCP de leitura ([tui].agent_allow ou [runner].command no brain.toml)"
+    MCP_NOTE = "Precisa de permissão para as ferramentas MCP de leitura ([runner].allow ou [runner].command no brain.toml)"
 
     def agent_connect(self, key: str) -> None:
         self.ask_agent(f"Puxar a fonte {key}", ["Lê a fonte pelo MCP, só leitura", "Grava com brain snapshot (hash igual = silêncio)",

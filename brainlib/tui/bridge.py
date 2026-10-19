@@ -64,7 +64,7 @@ OWNER_PREFIX = "O dono está presente (sessão do TUI) e pediu esta tarefa. "
 def agent_argv(cfg: dict, prompt: str) -> list[str] | None:
     """Comando headless do agente configurado ([runner] em brain.toml), com o prompt dado."""
     r = cfg["runner"]
-    extra = [t for t in cfg.get("tui", {}).get("agent_allow", []) if t]
+    extra = runner.read_allow(cfg) + [t for t in cfg.get("tui", {}).get("agent_allow", []) if t]
     full = OWNER_PREFIX + prompt
     if r.get("command"):
         return [part.replace("{prompt}", full) for part in shlex.split(r["command"])]

@@ -77,8 +77,8 @@ Noturno (render → agente `/update` → memória → backup semanal):
 ./brain schedule install --time 05:00
 ```
 
-> Mac que dorme de madrugada pula o cron silenciosamente — `./brain nightly`
-> manual de manhã é o ritual mais confiável.
+> No macOS o noturno roda por launchd (recupera o horário perdido com o Mac dormindo);
+> no cron ele é pulado — `./brain nightly` manual de manhã é o ritual mais confiável.
 
 ## Mapa rápido
 

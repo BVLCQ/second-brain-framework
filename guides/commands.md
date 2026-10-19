@@ -260,12 +260,12 @@ brain tui             # abre; usa a .venv-tui sozinho
 ```
 Sem o extra, `brain tui` sai com código 3 e a instrução. A aba **Fontes** do painel 1 gerencia o `watch.toml` (`n` adiciona, `e` edita, `x` remove, `w` inclui um pull avulso) e mostra o
 último pull e as falhas de cada fonte. `u` (`/update`) atualiza tudo e `c` (`/connect`) puxa uma fonte: rodam o agente de `[runner]`,
-que precisa de permissão para as ferramentas MCP de leitura (`[runner].command` ou `[tui].agent_allow`). Teclas: `?` ajuda do contexto · `:` paleta de
+que precisa de permissão para as ferramentas MCP de leitura (`[runner].allow`, ou `[runner].command`). Teclas: `?` ajuda do contexto · `:` paleta de
 comandos · `g` busca · `/` filtro (com um id exato, `A-####`, `G#`, `P#`, `P#.n`, `D-####`…, mostra tudo que está associado a ele: o plano acima e abaixo, ações, decisões, entregas, pessoas; texto livre continua sendo busca no texto) · `N` nova nota (veja `brain note`) · `1`–`6` painéis (só pelos números; `6` é o log: `j` `k` rolam, `c` limpa) · `[` `]` ou `←` `→` abas · `⏎` ou duplo clique amplia o detalhe · `ctrl+t` troca o tema · `q` sai. O mouse também funciona: clique nas abas, nas linhas e nas dicas da barra, e a roda rola a lista. O TUI relê o vault sozinho quando ele muda fora dele (agente, outro terminal). O mapa
 completo por contexto, a legenda e uma versão para experimentar com dados fictícios estão em
 [`tui-mockup.html`](tui-mockup.html). Fora do TUI ficam só o que é do agente (`init`, `snapshot`, `add`, `extract`,
 `proposal add`; `outbox sent` e `publish done` ele registra ao enviar e publicar) e `demo`; o teste
-`tests/test_tui.py::CoverageTest` garante que nenhum subcomando novo da CLI fique sem lugar ou sem justificativa. Em `[tui]` do `brain.toml`, `agent_allow` lista ferramentas extras que o
+`tests/test_tui.py::CoverageTest` garante que nenhum subcomando novo da CLI fique sem lugar ou sem justificativa. `[runner].allow` do `brain.toml` lista as ferramentas MCP de leitura do agente headless (noturno e TUI). Em `[tui]`, `agent_allow` lista ferramentas extras, só do TUI, que o
 agente pode usar nas ações ⚡ (por exemplo as de escrita do MCP do Slack, só para enviar uma mensagem aprovada).
 
 ### `brain note add` · `brain note edit` · `brain note list`
@@ -875,13 +875,13 @@ brain nightly --skip-agent     # pula o LLM (só render, memória, backup)
 Sem agente de linha de comando instalado, a etapa do agente é pulada com aviso.
 
 ### `brain schedule install|remove|status`
-Agenda o noturno no crontab.
+Agenda o noturno: LaunchAgent no macOS (roda na sessão de login, onde o agente está autenticado), crontab nos demais.
 ```bash
 brain schedule install --time 05:00    # padrão 05:00
 brain schedule status
 brain schedule remove
 ```
-Mac dormindo no horário = o cron é pulado. Rode `brain nightly` de manhã se precisar.
+No macOS o launchd recupera o horário perdido quando o Mac acorda; no cron ele é pulado. Rode `brain nightly` de manhã se precisar.
 
 ### `brain backup`
 Zip do vault para o Google Drive (`[backup]`, OAuth) ou uma pasta local. Retenção de 8 cópias.

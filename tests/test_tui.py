@@ -11,6 +11,7 @@ import os
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from datetime import date
 from pathlib import Path
 
@@ -63,6 +64,13 @@ class BridgeTest(unittest.TestCase):
         self.assertEqual(argv[:2], ["meu-agente", "--p"])
         self.assertTrue(argv[2].endswith("/dump"))
         self.assertIn("dono está presente", argv[2])
+
+    def test_agent_argv_claude_gets_runner_allow_then_tui_extras(self):
+        cfg = config.DEFAULTS | {"runner": {**config.DEFAULTS["runner"], "agent": "claude", "allow": ["mcp__x__ler"]},
+                                 "tui": {"agent_allow": ["mcp__x__enviar"]}}
+        with mock.patch("shutil.which", return_value="/usr/bin/claude"):
+            argv = bridge.agent_argv(cfg, "/update")
+        self.assertEqual(argv[-2:], ["mcp__x__ler", "mcp__x__enviar"])
 
     def test_agent_argv_none_when_disabled(self):
         cfg = config.DEFAULTS | {"runner": {**config.DEFAULTS["runner"], "agent": "none"}}

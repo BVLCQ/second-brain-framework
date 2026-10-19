@@ -900,7 +900,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--skip-agent", action="store_true")
     p.set_defaults(fn=cmd_nightly)
 
-    p = sub.add_parser("schedule", help="agenda o noturno (crontab)")
+    p = sub.add_parser("schedule", help="agenda o noturno (launchd no macOS, crontab nos demais)")
     p.add_argument("action", choices=["install", "remove", "status"])
     p.add_argument("--time", default="05:00")
     p.set_defaults(fn=cmd_schedule)

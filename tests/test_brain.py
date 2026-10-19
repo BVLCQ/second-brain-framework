@@ -979,5 +979,42 @@ class SchemaCoverageTests(unittest.TestCase):
                 b.record_one({"type": "action.exploded", "by": "owner", "data": {}})
 
 
+class RunnerTest(unittest.TestCase):
+    def test_nightly_claude_gets_only_runner_allow(self):
+        from unittest import mock
+        from brainlib import runner
+        cfg = config.DEFAULTS | {"runner": {**config.DEFAULTS["runner"], "agent": "claude", "allow": ["mcp__x__ler"]},
+                                 "tui": {"agent_allow": ["mcp__x__enviar"]}}
+        with mock.patch("shutil.which", return_value="/usr/bin/claude"):
+            argv = runner.agent_command(cfg)
+        self.assertEqual(argv[-1], "mcp__x__ler")
+        self.assertNotIn("mcp__x__enviar", argv)  # escrita do TUI nunca vai pro noturno
+
+    def test_launchd_plist_runs_nightly_at_requested_time(self):
+        import argparse
+        import plistlib
+        from unittest import mock
+        from brainlib import runner
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td) / "i")
+            plist = Path(td) / "nightly.plist"
+            calls: list[tuple] = []
+
+            def fake_launchctl(*a):
+                calls.append(a)
+                return subprocess.CompletedProcess(a, 0, "", "")
+
+            with mock.patch.object(runner, "_launchd_plist", return_value=plist), \
+                 mock.patch.object(runner, "_launchctl", side_effect=fake_launchctl), \
+                 mock.patch.object(runner, "_crontab", return_value=[]):
+                runner._schedule_launchd(argparse.Namespace(action="install", time="05:30"), b)
+                data = plistlib.loads(plist.read_bytes())
+                self.assertEqual(data["StartCalendarInterval"], {"Hour": 5, "Minute": 30})
+                self.assertEqual(data["ProgramArguments"][1:], ["nightly"])
+                self.assertEqual(calls[-1][0], "bootstrap")
+                runner._schedule_launchd(argparse.Namespace(action="remove", time="05:00"), b)
+                self.assertFalse(plist.exists())
+
+
 if __name__ == "__main__":
     unittest.main()

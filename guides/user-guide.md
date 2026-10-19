@@ -694,7 +694,7 @@ checkbox**, e `FRESH/` é só leitura prática.
 
 | Sintoma | Causa provável | Saída |
 |---|---|---|
-| "o noturno não rodou" | Mac dormindo às 05:00 (cron não recupera) | `./brain nightly` manual de manhã — é o ritual recomendado mesmo |
+| "o noturno não rodou" | Mac desligado/cron antigo (`./brain schedule status` mostra se é launchd); "Not logged in" no `nightly-agent.log` = ainda está no cron | `./brain nightly` manual de manhã — é o ritual recomendado mesmo |
 | Ação nunca entra no plano de foco | sem `due` ou sem esforço estimado | `./brain action update A-#### --due … --effort 90m` e gere outro plano |
 | Pessoa "não consta" ao citar alguém | ficha nova | `/person <nome>` → ele oferece cadastrar com aliases |
 | Duas fichas da mesma pessoa | criadas antes dos aliases | `./brain person alias` funde por alias |

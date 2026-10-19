@@ -8,10 +8,13 @@ qualquer evento "do dono", aprovação, envio ou publicação — não há dono 
 from __future__ import annotations
 
 import os
+import plistlib
 import shlex
 import shutil
 import subprocess
+import sys
 import traceback
+from pathlib import Path
 
 from . import util
 
@@ -42,8 +45,16 @@ def agent_command(cfg: dict) -> list[str] | None:
             return None
         preset = PRESETS.get(name)
         if preset and shutil.which(preset[0]):
-            return [p.replace("{prompt}", prompt) for p in preset]
+            argv = [p.replace("{prompt}", prompt) for p in preset]
+            if name == "claude":
+                argv += read_allow(cfg)
+            return argv
     return None
+
+
+def read_allow(cfg: dict) -> list[str]:
+    """Ferramentas MCP de LEITURA que o agente headless pode usar ([runner].allow) — vale para o noturno e o TUI."""
+    return [t for t in cfg["runner"].get("allow", []) if t]
 
 
 def _log(brain, line: str) -> None:
@@ -114,7 +125,71 @@ def _crontab() -> list[str]:
     return res.stdout.splitlines() if res.returncode == 0 else []
 
 
+LAUNCHD_LABEL = "com.segundo-cerebro.nightly"
+
+
+def _launchd_plist() -> Path:
+    return Path.home() / "Library" / "LaunchAgents" / f"{LAUNCHD_LABEL}.plist"
+
+
+def _use_launchd() -> bool:
+    # cron no macOS roda fora da sessão de login: o agente (claude) sai com "Not logged in".
+    # Um LaunchAgent roda na sessão do usuário e ainda recupera a execução perdida com o Mac dormindo.
+    return sys.platform == "darwin" and shutil.which("launchctl") is not None
+
+
+def _launchctl(*args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(["launchctl", *args], capture_output=True, text=True, check=False)
+
+
+def _launchd_remove() -> None:
+    _launchctl("bootout", f"gui/{os.getuid()}/{LAUNCHD_LABEL}")
+    _launchd_plist().unlink(missing_ok=True)
+
+
+def _schedule_launchd(args, brain) -> None:
+    plist = _launchd_plist()
+    if args.action == "status":
+        if plist.exists():
+            spec = plistlib.loads(plist.read_bytes()).get("StartCalendarInterval", {})
+            loaded = _launchctl("print", f"gui/{os.getuid()}/{LAUNCHD_LABEL}").returncode == 0
+            print(f"launchd: {LAUNCHD_LABEL} às {spec.get('Hour', 0):02d}:{spec.get('Minute', 0):02d}"
+                  + ("" if loaded else " (plist existe, mas não carregado)"))
+        else:
+            print("não agendado — `./brain schedule install --time 05:00`")
+        return
+    old = _crontab()
+    if any(MARK in ln for ln in old):  # migra: tira a linha antiga do cron
+        keep = [ln for ln in old if MARK not in ln]
+        subprocess.run(["crontab", "-"], input="\n".join(keep) + ("\n" if keep else ""), text=True, check=True)
+    _launchd_remove()
+    if args.action == "remove":
+        print("✓ agendamento removido")
+        return
+    hh, mm = args.time.split(":")
+    root = brain.inst.root
+    brain.inst.logs.mkdir(parents=True, exist_ok=True)
+    plist.parent.mkdir(parents=True, exist_ok=True)
+    plist.write_bytes(plistlib.dumps({
+        "Label": LAUNCHD_LABEL,
+        "ProgramArguments": [str(root / "brain"), "nightly"],
+        "WorkingDirectory": str(root),
+        # PATH de quem instalou (mise/agente), como no cron
+        "EnvironmentVariables": {"PATH": os.environ.get("PATH", "/usr/bin:/bin")},
+        "StartCalendarInterval": {"Hour": int(hh), "Minute": int(mm)},
+        "StandardOutPath": str(brain.inst.logs / "cron.log"),
+        "StandardErrorPath": str(brain.inst.logs / "cron.log"),
+        "ProcessType": "Background",
+    }))
+    res = _launchctl("bootstrap", f"gui/{os.getuid()}", str(plist))
+    if res.returncode:
+        raise util.BrainError(f"launchctl bootstrap falhou: {(res.stderr or res.stdout).strip()}", code=3)
+    print(f"✓ noturno agendado às {args.time} (launchd: {LAUNCHD_LABEL})")
+
+
 def schedule_cli(args, brain) -> None:
+    if _use_launchd():
+        return _schedule_launchd(args, brain)
     if not shutil.which("crontab"):
         raise util.BrainError("crontab não encontrado — agende `./brain nightly` no agendador do seu sistema "
                               "(launchd no macOS: guides/user-guide.md §Noturno)", code=3)
