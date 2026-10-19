@@ -76,7 +76,11 @@ def agent_argv(cfg: dict, prompt: str) -> list[str] | None:
         preset = runner.PRESETS.get(name)
         if preset and shutil.which(preset[0]):
             argv = [p.replace("{prompt}", full) for p in preset]
-            if name == "claude" and extra:
+            if name == "claude":
+                tui = cfg.get("tui", {})
+                flags = [x for opt, key in (("--model", "model"), ("--effort", "effort")) if tui.get(key)
+                         for x in (opt, str(tui[key]))]
+                argv[3:3] = flags          # antes de --allowedTools (variádico): as opções não viram nome de ferramenta
                 argv += extra
             return argv
     return None

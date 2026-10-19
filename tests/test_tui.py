@@ -72,6 +72,16 @@ class BridgeTest(unittest.TestCase):
             argv = bridge.agent_argv(cfg, "/update")
         self.assertEqual(argv[-2:], ["mcp__x__ler", "mcp__x__enviar"])
 
+    def test_agent_argv_claude_uses_tui_model_and_effort_before_allowed_tools(self):
+        cfg = config.DEFAULTS | {"runner": {**config.DEFAULTS["runner"], "agent": "claude", "allow": ["mcp__x__ler"]},
+                                 "tui": {"agent_allow": [], "model": "claude-haiku-5-5", "effort": "high"}}
+        with mock.patch("shutil.which", return_value="/usr/bin/claude"):
+            argv = bridge.agent_argv(cfg, "/update")
+        i = argv.index("--model")
+        self.assertEqual(argv[i:i + 4], ["--model", "claude-haiku-5-5", "--effort", "high"])
+        self.assertLess(i, argv.index("--allowedTools"))
+        self.assertEqual(argv[-1], "mcp__x__ler")
+
     def test_agent_argv_none_when_disabled(self):
         cfg = config.DEFAULTS | {"runner": {**config.DEFAULTS["runner"], "agent": "none"}}
         self.assertIsNone(bridge.agent_argv(cfg, "/dump"))

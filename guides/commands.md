@@ -271,7 +271,7 @@ comandos · `g` busca · `/` filtro (com um id exato, `A-####`, `G#`, `P#`, `P#.
 completo por contexto, a legenda e uma versão para experimentar com dados fictícios estão em
 [`tui-mockup.html`](tui-mockup.html). Fora do TUI ficam só o que é do agente (`init`, `snapshot`, `add`, `extract`,
 `proposal add`; `outbox sent` e `publish done` ele registra ao enviar e publicar) e `demo`; o teste
-`tests/test_tui.py::CoverageTest` garante que nenhum subcomando novo da CLI fique sem lugar ou sem justificativa. `[runner].allow` do `brain.toml` lista as ferramentas MCP de leitura do agente headless (noturno e TUI). Em `[tui]`, `agent_allow` lista ferramentas extras, só do TUI, que o
+`tests/test_tui.py::CoverageTest` garante que nenhum subcomando novo da CLI fique sem lugar ou sem justificativa. `[runner].allow` do `brain.toml` lista as ferramentas MCP de leitura do agente headless (noturno e TUI). Em `[tui]`, `model` e `effort` escolhem o modelo e o esforço do claude nas ações ⚡ (ex.: `claude-haiku-5-5` · `high`; vazio = padrão; não valem com `[runner].command`), e `agent_allow` lista ferramentas extras, só do TUI, que o
 agente pode usar nas ações ⚡ (por exemplo as de escrita do MCP do Slack, só para enviar uma mensagem aprovada).
 
 ### `brain note add` · `brain note edit` · `brain note list`

@@ -73,6 +73,9 @@ allow = []
 # Ferramentas EXTRAS que o agente (claude) pode usar só nas ações ⚡ do `brain tui` — por exemplo as
 # ferramentas de ESCRITA do MCP do Slack, só para enviar uma mensagem já aprovada. Vazio = só [runner].allow.
 agent_allow = []
+# Modelo e esforço do claude nas ações ⚡ do TUI (o noturno não usa). Vazio = padrão do claude.
+model = ""                     # ex.: "claude-haiku-5-5"
+effort = ""                    # low | medium | high | xhigh | max
 
 [backup]
 enabled = false
