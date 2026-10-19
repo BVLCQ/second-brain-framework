@@ -1036,6 +1036,31 @@ class PdfTest(unittest.TestCase):
             self.assertTrue(pngs[0].read_bytes().startswith(b"\x89PNG"))
 
 
+class VideoTest(unittest.TestCase):
+    def test_parse_and_merge_pick_the_language_actually_spoken_each_minute(self):
+        from brainlib import video
+        pt = video.parse("[00:00:05] Oi gente, vocês também estão aqui? Não sei, então vamos começar\n"
+                         "[00:01:10] Nosotros vamos a hablar de los datos y de las reglas\n")
+        es = video.parse("[00:00:05] Oi gente voces tambien esta aqui no se entonces\n"
+                         "[00:01:10] Nosotros vamos a hablar de los datos y de las reglas del negocio y también de usted\n")
+        merged = video.merge({"pt-BR": pt, "es-MX": es})
+        self.assertEqual([(t, loc) for t, _, loc in merged], [(5, "pt-BR"), (70, "es-MX")])
+
+    def test_missing_file_and_wrong_platform_are_clear_errors(self):
+        from unittest import mock
+        from brainlib import video
+        with self.assertRaises(util.BrainError) as cm:
+            video.transcribe("/nao/existe.mp4")
+        self.assertEqual(cm.exception.code, 3)
+        with tempfile.TemporaryDirectory() as td:
+            f = Path(td) / "a.mp4"
+            f.write_bytes(b"x")
+            with mock.patch.object(video, "swift_tool", return_value=None):
+                with self.assertRaises(util.BrainError) as cm:
+                    video.frames(f)
+            self.assertIn("macOS", str(cm.exception))
+
+
 class SnapshotEmptyTest(unittest.TestCase):
     def test_empty_window_counts_as_a_successful_pull_not_a_failure(self):
         import argparse

@@ -490,6 +490,11 @@ def cmd_pdf(args, b: Brain) -> None:
     pdf.cli(args, b)
 
 
+def cmd_video(args, b: Brain) -> None:
+    from . import video
+    video.cli(args, b)
+
+
 def cmd_doctor(args, b: Brain) -> None:
     from . import doctor
     doctor.cli(args, b)
@@ -867,6 +872,23 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--out", help="pasta de saída (padrão: temporária)")
     x.add_argument("--dpi", type=int, default=110)
     p.set_defaults(fn=cmd_pdf)
+
+    p = sub.add_parser("video", help="analisa vídeo/áudio no dispositivo (macOS 26+): transcrição por idioma e quadros amostrados")
+    vs = p.add_subparsers(dest="vcmd", required=True)
+    x = vs.add_parser("transcribe", help="texto com `[hh:mm:ss]`; vários idiomas = escolhe o falado em cada minuto")
+    x.add_argument("file")
+    x.add_argument("--locales", default="pt-BR", help="ex.: pt-BR,es-MX (reunião bilíngue)")
+    x.add_argument("--start", type=float, default=0, help="início em segundos")
+    x.add_argument("--length", type=float, default=0, help="duração em segundos (padrão: até o fim)")
+    x.add_argument("--out", help="grava o texto neste arquivo (padrão: stdout)")
+    x = vs.add_parser("frames", help="PNG a cada N segundos (slides, tela compartilhada); o agente lê as imagens")
+    x.add_argument("file")
+    x.add_argument("--every", type=int, default=150)
+    x.add_argument("--width", type=int, default=900)
+    x.add_argument("--start", type=float, default=0)
+    x.add_argument("--end", type=float, default=0)
+    x.add_argument("--out", help="pasta de saída (padrão: temporária)")
+    p.set_defaults(fn=cmd_video)
 
     p = sub.add_parser("note", help="notas avulsas na inbox, com vínculo opcional a A-####/G#/P#/P#.n")
     ns = p.add_subparsers(dest="ncmd", required=True)

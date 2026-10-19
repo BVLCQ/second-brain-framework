@@ -282,6 +282,14 @@ brain pdf render "vault/RAW/inbox/escaneado.pdf" --pages 1-2   # PNGs (--out DIR
 ```
 Ordem de leitores — texto: `pdftotext` (poppler) → PDFKit do macOS (via `swift`; o programa é compilado uma vez e fica em `~/Library/Caches/segundo-cerebro`) → `pypdf`, se instalado. Imagem: `pdftoppm` → PDFKit. Sem nenhum, sai com código 3 e a dica (`brew install poppler` ou `xcode-select --install`). Texto vazio = PDF escaneado: use `render` e leia as páginas como imagem.
 
+### `brain video transcribe` · `brain video frames`
+Análise de vídeo e áudio para o `/dump` — **todo vídeo na inbox é analisado**, sem pedir confirmação. Roda no dispositivo, sem ffmpeg e sem enviar nada para a nuvem (macOS 26+ com as Command Line Tools); não grava no vault.
+```bash
+brain video transcribe "gravacao.mp4" --locales pt-BR,es-MX --out rascunho.txt   # [hh:mm:ss] texto; --start/--length em segundos
+brain video frames "gravacao.mp4" --every 150 --width 900                        # PNGs numa pasta temporária (--out DIR)
+```
+Com mais de um idioma (reunião bilíngue), cada idioma é transcrito por inteiro e, por minuto, vale o texto do idioma que de fato se fala. A transcrição automática erra nomes próprios e termos técnicos; confirme nos quadros (slides) e, para a letra exata, no próprio vídeo. Uma gravação de 80 min leva poucos minutos.
+
 ### `brain note add` · `brain note edit` · `brain note list`
 Notas avulsas do dono. `add` grava `<VÍNCULO>-AAAA-MM-DD-note.md` na **inbox** (a porta única): `A-0146-…`, `G1-…`,
 `P2-…`, `P2.1-…`; sem vínculo, `note-…`; no mesmo dia e alvo vem o sufixo `-note-2.md`. O arquivo abre com um

@@ -6,7 +6,6 @@ Nada aqui grava no vault: a saída vai para o stdout ou para uma pasta temporár
 """
 from __future__ import annotations
 
-import hashlib
 import os
 import re
 import shutil
@@ -16,6 +15,7 @@ import tempfile
 from pathlib import Path
 
 from . import util
+from .swift import swift_tool as _swift_tool
 
 HINT = ("sem leitor de PDF — instale o poppler (`brew install poppler` · `apt install poppler-utils`) "
         "ou, no macOS, as Command Line Tools (`xcode-select --install`, dá o `swift`)")
@@ -70,32 +70,6 @@ def parse_pages(spec: str | None) -> list[int]:
             raise util.BrainError(f"páginas inválidas: {spec!r}", code=2)
         out.extend(range(a, b + 1))
     return sorted(set(out))
-
-
-def _cache_dir() -> Path:
-    base = os.environ.get("XDG_CACHE_HOME") or (Path.home() / ("Library/Caches" if sys.platform == "darwin" else ".cache"))
-    d = Path(base) / "segundo-cerebro"
-    d.mkdir(parents=True, exist_ok=True)
-    return d
-
-
-def _swift_tool(source: str, name: str) -> list[str] | None:
-    """Compila (uma vez, em cache) o programa swift e devolve o comando; sem compilador, usa o interpretador."""
-    if sys.platform != "darwin":
-        return None
-    sha = hashlib.sha256(source.encode()).hexdigest()[:12]
-    exe = _cache_dir() / f"{name}-{sha}"
-    if exe.exists():
-        return [str(exe)]
-    swiftc = shutil.which("swiftc")
-    src = _cache_dir() / f"{name}-{sha}.swift"
-    src.write_text(source, encoding="utf-8")
-    if swiftc:
-        res = subprocess.run([swiftc, "-O", str(src), "-o", str(exe)], capture_output=True, text=True, check=False)
-        if res.returncode == 0:
-            return [str(exe)]
-    swift = shutil.which("swift")
-    return [swift, str(src)] if swift else None
 
 
 def _check(path: Path) -> str:

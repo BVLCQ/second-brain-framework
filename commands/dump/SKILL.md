@@ -36,6 +36,12 @@ Regras transversais: proveniência em toda extração · `brain person resolve` 
 
 Para cada item da inbox (ignore `.keep.md`):
 
+> **VÍDEO e ÁUDIO (`.mp4`, `.mov`, `.m4a`…): são analisados sempre, nunca ficam esperando confirmação, mesmo grandes** (o arquivo é lido no lugar; o vídeo vai para o RAW sem editar).
+> 1. `./brain video transcribe <arquivo> --locales pt-BR,es-MX --out <rascunho>.txt` transcreve no dispositivo (reunião bilíngue: informe os dois idiomas; ele escolhe o falado em cada minuto). Erros de reconhecimento são esperados: nomes próprios e termos técnicos saem trocados.
+> 2. `./brain video frames <arquivo> --every 150` extrai PNGs (slides, tela compartilhada); leia os quadros-chave como imagem para confirmar títulos, links e números.
+> 3. Antes de transcrever, procure no Drive/Meet notas ou transcrição do Gemini do mesmo evento: se existirem, são a fonte primária.
+> 4. Trate como **reunião**: artefato com contexto, pontos com minuto `[mm:ss]`, decisões, ações, citações-chave. A transcrição completa vai para `PROCESSED/` como documento próprio, avisando que é automática.
+>
 > **PDF:** `./brain pdf text <arquivo> [--pages 1-3]` devolve o texto por página (sem precisar de poppler; no macOS usa o PDFKit). Se vier vazio, o PDF é escaneado: `./brain pdf render <arquivo> --pages 1-3` gera PNGs que você lê como imagem. Nome com espaço ou acento: passe entre aspas, o arquivo no RAW não é renomeado.
 
 0. **Atalho opcional** — se `[extractor]` estiver ligado (LM Studio), rode
