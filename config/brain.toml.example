@@ -54,7 +54,7 @@ api_key_env = ""                # LM Studio dispensa chave; gateway: nome da var
 # timeout_s = 180
 
 [memory]
-engine = "none"                 # "hindsight" quando o servidor estiver no ar
+engine = "none"                 # "hindsight" quando o servidor estiver no ar (bancos em chunks: retain sem LLM)
 url = "http://localhost:8888"
 raw_bank = "brain-raw"
 mem_bank = "brain-mem"

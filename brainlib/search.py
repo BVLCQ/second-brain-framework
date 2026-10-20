@@ -1,6 +1,8 @@
 """Busca determinística (sem LLM) no ledger, no PLANNING e nos artefatos do PROCESSED.
 
 Ranking simples: termos dobrados (sem acento) contados no título pesam 3×, no corpo 1×.
+Todos os termos precisam casar (AND); se isso não achar nada, refaz com qualquer termo (OR),
+ordenando por quantos termos distintos casaram, e marca os hits com `match: "parcial"`.
 A camada de memória (Hindsight) é a busca semântica; esta é a rede de segurança.
 """
 from __future__ import annotations
@@ -10,11 +12,13 @@ from pathlib import Path
 from . import model, notes, util
 
 
-def _score(terms: list[str], title: str, body: str = "") -> int:
+def _score(terms: list[str], title: str, body: str = "", any_term: bool = False) -> int:
     t, b = util.fold(title), util.fold(body)
-    if not all(term in t or term in b for term in terms):
+    matched = [term for term in terms if term in t or term in b]
+    if not matched or (not any_term and len(matched) < len(terms)):
         return 0
-    return sum(3 * t.count(term) + b.count(term) for term in terms)
+    base = sum(3 * t.count(term) + b.count(term) for term in matched)
+    return base + 1000 * len(matched) if any_term else base      # OR: sobreposição de termos manda
 
 
 def search(brain, query: str, limit: int = 20) -> list[dict]:
@@ -22,12 +26,10 @@ def search(brain, query: str, limit: int = 20) -> list[dict]:
     if not terms:
         return []
     m = model.build(brain)
-    hits: list[dict] = []
+    cands: list[tuple] = []
 
     def add(kind, id_, title, body, date=None, path=None):
-        s = _score(terms, f"{id_} {title}", body)
-        if s:
-            hits.append({"kind": kind, "id": id_, "title": title, "date": date, "path": path, "score": s})
+        cands.append((kind, id_, title, body, date, path))
 
     for a in m["actions"]:
         add("ação", a["id"], a["title"], " ".join([a["owner_name"], a["how"] or "", a["outcome"] or "",
@@ -50,5 +52,18 @@ def search(brain, query: str, limit: int = 20) -> list[dict]:
         add("artefato", a["id"], a["title"], f"{a['summary']} {body}", a["date"], a["id"])
     for n in notes.scan(brain.inst):          # notas avulsas (inbox + RAW); o id leva ao alvo do vínculo
         add("nota", n.link or Path(n.path).name, n.title, f"{n.link} {n.text}", n.created[:10], n.path)
-    hits.sort(key=lambda h: (-h["score"], h.get("date") or ""), reverse=False)
+
+    def rank(any_term: bool) -> list[dict]:
+        hits = []
+        for kind, id_, title, body, date, path in cands:
+            sc = _score(terms, f"{id_} {title}", body, any_term)
+            if sc:
+                hits.append({"kind": kind, "id": id_, "title": title, "date": date, "path": path, "score": sc,
+                             **({"match": "parcial"} if any_term else {})})
+        hits.sort(key=lambda h: (-h["score"], h.get("date") or ""))
+        return hits
+
+    hits = rank(False)
+    if not hits and len(terms) > 1:
+        hits = rank(True)
     return hits[:limit]

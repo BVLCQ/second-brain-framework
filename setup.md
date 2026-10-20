@@ -166,7 +166,10 @@ uv tool install hindsight-embed
 # prova imediata, sem instalar nada: uvx hindsight-embed@latest --help
 ```
 
-### 5.2 Configuração — LLM de extração no LM Studio
+### 5.2 Configuração — LLM no LM Studio
+
+Os bancos do brain usam `retain_extraction_mode = chunks` (aplicado por `./brain memory setup`):
+o retain não chama o LLM; ele só entra se você voltar a `concise`. Configure-o mesmo assim.
 
 ```bash
 export HINDSIGHT_API_LLM_PROVIDER=lmstudio

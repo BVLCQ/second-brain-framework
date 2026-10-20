@@ -17,23 +17,9 @@ services:
       HINDSIGHT_API_LLM_MODEL: qwen/qwen3-4b-2507
       HINDSIGHT_API_LLM_API_KEY: lm-studio   # placeholder; o LM Studio ignora
       HINDSIGHT_API_LLM_OUTPUT_LANGUAGE: Brazilian Portuguese (pt-BR)
-      # Consolidação: 3 fatos por chamada (padrão 8). Com 8, o prompt passava de 8192 tokens
-      # (contexto do qwen3-4b no LM Studio) e voltava HTTP 400. Ainda há estouros ocasionais
-      # (~1 em 3 chamadas): o Hindsight divide o lote e tenta de novo — aceito para não subir
-      # o contexto para 16k (+~1,2 GB de RAM).
-      HINDSIGHT_API_CONSOLIDATION_LLM_BATCH_SIZE: "3"
-      # Contexto que a consolidação anexa ao prompt (observações relacionadas + fatos-fonte).
-      # O orçamento conta só o texto; ids, datas e contexto em JSON vêm por fora, e o prompt de
-      # sistema já ocupa ~3k. Com os padrões (512 / 4096 / 256), até um fato sozinho passava de
-      # 8192 tokens no qwen3-4b. Menor aqui = cabe no contexto sem carregar o modelo maior.
-      HINDSIGHT_API_CONSOLIDATION_MAX_TOKENS: "256"
-      HINDSIGHT_API_CONSOLIDATION_SOURCE_FACTS_MAX_TOKENS: "1024"
-      HINDSIGHT_API_CONSOLIDATION_SOURCE_FACTS_MAX_TOKENS_PER_OBSERVATION: "128"
-      # O LM Studio atende 4 chamadas em paralelo (~50 s cada no qwen3-4b). Com o padrão de 32
-      # simultâneas, as da fila estouravam o timeout de 120 s e o retain falhava. 4 = slots do
-      # LM Studio; 300 s cobre uma chamada lenta de consolidação com folga.
-      HINDSIGHT_API_LLM_MAX_CONCURRENT: "4"
-      HINDSIGHT_API_LLM_TIMEOUT: "300"
+      # Os bancos usam retain_extraction_mode=chunks (brainlib/memory.py setup): o retain não chama o LLM.
+      # O tuning que continha o qwen3-4b na consolidação (batch 3, orçamentos 256/1024/128, concorrência 4,
+      # timeout 300) foi aposentado — está no git history se a extração por LLM voltar.
       # Id fixo do worker. O padrão é o hostname (= id do container, muda a cada recreate) e o
       # worker só recupera, ao subir, as operações que ele mesmo tinha pego — com id novo, a
       # consolidação em andamento ficava presa em "processing" para sempre.

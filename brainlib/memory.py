@@ -2,7 +2,8 @@
 
 Dois bancos (config [memory]):
   raw_bank · arquivos do RAW como estão (retain_extraction_mode = chunks — sem LLM, sem interpretação)
-  mem_bank · artefatos do PROCESSED + entidades do ledger + PLANNING/PROFILE, com extração de fatos
+  mem_bank · artefatos do PROCESSED + entidades do ledger + PLANNING/PROFILE (chunks também: o autor já foi
+            o agente ou o CLI, re-extrair com um LLM local menor só perde informação)
 document_id = caminho no vault (ou ledger/<ID>): toda lembrança aponta para algo citável.
 O vault é a verdade; `brain memory rebuild` apaga os bancos e reconstrói do zero.
 O LLM de extração é configurado no servidor Hindsight (guides/memory.md), não aqui.
@@ -225,7 +226,7 @@ def setup(brain, hs: Hindsight | None = None) -> list[str]:
     owner = brain.inst.cfg["owner"]["name"]
     hs.put_bank(mem["mem_bank"], {"name": "Segundo Cérebro — conhecimento", "mission": MEM_MISSION.format(owner=owner),
                                   "retain_mission": RETAIN_MISSION, "observations_mission": OBS_MISSION})
-    hs.patch_config(mem["mem_bank"], {"retain_extraction_mode": "concise"})
+    hs.patch_config(mem["mem_bank"], {"retain_extraction_mode": "chunks"})
     hs.put_bank(mem["raw_bank"], {"name": "Segundo Cérebro — RAW (texto original)",
                                   "mission": "Arquivo bruto do vault: texto original, sem interpretação."})
     hs.patch_config(mem["raw_bank"], {"retain_extraction_mode": "chunks"})

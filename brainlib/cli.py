@@ -436,8 +436,10 @@ def cmd_status(args, b: Brain) -> None:
 def cmd_search(args, b: Brain) -> None:
     from . import search
     hits = search.search(b, args.query, limit=args.limit)
-    _out(args, hits, "\n".join(f"[{h['kind']}] {h['id']} · {h['title']} · {h.get('date') or ''}"
-                               for h in hits) or "não consta")
+    text = "\n".join(f"[{h['kind']}] {h['id']} · {h['title']} · {h.get('date') or ''}" for h in hits)
+    if hits and hits[0].get("match") == "parcial":
+        text = "(nenhum resultado com todos os termos — mostrando os que casam com algum)\n" + text
+    _out(args, hits, text or "não consta")
 
 
 def cmd_render(args, b: Brain) -> None:
