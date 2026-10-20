@@ -693,7 +693,7 @@ checkbox**, e `FRESH/` é só leitura prática.
 | "o noturno não rodou" | Mac desligado/cron antigo (`./brain schedule status` mostra se é launchd); "Not logged in" no `nightly-agent.log` = ainda está no cron | `./brain nightly` manual de manhã — é o ritual recomendado mesmo |
 | Ação nunca entra no plano de foco | sem `due` ou sem esforço estimado | `./brain action update A-#### --due … --effort 90m` e gere outro plano |
 | Pessoa "não consta" ao citar alguém | ficha nova | `/person <nome>` → ele oferece cadastrar com aliases |
-| Duas fichas da mesma pessoa | criadas antes dos aliases | `./brain person alias` funde por alias |
+| Duas fichas da mesma pessoa | criadas antes dos aliases | `./brain person alias` evita a segunda ficha; se ela já existe, `./brain person merge DUP --into ID` |
 | `/ask` responde "não consta" para algo que existia | filtro muito estreito na busca | tente termo do título; se memória ligada, `./brain memory sync` |
 | Recall/embeddings falham | LM Studio parado ou sem o `bge-m3` carregado | `lms server start` e `lms load text-embedding-bge-m3` (setup.md §3) |
 | Painel "velho" | ninguém renderizou | `/brief` (renderiza antes) ou `./brain render --open` |

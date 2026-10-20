@@ -146,6 +146,27 @@ class LedgerTests(unittest.TestCase):
                 b.record_one({"type": "action.opened", "by": "owner",
                               "data": {"title": "x", "owner": "ghost"}})
 
+    def test_merge_duplicate_person(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            b.record_one({"type": "person.added", "id": "lia-demo", "by": "owner",
+                          "data": {"name": "Lia-demo", "email": "lia@example.com"}})
+            dup = b.record_one({"type": "person.added", "id": "lia-demo", "by": "owner",
+                                "data": {"name": "Lia-demo Duplicada", "email": "lia@example.com"}})
+            self.assertEqual(dup["id"], "lia-demo-2")
+            act = b.record_one({"type": "action.opened", "by": "owner",
+                                "data": {"title": "Ler", "owner": "eu", "people": ["lia-demo-2"]}})
+            with self.assertRaises(util.BrainError):
+                b.record_one({"type": "person.merged", "id": "lia-demo-2", "by": "owner",
+                              "data": {"into": "lia-demo-2"}})
+            b.record_one({"type": "person.merged", "id": "lia-demo-2", "by": "owner",
+                          "data": {"into": "lia-demo"}})
+            self.assertNotIn("lia-demo-2", b.state.people)
+            self.assertEqual(b.state.actions[act["id"]].people, ["lia-demo"])
+            self.assertEqual(people.resolve(b.state, "Lia-demo Duplicada"), ["lia-demo"])
+            self.assertEqual(people.alias_collisions(b.state), [])
+            self.assertEqual(Brain(b.inst).state.merged_people, {"lia-demo-2": "lia-demo"})
+
     def test_clear_due(self):
         with tempfile.TemporaryDirectory() as td:
             b = _brain(Path(td))

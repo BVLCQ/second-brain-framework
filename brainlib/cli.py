@@ -109,6 +109,10 @@ def cmd_person(args, b: Brain) -> None:
         ev = b.record_one(_common({"type": "person.updated", "id": args.id, "data": {
             "name": args.name, "role": args.role, "relation": args.relation, "email": args.email}}, args))
         _out(args, ev, f"✓ {args.id} atualizado")
+    elif args.pcmd == "merge":
+        ev = b.record_one(_common({"type": "person.merged", "id": args.id,
+                                   "data": {"into": args.into, "reason": args.reason}}, args))
+        _out(args, ev, f"✓ {args.id} fundida em {args.into}")
     elif args.pcmd == "resolve":
         cands = people.resolve(st, args.text)
         payload = [{"id": c, "name": st.people[c].name, "role": st.people[c].role} for c in cands]
@@ -578,6 +582,11 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("id")
     for f in ("--name", "--role", "--relation", "--email"):
         x.add_argument(f)
+    _fact_opts(x)
+    x = ps.add_parser("merge", help="funde uma ficha duplicada em outra (a duplicada é aposentada)")
+    x.add_argument("id", help="ficha duplicada, que deixa de existir")
+    x.add_argument("--into", required=True, help="ficha que fica")
+    x.add_argument("--reason")
     _fact_opts(x)
     x = ps.add_parser("resolve")
     x.add_argument("text")

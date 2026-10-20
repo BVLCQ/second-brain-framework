@@ -27,6 +27,7 @@ PLAN_NODE = re.compile(r"^(G\d+|P\d+|P\d+\.\d+)$")
 TYPES: dict[str, dict] = {
     "person.added": {"entity": "person", "new": True, "req": ["name"]},
     "person.updated": {"entity": "person", "req": []},
+    "person.merged": {"entity": "person", "req": ["into"]},
     "action.opened": {"entity": "action", "new": True, "prefix": "A", "req": ["title", "owner"]},
     "action.updated": {"entity": "action", "req": []},
     "action.closed": {"entity": "action", "req": ["how"]},
@@ -106,6 +107,9 @@ def validate(ev: dict, state, plan) -> None:
 
     if t == "person.added":
         _need(eid not in state.people, f"pessoa '{eid}' já existe — use person.updated (alias)")
+    elif t == "person.merged":
+        _person(state, data["into"], "into")
+        _need(data["into"] != eid, f"pessoa '{eid}' não pode ser fundida nela mesma")
     elif t == "action.opened":
         _person(state, data["owner"], "owner")
         _need(data.get("list", "mine") in ACTION_LISTS, f"list inválida: {data.get('list')!r}")

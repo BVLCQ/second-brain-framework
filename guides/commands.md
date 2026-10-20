@@ -337,6 +337,13 @@ Muda `--name`, `--role`, `--relation` ou `--email`, mais as opções de registro
 brain person update marina-demo --role "Sócia-gerente" --by owner
 ```
 
+
+### `brain person merge ID --into ID`
+Funde uma ficha duplicada em outra: a duplicada deixa de existir, e nome, id, e-mail e aliases dela viram aliases da que fica. Ações, decisões, artefatos e mensagens que apontavam para ela passam a apontar para a ficha que fica. Grava `person.merged` no ledger (append-only; as linhas antigas não mudam).
+```bash
+brain person merge marina-demo-2 --into marina-demo --reason "duplicada (mesmo e-mail)" --by owner
+```
+
 ### `brain person resolve TEXTO`
 Diz a quem um texto se refere (sem gravar nada). Ambíguo sai com código 2.
 ```bash

@@ -171,6 +171,7 @@ class Connector:
 class State:
     events: list[dict] = field(default_factory=list)
     people: dict[str, Person] = field(default_factory=dict)
+    merged_people: dict[str, str] = field(default_factory=dict)   # id aposentado → id que o absorveu
     actions: dict[str, Action] = field(default_factory=dict)
     decisions: dict[str, Decision] = field(default_factory=dict)
     deliveries: dict[str, Delivery] = field(default_factory=dict)
@@ -229,6 +230,36 @@ def _d(value) -> date | None:
         return None
 
 
+def _merge_person(st: State, old_id: str, into: str) -> None:
+    """Aposenta `old_id`: nomes, aliases e e-mail viram aliases de `into`; referências são redirecionadas."""
+    old, new = st.people.pop(old_id), st.people[into]
+    for alias in [old.id, old.name, old.email, *old.aliases]:
+        if alias and alias not in new.names():
+            new.aliases.append(alias)
+    for f in ("role", "relation", "email"):
+        if not getattr(new, f) and getattr(old, f):
+            setattr(new, f, getattr(old, f))
+    st.merged_people[old_id] = into
+
+    def swap(ids: list[str]) -> None:
+        for i, v in enumerate(ids):
+            if v == old_id:
+                ids[i] = into
+        ids[:] = list(dict.fromkeys(ids))
+
+    for a in st.actions.values():
+        if a.owner == old_id:
+            a.owner = into
+        swap(a.people)
+    for d in st.decisions.values():
+        swap(d.decided_by)
+    for art in st.artifacts.values():
+        swap(art.people)
+    for m in st.messages.values():
+        if m.to == old_id:
+            m.to = into
+
+
 def apply(st: State, ev: dict) -> None:
     t, eid, data = ev["type"], ev.get("id"), ev.get("data", {})
     when = _d(ev.get("date")) or _d(ev.get("ts"))
@@ -245,6 +276,8 @@ def apply(st: State, ev: dict) -> None:
         for f in ("name", "role", "relation", "email"):
             if data.get(f):
                 setattr(p, f, data[f])
+    elif t == "person.merged":
+        _merge_person(st, eid, data["into"])
 
     elif t.startswith("action."):
         if t == "action.opened":
