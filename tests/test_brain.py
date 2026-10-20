@@ -844,6 +844,15 @@ class MemorySyncTests(unittest.TestCase):
             self.assertIn("retain falho", mem_check["detail"])
 
 
+class ScanDemoTokenTests(unittest.TestCase):
+    def test_demo_suffix_is_not_a_leak(self):
+        import re
+        res = [("pessoa", re.compile(r"(?<!\w)marina(?!\w)", re.I))]
+        self.assertTrue(upstream._scan_line("falei com a Marina ontem", res, ""))
+        self.assertFalse(upstream._scan_line("falei com a Marina-demo ontem, id marina-demo", res, ""))
+        self.assertFalse(upstream._scan_line("marina-demo@example.com", res, ""))
+
+
 class UpstreamTests(unittest.TestCase):
     """update/upstream contra repos git locais: um remoto bare, um mantenedor (A) e uma instância (B)."""
 

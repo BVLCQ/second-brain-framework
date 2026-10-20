@@ -252,10 +252,14 @@ def _user() -> str:
         return ""
 
 
+_DEMO_TOKEN_RE = re.compile(r"[\w.]+-demo\b", re.IGNORECASE)   # `marina-demo`, `Marina-demo`: nome fictício declarado
+
+
 def _scan_line(text: str, term_res: list[tuple[str, re.Pattern]], home: str) -> list[tuple[str, str]]:
     hits: list[tuple[str, str]] = []
+    plain = _DEMO_TOKEN_RE.sub(" ", text)          # o sufixo -demo marca dado fictício: não é vazamento do ledger
     for kind, rx in term_res:
-        if rx.search(text):
+        if rx.search(plain):
             hits.append((f"dado pessoal ({kind})", rx.pattern))
     for m in _HOME_RE.finditer(text):
         who = m.group(2).lower()
