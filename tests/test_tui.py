@@ -88,6 +88,20 @@ class BridgeTest(unittest.TestCase):
 
 
 @unittest.skipUnless(HAVE_TEXTUAL, "textual não instalado (./brain tui --setup)")
+class DetailTest(unittest.TestCase):
+    def test_every_action_detail_renders(self):
+        """Regressão: ação que destrava outra (campo 'destrava') quebrava a ficha com ValueError do rich."""
+        from brainlib.tui import rows, store
+        with tempfile.TemporaryDirectory() as tmp, contextlib.redirect_stdout(io.StringIO()):
+            root = Path(tmp) / "inst"
+            demo_mod.cli(argparse.Namespace(dir=str(root), open=False))
+            st = store.Store(config.load(root))
+            self.assertTrue(any(a["unblocks"] for a in st.m["actions"]))
+            for a in st.m["actions"]:
+                rows.d_action(st, store.Item(a["id"], "action", a))
+
+
+@unittest.skipUnless(HAVE_TEXTUAL, "textual não instalado (./brain tui --setup)")
 class TuiTest(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

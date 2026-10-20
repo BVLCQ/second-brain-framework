@@ -420,7 +420,7 @@ def d_action(store, it) -> Doc:
             ("entregável", link(a["deliverable"], a["deliverable"])) if a["deliverable"] else None,
             ("pessoas", Text(", ".join(store.first_name(p) for p in a["people"]) or "—")),
             ("bloqueada por", Text.assemble(link("⊘ " + bl["id"], bl["id"], AMB), " " + bl["title"])) if bl and bl["open"] else None,
-            ("destrava", Text.assemble(*[(link(u["id"], u["id"]), " " + u["title"] + "  ") for u in un])) if un else None,
+            ("destrava", Text.assemble(*[p for u in un for p in (link(u["id"], u["id"]), " " + u["title"] + "  ")])) if un else None,
             ("origem", Text.assemble(a["origin"] or "—", " ", prov(a["prov"]))),
             ("fonte", Text(a["source_label"], DIM))]
     doc.kv(rows)
