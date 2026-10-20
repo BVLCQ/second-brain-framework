@@ -14,6 +14,7 @@ from .. import util
 from . import dates
 
 RED, AMB, GRN, CYN, VIO, DIM, FAINT = "red", "yellow", "green", "cyan", "magenta", "dim", "dim italic"
+PNK = "hot_pink"   # prazo sugerido pelo agente (volta às cores normais quando o dono define a data)
 GLYPH = {"aberta": ("○", DIM), "fazendo": ("◐", CYN), "aguardando": ("◔", AMB), "bloqueada": ("⊘", AMB),
          "fechada": ("✓", GRN), "descartada": ("✗", FAINT)}
 DELIV_GLYPH = {"feito": ("[x]", GRN), "em-andamento": ("[~]", CYN), "nao-iniciado": ("[ ]", DIM),
@@ -75,14 +76,15 @@ def due_tag(a: dict) -> Text:
         return T((wd_day(a["closed"] or a["due"]), FAINT))
     if not a["due"]:
         return T(("sem prazo", FAINT))
+    sug = PNK if a.get("due_suggested") else None
     if a["overdue_days"]:
-        return T((f"{a['overdue_days']}d atraso", RED))
+        return T((f"{a['overdue_days']}d atraso", sug or RED))
     di = a["due_in"]
     if di == 0:
-        return T(("hoje", AMB))
+        return T(("hoje", sug or AMB))
     if di == 1:
-        return T(("amanhã", AMB))
-    return T((wd_day(a["due"]), DIM))
+        return T(("amanhã", sug or AMB))
+    return T((wd_day(a["due"]), sug or DIM))
 
 
 # ── linhas ──────────────────────────────────────────────────────────────────
@@ -410,9 +412,12 @@ def d_action(store, it) -> Doc:
     doc = Doc().h(Text(a["id"] + " · ", "bold"), (a["title"], "bold"))
     bl = store.by_action.get(a["blocked_by"][0]) if a["blocked_by"] else None
     un = [store.by_action.get(x) for x in a["unblocks"] if x in store.by_action]
-    due = Text(a["due"] + f" · {wd_day(a['due'])} · ") if a["due"] else Text("sem prazo · o foco ignora esta ação", AMB)
+    due = Text(a["due"] + f" · {wd_day(a['due'])} · ", PNK if a.get("due_suggested") else "") if a["due"] \
+        else Text("sem prazo · o foco ignora esta ação", AMB)
     if a["due"]:
         due.append_text(due_tag(a))
+        if a.get("due_suggested"):
+            due.append("  sugerido" + (f": {a['due_reason']}" if a.get("due_reason") else ""), PNK)
     rows = [("lista", Text(a["list"] + ("" if a["mine"] else f" · dono {a['owner_name']}"))),
             ("status", Text.assemble((f"{g} {a['status']}", gs), ("  alta", RED) if a["priority"] == "alta" else "")),
             ("prazo", due), ("esforço", Text(util.fmt_duration(a["effort_min"]))),

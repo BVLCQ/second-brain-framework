@@ -72,6 +72,8 @@ class Pages:
         if not a["due"]:
             return "sem prazo"
         txt = util.fmt_date(a["due"], with_weekday=True)
+        if a.get("due_suggested"):
+            txt += " (sugerido)"
         if a["overdue_days"]:
             return f"⚠ {txt} (atrasada {a['overdue_days']}d)"
         if a["due_in"] is not None and a["due_in"] <= 7:
@@ -571,7 +573,7 @@ class Pages:
             statuses[a["id"]] = a["kanban"]
             fm = {"id": a["id"], "titulo": a["title"], "status": a["kanban"],
                   "lista": {"mine": "minhas", "waiting": "aguardando", "watching": "observando"}[a["list"]],
-                  "dono": a["owner_name"], "prazo": a["due"], "esforco_min": a["effort_min"],
+                  "dono": a["owner_name"], "prazo": a["due"], "prazo_sugerido": bool(a["due_suggested"]), "esforco_min": a["effort_min"],
                   "projeto": a["project"], "goal": a["goal"], "atraso_dias": a["overdue_days"],
                   "idade_dias": a["aging_days"], "aberta_em": a["opened"], "fechada_em": a["closed"],
                   "prioridade": a["priority"], "fonte": a["source_label"], "prov": a["prov"], "tags": ["acao"]}

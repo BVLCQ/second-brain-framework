@@ -405,8 +405,17 @@ em outros agentes, o texto é entendido do mesmo jeito.)
   não passa pela inbox.
 - **Recebe:** a linha da ação: `✓ A-0012 · Ler a política de dados · vence
   15/10 · P1`. E a tarefa já está no painel.
+- **Prazo sugerido:** se você não disse prazo, o agente **sugere** um pelo
+  contexto (prazo do entregável/projeto, acordos com pessoas, agenda e carga)
+  e diz o porquê. Enquanto for sugestão, a data aparece **em rosa** na TUI e no
+  painel (e com "(sugerido)" nos Markdown). Você decide: digita outra data
+  (`/todo prazo A-0012` repete a sugestão; na TUI, tecla `t`) e a cor volta ao
+  normal, ou aceita como está (`brain action update A-0012 --confirm-due --by owner`,
+  ou salve o formulário de prazo da TUI com a mesma data). Sem base nenhuma, ele
+  não sugere ("não consta") e a ação fica sem prazo.
 - **Pegadinha:** tarefa sem prazo fica sem `due` — e o planejador de foco
-  **ignora** o que não tem data. Ele avisa; escute.
+  **ignora** o que não tem data (um prazo sugerido já conta como data).
+  Ele avisa; escute.
 
 #### `/done` — fechar tarefa
 - **Quando:** "fechei/terminei X".

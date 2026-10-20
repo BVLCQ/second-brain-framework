@@ -89,6 +89,16 @@ class BridgeTest(unittest.TestCase):
 
 @unittest.skipUnless(HAVE_TEXTUAL, "textual não instalado (./brain tui --setup)")
 class DetailTest(unittest.TestCase):
+    def test_suggested_due_is_pink_until_owner_decides(self):
+        from brainlib.tui import rows
+        base = {"open": True, "due": "2026-10-20", "due_in": 3, "overdue_days": 0, "closed": None}
+        plain, sug = rows.due_tag(base), rows.due_tag({**base, "due_suggested": True})
+        self.assertEqual(plain.plain, sug.plain)
+        self.assertTrue(all(str(sp.style).endswith(rows.PNK) for sp in sug.spans))
+        self.assertFalse(any(rows.PNK in str(sp.style) for sp in plain.spans))
+        late = rows.due_tag({**base, "due_in": -2, "overdue_days": 2, "due_suggested": True})
+        self.assertTrue(all(rows.PNK in str(sp.style) for sp in late.spans))
+
     def test_every_action_detail_renders(self):
         """Regressão: ação que destrava outra (campo 'destrava') quebrava a ficha com ValueError do rich."""
         from brainlib.tui import rows, store
@@ -133,6 +143,16 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             if not app.busy and not app._lock.locked() and len(app.screen_stack) == 1:
                 return
         self.fail("o TUI não terminou de executar")
+
+    async def settle_new_action(self, app, pilot) -> None:
+        """Ação criada sem prazo: o agente oferece sugerir um (modal ⚡). Aqui só dispensa; o teste dele é à parte."""
+        for _ in range(80):
+            await pilot.pause(0.1)
+            if type(app.screen).__name__ == "AgentModal":
+                self.assertIn("Sugerir prazo", app.screen.title_)
+                await pilot.press("escape")
+                break
+        await self.settle(app, pilot)
 
     def app(self):
         from brainlib.tui.app import BrainApp
@@ -272,6 +292,31 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             log = self.log_text(app)
             self.assertIn(f"$ brain action close {target} --how", log)
             self.assertIn("brain render", log)
+
+    async def test_new_action_without_due_offers_agent_suggestion(self):
+        app = self.app()
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause(0.4)
+            await pilot.press("n")
+            await pilot.pause(0.3)
+            await self.fill(pilot, title="Sem prazo dito")
+            await pilot.press("ctrl+s")
+            for _ in range(80):
+                await pilot.pause(0.1)
+                if type(app.screen).__name__ == "AgentModal":
+                    break
+            self.assertEqual(type(app.screen).__name__, "AgentModal")
+            aid = next(x for x in self.state(app).actions.values() if x.title == "Sem prazo dito").id
+            self.assertIn(f"/todo prazo {aid}", app.screen.prompt)
+            await pilot.press("escape")
+            await self.settle(app, pilot)
+            # com prazo digitado, não há o que sugerir
+            await pilot.press("n")
+            await pilot.pause(0.3)
+            await self.fill(pilot, title="Com prazo dito", due="2026-10-30")
+            await pilot.press("ctrl+s")
+            await self.settle(app, pilot)
+            self.assertEqual(len(app.screen_stack), 1)
 
     async def test_new_action_resolves_natural_date(self):
         app = self.app()
@@ -589,7 +634,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             await pilot.press("tab")
             await self.typ(pilot, "caio-demo")
             await pilot.press("enter")
-            await self.settle(app, pilot)
+            await self.settle_new_action(app, pilot)
             a = next(x for x in self.state(app).actions.values() if x.title == "Alinhar com Caio-demo")
             self.assertEqual(a.deliverable, "P1.3")
             self.assertIn("caio-demo", a.people)
@@ -1063,7 +1108,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(app.screen.query_one("#f_project").value, pid)
             await self.fill(pilot, title="Tarefa do entregável")
             await pilot.press("ctrl+s")
-            await self.settle(app, pilot)
+            await self.settle_new_action(app, pilot)
             a = next(x for x in self.state(app).actions.values() if x.title == "Tarefa do entregável")
             self.assertEqual((a.deliverable, a.project), (f"{pid}.1", pid))
 
@@ -1179,7 +1224,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             await pilot.pause(0.2)
             self.assertIn(f"--deliverable {proj}.1", self.text_of(app.screen.query_one("#cmdp")))
             await pilot.press("ctrl+s")
-            await self.settle(app, pilot)
+            await self.settle_new_action(app, pilot)
             b = next(x for x in self.state(app).actions.values() if x.title == "Com número")
             self.assertEqual(b.deliverable, f"{proj}.1")
 

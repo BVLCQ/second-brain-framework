@@ -138,7 +138,7 @@ def _action_line(b: Brain, aid: str) -> str:
     a = b.state.actions[aid]
     bits = [a.id, b.state.effective_status(a), a.title, f"dono: {b.state.person_name(a.owner)}"]
     if a.due:
-        bits.append(f"prazo {a.due.isoformat()}")
+        bits.append(f"prazo {a.due.isoformat()}" + (" (sugerido)" if a.due_suggested else ""))
     if a.effort_min:
         bits.append(f"esforço {util.fmt_duration(a.effort_min)}")
     if a.project:
@@ -155,6 +155,7 @@ def cmd_action(args, b: Brain) -> None:
         lst = args.list or ("mine" if owner == b.owner else "waiting")
         ev = b.record_one(_common({"type": "action.opened", "data": {
             "title": args.title, "owner": owner, "list": lst, "due": args.due,
+            "due_suggested": args.due_suggested or None, "due_reason": args.due_reason,
             "effort_min": _effort(b, args.effort), "project": args.project, "deliverable": args.deliverable,
             "blocked_by": util.split_csv(args.blocked_by), "unblocks": util.split_csv(args.unblocks),
             "people": _resolve_people(b, args.people or []), "priority": args.priority,
@@ -164,6 +165,10 @@ def cmd_action(args, b: Brain) -> None:
         data = {"note": args.note, "status": args.status, "due": args.due, "list": args.list,
                 "effort_min": _effort(b, args.effort), "project": args.project,
                 "deliverable": args.deliverable, "priority": args.priority, "title": args.title}
+        if args.due_suggested:
+            data["due_suggested"], data["due_reason"] = True, args.due_reason
+        if args.confirm_due:
+            data["due_confirmed"] = True
         if args.owner:
             data["owner"] = _resolve_people(b, [args.owner])[0]
         if args.blocked_by is not None:
@@ -607,6 +612,9 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--owner", help="id/alias do dono da ação (padrão: você)")
     x.add_argument("--list", choices=["mine", "waiting", "watching"])
     x.add_argument("--due")
+    x.add_argument("--due-suggested", action="store_true",
+                   help="o prazo é sugestão do agente (--by agent); aparece em rosa até o dono definir/confirmar")
+    x.add_argument("--due-reason", help="por que essa data (com --due-suggested)")
     x.add_argument("--effort", help="90m · 2h · 1h30 · 1d")
     x.add_argument("--project")
     x.add_argument("--deliverable")
@@ -625,6 +633,11 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--owner")
     x.add_argument("--list", choices=["mine", "waiting", "watching"])
     x.add_argument("--due")
+    x.add_argument("--due-suggested", action="store_true",
+                   help="o prazo é sugestão do agente (--by agent); aparece em rosa até o dono definir/confirmar")
+    x.add_argument("--due-reason", help="por que essa data (com --due-suggested)")
+    x.add_argument("--confirm-due", action="store_true",
+                   help="dono aceita o prazo sugerido como está (--by owner)")
     x.add_argument("--clear-due", action="store_true")
     x.add_argument("--effort")
     x.add_argument("--project")

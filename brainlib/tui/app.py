@@ -180,6 +180,7 @@ class BrainApp(App):
         self._lock: asyncio.Lock | None = None
         self.busy = ""
         self._quit_armed = False
+        self._suggest_for: str | None = None
 
     @property
     def p(self) -> int:
@@ -959,6 +960,20 @@ class BrainApp(App):
                     a += [opt, v[key]]
             return [a]
 
+        def after_suggest() -> None:
+            """Sem prazo digitado: oferece o agente para sugerir um (aparece em rosa até você decidir)."""
+            title = self._suggest_for
+            hit = [] if not title else sorted((x["id"] for x in self.store.m["actions"] if x["title"] == title and x["open"] and not x["due"]))
+            if hit:
+                self.ask_agent(f"Sugerir prazo para {hit[-1]}", [
+                    "Lê o contexto: PLANNING (prazos de projeto/entregável), acordos com pessoas, agenda e carga atual",
+                    "Grava o prazo como sugestão (brain action update … --due-suggested): fica rosa até você definir a data",
+                    "Sem base para sugerir, diz 'não consta' e deixa a ação sem prazo"], f"/todo prazo {hit[-1]}")
+
+        def build_and_remember(v):
+            self._suggest_for = v["title"] if not self._iso(v["due"]) and v["list"] != "watching" else None
+            return build(v)
+
         self.form(FormSpec(f"Nova ação em {pre['deliv']}" if pre.get("deliv") else "Nova ação", [
             Field("title", "título", req=True, ph="o que precisa acontecer"),
             Field("due", "prazo", ph=dates.HELP, check=self._due_check, res=dates.describe),
@@ -972,7 +987,8 @@ class BrainApp(App):
             Field("people", "pessoas", ph="marina-demo, heitor-demo (opcional)"),
             Field("blocked", "bloqueada por", ph="A-#### (opcional)"),
             Field("link", "link", ph="URL (opcional)")],
-            build, sub="Equivalente ao /todo, sem o agente."))
+            build_and_remember, sub="Equivalente ao /todo. Sem prazo, o agente oferece uma sugestão (rosa).",
+            after=after_suggest))
 
     def clear_log(self) -> None:
         self.query_one("#log", RichLog).clear()
@@ -1106,9 +1122,11 @@ class BrainApp(App):
         def build(v):
             return [["action", "update", a["id"]] + (self._due_arg(v["due"]) or ["--clear-due"]) + ["--by", "owner"]]
 
+        sub = ("Prazo sugerido pelo agente (rosa): salve com a mesma data para confirmar, ou digite outra."
+               if a.get("due_suggested") else "Deixe em branco para remover o prazo.")
         self.form(FormSpec(f"Prazo de {a['id']}", [
             Field("due", "prazo", value=a["due"] or "", ph=dates.HELP, check=self._due_check, res=dates.describe)],
-            build, sub="Deixe em branco para remover o prazo."))
+            build, sub=sub))
 
     def cycle_status(self) -> None:
         a = self.cur().data

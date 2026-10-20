@@ -72,6 +72,10 @@ Para cada item da inbox (ignore `.keep.md`):
 JSON
 ```
 
+Prazo de ação: o que o documento/conversa **diz** ("até sexta") vai em `due` normal, `[doc]`/`[observado]`. Ação nova
+sem prazo dito: sugira um pelo contexto (`"due_suggested":true,"due_reason":"…"` em `data`; método em `commands/todo/SKILL.md`,
+seção *Sugerir prazo*). Sem base, deixe sem prazo — não invente.
+
 Fonte já registrada (`artifact.added` com o mesmo `raw`) = **pule**. Re-rodar = zero duplicatas.
 
 ## Recibo (chat)

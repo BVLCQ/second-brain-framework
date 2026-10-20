@@ -128,6 +128,41 @@ class LedgerTests(unittest.TestCase):
             self.assertEqual(b.state.blocked(b.state.actions["A-0002"]), [])
             self.assertEqual(b.validate_all(), [])
 
+    def test_suggested_due_lifecycle(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            a = b.record_one({"type": "action.opened", "by": "agent", "prov": "observado", "source": "chat",
+                              "data": {"title": "Sugerida", "owner": "eu", "due": "2026-10-16",
+                                       "due_suggested": True, "due_reason": "entregável P1.1 vence 20/10"}})["id"]
+            st = b.state.actions[a]
+            self.assertTrue(st.due_suggested)
+            self.assertEqual(st.due_reason, "entregável P1.1 vence 20/10")
+            # só o agente sugere; sugestão exige data
+            with self.assertRaises(util.BrainError):
+                b.record_one({"type": "action.updated", "id": a, "by": "owner",
+                              "data": {"due": "2026-10-17", "due_suggested": True}})
+            with self.assertRaises(util.BrainError):
+                b.record_one({"type": "action.updated", "id": a, "by": "agent", "prov": "observado", "source": "chat",
+                              "data": {"due_suggested": True}})
+            # o dono aceita como está: mesma data, deixa de ser sugestão
+            b.record_one({"type": "action.updated", "id": a, "by": "owner", "data": {"due_confirmed": True}})
+            self.assertFalse(b.state.actions[a].due_suggested)
+            self.assertEqual(b.state.actions[a].due.isoformat(), "2026-10-16")
+            with self.assertRaises(util.BrainError):      # nada pendente para confirmar
+                b.record_one({"type": "action.updated", "id": a, "by": "owner", "data": {"due_confirmed": True}})
+            # nova sugestão; qualquer data do dono (ou limpar o prazo) a derruba
+            sug = {"due": "2026-10-14", "due_suggested": True, "due_reason": "x"}
+            b.record_one({"type": "action.updated", "id": a, "by": "agent", "prov": "observado", "source": "chat", "data": sug})
+            self.assertTrue(b.state.actions[a].due_suggested)
+            b.record_one({"type": "action.updated", "id": a, "by": "owner", "data": {"due": "2026-10-14"}})
+            self.assertFalse(b.state.actions[a].due_suggested)
+            self.assertEqual(b.state.actions[a].due_reason, "")
+            b.record_one({"type": "action.updated", "id": a, "by": "agent", "prov": "observado", "source": "chat", "data": sug})
+            b.record_one({"type": "action.updated", "id": a, "by": "owner", "data": {"clear": ["due"]}})
+            self.assertFalse(b.state.actions[a].due_suggested)
+            self.assertIsNone(b.state.actions[a].due)
+            self.assertEqual(b.validate_all(), [])
+
     def test_decision_supersede(self):
         with tempfile.TemporaryDirectory() as td:
             b = _brain(Path(td))

@@ -138,6 +138,11 @@ O agente **propõe** fechar ação com evidência (`brain proposal add --kind fe
 não fecha só porque um e-mail "parece" resolver. Fecho é do dono (`/done` ou
 checkbox em `FRESH/todo.md` / `status:` na ficha da ação — colhido no próximo render).
 
+**Prazo sugerido:** ação nova sem prazo dito recebe do agente uma data **sugerida**
+(`due_suggested`, com `due_reason`): só o agente sugere; aparece em rosa até o dono
+definir uma data (qualquer `--due` dele a torna firme) ou confirmar (`--confirm-due`).
+Sem base de contexto (entregável, acordo, agenda), não se sugere — "não consta".
+
 Atraso e bloqueio se calculam na leitura. Campos `blocked_by` / `unblocks`
 ligam ações. Fechar uma ação anota as que ela destrava — não as fecha.
 

@@ -62,6 +62,7 @@ class ModelBuilder:
             "list": a.list, "status": eff, "kanban": KANBAN.get(eff, eff), "open": a.open,
             "mine": a.owner == self.owner,
             "due": _iso(a.due), "due_in": (a.due - self.today).days if a.open and a.due else None,
+            "due_suggested": bool(a.open and a.due and a.due_suggested), "due_reason": a.due_reason,
             "overdue_days": overdue,
             "aging_days": (self.today - last).days if a.open and last else None,
             "effort_min": a.effort_min, "priority": a.priority,

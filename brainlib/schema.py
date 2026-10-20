@@ -125,6 +125,13 @@ def validate(ev: dict, state, plan) -> None:
             _need(data["priority"] in PRIORITIES, f"priority inválida: {data['priority']!r}")
         if data.get("due"):
             parse_date(data["due"])
+        if data.get("due_suggested"):
+            _need(data.get("due"), f"{t}: due_suggested exige data.due")
+            _need(ev.get("by") == "agent", f"{t}: só o agente sugere prazo (by=agent); "
+                  "prazo do dono é declaração, sem due_suggested")
+        if data.get("due_confirmed"):
+            _need(t == "action.updated" and ev.get("by") == "owner" and state.actions[eid].due_suggested,
+                  f"{t}: due_confirmed é só do dono (by=owner) e só vale com prazo sugerido pendente")
         if data.get("project"):
             _plan_node(plan, data["project"], "project")
         if data.get("deliverable"):

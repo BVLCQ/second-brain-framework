@@ -35,6 +35,8 @@ class Action:
     list: str = "mine"
     status: str = "aberta"           # aberta | fazendo | aguardando | fechada | descartada
     due: date | None = None
+    due_suggested: bool = False      # prazo sugerido pelo agente; qualquer data do dono (ou confirmação) zera
+    due_reason: str = ""             # por que o agente sugeriu essa data
     effort_min: int | None = None
     project: str | None = None
     deliverable: str | None = None
@@ -284,6 +286,8 @@ def apply(st: State, ev: dict) -> None:
             st.actions[eid] = Action(
                 id=eid, title=data["title"], owner=data["owner"], list=data.get("list", "mine"),
                 due=_d(data.get("due")), effort_min=data.get("effort_min"),
+                due_suggested=bool(data.get("due_suggested")) and bool(data.get("due")),
+                due_reason=data.get("due_reason", "") if data.get("due_suggested") else "",
                 project=data.get("project"), deliverable=data.get("deliverable"),
                 blocked_by=list(data.get("blocked_by", [])), unblocks=list(data.get("unblocks", [])),
                 people=list(data.get("people", [])),
@@ -296,10 +300,17 @@ def apply(st: State, ev: dict) -> None:
                 if data.get(f):
                     setattr(a, f, data[f])
             if "due" in data:
+                # data nova sem due_suggested = o dono decidiu (a sugestão deixa de valer)
                 a.due = _d(data["due"])
+                a.due_suggested = bool(data.get("due_suggested")) and a.due is not None
+                a.due_reason = data.get("due_reason", "") if a.due_suggested else ""
+            if data.get("due_confirmed"):
+                a.due_suggested, a.due_reason = False, ""
             for f in data.get("clear", []):
                 if f in ("due", "effort_min", "project", "deliverable"):
                     setattr(a, f, None)
+                if f == "due":
+                    a.due_suggested, a.due_reason = False, ""
             if data.get("effort_min"):
                 a.effort_min = data["effort_min"]
             if "blocked_by" in data:
