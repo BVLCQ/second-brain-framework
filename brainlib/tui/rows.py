@@ -87,6 +87,14 @@ def due_tag(a: dict) -> Text:
     return T((wd_day(a["due"]), sug or DIM))
 
 
+def status_mark(a: dict) -> Text:
+    """Ícone de status de uma ação: atrasada (⚠) > bloqueada (⊘) > aberta (○) > concluída (✓)."""
+    if a["overdue_days"]:
+        return T(("⚠ ", RED))
+    g, gs = GLYPH.get(a["status"], ("○", DIM))
+    return T((g + " ", gs))
+
+
 # ── linhas ──────────────────────────────────────────────────────────────────
 def row(store, it, width: int) -> Text:
     k, d = it.kind, it.data
@@ -480,7 +488,7 @@ def d_plan(store, it) -> Doc:
             doc.p(("Nenhuma.", DIM))
         for i in ids:
             a = store.by_action[i]
-            doc.p(link(i, i, "bold"), f" {a['title']} ", due_tag(a))
+            doc.p(status_mark(a), link(i, i, "bold"), f" {a['title']} ", due_tag(a))
         decisions_section(doc, store, d["id"])
     else:
         p, g = it.extra["project"], it.extra["goal"]
@@ -494,7 +502,7 @@ def d_plan(store, it) -> Doc:
         if not ac:
             doc.p(("Nenhuma ação aponta para este entregável.", AMB))
         for a in ac:
-            doc.p(link(a["id"], a["id"], "bold"), f" {a['title']} ", due_tag(a))
+            doc.p(status_mark(a), link(a["id"], a["id"], "bold"), f" {a['title']} ", due_tag(a))
         decisions_section(doc, store, d["id"])
         doc.blank().p(("Marcar estado é um fato, não um gate: space ou s. Criar, renomear ou fechar goal e projeto é gate: E.", DIM))
     hint = {"g": "n cria um projeto neste goal · G cria um goal (gate)", "p": "n cria um entregável neste projeto · G cria um goal (gate)",
