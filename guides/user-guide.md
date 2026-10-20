@@ -56,7 +56,7 @@ regra e usar a porta certa.
 
 **O que você ganha de concreto:**
 
-- "O que foi decidido sobre o pipeline, quem decidiu e quando?" — respondido
+- "O que foi decidido sobre o forno, quem decidiu e quando?" — respondido
   com fonte em segundos, não "deixa eu procurar naquele doc".
 - O que você deve, o que te devem e o que é só ruído — em três listas
   separadas que não se misturam.
@@ -154,7 +154,7 @@ agente: *"execute o setup.md"* resolve.
 No terminal, na pasta do repo:
 
 ```bash
-./brain init --owner-id ana --owner-name "Ana Souza"
+./brain init --owner-id voce --owner-name "Seu Nome"
 ```
 
 Isso semeia o `vault/` vazio a partir do template. Nada de conteúdo falso,
@@ -171,8 +171,8 @@ você em **4 blocos curtos** (3–5 perguntas por vez, tudo numa resposta só):
 2. **Para onde vai** — 2 a 4 goals com horizonte; projetos; entregáveis com
    prazo (se souber; sem prazo também vale).
 3. **Quem te cerca** — pessoas recorrentes (nome, apelido, e-mail). Cada uma
-   vira uma ficha com aliases — é o que impede o cérebro de criar "Ana R."
-   e "Ana Ribeiro" como duas pessoas.
+   vira uma ficha com aliases — é o que impede o cérebro de criar "M.-demo"
+   e "Marina-demo" como duas pessoas.
 4. **O que observar** (opcional) — canais/caixas/boards que ele deve puxar
    sozinho (vira o `watch.toml`, seção 4).
 
@@ -252,7 +252,7 @@ Duas regras de ouro:
 
 **Gmail.** No Claude Code, adicione o conector MCP do Gmail (Google) e
 autorize com a conta certa. Feito isso, `/gmail` funciona: o agente busca as
-threads (padrão: hoje; filtro seu vira query, ex. `/gmail da Ana`),
+threads (padrão: hoje; filtro seu vira query, ex. `/gmail da Marina-demo`),
 snapshota e processa. O digest destaca o que **cobra você** e o que
 **parece fechar** alguma ação — e atenção: isso último vira uma *proposta*
 (`R-####`) com a evidência, nunca um fechamento automático.
@@ -263,7 +263,7 @@ serve para uma coisa: o planejador de foco saber onde você está ocupado.
 Escrever no calendário é porta exclusiva do `/focus` (abaixo).
 
 **Slack.** Adicione o conector MCP do Slack. `/slack #time-dados` (ou
-`/slack @ana`) puxa a janela (padrão 7 dias), snapshota e resume o que
+`/slack @marina-demo`) puxa a janela (padrão 7 dias), snapshota e resume o que
 mudou: menções a você, decisões, promessas. **Para enviar**, nada disso:
 é `/outbox`, com allowlist e aprovação do texto exato.
 
@@ -326,13 +326,13 @@ jogar coisa na inbox.
 
 **Durante o dia (zero esforço — só captura)**
 
-- Precisa lembrar de algo? `/todo falar com o Bruno sobre o draft até sexta`.
+- Precisa lembrar de algo? `/todo falar com o Heitor-demo sobre o draft até sexta`.
 - Terminou algo? `/done A-0014 enviado, ele confirmou`.
 - Meeting gravada/transcrita? Arraste o arquivo para `vault/RAW/inbox/`.
 - Doc importante, print, nota solta? Mesma coisa: inbox. Sem organizar,
   sem renomear bonito — organizar é trabalho do agente, não seu.
-- Curiosidade pontual? `/ask o que decidimos sobre o agente de suporte?`
-- Vai entrar numa conversa com alguém? `/person ana` — card de preparação:
+- Curiosidade pontual? `/ask o que decidimos sobre o ponto novo?`
+- Vai entrar numa conversa com alguém? `/person marina-demo` — card de preparação:
   quem é, o que ela te deve, o que você deve a ela, últimas decisões dela.
 
 **Fim do dia (nada)**
@@ -354,7 +354,7 @@ manhã. O sistema não pune atraso de captura; ele pune só a não-captura.
    tabela, diga "ok", e os blocos nascem no calendário como *Focus time*
    (ou baixam um `.ics` para importar).
 3. Preparando 1:1? `/share status` (ou `/share project P1`) gera um HTML
-   limpo para enviar ao gestor; `/person ana` é o seu lado da mesa.
+   limpo para enviar ao gestor; `/person marina-demo` é o seu lado da mesa.
 4. Fechando mês/ciclo? `/recap G1` monta o dossiê datado com histórico e
    impacto — cada afirmação com fonte.
 
@@ -410,7 +410,7 @@ em outros agentes, o texto é entendido do mesmo jeito.)
 
 #### `/done` — fechar tarefa
 - **Quando:** "fechei/terminei X".
-- **Digita:** `/done A-0014 enviei o draft, Bruno confirmou`
+- **Digita:** `/done A-0014 enviei o draft, Heitor-demo confirmou`
 - **Por dentro:** ID exato fecha direto. Se você escrever texto em vez do
   ID, ele casa: achou uma única → confirma em 1 linha; várias → lista para
   você escolher; ação de terceiro ou muito antiga → sempre confirma antes.
@@ -419,7 +419,7 @@ em outros agentes, o texto é entendido do mesmo jeito.)
   esperavam por essa recebem nota de "destravada" — não fecham sozinhas.
 - **Recebe:** id, como fechou, se virou entrega, o que desbloqueou.
 - **Pegadinha:** "operacional" não é entrega. Responder um e-mail não gera
-  `E-####`; entregar o dicionário v1 gera. Não force — o sistema já julga.
+  `E-####`; entregar o manual de rotinas v1 gera. Não force — o sistema já julga.
 
 ### Entrada de informação
 
@@ -455,7 +455,7 @@ em outros agentes, o texto é entendido do mesmo jeito.)
 
 #### `/gmail` · `/slack` · `/calendar` · `/drive` — atalhos por fonte
 - **Quando:** quer aquela fonte específica, com filtro seu.
-- **Digita:** `/gmail da Ana` · `/slack #time-dados 3d` · `/calendar` ·
+- **Digita:** `/gmail da Marina-demo` · `/slack #time-dados 3d` · `/calendar` ·
   `/drive política de dados v3`
 - **Recebe:** digest/encaixe correspondente. `/calendar` é especial: não
   extrai ações — a agenda existe para o `/focus` saber seus buracos.
@@ -470,13 +470,13 @@ em outros agentes, o texto é entendido do mesmo jeito.)
 - **Por dentro:** busca no índice determinístico (+ memória semântica se
   ligada), abre o artefato citado, desce ao original só se precisar da
   letra exata.
-- **Recebe:** a resposta com fonte (`PROCESSED/2026/10/kickoff.md`) e
-  proveniência ("decidido pela Ana em 02/10 [observado]"). Se não sabe:
+- **Recebe:** a resposta com fonte (`PROCESSED/2026/10/vistoria-imovel.md`) e
+  proveniência ("decidido pela Marina-demo em 02/10 [observado]"). Se não sabe:
   **"não consta"** — e isso é a resposta certa, não uma falha.
 - **Pegadinha:** ele não completa com "conhecimento geral". Isso é feature.
 
 #### `/person` — dossiê de alguém
-- **Digita:** `/person ana`
+- **Digita:** `/person marina-demo`
 - **Recebe:** quem é (papel, relação, aliases) · o que ela te deve (waiting)
   · o que você deve a ela · decisões dela (quem/quando/fonte) · última
   interação · threads abertas. É o card de prep de reunião.
@@ -532,8 +532,8 @@ em outros agentes, o texto é entendido do mesmo jeito.)
 ### Mundo externo (as portas)
 
 #### `/outbox` — o cérebro redige, você manda
-- **Quando:** "cobra a Carla", "avisa o time do atraso".
-- **Digita:** `/outbox cobrar a Carla sobre o MVP da planilha`
+- **Quando:** "cobra o Caio-demo", "avisa o time do atraso".
+- **Digita:** `/outbox cobrar o Caio-demo sobre o orçamento da reforma`
 - **Por dentro:** destinatário precisa estar na allowlist
   (`[outbound].allow` no brain.toml — se não estiver, ele te mostra a linha
   e PARA). Ele redige um texto curto e mostra **inteiro**, numerado.
@@ -545,7 +545,7 @@ em outros agentes, o texto é entendido do mesmo jeito.)
   trancado por padrão.
 
 #### `/share` — export para um colega
-- **Quando:** "me dá um status do P1 pra mandar pra Ana".
+- **Quando:** "me dá um status do P1 pra mandar pra Marina-demo".
 - **Digita:** `/share project P1` (também: `/share goal G1`,
   `/share status`, `/share period 2026-09-01:2026-09-30`) — HTML ou MD.
 - **Recebe:** um arquivo **autocontido** em `vault/reports/share/`, sem

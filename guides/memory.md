@@ -98,7 +98,7 @@ url = "http://localhost:8888"
 ./brain memory setup
 ./brain memory sync          # incremental; pode --limit 50 --dry-run
 ./brain memory status
-./brain memory recall "quem decidiu congelar o agente?"
+./brain memory recall "quem decidiu o ponto novo?"
 ```
 
 O retain do Hindsight é assíncrono: o `sync` guarda o `operation_id` de cada documento em

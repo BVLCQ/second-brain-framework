@@ -31,7 +31,7 @@ def _inst(tmp: Path) -> config.Instance:
     (tmp / "vault" / "reports").mkdir(parents=True)
     (tmp / "config" / "brain.toml").write_text(
         '[owner]\nid = "eu"\nname = "Dona"\n\n'
-        '[outbound]\nallow = ["marina", "#time"]\n\n'
+        '[outbound]\nallow = ["marina-demo", "#time"]\n\n'
         '[publish]\ndestinations = ["slack:#time"]\n', encoding="utf-8")
     (tmp / "vault" / "PLANNING" / "goals.md").write_text(
         "# PLANNING\n\n## G1 — Meta\n- status: ativo\n- horizonte: 2026-12-31\n"
@@ -45,8 +45,8 @@ def _brain(tmp: Path) -> Brain:
     b = Brain(_inst(tmp))
     b.record_one({"type": "person.added", "id": "eu", "by": "owner",
                   "data": {"name": "Dona", "aliases": ["Eu"], "relation": "dono"}})
-    b.record_one({"type": "person.added", "id": "marina", "by": "owner",
-                  "data": {"name": "Marina Duarte", "aliases": ["Marina", "Mari"], "email": "marina@x.com"}})
+    b.record_one({"type": "person.added", "id": "marina-demo", "by": "owner",
+                  "data": {"name": "Marina-demo", "aliases": ["Marina-demo", "Mari-demo"], "email": "marina-demo@x.com"}})
     return b
 
 
@@ -73,8 +73,8 @@ class UtilTests(unittest.TestCase):
         self.assertEqual(util.parse_duration("1d"), 480)
 
     def test_fold_slug(self):
-        self.assertEqual(util.fold("  Marina  Duarte "), "marina duarte")
-        self.assertEqual(util.slugify("Marina Duarte"), "marina-duarte")
+        self.assertEqual(util.fold("  Marina  demo "), "marina demo")
+        self.assertEqual(util.slugify("Marina-demo"), "marina-demo")
 
     def test_today_frozen(self):
         self.assertEqual(util.today(), date(2026, 10, 9))
@@ -114,7 +114,7 @@ class LedgerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             b = _brain(Path(td))
             a1 = b.record_one({"type": "action.opened", "by": "owner",
-                               "data": {"title": "Revisar", "owner": "marina", "list": "waiting"}})
+                               "data": {"title": "Revisar", "owner": "marina-demo", "list": "waiting"}})
             self.assertEqual(a1["id"], "A-0001")
             a2 = b.record_one({"type": "action.opened", "by": "owner",
                                "data": {"title": "Publicar", "owner": "eu", "due": "2026-10-12",
@@ -133,9 +133,9 @@ class LedgerTests(unittest.TestCase):
             b = _brain(Path(td))
             d1 = b.record_one({"type": "decision.made", "by": "agent", "prov": "observado",
                                "source": "chat",
-                               "data": {"title": "Congelar", "decided_by": ["marina"], "project": "P1"}})
+                               "data": {"title": "Congelar", "decided_by": ["marina-demo"], "project": "P1"}})
             b.record_one({"type": "decision.made", "by": "agent", "prov": "doc", "source": "chat",
-                          "data": {"title": "Portar", "decided_by": ["marina"], "project": "P1",
+                          "data": {"title": "Portar", "decided_by": ["marina-demo"], "project": "P1",
                                    "supersedes": d1["id"]}})
             self.assertEqual(b.state.decisions[d1["id"]].status, "substituida")
 
@@ -181,8 +181,8 @@ class PeopleTests(unittest.TestCase):
     def test_resolve(self):
         with tempfile.TemporaryDirectory() as td:
             b = _brain(Path(td))
-            self.assertEqual(people.resolve(b.state, "Marina"), ["marina"])
-            self.assertEqual(people.resolve(b.state, "marina@x.com"), ["marina"])
+            self.assertEqual(people.resolve(b.state, "Marina-demo"), ["marina-demo"])
+            self.assertEqual(people.resolve(b.state, "marina-demo@x.com"), ["marina-demo"])
             self.assertEqual(people.resolve(b.state, "ninguém"), [])
 
 
@@ -253,7 +253,7 @@ class OutboxTests(unittest.TestCase):
             b = _brain(Path(td))
             with self.assertRaises(util.BrainError):
                 outbox.draft(b, "ghost", "oi", None, None)
-            ev = outbox.draft(b, "marina", "Oi Marina, tudo bem?", None, "teste")
+            ev = outbox.draft(b, "marina-demo", "Oi Marina-demo, tudo bem?", None, "teste")
             with self.assertRaises(util.BrainError):
                 outbox.sent(b, ev["id"], None)
             outbox.approve(b, ev["id"], "enviar 1")
@@ -473,7 +473,7 @@ class NightlyGateTests(unittest.TestCase):
     def test_forbids_approval(self):
         with tempfile.TemporaryDirectory() as td:
             b = _brain(Path(td))
-            ev = outbox.draft(b, "marina", "oi", None, None)
+            ev = outbox.draft(b, "marina-demo", "oi", None, None)
             os.environ["BRAIN_NIGHTLY"] = "1"
             try:
                 with self.assertRaises(util.BrainError):
@@ -490,7 +490,7 @@ class ShareMcpRenderTests(unittest.TestCase):
                           "data": {"title": "Enviar draft", "owner": "eu", "due": "2026-10-11",
                                    "effort_min": 45, "project": "P1"}})
             b.record_one({"type": "decision.made", "by": "agent", "prov": "observado", "source": "chat",
-                          "data": {"title": "Draft sai sem pipeline", "decided_by": ["marina"],
+                          "data": {"title": "Draft sai sem pipeline", "decided_by": ["marina-demo"],
                                    "project": "P1"}})
             report = render.render_all(b, do_harvest=False)
             self.assertGreater(report["total"], 8)
@@ -502,7 +502,7 @@ class ShareMcpRenderTests(unittest.TestCase):
             path = share.export(b, "project", "P1", "md")
             text = path.read_text(encoding="utf-8")
             self.assertIn("Draft sai sem pipeline", text)
-            self.assertIn("Marina Duarte", text)
+            self.assertIn("Marina-demo", text)
             self.assertIn("peso", text)
             (b.inst.reports / "share").mkdir(parents=True, exist_ok=True)
             outside = b.inst.config_dir / ".env"
@@ -538,7 +538,7 @@ class DemoTests(unittest.TestCase):
             report = render.render_all(b)
             dash = Path(report["dashboard"]).read_text(encoding="utf-8")
             self.assertIn("Reforma do novo ponto", dash)
-            self.assertIn("Marina Duarte", dash)
+            self.assertIn("Marina-demo", dash)
             self.assertTrue((target / "vault" / "FRESH" / "todo.md").exists())
             self.assertTrue((target / "vault" / "FRESH" / "dashboard" / "index.html").exists())
             self.assertFalse((target / "vault" / "FRESH" / "bases").exists())
@@ -581,21 +581,21 @@ class ExtractTests(unittest.TestCase):
             b = _brain(Path(td))
             raw_items = [
                 {"type": "action.opened", "id": "A-9999", "data": {"title": "Ler política",
-                 "owner": "Marina", "list": "mine", "due": "2026-10-15", "effort_min": 30}},
+                 "owner": "Marina-demo", "list": "mine", "due": "2026-10-15", "effort_min": 30}},
                 {"type": "decision.made", "data": {"title": "Congelar pipeline",
-                 "decided_by": "Marina Duarte", "project": "P1"}},
+                 "decided_by": "Marina-demo", "project": "P1"}},
                 {"type": "action.closed", "data": {"id": "A-0001"}},   # fora do escopo
             ]
             items, dropped = extract_mod.refine(b, raw_items, "RAW/2026/10/x.md")
             self.assertEqual(len(items), 2)
             self.assertEqual(dropped, ["tipo fora do escopo do extrator: 'action.closed'"])
-            # alias Marina → marina resolvido deterministicamente; id inventado ignorado
-            self.assertEqual(items[0]["data"]["owner"], "marina")
+            # alias Marina-demo → marina-demo resolvido deterministicamente; id inventado ignorado
+            self.assertEqual(items[0]["data"]["owner"], "marina-demo")
             # "eu" do modelo mapeia para o dono real da instância, seja qual for o id
             items_eu, _ = extract_mod.refine(b, [{"type": "action.opened",
                 "data": {"title": "x", "owner": "Eu"}}], "RAW/x.md")
             self.assertEqual(items_eu[0]["data"]["owner"], "eu")
-            self.assertEqual(items[1]["data"]["decided_by"], ["marina"])
+            self.assertEqual(items[1]["data"]["decided_by"], ["marina-demo"])
             self.assertNotIn("id", items[0])
             self.assertEqual(items[0]["prov"], "observado")
             self.assertEqual(items[0]["source"], "RAW/2026/10/x.md")

@@ -74,7 +74,7 @@ brain --version              # brain 2.0.0
 | `F-####` | plano de foco | `F-0001` |
 | `G#` / `P#` / `P#.n` | goal / projeto / entregável (em `PLANNING/goals.md`) | `G1`, `P1`, `P1.2` |
 
-Pessoas usam um id curto (`ana`) e aliases (`Ana`, `Ana R.`). Em qualquer opção que
+Pessoas usam um id curto (`marina-demo`) e aliases (`Marina-demo`, `M.-demo`). Em qualquer opção que
 pede pessoa, vale o id ou o alias.
 
 ### Opções de registro (quem, de onde, quando)
@@ -118,14 +118,14 @@ Semeia o vault e a config a partir de `template/`. **Nunca sobrescreve** nada qu
 
 | Opção | Uso |
 |---|---|
-| `--owner-id ID` | seu id curto (ex.: `ana`) |
+| `--owner-id ID` | seu id curto (ex.: `voce`) |
 | `--owner-name NOME` | nome completo |
 | `--alias ALIAS` | como você aparece nos textos |
 | `--email EMAIL` | seu e-mail |
 
 ```bash
-brain init --owner-id ana --owner-name "Ana Souza" --alias Ana \
-  --email ana@example.com
+brain init --owner-id voce --owner-name "Seu Nome" --alias Você \
+  --email voce@example.com
 ```
 Depois, no chat do agente: `/init` (entrevista que preenche PROFILE e PLANNING).
 
@@ -316,31 +316,31 @@ Códigos de saída: `3` vínculo inexistente, nota vazia ou nota fora da inbox; 
 |---|---|
 | `--id ID` | id curto (padrão: derivado do nome) |
 | `--alias ALIAS` | apelido; repita a opção para vários |
-| `--role PAPEL` | ex.: "Gestora de dados" |
+| `--role PAPEL` | ex.: "Sócia, chef de confeitaria" |
 | `--relation RELAÇÃO` | ex.: gestor, par, stakeholder |
 | `--email EMAIL` | |
 | + opções de registro | `--by --prov --source --date --actor --json` |
 
 ```bash
-brain person add "Ana Ribeiro" --id ana --alias Ana --role "Gestora de dados" --by owner
+brain person add "Marina-demo" --id marina-demo --alias "Marina-demo" --role "Sócia, chef de confeitaria" --by owner
 ```
 
 ### `brain person alias ID ALIAS [ALIAS ...]`
 Acrescenta aliases a uma pessoa existente (evita ficha duplicada).
 ```bash
-brain person alias ana "Ana R." "Aninha" --by owner
+brain person alias marina-demo "M.-demo" "Mari-demo" --by owner
 ```
 
 ### `brain person update ID`
 Muda `--name`, `--role`, `--relation` ou `--email`, mais as opções de registro.
 ```bash
-brain person update ana --role "Head de Dados" --by owner
+brain person update marina-demo --role "Sócia-gerente" --by owner
 ```
 
 ### `brain person resolve TEXTO`
 Diz a quem um texto se refere (sem gravar nada). Ambíguo sai com código 2.
 ```bash
-brain person resolve "a Ana"     # ana  Ana Ribeiro  Gestora de dados
+brain person resolve "a Marina-demo"     # marina-demo  Marina-demo  Sócia, chef de confeitaria
 ```
 
 ### `brain person list`
@@ -372,8 +372,8 @@ brain person list --json
 
 ```bash
 brain action open "Ler a política de dados v3" --by owner --due 2026-10-20 --effort 1h --project P1
-brain action open "Enviar diagnóstico do pipeline" --by owner --owner ana --due 2026-10-20   # → waiting
-brain action open "Acompanhar migração de parceiros" --by owner --owner diego --list watching
+brain action open "Enviar orçamento da reforma" --by owner --owner marina-demo --due 2026-10-20   # → waiting
+brain action open "Acompanhar o regulamento de exaustão da prefeitura" --by owner --owner sonia-demo --list watching
 ```
 
 ### `brain action update ID`
@@ -389,7 +389,7 @@ Muda qualquer campo da ação.
 
 ```bash
 brain action update A-0012 --status fazendo --by owner
-brain action update A-0012 --due 2026-10-25 --note "Ana pediu mais 5 dias" --by owner
+brain action update A-0012 --due 2026-10-25 --note "Marina-demo pediu mais 5 dias" --by owner
 brain action update A-0012 --clear-due --by owner
 ```
 
@@ -404,8 +404,8 @@ brain action update A-0012 --clear-due --by owner
 | + opções de registro | |
 
 ```bash
-brain action close A-0012 --how "enviei o draft, Bruno confirmou" --by owner
-brain action close A-0014 --how "publicado" --outcome "Dicionário v1 no ar" --evidence https://… --by owner
+brain action close A-0012 --how "enviei o draft, Heitor-demo confirmou" --by owner
+brain action close A-0014 --how "publicado" --outcome "Manual de rotinas v1 no ar" --evidence https://… --by owner
 ```
 Ações que esperavam por esta recebem nota de "destravada"; elas não fecham sozinhas.
 
@@ -456,7 +456,7 @@ brain action list --project P1 --all
 | + opções de registro | |
 
 ```bash
-brain decision add "Congelar o pipeline até o diagnóstico" --decided-by ana \
+brain decision add "Congelar a compra do forno até o orçamento" --decided-by marina-demo \
   --rationale "qualidade dos dados abaixo do SLA" --project P1 --by owner --date 2026-10-10
 ```
 
@@ -488,8 +488,8 @@ Entrega avulsa (conquista com resultado), sem precisar fechar uma ação.
 | + opções de registro | |
 
 ```bash
-brain delivery "Dashboard de churn no ar" --ref P2 --result "time de CS usando diariamente" \
-  --impact "reduziu 3h/semana de planilha" --by owner
+brain delivery "Cardápio do novo ponto fechado" --ref P2 --result "equipe usando a ficha técnica todo dia" \
+  --impact "reduziu 3h/semana de conferência" --by owner
 ```
 
 ---
@@ -511,9 +511,9 @@ do `/dump`: a mesma fonte não é processada duas vezes. Normalmente quem chama 
 | + opções de registro | |
 
 ```bash
-brain artifact PROCESSED/2026/10/kickoff.md --kind reuniao --title "Kickoff dados" \
-  --raw RAW/2026/10/kickoff.md --people ana,bruno --projects P1 --by agent --prov observado \
-  --source RAW/2026/10/kickoff.md
+brain artifact PROCESSED/2026/10/vistoria-imovel.md --kind reuniao --title "Vistoria dados" \
+  --raw RAW/2026/10/vistoria-imovel.md --people marina-demo,heitor-demo --projects P1 --by agent --prov observado \
+  --source RAW/2026/10/vistoria-imovel.md
 ```
 
 ---
@@ -532,7 +532,7 @@ O agente sugere; só você aceita ou rejeita. O noturno nunca aprova nada: ele c
 | + opções de registro | |
 
 ```bash
-brain proposal add --kind fechar-acao --target A-0012 --summary "Bruno confirmou no Slack" \
+brain proposal add --kind fechar-acao --target A-0012 --summary "Heitor-demo confirmou no Slack" \
   --evidence "slack #dados 14/10" --by agent --prov observado --source RAW/2026/10/slack-dados.md
 ```
 
@@ -608,7 +608,7 @@ o item selecionado comporta (goal → projeto, projeto → entregável, entregá
 ### `brain progress NÓ PCT`
 Seu percentual "de feeling" para um goal/projeto. Aparece **ao lado** do calculado, nunca o substitui.
 ```bash
-brain progress G1 45 --note "dicionário andou; pipeline não"
+brain progress G1 45 --note "cardápio andou; reforma não"
 ```
 
 ---
@@ -625,11 +625,11 @@ Cada evento: `type`, `by`, `prov`, `source`, `date` (opcional), `actor` (opciona
 ```json
 [
   {"type": "decision.made", "by": "agent", "prov": "observado",
-   "source": "PROCESSED/2026/10/kickoff.md", "date": "2026-10-10",
-   "data": {"title": "Congelar o pipeline até o diagnóstico", "decided_by": ["ana"]}},
+   "source": "PROCESSED/2026/10/vistoria-imovel.md", "date": "2026-10-10",
+   "data": {"title": "Congelar a compra do forno até o orçamento", "decided_by": ["marina-demo"]}},
   {"type": "action.opened", "by": "agent", "prov": "observado",
-   "source": "PROCESSED/2026/10/kickoff.md",
-   "data": {"title": "Enviar diagnóstico do pipeline", "owner": "ana", "list": "waiting", "due": "2026-10-20"}}
+   "source": "PROCESSED/2026/10/vistoria-imovel.md",
+   "data": {"title": "Enviar orçamento da reforma", "owner": "marina-demo", "list": "waiting", "due": "2026-10-20"}}
 ]
 ```
 ```bash
@@ -661,8 +661,8 @@ Mensagens (`message.*`), publicação (`share.*`), foco (`focus.*`) e conectores
 ### `brain search CONSULTA`
 Busca determinística (sem LLM) no ledger e nos artefatos.
 ```bash
-brain search "pipeline"
-brain search "dicionário" --limit 5 --json      # padrão: 20 resultados
+brain search "forno"
+brain search "manual" --limit 5 --json      # padrão: 20 resultados
 ```
 
 ### `brain render`
@@ -754,7 +754,7 @@ diário em `daily_max`.
 | `list [--all]` | pendentes (ou todas) |
 
 ```bash
-brain outbox draft --to carla --text "Oi Carla, como está o MVP da planilha?" --ref A-0005 --why "prazo venceu"
+brain outbox draft --to caio-demo --text "Oi Caio-demo, como está o orçamento da reforma?" --ref A-0005 --why "prazo venceu"
 brain outbox show M-0001
 brain outbox approve M-0001 --quote "enviar 1"
 brain outbox sent M-0001 --link https://seu-workspace.slack.com/archives/…
@@ -845,8 +845,8 @@ propostos, validados contra o ledger (`✓`/`✗`).
 
 ```bash
 brain extract --selftest
-brain extract vault/RAW/2026/10/reuniao-1a1-ana.md
-brain extract vault/RAW/2026/10/reuniao-1a1-ana.md --record
+brain extract vault/RAW/2026/10/reuniao-1a1-marina-demo.md
+brain extract vault/RAW/2026/10/reuniao-1a1-marina-demo.md --record
 ```
 
 ---
@@ -868,9 +868,9 @@ se o servidor cair ou for apagado, `rebuild` reconstrói tudo.
 ```bash
 brain memory sync
 brain memory sync --dry-run
-brain memory recall "o que foi decidido sobre o pipeline?"
+brain memory recall "o que foi decidido sobre o forno?"
 brain memory recall "política de dados" --bank raw
-brain memory recall "prazos" --tags proj:P1,pessoa:ana
+brain memory recall "prazos" --tags proj:P1,pessoa:marina-demo
 brain memory reflect "como está o projeto de churn?"
 brain memory rebuild
 ```
@@ -986,11 +986,11 @@ brain action close A-0015 --how "revisado e enviado à Lucía" --by owner
 brain action list --list waiting
 
 # Registrar uma decisão que você tomou
-brain decision add "Adiar o lançamento para março" --decided-by ana --by owner
+brain decision add "Adiar o lançamento para março" --decided-by marina-demo --by owner
 
 # Achar algo
 brain search "lançamento"
-brain memory recall "o que a Ana decidiu sobre o pipeline?"
+brain memory recall "o que a Marina-demo decidiu sobre o forno?"
 
 # Planejar foco da semana
 brain focus plan && brain focus approve F-0001 --quote "ok" && brain focus apply F-0001

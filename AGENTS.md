@@ -93,7 +93,7 @@ somente-leitura para o mundo.
      varredura.
    - **Generalize antes de subir.** O repo é público. Nada do dono vai pra lá:
      nomes, e-mails, pessoas do ledger, canais do Slack, caminhos da máquina,
-     segredos. Use exemplos genéricos (`ana`, `example.com`, `#seu-canal`) ou
+     segredos. Use exemplos genéricos (`marina-demo`, `example.com`, `#seu-canal`) ou
      deixe em `scripts/local/` / `config/`. A varredura não substitui ler o
      diff.
    - **Gate.** O dono aprova com "ok"; só então `git add` dos arquivos
@@ -296,7 +296,7 @@ Nestes casos: pare, explique o dilema ao dono em ≤5 linhas, proponha 2 caminho
 `/publish` → `commands/publish/SKILL.md`
 
 Ao receber um comando, leia a skill correspondente ANTES de agir. Variantes
-naturais ("meu dia", "atualiza tudo", "manda pra Carla") mapeiam para a skill
+naturais ("meu dia", "atualiza tudo", "manda pro Caio-demo") mapeiam para a skill
 óbvia.
 
 Toda escrita no ledger, nas views ou nas portas passa por `./brain`. O agente

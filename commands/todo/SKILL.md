@@ -15,7 +15,7 @@ Isto é `[declarado]`. Não passe pela inbox.
 
 ```
 ./brain action open "<título>" --due AAAA-MM-DD --effort 90m --project P1 \
-  --people ana --by owner
+  --people marina-demo --by owner
 ```
 
 6. `./brain render` e mostre a linha da ação (id, prazo, projeto).

@@ -25,7 +25,7 @@ template, tests, services, scripts, `scripts/local/` que amadureceu) volta ao re
 Conteúdo do vault e `config/` pessoal nunca. O repo é **público**.
 
 1. `./brain upstream scan` — o que está pendente e o resultado da varredura de dados pessoais.
-2. Achado = não sobe. Troque o dado real por exemplo genérico (`ana`, `example.com`,
+2. Achado = não sobe. Troque o dado real por exemplo genérico (`marina-demo`, `example.com`,
    `seu-workspace`, `#seu-canal`), mova o que é só desta máquina para `scripts/local/` ou
    `config/`, e rode de novo.
 3. Leia o diff mesmo com varredura limpa: ela não pega tudo.

@@ -65,7 +65,7 @@ Para cada item da inbox (ignore `.keep.md`):
 ./brain add <<'JSON'
 [
   {"type":"decision.made","prov":"observado","source":"PROCESSED/…/x.md",
-   "data":{"title":"…","decided_by":["ana"],"project":"P1","rationale":"…"}},
+   "data":{"title":"…","decided_by":["marina-demo"],"project":"P1","rationale":"…"}},
   {"type":"action.opened","prov":"observado","source":"PROCESSED/…/x.md",
    "data":{"title":"…","owner":"eu","due":"AAAA-MM-DD","effort_min":90,"project":"P1"}}
 ]

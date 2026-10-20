@@ -205,9 +205,9 @@ ou crie um LaunchAgent que rode `hindsight-embed daemon status` no login.
 ### 5.4 Prova em português
 
 ```bash
-hindsight-embed memory retain brain-mem "Decidimos congelar o pipeline até o diagnóstico, na reunião com a Ana"
+hindsight-embed memory retain brain-mem "Decidimos congelar a compra do forno até o orçamento, na reunião com a Marina-demo"
 sleep 90    # a extração é assíncrona
-hindsight-embed memory recall brain-mem "o que foi decidido sobre o pipeline?"
+hindsight-embed memory recall brain-mem "o que foi decidido sobre o forno?"
 ```
 
 Esperado: a resposta cita o fato. Se o recall em pt-BR vier fraco, é o sinal
@@ -226,7 +226,7 @@ url = "http://localhost:8888"
 ```bash
 ./brain memory setup
 ./brain memory sync           # primeira carga: alguns minutos
-./brain memory recall "quem decidiu congelar o pipeline?"
+./brain memory recall "quem decidiu congelar a compra do forno?"
 ./brain doctor --online       # deve ficar verde incluindo o servidor de memória
 ```
 

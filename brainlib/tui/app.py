@@ -904,7 +904,7 @@ class BrainApp(App):
             return [c]
 
         self.form(FormSpec(f"Novo entregável {nid} em {proj['id']}", [
-            Field("title", "título", req=True, ph="Dicionário de dados v1"),
+            Field("title", "título", req=True, ph="Manual de rotinas v1"),
             Field("due", "prazo", ph=dates.HELP, check=self._due_check, res=dates.describe),
             Field("weight", "peso", value="1", ph="1 · 2 · 3…", check=chk)], build,
             sub=f"{proj['id']} · {proj['title']}. Entregável não é goal nem projeto: entra no goals.md sem gate (o título não pode ter “·”).",
@@ -969,7 +969,7 @@ class BrainApp(App):
             Field("owner", "dono", ph="você (ou id/alias da pessoa)", value=owner),
             Field("deliv", "entregável", ph="9 (do projeto escolhido) ou P#.n · opcional", value=pre.get("deliv", ""),
                   check=self._deliv_check, res=self._deliv_res),
-            Field("people", "pessoas", ph="ana, bruno (opcional)"),
+            Field("people", "pessoas", ph="marina-demo, heitor-demo (opcional)"),
             Field("blocked", "bloqueada por", ph="A-#### (opcional)"),
             Field("link", "link", ph="URL (opcional)")],
             build, sub="Equivalente ao /todo, sem o agente."))
@@ -1046,7 +1046,7 @@ class BrainApp(App):
             return [["action", "close", a["id"], "--how", v["how"] or "…"] + (["--outcome", v["outcome"]] if v["outcome"] else []) + ["--by", "owner"]]
 
         self.form(FormSpec(f"Fechar {a['id']}", [
-            Field("how", "como foi", req=True, ph="enviei o draft, Bruno confirmou"),
+            Field("how", "como foi", req=True, ph="enviei o draft, Heitor-demo confirmou"),
             Field("outcome", "resultado", ph="opcional: resultado observável (vira entrega E-####)")],
             build, sub=a["title"]))
 
@@ -1095,7 +1095,7 @@ class BrainApp(App):
             Field("deliv", "entregável", value=deliv_shown, ph="só o número, no projeto escolhido (9 → P1.9), ou P#.n",
                   check=self._deliv_check, res=self._deliv_res),
             Field("blocked", "bloqueada por", value=blocked0, ph="A-#### (a CLI não remove bloqueio)"),
-            Field("people", "pessoas", ph="adiciona: ana, bruno"),
+            Field("people", "pessoas", ph="adiciona: marina-demo, heitor-demo"),
             Field("list", "lista", choice=["mine", "waiting", "watching"], value=a["list"]),
             Field("owner", "dono", value=owner0, ph="reatribui: id ou alias"),
             Field("note", "nota", ph="vai para o histórico da ação")], build))
@@ -1152,7 +1152,7 @@ class BrainApp(App):
         nid = it.id
         chk = lambda v: "" if v.isdigit() and int(v) <= 100 else "Use um número de 0 a 100."  # noqa: E731
         self.form(FormSpec(f"Declarar progresso de {nid}", [Field("pct", "percentual", req=True, ph="0 a 100", check=chk),
-                                                            Field("note", "nota", ph="dicionário andou; pipeline não")],
+                                                            Field("note", "nota", ph="cardápio andou; reforma não")],
                            lambda v: [["progress", nid, v["pct"] or "…"] + (["--note", v["note"]] if v["note"] else [])],
                            sub="Aparece ao lado do calculado; nunca o substitui.", render=True))
 
@@ -1363,7 +1363,7 @@ class BrainApp(App):
                 c += ["--rationale", v["why"]]
             return [c + ["--by", "owner"]]
 
-        self.form(FormSpec("Registrar decisão", [Field("title", "título", req=True), Field("by", "quem decidiu", req=True, ph="ana, diego"),
+        self.form(FormSpec("Registrar decisão", [Field("title", "título", req=True), Field("by", "quem decidiu", req=True, ph="marina-demo, sonia-demo"),
                                                  Field("project", "projeto", choice=["—"] + self.store.project_ids()), Field("why", "porquê", ph="opcional")], build))
 
     def f_supersede(self) -> None:
@@ -1417,15 +1417,15 @@ class BrainApp(App):
                            sub="Para aliases novos use a. A CLI não apaga campos, só os troca."))
 
     def f_resolve(self) -> None:
-        self.form(FormSpec("Quem é…?", [Field("text", "nome ou alias", req=True, ph="a Ana")],
+        self.form(FormSpec("Quem é…?", [Field("text", "nome ou alias", req=True, ph="a Marina-demo")],
                            lambda v: [["person", "resolve", v["text"] or "…"]],
                            sub="Diz a quem o texto se refere, sem gravar nada. Ambíguo vira erro 2: a pergunta é sua.", render=False))
 
     def f_memory(self) -> None:
-        self.form(FormSpec("Memória: perguntar", [Field("q", "pergunta", req=True, ph="o que foi decidido sobre o pipeline?"),
+        self.form(FormSpec("Memória: perguntar", [Field("q", "pergunta", req=True, ph="o que foi decidido sobre o forno?"),
                                                   Field("mode", "como", choice=["recall", "reflect"]),
                                                   Field("bank", "banco", choice=["mem", "raw"]),
-                                                  Field("tags", "tags", ph="proj:P1,pessoa:ana (opcional)")],
+                                                  Field("tags", "tags", ph="proj:P1,pessoa:marina-demo (opcional)")],
                            lambda v: [["memory", v["mode"], v["q"] or "…", "--bank", v["bank"]] + (["--tags", v["tags"]] if v["tags"] else [])],
                            sub="recall devolve trechos; reflect pede uma resposta sintetizada. Confirme no arquivo do vault antes de afirmar.",
                            render=False, show="Memória"))
@@ -1434,7 +1434,7 @@ class BrainApp(App):
         p = self.cur().data
         def build(v):
             return [["person", "alias", p["id"]] + [a.strip() for a in v["al"].split(",") if a.strip()] + ["--by", "owner"]]
-        self.form(FormSpec(f"Alias para {p['id']}", [Field("al", "aliases", req=True, ph="Aninha, A. Ribeiro")], build,
+        self.form(FormSpec(f"Alias para {p['id']}", [Field("al", "aliases", req=True, ph="Mari-demo, M.-demo")], build,
                            sub="Evita uma segunda ficha para a mesma pessoa."))
 
     def open_raw(self) -> None:

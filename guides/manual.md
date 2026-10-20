@@ -342,14 +342,14 @@ Lista padrão: sua. Se a ação é de outra pessoa para você, ela nasce
 
 ### `/done` — fechar
 
-`/done A-0014 enviei o draft pro Bruno`.
+`/done A-0014 enviei o draft pro Heitor-demo`.
 
 ID exato fecha direto. Texto sem ID: um match só, o agente confirma em uma
 linha; vários matches, ele lista; ação de terceiro ou muito antiga, ele
 sempre confirma.
 
 ```bash
-./brain action close A-0014 --how "enviei o draft" --outcome "Bruno confirmou" --by owner
+./brain action close A-0014 --how "enviei o draft" --outcome "Heitor-demo confirmou" --by owner
 ```
 
 Se houver resultado observável **e** projeto, entregável ou `unblocks`, nasce
@@ -409,7 +409,7 @@ avisa. Não finge que está tudo bem.
 
 ### `/ask`
 
-`o que sabemos sobre o dicionário?`
+`o que sabemos sobre o manual?`
 
 Ordem: `./brain search`, artefato, RAW só se precisar da frase exata. Se o
 Hindsight estiver no ar, `./brain memory recall` é atalho — cada trecho tem
@@ -419,7 +419,7 @@ O app não completa com conhecimento de mundo.
 
 ### `/person` e `/project`
 
-`/person Ana` — papel, o que ela te deve, o que você deve a ela, decisões
+`/person Marina-demo` — papel, o que ela te deve, o que você deve a ela, decisões
 que ela tomou (quem/quando/fonte), última interação. Nome ambíguo: o agente
 lista e para. Não inventa "como ela gosta de ouvir".
 
@@ -444,7 +444,7 @@ data de hoje (ou `--date`) na linha do `goals.md` e no log.
 Declarar um feeling, sem mexer na árvore:
 
 ```bash
-./brain progress G1 45 --note "dicionário andou; pipeline não"
+./brain progress G1 45 --note "cardápio andou; reforma não"
 ```
 
 Mudar a estrutura: o agente mostra o diff, espera "ok", aplica no
@@ -510,10 +510,10 @@ checkbox.
 ## 9. Pessoas
 
 ```bash
-./brain person add "Ana Ribeiro" --alias Ana --alias Bia --email ana@empresa.com \
+./brain person add "Marina-demo" --alias "Marina-demo" --alias Mari-demo --email marina-demo@empresa.com \
   --role "Gestora" --relation gestora --by owner
-./brain person alias ana "Ana R."
-./brain person resolve "Bia"
+./brain person alias marina-demo "M.-demo"
+./brain person resolve "Mari-demo"
 ./brain person list
 ```
 
@@ -521,7 +521,7 @@ checkbox.
 não achar. O agente não escolhe no chute.
 
 Casam, nesta ordem: id, nome, alias ou e-mail iguais; senão, cada palavra da
-consulta é prefixo de alguma palavra do nome ("Ana R" acha "Ana Ribeiro").
+consulta é prefixo de alguma palavra do nome ("Marina-demo D" acha "Marina-demo").
 Uma letra só casa com muita gente — o comando recusa a ambiguidade.
 
 Alias repetido em duas pessoas aparece como aviso no `./brain validate` e no
@@ -534,8 +534,8 @@ doctor. Isso é para você decidir, não para o app fundir sozinho.
 ### Ação
 
 ```bash
-./brain action open "Publicar o dicionário" --due 2026-10-20 --effort 2h \
-  --project P1 --deliverable P1.1 --blocked-by A-0002 --people bruno \
+./brain action open "Publicar o manual" --due 2026-10-20 --effort 2h \
+  --project P1 --deliverable P1.1 --blocked-by A-0002 --people heitor-demo \
   --priority alta --by owner
 
 ./brain action update A-0003 --status fazendo --note "comecei a revisão"
@@ -556,8 +556,8 @@ Estados que você grava: `aberta`, `fazendo`, `aguardando`. `bloqueada`,
 ### Decisão
 
 ```bash
-./brain decision add "Dicionário sai como draft" --decided-by ana \
-  --project P1 --rationale "meio dicionário em produção" \
+./brain decision add "Manual sai como draft" --decided-by marina-demo \
+  --project P1 --rationale "meio manual em produção" \
   --prov observado --source PROCESSED/2026/10/ata.md
 
 ./brain decision list --project P1
@@ -573,8 +573,8 @@ cadastrada.
 Quando a conquista não nasceu de um `/done`:
 
 ```bash
-./brain delivery "Draft do dicionário" --ref A-0001 \
-  --result "em revisão com o Bruno" --evidence "e-mail" --by owner
+./brain delivery "Draft do manual" --ref A-0001 \
+  --result "em revisão com o Heitor-demo" --evidence "e-mail" --by owner
 ```
 
 `--ref` pode ser `A-####`, `P1`, `P1.1` ou `G1`. Sem resultado declarado, a
@@ -587,7 +587,7 @@ faz isso sozinho:
 
 ```bash
 ./brain proposal add --kind fechar-acao --target A-0006 \
-  --summary "O report já traz a deflexão de julho" \
+  --summary "O report já traz a fechamento de setembro" \
   --evidence PROCESSED/2026/10/status.md \
   --prov observado --source PROCESSED/2026/10/status.md
 
@@ -687,7 +687,7 @@ pelo Slack.
 2. Rascunho:
 
 ```bash
-./brain outbox draft --to carla --text "Oi Carla, …" --ref A-0005 \
+./brain outbox draft --to caio-demo --text "Oi Caio-demo, …" --ref A-0005 \
   --why "cobrar o MVP"
 ```
 
