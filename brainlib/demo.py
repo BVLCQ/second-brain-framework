@@ -11,7 +11,7 @@ import re
 from datetime import timedelta
 from pathlib import Path
 
-from . import config, util
+from . import config, rawsort, util
 from .core import Brain
 
 BANNER = "⚠ Instância DEMO — conteúdo 100% fictício, gerado por IA apenas para demonstrar o framework."
@@ -203,7 +203,7 @@ def build(target: Path) -> Path:
         path = inst.vault / rel
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(f"# {title}\n\ntipo: {kind} · evento: {day.isoformat()}\n\n{summary}\n", encoding="utf-8")
-        raw_rel = f"RAW/{day:%Y}/{day:%m}/{slug}.md"
+        raw_rel = f"RAW/{day:%Y}/{day:%m}/{rawsort.KIND_FOLDER.get(kind, 'misc')}/{slug}.md"
         raw_path = inst.vault / raw_rel
         raw_path.parent.mkdir(parents=True, exist_ok=True)
         raw_path.write_text(DISCLAIMER + RAW_SOURCES[slug], encoding="utf-8")

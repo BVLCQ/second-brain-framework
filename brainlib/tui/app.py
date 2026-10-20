@@ -1439,8 +1439,10 @@ class BrainApp(App):
 
     def open_raw(self) -> None:
         a = self.cur().data
-        path = (self.inst.vault / (a["raw"] or "")).resolve()
-        if not a["raw"] or not path.is_file() or not path.is_relative_to(self.inst.vault.resolve()):
+        from .. import rawsort
+        found = rawsort.resolve(self.inst, a["raw"] or "") if a["raw"] else None
+        path = found.resolve() if found else None
+        if not path or not path.is_relative_to(self.inst.vault.resolve()):
             self.log_line("RAW não encontrado para este artefato (ou fora do vault)", "yellow")
             return
         self.external([*shlex.split(os.environ.get("PAGER") or "less"), str(path)])

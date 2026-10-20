@@ -26,7 +26,7 @@ Toda entidade (ação, decisão, pessoa, artefato) entra pelo `./brain` — nunc
 
 **Notas do dono (`<A-####|G#|P#|P#.n|note>-AAAA-MM-DD-note.md`)** — criadas pelo TUI (`N`) ou por
 `./brain note add`. O frontmatter traz `vinculo:` e `criada:`. Trate como **nota** sem reclassificar: arquive
-no RAW **sem renomear** (o TUI as acha pelo nome, no detalhe do vínculo) e registre o artefato com
+no RAW (`notes/`) **sem renomear** (o TUI as acha pelo nome, no detalhe do vínculo) e registre o artefato com
 `--projects` = o projeto do vínculo (`P#`/`P#.n` → `P#`; `A-####` → o projeto da ação; goal → deixe vazio e cite
 o `G#` no resumo). Extraia ações/decisões só do que a nota afirmar; o vínculo já é a ligação.
 
@@ -44,14 +44,19 @@ Para cada item da inbox (ignore `.keep.md`):
 >
 > **PDF:** `./brain pdf text <arquivo> [--pages 1-3]` devolve o texto por página (sem precisar de poppler; no macOS usa o PDFKit). Se vier vazio, o PDF é escaneado: `./brain pdf render <arquivo> --pages 1-3` gera PNGs que você lê como imagem. Nome com espaço ou acento: passe entre aspas, o arquivo no RAW não é renomeado.
 
-1. Mova para `vault/RAW/<ano>/<mês>/` pela data de **captura** (hoje, se não souber). Colisão de nome → sufixo `-2`.
+1. Arquive com `./brain raw archive "<arquivo>"` (sem argumento arquiva a inbox toda). O CLI move para
+   `vault/RAW/<ano>/<mês>/<tipo>/` pela data de **captura** (hoje; `--date AAAA-MM-DD` se souber outra) e escolhe o
+   tipo por nome/extensão: `slack` · `meetings` · `documents` · `videos` · `artifacts` · `notes` · `images` ·
+   `connectors` · `misc`. Se a sua classificação pelo conteúdo discordar (um `.md` solto que é transcrição de
+   reunião → `meetings`), force com `--type`. Colisão de nome → sufixo `-2`. O comando imprime o caminho final:
+   use-o em `--raw` e `--source`.
 2. Escreva o artefato em `vault/PROCESSED/<ano>/<mês>/<slug>.md`.
 3. Registre pessoas novas (`brain person add`) e o artefato:
 
 ```
 ./brain artifact PROCESSED/<ano>/<mês>/<slug>.md --kind reuniao|documento|nota|conector \
-  --title "…" --raw RAW/<ano>/<mês>/<arquivo> --people a,b --projects P1 --summary "…" \
-  --prov observado --source RAW/<ano>/<mês>/<arquivo>
+  --title "…" --raw RAW/<ano>/<mês>/<tipo>/<arquivo> --people a,b --projects P1 --summary "…" \
+  --prov observado --source RAW/<ano>/<mês>/<tipo>/<arquivo>
 ```
 
 4. Extrações em lote (preferível quando houver várias):

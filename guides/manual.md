@@ -88,7 +88,7 @@ brain-v2/                      framework (vai pro git)
     ├── PLANNING/goals.md      a árvore (curada, com gate)
     ├── PLANNING/log.md        por que a árvore mudou
     ├── RAW/inbox/             porta de entrada
-    ├── RAW/<ano>/<mês>/       originais, imutáveis
+    ├── RAW/<ano>/<mês>/<tipo>/ originais, imutáveis (slack, meetings, documents, …)
     ├── PROCESSED/<ano>/<mês>/ texto extraído, não se reescreve
     ├── PROCESSED/_ledger/events.jsonl
     ├── FRESH/                 retrato gerado (painel, páginas Markdown)
@@ -367,8 +367,8 @@ agente:
 
 1. Ignora `.keep.md`.
 2. Pula o que já tem artefato para a mesma fonte (rodar de novo não duplica).
-3. Move o original para `RAW/<ano>/<mês>/` pela data de **captura**. Não edita.
-   Nome repetido ganha sufixo `-2`.
+3. Move o original para `RAW/<ano>/<mês>/<tipo>/` (`./brain raw archive`) pela
+   data de **captura**. Não edita. Nome repetido ganha sufixo `-2`.
 4. Classifica: reunião, documento, nota ou conector (snapshot `gmail-…`,
    `slack-…`, `gcal-…`, `jira-…`).
 5. Escreve o texto extraído em `PROCESSED/<ano>/<mês>/`. Esse arquivo não se

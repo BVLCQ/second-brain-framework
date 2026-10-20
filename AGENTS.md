@@ -52,7 +52,7 @@ template de arquivo JÁ existente do dono mudou upstream, proponha o diff.
 | Zona | Regra | O agente pode | O agente NUNCA pode |
 |---|---|---|---|
 | `vault/RAW/inbox/` | porta única | receber itens do dono e snapshots de MCP | processar nada in-place |
-| `vault/RAW/<ano>/<mês>/` | conteúdo imutável | **mover** itens da inbox pra cá (sem editar; colisão → sufixo `-2`) | editar, renomear, apagar, "organizar" |
+| `vault/RAW/<ano>/<mês>/<tipo>/` | conteúdo imutável | **mover** itens da inbox pra cá, na pasta do tipo (`./brain raw archive`; sem editar; colisão → sufixo `-2`) | editar, renomear, apagar, reclassificar por conta própria |
 | `vault/PROCESSED/<ano>/<mês>/` | append-only | criar artefatos de extração | reescrever ou apagar artefato já escrito |
 | `vault/PROCESSED/_ledger/events.jsonl` | append-only, só via `./brain` | gravar eventos (`brain action`, `brain add`, …) | editar linha, numerar ID na mão, apendar JSON cru |
 | `vault/FRESH/` | 100% derivado | `./brain render` (reescreve tudo) | guardar informação que não deriva de PROFILE+PLANNING+ledger |
@@ -171,8 +171,11 @@ via `brain plan deliverable` e uma linha em `PLANNING/log.md`.
 1. **Varra** `vault/RAW/inbox/` por itens sem artefato (idempotência: fonte
    que já tem `artifact.added` com o mesmo `raw` é pulada). `.keep.md` é
    ignorado.
-2. **Arquive** em `vault/RAW/<ano>/<mês>/` pela **data de captura**. Mover,
-   nunca editar.
+2. **Arquive** em `vault/RAW/<ano>/<mês>/<tipo>/` pela **data de captura**
+   (`./brain raw archive`). Tipos: `slack` · `meetings` · `documents` · `videos` ·
+   `artifacts` · `notes` · `images` · `connectors` · `misc`. Mover, nunca editar.
+   Caminho `RAW/<ano>/<mês>/<arquivo>` já gravado no ledger continua válido:
+   `./brain raw where` acha o arquivo na pasta do tipo.
 3. **Classifique**: `reunião` · `documento` · `nota` · `conector`.
 4. **Extraia** pelo template do tipo (`commands/dump/SKILL.md`). Toda extração
    leva proveniência.

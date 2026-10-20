@@ -291,10 +291,26 @@ brain video frames "gravacao.mp4" --every 150 --width 900                       
 ```
 Com mais de um idioma (reunião bilíngue), cada idioma é transcrito por inteiro e, por minuto, vale o texto do idioma que de fato se fala. A transcrição automática erra nomes próprios e termos técnicos; confirme nos quadros (slides) e, para a letra exata, no próprio vídeo. Uma gravação de 80 min leva poucos minutos.
 
+### `brain raw archive` · `brain raw sort` · `brain raw where`
+O RAW é organizado por tipo: `RAW/<ano>/<mês>/<tipo>/<arquivo>`. Tipos: `slack` (snapshots do Slack), `meetings`
+(transcrições do Meet, `.vtt`/`.srt`), `documents` (PDF, Office, `.md`/`.txt` soltos), `videos` (vídeo e áudio),
+`artifacts` (`.html`), `notes` (notas do `brain note`), `images`, `connectors` (Jira, Gmail, Calendar, Databricks e
+listagens do Drive) e `misc` (o resto). A classificação é por prefixo do snapshot e extensão — o mesmo arquivo cai
+sempre na mesma pasta.
+
+- `archive [arquivo…] [--type T] [--date AAAA-MM-DD]` — move da inbox para a pasta do tipo (o passo de arquivar do
+  `/dump`). Sem argumento, tudo que está na inbox. `--type` força o tipo quando o conteúdo mostra outra coisa.
+- `sort [--dry-run]` — arruma o RAW antigo, com arquivos soltos em `<ano>/<mês>/`. Idempotente. Grava o mapa
+  origem → destino em `vault/logs/raw-sort-*.jsonl`. O ledger não é tocado.
+- `where <caminho>` — onde está hoje um `RAW/…` guardado no ledger. O arquivo é achado pelo nome dentro do mesmo mês;
+  é o que o TUI (`o`, abrir RAW) e o MCP `brain_read` usam.
+
+Com a memória (Hindsight) ligada, rode `./brain memory rebuild` depois de um `sort`: os ids dos documentos são os caminhos, e o `sync` não remove os antigos.
+
 ### `brain note add` · `brain note edit` · `brain note list`
 Notas avulsas do dono. `add` grava `<VÍNCULO>-AAAA-MM-DD-note.md` na **inbox** (a porta única): `A-0146-…`, `G1-…`,
 `P2-…`, `P2.1-…`; sem vínculo, `note-…`; no mesmo dia e alvo vem o sufixo `-note-2.md`. O arquivo abre com um
-frontmatter (`vinculo:`, `criada: AAAA-MM-DD HH:mm`) e depois o texto. O `/dump` arquiva em `RAW/<ano>/<mês>/` sem
+frontmatter (`vinculo:`, `criada: AAAA-MM-DD HH:mm`) e depois o texto. O `/dump` arquiva em `RAW/<ano>/<mês>/notes/` sem
 renomear, então o TUI acha a nota (inbox ou RAW) e a mostra no detalhe do vínculo, abaixo do histórico, com data e hora.
 No TUI, `N` abre o formulário (caixa grande, vínculo opcional já preenchido com o item selecionado); `ctrl+o` abre o texto no seu `$VISUAL`/`$EDITOR` como Markdown e traz o resultado de volta. Se já existe nota **de hoje** para o mesmo vínculo e ela ainda está na inbox, o TUI pergunta: editar a existente (`brain note edit`, o texto novo entra no fim) ou criar outra (`…-note-2.md`). Nota já arquivada no RAW é imutável: só cria outra.
 

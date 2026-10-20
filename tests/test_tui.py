@@ -1175,10 +1175,11 @@ class CoverageTest(unittest.TestCase):
     READ_ONLY_VIEWS = {   # a leitura já está num painel (modelo em processo), sem precisar chamar a CLI
         "person list", "action show", "action list", "decision list", "plan show", "focus show", "outbox show",
         "outbox list", "proposal list", "publish list", "doctor", "search", "status", "artifact", "watch list", "watch since", "watch folders",
-        "note list"}
+        "note list", "raw where"}
     AGENT_ONLY = {        # quem escreve é o agente (extração, snapshot, envio), conforme a Constituição
         "init", "add", "snapshot", "proposal add", "outbox sent", "outbox failed", "publish done",
-        "pdf text", "pdf render", "video transcribe", "video frames", "person merge"}
+        "pdf text", "pdf render", "video transcribe", "video frames", "person merge",
+        "raw archive", "raw sort"}
     NOT_IN_TUI = {"demo", "tui"}
     DYNAMIC = {"memory recall", "memory reflect"}      # o formulário "Memória: perguntar" monta o subcomando
 

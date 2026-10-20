@@ -76,7 +76,7 @@ invisível: qualquer arquivo abre num editor de texto. A organização:
 ```
 vault/
 ├── RAW/inbox/          ← a ÚNICA porta de entrada. Jogue qualquer coisa aqui.
-├── RAW/<ano>/<mês>/    ← arquivo morto imutável (o original nunca é editado)
+├── RAW/<ano>/<mês>/<tipo>/ ← arquivo morto imutável, separado por tipo (slack, meetings, documents, videos, artifacts, notes, images, connectors, misc)
 ├── PROCESSED/<ano>/<mês>/  ← o resumo extraído de cada fonte (append-only)
 ├── PROCESSED/_ledger/events.jsonl  ← O LIVRO-RAZÃO (explicado abaixo)
 ├── PLANNING/goals.md   ← sua árvore de goals → projetos → entregáveis
@@ -191,7 +191,7 @@ corta e reapresenta o resto; não reescreve tudo.
 Todo arquivo que estiver na inbox (o doc de onboarding, por exemplo) vira
 material. Peça `/dump` — o pipeline completo, explicado de leigo:
 
-1. O agente **move** o arquivo da inbox para o arquivo morto (`RAW/2026/10/`),
+1. O agente **move** o arquivo da inbox para o arquivo morto (`RAW/2026/10/<tipo>/`),
    pela data de captura. O original nunca mais é editado.
 2. **Classifica**: reunião, documento, nota ou snapshot de conector.
 3. **Extrai** para um artefato em `PROCESSED/2026/10/`: do que trata, decisões

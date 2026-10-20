@@ -491,6 +491,11 @@ def cmd_note(args, b: Brain) -> None:
     notes.cli(args, b)
 
 
+def cmd_raw(args, b: Brain) -> None:
+    from . import rawsort
+    rawsort.cli(args, b)
+
+
 def cmd_pdf(args, b: Brain) -> None:
     from . import pdf
     pdf.cli(args, b)
@@ -911,6 +916,20 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--json", action="store_true")
     p.set_defaults(fn=cmd_note)
 
+    p = sub.add_parser("raw", help="RAW organizado por tipo: RAW/<ano>/<mês>/<tipo>/ (slack, meetings, documents, …, misc)")
+    rs = p.add_subparsers(dest="rcmd", required=True)
+    x = rs.add_parser("archive", help="move itens da inbox para a pasta do tipo (o que o /dump faz no passo de arquivar)")
+    x.add_argument("files", nargs="*", help="nomes na inbox (padrão: tudo)")
+    x.add_argument("--type", choices=rawsort_categories(), help="força o tipo (padrão: classificação por nome/extensão)")
+    x.add_argument("--date", help="data de captura AAAA-MM-DD (padrão: hoje)")
+    x.add_argument("--json", action="store_true")
+    x = rs.add_parser("sort", help="arruma o RAW antigo: arquivos soltos em <ano>/<mês>/ vão para a pasta do tipo")
+    x.add_argument("--dry-run", action="store_true")
+    x.add_argument("--json", action="store_true")
+    x = rs.add_parser("where", help="onde está hoje um caminho RAW/… guardado no ledger")
+    x.add_argument("path")
+    p.set_defaults(fn=cmd_raw)
+
     p = sub.add_parser("doctor", help="saúde da instância")
     p.add_argument("--json", action="store_true")
     p.add_argument("--online", action="store_true", help="testa também o servidor de memória, se estiver ligado")
@@ -1009,6 +1028,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--setup", action="store_true", help="cria a venv .venv-tui com as dependências travadas por hash")
     p.set_defaults(fn=cmd_tui)
     return ap
+
+
+def rawsort_categories() -> list[str]:
+    from .rawsort import CATEGORIES
+    return list(CATEGORIES)
 
 
 def cmd_demo(args, b) -> None:

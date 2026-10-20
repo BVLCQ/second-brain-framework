@@ -97,7 +97,7 @@ def parse_busy(raw, cfg) -> list[Interval]:
 
 
 def latest_calendar_snapshot(vault: Path) -> Path | None:
-    cands = list((vault / "RAW" / "inbox").glob("gcal-*.json")) + list((vault / "RAW").glob("*/*/gcal-*.json"))
+    cands = list((vault / "RAW" / "inbox").glob("gcal-*.json")) + list((vault / "RAW").glob("*/*/**/gcal-*.json"))
     return max(cands, key=lambda p: p.name.rsplit("-", 1)[-1]) if cands else None
 
 

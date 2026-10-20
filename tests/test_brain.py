@@ -15,7 +15,7 @@ sys.path.insert(0, str(ROOT))
 
 os.environ.setdefault("BRAIN_NOW", "2026-10-09T10:00:00-03:00")
 
-from brainlib import config, doctor, notes as notes_mod, focus, harvest, mcp_server, memory, outbox, planning, people, render, schema, share, snapshot, upstream, util
+from brainlib import config, doctor, notes as notes_mod, focus, harvest, mcp_server, memory, outbox, planning, people, rawsort, render, schema, share, snapshot, upstream, util
 from brainlib.core import Brain
 from brainlib.gcal import GoogleCalendar
 from brainlib import demo as demo_mod
@@ -417,6 +417,94 @@ class NoteTests(unittest.TestCase):
             self.assertIn("P1-2026-10-09-note.md", r.stdout)
             self.assertIn("P1-2026-10-09-note.md", run("note", "list", "--link", "p1").stdout)
             self.assertEqual(run("note", "add", "--link", "G9", "--text", "x").returncode, 3)
+
+
+class RawSortTests(unittest.TestCase):
+    CASES = {
+        "slack-slack-dm-marina-demo-2026-10-14T185117.md": "slack",
+        "drive-drive-meet-gravacoes-onboarding-2026-10-19T183016.md": "meetings",
+        "drive-drive-meet-gravacoes-pasta-onboarding-2026-10-19T183017.md": "connectors",
+        "drive-drive-meet-gravacoes-2026-10-14T185118.md": "connectors",
+        "drive-drive-meet-gravacoes-listagem-x-2026-10-20T143119.json": "connectors",
+        "jira-jira-me-2026-10-16T183900.json": "connectors",
+        "gcal-gcal-primary-2026-10-09T100000.json": "connectors",
+        "reuniao.vtt": "meetings",
+        "Relatório Final.PDF": "documents",
+        "ata.md": "documents",
+        "gravacao.mp4": "videos",
+        "audio.m4a": "videos",
+        "pagina.html": "artifacts",
+        "print.png": "images",
+        "P1-2026-10-09-note.md": "notes",
+        "note-2026-10-09-note-2.md": "notes",
+        "dados.parquet": "misc",
+        ".DS_Store": "misc",
+    }
+
+    def test_classify(self):
+        for name, want in self.CASES.items():
+            self.assertEqual(rawsort.classify(name), want, name)
+
+    def test_archive_moves_inbox_into_type_folder_without_overwriting(self):
+        with tempfile.TemporaryDirectory() as td:
+            inst = _inst(Path(td))
+            for name in ("slack-slack-a-2026-10-09T100000.md", "foto.png", ".keep.md"):
+                (inst.inbox / name).write_text("x", encoding="utf-8")
+            (inst.vault / "RAW" / "2026" / "10" / "images").mkdir(parents=True)
+            (inst.vault / "RAW" / "2026" / "10" / "images" / "foto.png").write_text("antigo", encoding="utf-8")
+            moved = rawsort.archive(inst)
+            self.assertEqual({m["to"] for m in moved}, {"RAW/2026/10/slack/slack-slack-a-2026-10-09T100000.md",
+                                                        "RAW/2026/10/images/foto-2.png"})
+            self.assertEqual((inst.vault / "RAW/2026/10/images/foto.png").read_text(encoding="utf-8"), "antigo")
+            self.assertEqual([p.name for p in inst.inbox.iterdir()], [".keep.md"])
+
+    def test_archive_forced_type_and_bad_args(self):
+        with tempfile.TemporaryDirectory() as td:
+            inst = _inst(Path(td))
+            (inst.inbox / "ata.md").write_text("x", encoding="utf-8")
+            (inst.vault / "PLANNING" / "x.md").write_text("x", encoding="utf-8")
+            with self.assertRaises(util.BrainError):
+                rawsort.archive(inst, ["ata.md"], "inexistente")
+            with self.assertRaises(util.BrainError):
+                rawsort.archive(inst, ["PLANNING/x.md"])             # só a inbox é origem
+            (m,) = rawsort.archive(inst, ["ata.md"], "meetings", "2026-09-30")
+            self.assertEqual(m["to"], "RAW/2026/09/meetings/ata.md")
+
+    def test_sort_existing_is_idempotent_and_old_ledger_paths_still_resolve(self):
+        with tempfile.TemporaryDirectory() as td:
+            inst = _inst(Path(td))
+            month = inst.vault / "RAW" / "2026" / "10"
+            month.mkdir(parents=True)
+            (month / "slack-slack-a-2026-10-09T100000.md").write_text("s", encoding="utf-8")
+            (month / "doc.pdf").write_text("d", encoding="utf-8")
+            (month / "[Training] Aula 2026_10_09.mp4").write_text("v", encoding="utf-8")   # colchetes não são glob
+            (inst.vault / "RAW" / "2026" / "09").mkdir()
+            (inst.vault / "RAW" / "2026" / "09" / "doc.pdf").write_text("outro mês", encoding="utf-8")
+            plan = rawsort.sort_existing(inst, dry_run=True)
+            self.assertEqual(len(plan), 4)
+            self.assertTrue((month / "doc.pdf").exists())            # simulação não move
+            self.assertEqual(len(rawsort.sort_existing(inst)), 4)
+            self.assertEqual(rawsort.sort_existing(inst), [])
+            self.assertFalse((month / "doc.pdf").exists())
+            self.assertEqual(rawsort.resolve(inst, "RAW/2026/10/doc.pdf"), month / "documents" / "doc.pdf")
+            self.assertEqual(rawsort.resolve(inst, "RAW/2026/09/doc.pdf").read_text(encoding="utf-8"), "outro mês")
+            self.assertEqual(rawsort.resolve(inst, "RAW/2026/10/[Training] Aula 2026_10_09.mp4"),
+                             month / "videos" / "[Training] Aula 2026_10_09.mp4")
+            self.assertIsNone(rawsort.resolve(inst, "RAW/2026/10/nao-existe.pdf"))
+            self.assertTrue(list(inst.logs.glob("raw-sort-*.jsonl")))
+
+    def test_notes_and_calendar_snapshots_are_found_in_type_folders(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            src = notes_mod.create(b, "nota arquivada por tipo", "P1")
+            rawsort.archive(b.inst)
+            (n,) = notes_mod.scan(b.inst)
+            self.assertTrue(n.archived)
+            self.assertEqual(n.path, f"RAW/2026/10/notes/{src.name}")
+            conn = b.inst.vault / "RAW" / "2026" / "10" / "connectors"
+            conn.mkdir(parents=True, exist_ok=True)
+            (conn / "gcal-gcal-primary-2026-10-09T100000.json").write_text("{}", encoding="utf-8")
+            self.assertEqual(focus.latest_calendar_snapshot(b.inst.vault).name, "gcal-gcal-primary-2026-10-09T100000.json")
 
 
 class PlanAddTests(unittest.TestCase):

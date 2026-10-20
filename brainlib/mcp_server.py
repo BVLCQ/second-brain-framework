@@ -10,7 +10,7 @@ import sys
 from datetime import date, timedelta
 from pathlib import Path
 
-from . import __version__, model, people, search, util
+from . import __version__, model, people, rawsort, search, util
 from .core import Brain
 
 PROTOCOLS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"]
@@ -109,6 +109,9 @@ def _read(brain, args) -> dict:
     rel = rel[len("vault/"):] if rel.startswith("vault/") else rel
     vault = brain.inst.vault.resolve()
     path = (vault / rel).resolve()
+    if rel.startswith("RAW/") and not path.is_file():
+        found = rawsort.resolve(brain.inst, rel)          # caminho antigo do ledger → pasta do tipo
+        path = found.resolve() if found else path
     if vault not in path.parents or not path.is_file():
         return {"erro": "caminho fora do vault ou inexistente"}
     if path.suffix.lower() not in {".md", ".txt", ".csv", ".json", ".jsonl", ".html", ".vtt", ".srt"}:

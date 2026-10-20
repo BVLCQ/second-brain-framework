@@ -75,7 +75,7 @@ def _taken(inst) -> set[str]:
     names = {p.name for p in inst.inbox.glob("*-note*.md")} if inst.inbox.exists() else set()
     raw = inst.vault / "RAW"
     if raw.exists():
-        names |= {p.name for p in raw.glob("*/*/*-note*.md")}
+        names |= {p.name for p in raw.glob("*/*/**/*-note*.md")}
     return names
 
 
@@ -181,7 +181,7 @@ def scan(inst) -> list[Note]:
         found += sorted(inst.inbox.glob("*-note*.md"))
     raw = inst.vault / "RAW"
     if raw.exists():
-        found += sorted(raw.glob("*/*/*-note*.md"))
+        found += sorted(raw.glob("*/*/**/*-note*.md"))
     out = [n for n in (_parse(p, inst.vault) for p in found) if n]
     out.sort(key=lambda n: (n.created, n.path), reverse=True)
     return out
