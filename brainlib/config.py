@@ -41,15 +41,6 @@ DEFAULTS: dict = {
         "max_file_mb": 25,
         "timeout_s": 120,
     },
-    "extractor": {
-        "enabled": False,                  # true quando o LM Studio estiver no ar
-        "base_url": "http://localhost:1234/v1",
-        "model": "",                       # ex.: "qwen/qwen3-4b-2507" — `lms ls` lista os carregados
-        "api_key_env": "",                 # LM Studio dispensa chave; gateway: nome da variável de ambiente
-        "temperature": 0.1,
-        "max_tokens": 4096,
-        "timeout_s": 180,
-    },
     "runner": {"agent": "auto", "command": "", "prompt": "/update", "timeout_min": 45,
                "allow": []},              # ferramentas MCP de LEITURA do agente headless (noturno e TUI)
     "tui": {"agent_allow": [],             # ferramentas extras do agente nas ações ⚡ do TUI (ex.: MCP de escrita)

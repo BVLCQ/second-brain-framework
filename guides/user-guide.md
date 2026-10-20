@@ -430,9 +430,6 @@ em outros agentes, o texto é entendido do mesmo jeito.)
   classifica (reunião · documento · nota · conector), extrai o artefato
   (decisões com quem/quando/base, ações por dono, citações com minuto, no
   caso de reunião), resolve identidades, grava no ledger, renderiza.
-  Se o extrator local (`[extractor]`) estiver ligado, o passo de extração
-  usa o modelo local e o agente só revisa — mais barato e igualmente
-  validado.
 - **Recebe:** ~5 linhas por item (tipo, extrações, menções, estranheza) e o
   contador final `inbox: 0 restantes`.
 - **Pegadinha:** nada. Rodar duas vezes não duplica (idempotente).
@@ -603,7 +600,6 @@ Já coberto na seção 3. Gatilho: PROFILE e PLANNING vazios.
 | `./brain search "termo"` | busca sem LLM no ledger + artefatos |
 | `./brain doctor [--online]` | saúde da instância (inclui memória) |
 | `./brain validate` | revalida o ledger inteiro |
-| `./brain extract <raw>` | rascunho de extração com modelo local (valida, não grava) |
 | `./brain nightly` | o noturno na mão (render → /update → memória → backup-dom) |
 | `./brain schedule install --time 05:00` | agendar o noturno |
 | `./brain memory sync` / `recall "…"` | índice semântico (se ligado) |
@@ -699,7 +695,7 @@ checkbox**, e `FRESH/` é só leitura prática.
 | Pessoa "não consta" ao citar alguém | ficha nova | `/person <nome>` → ele oferece cadastrar com aliases |
 | Duas fichas da mesma pessoa | criadas antes dos aliases | `./brain person alias` funde por alias |
 | `/ask` responde "não consta" para algo que existia | filtro muito estreito na busca | tente termo do título; se memória ligada, `./brain memory sync` |
-| Extrator local não responde | LM Studio parado | `lms server start` (setup.md §3) |
+| Recall/embeddings falham | LM Studio parado ou sem o `bge-m3` carregado | `lms server start` e `lms load text-embedding-bge-m3` (setup.md §3) |
 | Painel "velho" | ninguém renderizou | `/brief` (renderiza antes) ou `./brain render --open` |
 | Perigo/erro no doctor | ele diz exatamente o quê | siga a linha; se ledger: `./brain validate` |
 | Restauro de backup | — | seção `/backup` acima; o agente guia passo a passo |

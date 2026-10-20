@@ -44,11 +44,6 @@ Para cada item da inbox (ignore `.keep.md`):
 >
 > **PDF:** `./brain pdf text <arquivo> [--pages 1-3]` devolve o texto por página (sem precisar de poppler; no macOS usa o PDFKit). Se vier vazio, o PDF é escaneado: `./brain pdf render <arquivo> --pages 1-3` gera PNGs que você lê como imagem. Nome com espaço ou acento: passe entre aspas, o arquivo no RAW não é renomeado.
 
-0. **Atalho opcional** — se `[extractor]` estiver ligado (LM Studio), rode
-   `./brain extract vault/RAW/<ano>/<mês>/<arquivo>`: o modelo local devolve
-   um rascunho **já validado** (pessoas resolvidas, datas, escopo). Revise,
-   complete o que faltar e use como lote do passo 4. Modelo erra → o CLI
-   recusa; o rascunho não substitui seu julgamento.
 1. Mova para `vault/RAW/<ano>/<mês>/` pela data de **captura** (hoje, se não souber). Colisão de nome → sufixo `-2`.
 2. Escreva o artefato em `vault/PROCESSED/<ano>/<mês>/<slug>.md`.
 3. Registre pessoas novas (`brain person add`) e o artefato:

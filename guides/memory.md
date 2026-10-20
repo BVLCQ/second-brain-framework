@@ -55,26 +55,24 @@ passa disso — reduza `retain_chunk_size`). Não carregue um LLM no LM Studio s
 
 ### Recomendado: daemon local, sem Docker (LM Studio)
 
-A receita completa e verificável está no **`setup.md`** (seção 5). Resumo:
+A receita completa e verificável está no **`setup.md`** (seção 4). Resumo:
 
 ```bash
 uv tool install hindsight-embed          # daemon + PostgreSQL embutido (pg0)
-export HINDSIGHT_API_LLM_PROVIDER=lmstudio
-export HINDSIGHT_API_LLM_BASE_URL=http://localhost:1234/v1
-export HINDSIGHT_API_LLM_MODEL=<id do `lms ls`>
-export HINDSIGHT_API_LLM_API_KEY=lm-studio   # placeholder; o LM Studio ignora
+export HINDSIGHT_API_EMBEDDINGS_PROVIDER=openai
+export HINDSIGHT_API_EMBEDDINGS_OPENAI_BASE_URL=http://localhost:1234/v1
+export HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL=text-embedding-bge-m3
+export HINDSIGHT_API_EMBEDDINGS_OPENAI_API_KEY=lm-studio   # placeholder; o LM Studio ignora
+export HINDSIGHT_API_RERANKER_PROVIDER=rrf
+export HINDSIGHT_API_SKIP_LLM_VERIFICATION=true            # sem LLM carregado ao subir
 hindsight-embed configure
 hindsight-embed daemon status             # sobe na primeira chamada
 curl localhost:8888/health
 ```
 
-O LLM é só configuração do servidor (os bancos usam `chunks`, sem extração); se
-você reativar `concise`, ele roda no **LM Studio local** — conteúdo do vault não sai da
-máquina. Embeddings e reranker usam os modelos locais embutidos do Hindsight
-por padrão; se o recall em pt-BR ficar fraco, aponte os embeddings para um
-modelo multilíngue do LM Studio (ex.: `bge-m3`, 1024 dims) via
-`HINDSIGHT_API_EMBEDDINGS_PROVIDER=openai` +
-`HINDSIGHT_API_EMBEDDINGS_OPENAI_BASE_URL=http://localhost:1234/v1`.
+Os bancos usam `chunks`, então o servidor não chama LLM: só o `bge-m3` fica carregado no
+LM Studio, e o conteúdo do vault não sai da máquina. Se você reativar `concise`, configure
+também `HINDSIGHT_API_LLM_*` (LM Studio ou nuvem) e remova o `SKIP_LLM_VERIFICATION`.
 
 ### Alternativa: API Service (Docker) com nuvem
 

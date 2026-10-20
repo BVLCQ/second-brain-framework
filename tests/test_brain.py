@@ -15,7 +15,7 @@ sys.path.insert(0, str(ROOT))
 
 os.environ.setdefault("BRAIN_NOW", "2026-10-09T10:00:00-03:00")
 
-from brainlib import config, doctor, notes as notes_mod, extract as extract_mod, focus, harvest, mcp_server, memory, outbox, planning, people, render, schema, share, snapshot, upstream, util
+from brainlib import config, doctor, notes as notes_mod, focus, harvest, mcp_server, memory, outbox, planning, people, render, schema, share, snapshot, upstream, util
 from brainlib.core import Brain
 from brainlib.gcal import GoogleCalendar
 from brainlib import demo as demo_mod
@@ -545,87 +545,6 @@ class DemoTests(unittest.TestCase):
             self.assertTrue((target / "vault" / "FRESH" / "projects" / "P1.md").exists())
 
 
-
-
-class ExtractTests(unittest.TestCase):
-    """Funil do extrator sem rede: parse, refinamento e dry-run."""
-
-    def test_parse_json_fences_and_prose(self):
-        self.assertEqual(extract_mod.parse_json('```json\n[{"type":"action.opened"}]\n```'),
-                         [{"type": "action.opened"}])
-        self.assertEqual(extract_mod.parse_json('Aqui vai:\n[{"a":1}]\nobrigado'),
-                         [{"a": 1}])
-        self.assertEqual(extract_mod.parse_json('{"type":"decision.made"}'),
-                         [{"type": "decision.made"}])
-        with self.assertRaises(util.BrainError):
-            extract_mod.parse_json("sem json aqui")
-
-    def test_guess_kind(self):
-        with tempfile.TemporaryDirectory() as td:
-            root = Path(td)
-            cases = {
-                "slack-time-dados.md": "conector",
-                "ata-reuniao-x.md": "reuniao",
-                "lembrete-rapido.md": "nota",
-            }
-            for name, want in cases.items():
-                f = root / name
-                f.write_text("conteúdo qualquer " * 3, encoding="utf-8")
-                self.assertEqual(extract_mod.guess_kind(f), want, name)
-            big = root / "politica-gigante.md"
-            big.write_text("x" * 8000, encoding="utf-8")
-            self.assertEqual(extract_mod.guess_kind(big), "documento")
-
-    def test_refine_and_dry_run(self):
-        with tempfile.TemporaryDirectory() as td:
-            b = _brain(Path(td))
-            raw_items = [
-                {"type": "action.opened", "id": "A-9999", "data": {"title": "Ler política",
-                 "owner": "Marina-demo", "list": "mine", "due": "2026-10-15", "effort_min": 30}},
-                {"type": "decision.made", "data": {"title": "Congelar pipeline",
-                 "decided_by": "Marina-demo", "project": "P1"}},
-                {"type": "action.closed", "data": {"id": "A-0001"}},   # fora do escopo
-            ]
-            items, dropped = extract_mod.refine(b, raw_items, "RAW/2026/10/x.md")
-            self.assertEqual(len(items), 2)
-            self.assertEqual(dropped, ["tipo fora do escopo do extrator: 'action.closed'"])
-            # alias Marina-demo → marina-demo resolvido deterministicamente; id inventado ignorado
-            self.assertEqual(items[0]["data"]["owner"], "marina-demo")
-            # "eu" do modelo mapeia para o dono real da instância, seja qual for o id
-            items_eu, _ = extract_mod.refine(b, [{"type": "action.opened",
-                "data": {"title": "x", "owner": "Eu"}}], "RAW/x.md")
-            self.assertEqual(items_eu[0]["data"]["owner"], "eu")
-            self.assertEqual(items[1]["data"]["decided_by"], ["marina-demo"])
-            self.assertNotIn("id", items[0])
-            self.assertEqual(items[0]["prov"], "observado")
-            self.assertEqual(items[0]["source"], "RAW/2026/10/x.md")
-            ok, errs = extract_mod.dry_run(b, items)
-            self.assertEqual(len(ok), 2)
-            self.assertEqual(errs, [])
-            # pessoa desconhecida: o dry-run recusa (validação do ledger)
-            bad = [{"type": "action.opened", "by": "agent", "prov": "observado",
-                    "source": "RAW/x.md", "data": {"title": "x", "owner": "fantasma"}}]
-            ok2, errs2 = extract_mod.dry_run(b, bad)
-            self.assertEqual(ok2, [])
-            self.assertIn("fantasma", errs2[0])
-
-    def test_disabled_by_default(self):
-        with tempfile.TemporaryDirectory() as td:
-            b = _brain(Path(td))
-            f = Path(td) / "vault" / "RAW" / "inbox" / "n.md"
-            f.write_text("texto", encoding="utf-8")
-            with self.assertRaises(util.BrainError):
-                extract_mod.extract(b, f)
-
-    def test_outside_vault_refused(self):
-        with tempfile.TemporaryDirectory() as td:
-            b = _brain(Path(td))
-            outside = Path(td) / "fora.md"
-            outside.write_text("x", encoding="utf-8")
-            b.inst.cfg["extractor"]["enabled"] = True
-            b.inst.cfg["extractor"]["model"] = "m"
-            with self.assertRaises(util.BrainError):
-                extract_mod.extract(b, outside)
 
 
 class FakeHindsight(memory.Hindsight):

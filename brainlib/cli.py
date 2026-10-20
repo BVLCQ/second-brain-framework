@@ -507,11 +507,6 @@ def cmd_memory(args, b: Brain) -> None:
     memory.cli(args, b)
 
 
-def cmd_extract(args, b: Brain) -> None:
-    from . import extract
-    extract.cli(args, b)
-
-
 def cmd_mcp(args, b: Brain) -> None:
     from . import mcp_server
     mcp_server.serve(b)
@@ -930,14 +925,6 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("mcp", help="servidor MCP somente-leitura (stdio) para outras IAs")
     p.set_defaults(fn=cmd_mcp)
-
-    p = sub.add_parser("extract", help="rascunho de extração com modelo local (LM Studio) — valida, não grava")
-    p.add_argument("path", nargs="?", help="arquivo da fonte (ex.: vault/RAW/2026/10/reuniao-x.md)")
-    p.add_argument("--kind", choices=["auto", "reuniao", "documento", "nota", "conector"], default="auto")
-    p.add_argument("--record", action="store_true", help="grava no ledger SOMENTE os eventos válidos")
-    p.add_argument("--selftest", action="store_true", help="extrai de uma reunião do vault de demo e valida o funil")
-    p.add_argument("--json", action="store_true")
-    p.set_defaults(fn=cmd_extract)
 
     p = sub.add_parser("nightly", help="rotina noturna: render → agente → memória → backup → render")
     p.add_argument("--skip-agent", action="store_true")

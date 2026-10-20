@@ -26,7 +26,7 @@ comandos, use o cockpit de terminal (`brain tui`); o guia interativo está em [`
 13. [Foco](#13-foco--focus) — `focus`
 14. [Mensagens](#14-mensagens--outbox) — `outbox`
 15. [Exportar e publicar](#15-exportar-e-publicar--share--publish) — `share` · `publish`
-16. [Fontes e extração](#16-fontes-e-extração--snapshot--extract) — `snapshot` · `extract`
+16. [Fontes](#16-fontes--snapshot) — `snapshot`
 17. [Memória e MCP](#17-memória-e-mcp--memory--mcp) — `memory` · `mcp`
 18. [Rotina noturna e backup](#18-rotina-noturna-e-backup--nightly--schedule--backup) — `nightly` · `schedule` · `backup`
 19. [Slash commands do agente → CLI](#19-slash-commands-do-agente--cli)
@@ -269,7 +269,7 @@ Sem o extra, `brain tui` sai com código 3 e a instrução. A aba **Fontes** do 
 que precisa de permissão para as ferramentas MCP de leitura (`[runner].allow`, ou `[runner].command`). Teclas: `?` ajuda do contexto · `:` paleta de
 comandos · `g` busca · `/` filtro (com um id exato, `A-####`, `G#`, `P#`, `P#.n`, `D-####`…, mostra tudo que está associado a ele: o plano acima e abaixo, ações, decisões, entregas, pessoas; texto livre continua sendo busca no texto) · `N` nova nota (veja `brain note`) · `1`–`6` painéis (só pelos números; `6` é o log: `j` `k` rolam, `c` limpa) · `[` `]` ou `←` `→` abas · `⏎` ou duplo clique amplia o detalhe · `ctrl+t` troca o tema · `q` sai. O mouse também funciona: clique nas abas, nas linhas e nas dicas da barra, e a roda rola a lista. O TUI relê o vault sozinho quando ele muda fora dele (agente, outro terminal). O mapa
 completo por contexto, a legenda e uma versão para experimentar com dados fictícios estão em
-[`tui-mockup.html`](tui-mockup.html). Fora do TUI ficam só o que é do agente (`init`, `snapshot`, `add`, `extract`,
+[`tui-mockup.html`](tui-mockup.html). Fora do TUI ficam só o que é do agente (`init`, `snapshot`, `add`,
 `proposal add`; `outbox sent` e `publish done` ele registra ao enviar e publicar) e `demo`; o teste
 `tests/test_tui.py::CoverageTest` garante que nenhum subcomando novo da CLI fique sem lugar ou sem justificativa. `[runner].allow` do `brain.toml` lista as ferramentas MCP de leitura do agente headless (noturno e TUI). Em `[tui]`, `model` e `effort` escolhem o modelo e o esforço do claude nas ações ⚡ (ex.: `claude-haiku-5-5` · `high`; vazio = padrão; não valem com `[runner].command`), e `agent_allow` lista ferramentas extras, só do TUI, que o
 agente pode usar nas ações ⚡ (por exemplo as de escrita do MCP do Slack, só para enviar uma mensagem aprovada).
@@ -801,7 +801,7 @@ O conteúdo é travado por hash: se o arquivo mudar depois da aprovação, refa�
 
 ---
 
-## 16. Fontes e extração — `snapshot` · `extract`
+## 16. Fontes — `snapshot`
 
 ### `brain snapshot --key CHAVE`
 Grava uma leitura de fonte (MCP de Slack, Gmail, Calendar, Drive…) na inbox. Conteúdo
@@ -831,23 +831,6 @@ Em pasta observada só o item que mudou gera arquivo. O mesmo conteúdo já guar
 chave ou item (atalho, arquivo movido de subpasta, chave antiga) não é duplicado. O `doctor`
 continua vendo uma fonte só (a `--key`).
 Depois: `/dump` no agente para processar.
-
-### `brain extract [ARQUIVO]`
-Rascunho de extração com o modelo local do LM Studio (`[extractor]`). Mostra eventos
-propostos, validados contra o ledger (`✓`/`✗`).
-
-| Opção | Uso |
-|---|---|
-| `--kind auto\|reuniao\|documento\|nota\|conector` | padrão `auto` |
-| `--record` | grava **somente** os eventos válidos |
-| `--selftest` | prova ponta a ponta numa reunião do vault de demo (não toca no seu) |
-| `--json` | |
-
-```bash
-brain extract --selftest
-brain extract vault/RAW/2026/10/reuniao-1a1-marina-demo.md
-brain extract vault/RAW/2026/10/reuniao-1a1-marina-demo.md --record
-```
 
 ---
 
@@ -927,7 +910,7 @@ lê, julga e mostra; o `brain` valida e grava.
 | `/week` | cockpit semanal | `render`, `proposal` |
 | `/todo <texto>` | criar ação falando | `action open --by owner` |
 | `/done A-#### <como>` | fechar ação | `action close` |
-| `/dump` | processar a inbox | `artifact`, `add`, `extract`, `render`, `memory sync` |
+| `/dump` | processar a inbox | `artifact`, `add`, `render`, `memory sync` |
 | `/update` | puxar todas as fontes do `watch.toml` | `snapshot`, `/dump` |
 | `/connect <fonte>` | uma fonte, agora | `snapshot`, `/dump` |
 | `/gmail` · `/slack` · `/calendar` · `/drive` | atalhos por fonte | `snapshot` |

@@ -75,7 +75,7 @@ ARTIFACTS = {
                         "Galeria vence a esquina (break-even no 9º mês, reforma de até 25 mil); ponto novo é o espaço da galeria."),
 }
 
-# Fontes originais (RAW) — o demo precisa de RAW real para o extrator (`brain extract --selftest`).
+# Fontes originais (RAW) — o demo precisa de RAW real para o /dump e o /ask.
 RAW_SOURCES = {
     "vistoria-imovel": """# Vistoria do imóvel da esquina — ata resumida
 

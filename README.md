@@ -18,8 +18,8 @@ experimentar no navegador com dados fictícios, é `guides/tui-mockup.html`.
   lock e fold determinísticos. O LLM não numera nada: toda escrita passa
   pelo `./brain`, que valida referências, proveniência e ciclo de vida.
 - **O LLM extrai e julga; o CLI contabiliza.** A extração pode ser feita
-  pelo agente da sessão **ou** por um modelo local barato (`./brain extract`
-  via LM Studio) — o ledger valida os dois igualmente.
+  pelo agente da sessão — o ledger valida referências, proveniência e ciclo
+  de vida de tudo que ele grava.
 - **FRESH é 100% derivado** — `./brain render` regenera Markdown + painel
   HTML offline (um arquivo, abre no navegador: goals, projetos, decisões,
   TODO, timeline, Gantt, busca). Antes de sobrescrever, colhe as edições do
@@ -44,7 +44,7 @@ experimentar no navegador com dados fictícios, é `guides/tui-mockup.html`.
 - Um agente com ferramentas MCP de leitura — **Claude Code** é o alvo de
   referência (comandos `/` em `.claude/commands/`); Cursor, Codex e outros
   funcionam lendo `commands/*/SKILL.md`.
-- Opcional: **LM Studio** (extração local + embeddings), **Hindsight**
+- Opcional: **LM Studio** (embeddings `bge-m3`), **Hindsight**
   (memória semântica), OAuth Google (foco no calendário / backup no Drive).
   O `setup.md` instala tudo — inclusive em máquina nova, executado por
   agente.
@@ -61,7 +61,7 @@ mise install                 # Python 3.12 (ou qualquer 3.11+ já presente)
 Abra o chat do agente **nesta pasta** e digite `/init`. Ele entrevista,
 propõe PROFILE + PLANNING e espera o seu "ok".
 
-Para o stack completo local (LM Studio + extrator + Hindsight + noturno),
+Para o stack completo local (LM Studio + Hindsight + noturno),
 siga o **`setup.md`** — em uma máquina nova, basta pedir ao agente:
 *execute o setup.md*.
 
@@ -93,7 +93,6 @@ Noturno (render → agente `/update` → memória → backup semanal):
 | Mandar mensagem | `/outbox` (rascunho → "enviar 1") |
 | Compartilhar status | `/share` · `/recap` · `/publish` |
 | Perguntar | `/ask o que sabemos sobre X?` |
-| Rascunho de extração com modelo local | `./brain extract vault/RAW/2026/10/x.md` |
 | Saúde da instância | `./brain doctor` |
 
 Toda escrita no livro-razão passa por `./brain`. O agente não edita
