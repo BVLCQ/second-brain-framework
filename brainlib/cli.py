@@ -997,6 +997,12 @@ def build_parser() -> argparse.ArgumentParser:
     x = ws.add_parser("since", help="início da janela de leitura da fonte (o agente não calcula datas)")
     x.add_argument("key")
     x.add_argument("--json", action="store_true")
+    x = ws.add_parser("folders", help="de uma pasta observada, quais subpastas descer (pela data da call no nome × último pull)")
+    x.add_argument("key")
+    x.add_argument("--file", help="JSON com [{id, name, modifiedTime?}] (padrão: stdin)")
+    x.add_argument("--margin", default="3d", help="folga antes do último pull para notas editadas depois da call (padrão 3d)")
+    x.add_argument("--full", action="store_true", help="varredura completa: desce em todas")
+    x.add_argument("--json", action="store_true")
     p.set_defaults(fn=cmd_watch)
 
     p = sub.add_parser("tui", help="cockpit de terminal (Textual, extra opcional): painéis, teclas contextuais e log da CLI")

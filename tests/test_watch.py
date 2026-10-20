@@ -161,6 +161,37 @@ class WatchSinceTest(_WatchBase):
     def test_auto_is_capped_after_a_long_gap(self):
         self.assertEqual(self.since("auto", last_ok="2026-08-01T07:00:00-03:00")["hours"], 14 * 24.0)
 
+    def plan(self, folders, last_ok="2026-10-19T07:00:00-03:00", **kw) -> dict:
+        watch.add(self.inst, "slack-x", {"kind": "slack", "window": "auto"})
+        old = os.environ.get("BRAIN_NOW")
+        os.environ["BRAIN_NOW"] = self.NOW
+        try:
+            return watch.plan_folders(self.brain(last_ok), "slack-x", folders, **kw)
+        finally:
+            os.environ.pop("BRAIN_NOW") if old is None else os.environ.__setitem__("BRAIN_NOW", old)
+
+    def test_name_timestamp_formats(self):
+        for name, want in [("Retro - 2026/10/16 14:00", (2026, 10, 16, 14, 0)),
+                           ("Retro 2026-10-16", (2026, 10, 16, 0, 0)),
+                           ("Retro 16/10/2026 09:05", (2026, 10, 16, 9, 5))]:
+            t = watch.name_timestamp(name)
+            self.assertEqual((t.year, t.month, t.day, t.hour, t.minute), want, name)
+        self.assertIsNone(watch.name_timestamp("Sem data"))
+        self.assertIsNone(watch.name_timestamp("Retro 2026/13/45"))
+
+    def test_folder_plan_skips_old_calls_only(self):
+        r = self.plan([{"id": "novo", "name": "Daily - 2026/10/19 09:00"},
+                       {"id": "velho", "name": "Retro - 2026/10/01 09:00"},
+                       {"id": "sem", "name": "Notas soltas"},
+                       {"id": "mexida", "name": "Velha - 2026/09/01 09:00", "modifiedTime": "2026-10-19T12:00:00Z"}])
+        got = {x["id"]: x["descend"] for x in r["folders"]}
+        self.assertEqual(got, {"novo": True, "velho": False, "sem": True, "mexida": True})
+        self.assertEqual((r["descend"], r["skip"]), (3, 1))
+
+    def test_folder_plan_full_descends_everywhere(self):
+        r = self.plan([{"id": "velho", "name": "Retro - 2026/10/01 09:00"}], full=True)
+        self.assertEqual((r["descend"], r["skip"]), (1, 0))
+
     def test_invalid_window_is_refused(self):
         for bad in ("2 dias", "0d", "d", "1m"):
             with self.assertRaises(util.BrainError, msg=bad):

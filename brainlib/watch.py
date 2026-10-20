@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import sys
 import tomllib
 from dataclasses import dataclass
 from datetime import timedelta
@@ -129,6 +130,63 @@ def since(brain, key: str) -> dict:
             start, why = now - AUTO_FIRST, f"primeiro pull — {AUTO_FIRST.days}d para trás"
     return {"key": key, "window": spec, "since": start.isoformat(timespec="seconds"), "epoch": int(start.timestamp()),
             "jql": start.strftime("%Y/%m/%d %H:%M"), "hours": round((now - start).total_seconds() / 3600, 1), "why": why}
+
+
+NAME_TS = [
+    (re.compile(r"(\d{4})[/-](\d{2})[/-](\d{2})(?:[ T_]+(\d{1,2})[:h.](\d{2}))?"), ("y", "m", "d", "H", "M")),
+    (re.compile(r"(\d{2})[/-](\d{2})[/-](\d{4})(?:[ T_]+(\d{1,2})[:h.](\d{2}))?"), ("d", "m", "y", "H", "M")),
+]
+FOLDER_MARGIN = "3d"   # a nota do Meet pode sair/ser editada dias depois da call
+
+
+def name_timestamp(name: str):
+    """Data/hora da call escrita no nome ('Retro MOps - 2026/10/16 14:00'), no fuso local. None = não achou."""
+    from datetime import datetime
+    for rx, order in NAME_TS:
+        m = rx.search(name or "")
+        if not m:
+            continue
+        f = dict(zip(order, m.groups()))
+        try:
+            return datetime(int(f["y"]), int(f["m"]), int(f["d"]), int(f["H"] or 0), int(f["M"] or 0),
+                            tzinfo=util.tz())
+        except ValueError:
+            continue
+    return None
+
+
+def plan_folders(brain, key: str, folders: list[dict], margin: str = FOLDER_MARGIN, full: bool = False) -> dict:
+    """Quais subpastas de uma fonte `folder` vale descer — decidido pelo carimbo do último pull, sem LLM.
+
+    Uma subpasta é PULADA só quando a call dela (data no nome) é anterior a `since − margem` e a própria pasta
+    não foi modificada desde `since`. Sem data legível no nome → desce (não dá para provar que é antiga).
+    `full` desce em todas (varredura completa, p.ex. semanal ou depois de falhas).
+    """
+    st = since(brain, key)
+    start = util.parse_dt(st["since"])
+    delta = parse_window(margin)
+    if delta is None:
+        raise util.BrainError("margem inválida (use 12h, 3d, 1w…)", code=4)
+    cutoff = start - delta
+    rows = []
+    for f in folders:
+        name = str(f.get("name") or f.get("title") or "")
+        at, mod = name_timestamp(name), f.get("modifiedTime")
+        if full:
+            go, why = True, "varredura completa"
+        elif at is None:
+            go, why = True, "sem data no nome"
+        elif at >= cutoff:
+            go, why = True, "call dentro da janela"
+        elif mod and util.parse_dt(mod) >= start:
+            go, why = True, "pasta modificada desde o último pull"
+        else:
+            go, why = False, "call anterior à janela"
+        rows.append({"id": f.get("id", ""), "name": name, "call_at": at.isoformat(timespec="minutes") if at else None,
+                     "descend": go, "why": why})
+    return {"key": key, "since": st["since"], "margin": margin, "cutoff": cutoff.isoformat(timespec="minutes"),
+            "full": full, "descend": sum(r["descend"] for r in rows), "skip": sum(not r["descend"] for r in rows),
+            "folders": rows}
 
 
 def _split_value(rhs: str) -> tuple[str, str]:
@@ -267,6 +325,23 @@ def cli(args, brain) -> None:
             print(json.dumps(r, ensure_ascii=False, indent=2))
         else:
             print(f"since={r['since']} · epoch={r['epoch']} · jql=\"{r['jql']}\" · {r['hours']}h · {r['why']}")
+    elif c == "folders":
+        raw = Path(args.file).read_text(encoding="utf-8") if args.file else sys.stdin.read()
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError as e:
+            raise util.BrainError(f"entrada não é JSON ({e})", code=2)
+        items = data.get("folders", data.get("files")) if isinstance(data, dict) else data
+        if not isinstance(items, list):
+            raise util.BrainError("esperava uma lista JSON de subpastas [{id, name, modifiedTime?}]", code=2)
+        r = plan_folders(brain, args.key, items, args.margin, args.full)
+        if args.json:
+            print(json.dumps(r, ensure_ascii=False, indent=2))
+        else:
+            print(f"{r['key']} · desde {r['since'][:16].replace('T', ' ')} (corte {r['cutoff'].replace('T', ' ')}, "
+                  f"margem {r['margin']}) · descer {r['descend']} · pular {r['skip']}")
+            for x in r["folders"]:
+                print(f"{'descer' if x['descend'] else 'pular '}\t{x['id']}\t{x['call_at'] or '—'}\t{x['name']}\t({x['why']})")
     elif c == "add":
         f = {"kind": args.kind, "window": args.window, "note": args.note, **parse_pairs(args.set)}
         add(inst, args.key, f)

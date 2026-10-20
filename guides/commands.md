@@ -230,6 +230,7 @@ nada é escrito. Quem *lê* as fontes é o agente (`/update`, `/connect`); o `br
 |---|---|
 | `list [--json]` | fontes cadastradas |
 | `since KEY [--json]` | início da janela de leitura da fonte (`since`, `epoch`, `jql`) — é o que o agente usa; ele não calcula datas |
+| `folders KEY [--file F] [--margin 3d] [--full] [--json]` | de uma pasta do Drive, quais subpastas descer: lê `[{id, name, modifiedTime?}]` (arquivo ou stdin) e compara a data da call no nome com o carimbo do último pull, menos a folga. Nome sem data ou pasta modificada desde o pull sempre desce; `--full` desce em todas |
 | `add KEY --kind K` | `--window auto\|12h\|1d\|2w` · `--note "…"` · `--set campo=valor` (ex.: `channel=#time-dados`, `jql=…`; repita a opção) |
 | `edit KEY` | mesmas opções, mais `--rename NOVA_KEY` e `--unset CAMPO`. `key` e `kind` não saem |
 | `remove KEY` | tira do watch; snapshots já gravados e o ledger ficam |
