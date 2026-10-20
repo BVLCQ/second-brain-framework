@@ -153,7 +153,8 @@ def row(store, it, width: int) -> Text:
         extra = " · ".join(x for x in (d.get("kind"), d.get("window")) if x)
         return two(T((mark, st), " ", d["key"], ("  " + extra if extra else "", DIM)), right, width)
     if k == "sys":
-        return two(T(("▸", DIM), " ", d["name"]), T(("porta ", AMB) if d.get("door") else "", ("info" if d.get("info") else "⏎", DIM)), width)
+        right = T(("⚡ ", VIO)) if d.get("agent") else T(("porta ", AMB) if d.get("door") else "", ("info" if d.get("info") else "⏎", DIM))
+        return two(T(("▸", DIM), " ", d["name"]), right, width)
     return T(str(it.id))
 
 
@@ -314,6 +315,10 @@ def d_sys(store, it) -> Doc:
     doc = Doc().h(o["name"]).blank().p(o["desc"])
     if o.get("door"):
         doc.blank().p(Text(" porta · " + o["door"] + " ", "bold yellow"), ("  pede confirmação antes de rodar", DIM))
+    if o.get("agent"):
+        doc.sec("Equivalente no chat").cmd(o["agent"] + (" <" + o["arg"][0] + ">" if o.get("arg") else ""))
+        doc.blank().p(("⚡ roda o agente headless, mostra o comando antes e espera o enter. O que ele escreve passa pelo ./brain.", DIM))
+        return doc
     doc.sec("Equivalente na CLI").cmd("brain " + (" ".join(o["args"]) if o.get("args") else "memory recall|reflect …"))
     if not o.get("info"):
         doc.blank().p(("⏎ executa e mostra a saída no log", DIM))

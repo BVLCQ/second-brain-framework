@@ -168,8 +168,9 @@ uv tool install hindsight-embed
 
 ### 5.2 Configuração — LLM no LM Studio
 
-Os bancos do brain usam `retain_extraction_mode = chunks` (aplicado por `./brain memory setup`):
-o retain não chama o LLM; ele só entra se você voltar a `concise`. Configure-o mesmo assim.
+`./brain memory setup` põe os bancos em `chunks`, sem consolidação nem observações: o LLM não é
+chamado (só volta a entrar se você reativar `concise`). Configure-o mesmo assim, mas não precisa
+mantê-lo carregado. O modelo que fica em uso é o de embeddings (`bge-m3`; `guides/memory.md`).
 
 ```bash
 export HINDSIGHT_API_LLM_PROVIDER=lmstudio

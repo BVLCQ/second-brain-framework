@@ -62,6 +62,47 @@ SYS_OPS = [
      "desc": "Mostra a linha do crontab, se houver."},
     {"id": "sys:unsched", "name": "Agendamento: remover", "args": ["schedule", "remove"], "confirm": True,
      "desc": "Remove a entrada do noturno do crontab."},
+    # Comandos do agente (⚡ na lista): o mesmo que digitar /<skill> no chat. "do" são os passos mostrados antes de rodar;
+    # "arg" abre um campo (req = obrigatório); os cinco primeiros têm fluxo próprio no app (agent_*).
+    {"id": "sys:ai-dump", "name": "Processar a inbox (/dump)", "agent": "/dump",
+     "desc": "Arquiva o que está em RAW/inbox/, extrai decisões, ações e fatos com proveniência e grava tudo pelo ./brain."},
+    {"id": "sys:ai-update", "name": "Atualizar tudo (/update)", "agent": "/update",
+     "desc": "Puxa as fontes do watch.toml pelo MCP de leitura, grava os snapshots, processa a inbox e regenera as views."},
+    {"id": "sys:ai-connect", "name": "Puxar uma fonte (/connect)", "agent": "/connect",
+     "desc": "Escolhe uma fonte, lê o estado atual pelo MCP (só leitura), grava o snapshot e processa a novidade."},
+    {"id": "sys:ai-brief", "name": "Brief do dia (/brief)", "agent": "/brief",
+     "desc": "Hoje, ações atrasadas, próximos 3 dias e goal em foco. A narrativa vai para FRESH/notes/."},
+    {"id": "sys:ai-week", "name": "Cockpit da semana (/week)", "agent": "/week",
+     "do": ["Lookahead de 14 dias, radar de goals e ações envelhecendo", "Escreve a narrativa em FRESH/notes/semana.md",
+            "Mudança em goals só vira proposta: o gate continua seu"],
+     "desc": "Lookahead de 14 dias, radar de goals, ações envelhecendo e foco sugerido."},
+    {"id": "sys:ai-gmail", "name": "Ler emails (/gmail)", "agent": "/gmail", "arg": ("filtro ou janela", "da Marina-demo · assunto X · 3d (vazio = hoje)", False),
+     "do": ["Lê a caixa pelo MCP, só leitura (nunca compõe nem envia)", "Grava com brain snapshot e processa (/dump)",
+            "Fechar ação com base no email vira proposta, não fecho"],
+     "desc": "Puxa emails pelo MCP de leitura: snapshot na inbox, /dump e um digest do que é novo e do que cobra você."},
+    {"id": "sys:ai-slack", "name": "Ler Slack (/slack)", "agent": "/slack", "arg": ("canal ou pessoa", "#canal @user 7d", True),
+     "do": ["Lê o canal ou a conversa pelo MCP, só leitura (janela padrão 7d)", "Grava com brain snapshot e processa (/dump)",
+            "Enviar mensagem é a outbox (aba Aprovar), não este comando"],
+     "desc": "Puxa mensagens de um canal ou conversa pelo MCP de leitura e processa o que mudou."},
+    {"id": "sys:ai-drive", "name": "Ler doc do Drive (/drive)", "agent": "/drive", "arg": ("termo ou id", "nome do doc ou id do arquivo", True),
+     "do": ["Busca ou exporta o doc pelo MCP, só leitura (nunca cria nem edita)", "Grava o snapshot datado e processa (/dump)",
+            "Primeira vez = estado inicial; depois, o que mudou"],
+     "desc": "Docs vivos do Drive: busca um termo ou exporta um id, e processa como change digest."},
+    {"id": "sys:ai-calendar", "name": "Ler a agenda (/calendar)", "agent": "/calendar", "arg": ("janela", "14d (vazio = padrão)", False),
+     "do": ["Lê a agenda pelo MCP, só leitura (janela padrão 14d)", "Grava o snapshot gcal-primary na inbox",
+            "Não cria evento: bloco de foco é a aba Aprovar › Foco"],
+     "desc": "Snapshot da agenda: combustível do planejador de foco."},
+    {"id": "sys:ai-recap", "name": "Recap de goal, projeto ou período (/recap)", "agent": "/recap",
+     "arg": ("alvo", "G1 · P2 · 2025-01-01:2025-03-31", True),
+     "do": ["Gera o documento datado em vault/reports/ (brain share)", "Escreve só fatos do ledger, cada um com fonte",
+            "Publicar é outra porta, com seu gate"],
+     "desc": "Documento datado e compartilhável com histórico e impacto de um goal, projeto ou período."},
+    {"id": "sys:ai-upgrade", "name": "Reconciliar o framework (/upgrade)", "agent": "/upgrade",
+     "do": ["brain update --check, depois o avanço com autostash", "Reconcilia edições locais (drift vs. edição) e semeia template/ novo",
+            "Melhorias nascidas aqui voltam ao repo só com o seu ok"],
+     "desc": "Atualiza o framework e devolve ao repo as melhorias locais. Use quando um git pull puro falhar por divergência."},
+    {"id": "sys:ai-init", "name": "Primeira entrevista (/init)", "agent": "/init",
+     "desc": "Descobre quem é o dono, seus goals, projetos e pessoas, e monta PROFILE e PLANNING como proposta, com gate."},
     {"id": "sys:mcp", "name": "Servidor MCP (somente leitura)", "args": ["mcp"], "info": True,
      "desc": "Expõe o cérebro por stdio para outras IAs consultarem; nenhuma ferramenta escreve. "
              "Registre com: claude mcp add segundo-cerebro -- brain mcp"},
@@ -333,7 +374,7 @@ class Store:
             elif tab == 2:
                 out = [Item(f"src:{s['key']}", "src", s, q=f"{s['key']} {s.get('kind', '')} {s.get('channel', '')}") for s in self.sources]
             else:
-                out = [Item(o["id"], "sys", o, q=f"{o['name']} {' '.join(o.get('args', []))}") for o in SYS_OPS]
+                out = [Item(o["id"], "sys", o, q=f"{o['name']} {' '.join(o.get('args', []))} {o.get('agent', '')}") for o in SYS_OPS]
         elif panel == 2:
             lst = ["mine", "waiting", "watching"][tab]
             rows = [a for a in m["actions"] if a["list"] == lst and (show_all or a["open"])]

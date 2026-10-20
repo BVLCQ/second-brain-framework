@@ -677,7 +677,7 @@ class MemorySyncTests(unittest.TestCase):
         b = _brain(Path(td))
         return b, FakeHindsight()
 
-    def test_setup_uses_chunks_for_both_banks(self):
+    def test_setup_keeps_both_banks_llm_free(self):
         class Rec:
             def __init__(self):
                 self.cfg = {}
@@ -692,7 +692,10 @@ class MemorySyncTests(unittest.TestCase):
             b = _brain(Path(td))
             hs = Rec()
             memory.setup(b, hs=hs)
-            self.assertEqual({c["retain_extraction_mode"] for c in hs.cfg.values()}, {"chunks"})
+            self.assertEqual(len(hs.cfg), 2)
+            for cfg in hs.cfg.values():
+                self.assertEqual(cfg, {"retain_extraction_mode": "chunks", "enable_auto_consolidation": False,
+                                       "enable_observations": False})
             self.assertEqual(len(hs.cfg), 2)
 
     def test_sync_records_operation_ids(self):
@@ -814,6 +817,18 @@ class MemorySyncTests(unittest.TestCase):
             # consolidação que desistiu vira aviso
             self.assertEqual(s["level"], "warn")
             self.assertIn("brain-mem 3", s["detail"])
+
+    def test_backlog_without_consolidation_op_is_not_busy(self):
+        with tempfile.TemporaryDirectory() as td:
+            b, hs = self._setup(td)
+            b.inst.cfg["memory"]["engine"] = "hindsight"
+            memory.sync(b, hs=hs)
+            for o in hs.ops.values():
+                o["status"] = "completed"
+            hs.bank_stats["brain-mem"] = {"pending_consolidation": 136}     # consolidação desligada: backlog parado
+            s = memory.status(b, online=True, hs=hs)
+            self.assertIn("fila: vazia — LLM livre", s["queue_text"])
+            self.assertEqual(s["queue"]["brain-mem"]["pending_consolidation"], 0)
 
     def test_doctor_warns_offline_from_recorded_failures(self):
         with tempfile.TemporaryDirectory() as td:

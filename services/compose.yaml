@@ -17,9 +17,12 @@ services:
       HINDSIGHT_API_LLM_MODEL: qwen/qwen3-4b-2507
       HINDSIGHT_API_LLM_API_KEY: lm-studio   # placeholder; o LM Studio ignora
       HINDSIGHT_API_LLM_OUTPUT_LANGUAGE: Brazilian Portuguese (pt-BR)
-      # Os bancos usam retain_extraction_mode=chunks (brainlib/memory.py setup): o retain não chama o LLM.
+      # Os bancos usam chunks, sem consolidação nem observações (brainlib/memory.py NO_LLM_CONFIG): o LLM abaixo
+      # não é chamado — pode ficar descarregado no LM Studio. Só o bge-m3 (embeddings, ~635 MB) precisa estar disponível.
       # O tuning que continha o qwen3-4b na consolidação (batch 3, orçamentos 256/1024/128, concorrência 4,
       # timeout 300) foi aposentado — está no git history se a extração por LLM voltar.
+      # Sem consolidação/extração o LLM não é usado: não verifica nem carrega o modelo ao subir.
+      HINDSIGHT_API_SKIP_LLM_VERIFICATION: "true"
       # Id fixo do worker. O padrão é o hostname (= id do container, muda a cada recreate) e o
       # worker só recupera, ao subir, as operações que ele mesmo tinha pego — com id novo, a
       # consolidação em andamento ficava presa em "processing" para sempre.

@@ -485,11 +485,34 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
         from brainlib.tui.store import SYS_OPS
         parser = cli.build_parser()
         for op in SYS_OPS:
-            if op.get("form"):
+            if op.get("form") or op.get("agent"):
                 continue
             for args in (op["args"], op.get("apply")):
                 if args:
                     parser.parse_args(args)                       # levanta SystemExit se a CLI não conhecer
+
+    async def test_system_ai_commands_open_the_agent_modal(self):
+        app = self.app()
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause(0.4)
+            app.run_catalog((1, 3, "enter", "sys:ai-week"))            # sem argumento: vai direto ao modal ⚡
+            await self.settle_modal(app, pilot, "AgentModal")
+            self.assertEqual(app.screen.prompt, "/week")
+            await pilot.press("escape")
+            app.run_catalog((1, 3, "enter", "sys:ai-slack"))           # argumento obrigatório: pede antes
+            await self.settle_modal(app, pilot, "FormModal")
+            await pilot.press("enter")
+            await pilot.pause(0.2)
+            self.assertEqual(type(app.screen).__name__, "FormModal")
+            await self.typ(pilot, "#time-estrategia 3d")
+            await pilot.press("enter")
+            await self.settle_modal(app, pilot, "AgentModal")
+            self.assertEqual(app.screen.prompt, "/slack #time-estrategia 3d")
+            await pilot.press("escape")
+            app.run_catalog((1, 3, "enter", "sys:ai-dump"))            # os cinco antigos reaproveitam o fluxo próprio
+            await self.settle_modal(app, pilot, "AgentModal")
+            self.assertEqual(app.screen.prompt, "/dump")
+            await pilot.press("escape")
 
     async def test_system_output_opens_in_a_modal(self):
         app = self.app()

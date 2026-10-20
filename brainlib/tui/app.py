@@ -93,6 +93,13 @@ CMD_CATALOG = [               # paleta de comandos: nome, linha da CLI, (painel,
     ("Quem é…?", 'brain person resolve "…"', (5, 2, "R")),
     ("Sincronizar o foco", "brain focus sync [--dry-run]", (4, 2, "s")),
     ("Primeira entrevista", "agente: /init", (1, 0, "i")),
+    ("Cockpit da semana", "agente: /week", (1, 3, "enter", "sys:ai-week")),
+    ("Ler emails", "agente: /gmail [filtro]", (1, 3, "enter", "sys:ai-gmail")),
+    ("Ler Slack", "agente: /slack #canal [período]", (1, 3, "enter", "sys:ai-slack")),
+    ("Ler doc do Drive", "agente: /drive <termo|id>", (1, 3, "enter", "sys:ai-drive")),
+    ("Ler a agenda", "agente: /calendar [janela]", (1, 3, "enter", "sys:ai-calendar")),
+    ("Recap", "agente: /recap <G#|P#|período>", (1, 3, "enter", "sys:ai-recap")),
+    ("Reconciliar o framework", "agente: /upgrade", (1, 3, "enter", "sys:ai-upgrade")),
     ("Atualizar tudo", "agente: /update", (1, 0, "u")),
     ("Puxar uma fonte", "agente: /connect <fonte>", (1, 0, "c")),
     ("Fontes do watch.toml", "brain watch list", (1, 2, None)),
@@ -1191,7 +1198,11 @@ class BrainApp(App):
         path = self.inst.planning_file
         before = path.read_text(encoding="utf-8") if path.exists() else ""
         editor = _editor_argv()
-        self.external([*editor, str(path)])
+        try:
+            self.external([*editor, str(path)])
+        except OSError as e:
+            self.log_line(f"não consegui abrir o editor: {e}", "red")
+            return
         after = path.read_text(encoding="utf-8") if path.exists() else ""
         if after == before:
             self.log_line("PLANNING/goals.md: nada mudou", "dim")
@@ -1460,6 +1471,9 @@ class BrainApp(App):
 
     def run_sys(self, op_id: str, apply: bool = False) -> None:
         op = next(o for o in SYS_OPS if o["id"] == op_id)
+        if op.get("agent"):
+            self.run_ai(op)
+            return
         if op.get("form") == "memory":
             self.f_memory()
             return
@@ -1501,6 +1515,21 @@ class BrainApp(App):
             self.busy = ""
             self._quit_armed = False
             self.redraw()
+
+    def run_ai(self, op: dict) -> None:
+        """Comando de IA da aba Sistema: os cinco com fluxo próprio entram direto; os demais pedem o argumento (se houver) e abrem o modal ⚡."""
+        own = {"/init": self.agent_init, "/dump": self.agent_dump, "/update": self.agent_update, "/connect": self.pick_source, "/brief": self.agent_brief}
+        if op["agent"] in own:
+            own[op["agent"]]()
+            return
+        cmd, bullets = op["agent"], op["do"]
+        if not op.get("arg"):
+            self.ask_agent(op["name"], bullets, cmd)
+            return
+        label, ph, req = op["arg"]
+        field = Field("arg", label, ph=ph, req=req)
+        self.form(FormSpec(op["name"], [field], lambda v: [], sub=op["desc"], render=False,
+                           intercept=lambda v: self.ask_agent(op["name"], bullets, f"{cmd} {v['arg']}".strip()) or True))
 
     def agent_init(self) -> None:
         self.ask_agent("Primeira entrevista", ["Pergunta quem você é, seus goals, projetos e pessoas", "Monta PROFILE e PLANNING como proposta (diff)",

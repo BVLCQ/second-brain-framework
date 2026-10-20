@@ -21,8 +21,9 @@ Os dois bancos são disjuntos de propósito: `brain-raw` responde "o que foi dit
 quem é melhor que o extrator: o agente (artefatos do `/dump`, com proveniência) ou
 o CLI (páginas de entidade renderizadas do ledger). Re-extrair com um LLM local
 pequeno só perde ou corrompe informação, e a busca (embeddings) não depende dele.
-Com `chunks`, o retain não chama o LLM: sync rápido, sem consolidação. O custo é
-perder as observações cruzadas geradas pela consolidação — nenhum comando consome
+O `setup` aplica nos dois bancos `retain_extraction_mode=chunks`, `enable_auto_consolidation=false` e
+`enable_observations=false`: o retain não chama o LLM, o sync é rápido e nada fica na fila de
+consolidação. O custo é perder as observações cruzadas geradas pela consolidação — nenhum comando consome
 `reflect`, e `/ask` e o hook ancoram em `recall` por `document_id`. Por isso os
 avisos ligados ao LLM (`gave_up`, `failed_consolidation`, consolidação presa) ficam
 raros. **Reversível:** voltar a `concise` = `patch_config` do `mem_bank` +
@@ -31,6 +32,24 @@ política de chaves permitir), não um modelo local pequeno.
 
 Ao atualizar uma instância existente: `./brain memory setup` (reaplica o modo) e
 `./brain memory rebuild`.
+
+## Embeddings: o que carregar na memória
+
+Sem LLM no caminho, o único modelo que importa é o de embeddings. O padrão do Hindsight
+(`bge-small-en-v1.5`) é só de inglês — fraco em pt-BR e es. Benchmark (24 perguntas parafraseadas,
+14 pt + 10 es, CPU de 4 núcleos, sem outra carga):
+
+| Modelo | Top-1 | MRR | RAM do modelo | Latência/trecho |
+|---|---|---|---|---|
+| `bge-small-en` (padrão) | 7/24 | 0,42 | ~450 MB | 30 ms |
+| `multilingual-e5-small` (`onnx`, no Hindsight) | 19/24 | 0,85 | ~1,75 GB | 55 ms |
+| `bge-m3` local (`local`, CPU do container) | 20/24 | 0,91 | ~4,4 GB | 400 ms |
+| `bge-m3` no LM Studio (GGUF) | 20/24 | 0,90 | ~635 MB | ~76 ms |
+
+Recomendado: **`bge-m3` servido pelo LM Studio** (melhor qualidade com o menor RAM; 1024 dims). Sem o
+LM Studio, `multilingual-e5-small` via `HINDSIGHT_API_EMBEDDINGS_PROVIDER=onnx` perde pouco, mas
+tem 384 dims (exige recriar os bancos) e limite de 512 tokens (o chunk padrão de 3000 caracteres
+passa disso — reduza `retain_chunk_size`). Não carregue um LLM no LM Studio só para o Hindsight.
 
 ## Subir o servidor
 

@@ -6,7 +6,7 @@ Dois bancos (config [memory]):
             o agente ou o CLI, re-extrair com um LLM local menor só perde informação)
 document_id = caminho no vault (ou ledger/<ID>): toda lembrança aponta para algo citável.
 O vault é a verdade; `brain memory rebuild` apaga os bancos e reconstrói do zero.
-O LLM de extração é configurado no servidor Hindsight (guides/memory.md), não aqui.
+Sem extração nem consolidação (NO_LLM_CONFIG): o LLM do servidor Hindsight não é usado (guides/memory.md).
 """
 from __future__ import annotations
 
@@ -215,6 +215,11 @@ def _state_path(brain) -> Path:
     return brain.inst.config_dir / STATE_NAME
 
 
+# Bancos só de embeddings: o retain guarda os trechos como estão e não há consolidação nem observações —
+# nada no brain consome `reflect`/observações, e eram elas que mantinham o LLM local ocupado.
+NO_LLM_CONFIG = {"retain_extraction_mode": "chunks", "enable_auto_consolidation": False, "enable_observations": False}
+
+
 def pending(brain) -> list[dict]:
     state = util.read_json(_state_path(brain), {})
     return [d for d in documents(brain) if state.get(d["bank"], {}).get(d["id"]) != d["sha"]]
@@ -226,10 +231,10 @@ def setup(brain, hs: Hindsight | None = None) -> list[str]:
     owner = brain.inst.cfg["owner"]["name"]
     hs.put_bank(mem["mem_bank"], {"name": "Segundo Cérebro — conhecimento", "mission": MEM_MISSION.format(owner=owner),
                                   "retain_mission": RETAIN_MISSION, "observations_mission": OBS_MISSION})
-    hs.patch_config(mem["mem_bank"], {"retain_extraction_mode": "chunks"})
+    hs.patch_config(mem["mem_bank"], NO_LLM_CONFIG)
     hs.put_bank(mem["raw_bank"], {"name": "Segundo Cérebro — RAW (texto original)",
                                   "mission": "Arquivo bruto do vault: texto original, sem interpretação."})
-    hs.patch_config(mem["raw_bank"], {"retain_extraction_mode": "chunks"})
+    hs.patch_config(mem["raw_bank"], NO_LLM_CONFIG)
     return [mem["mem_bank"], mem["raw_bank"]]
 
 
@@ -418,8 +423,10 @@ def queue(brain, hs: Hindsight) -> dict:
             for o in hs.operations(bank, status_):
                 t = o.get("operation_type") or "?"
                 by_type.setdefault(t, {"processing": 0, "pending": 0})[status_] += 1
+        # Backlog sem operação de consolidação = consolidação desligada (NO_LLM_CONFIG): não é trabalho em curso.
+        backlog = int(st.get("pending_consolidation") or 0) if "consolidation" in by_type else 0
         out[bank] = {"ops": by_type,
-                     "pending_consolidation": int(st.get("pending_consolidation") or 0),
+                     "pending_consolidation": backlog,
                      "failed_consolidation": int(st.get("failed_consolidation") or 0)}
     return out
 
