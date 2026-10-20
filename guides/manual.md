@@ -510,7 +510,7 @@ checkbox.
 ## 9. Pessoas
 
 ```bash
-./brain person add "Marina-demo" --alias "Marina-demo" --alias Mari-demo --email marina-demo@empresa.com \
+./brain person add "Marina-demo" --alias "Marina-demo" --alias Mari-demo --email marina-demo@example.com \
   --role "Gestora" --relation gestora --by owner
 ./brain person alias marina-demo "M.-demo"
 ./brain person resolve "Mari-demo"
