@@ -248,7 +248,7 @@ class Doc:
         return self
 
     def kv(self, rows: list) -> "Doc":
-        rows = [r for r in rows if r]
+        rows = [r for r in rows if r and r[1] is not None]
         w = max((len(r[0]) for r in rows), default=0) + 2
         for label, val in rows:
             t = Text()
@@ -866,7 +866,7 @@ def d_matrix(store, it) -> Doc:
     def put(left: list[Text], right: list[Text], label: str) -> None:
         for n in range(max(len(left), len(right))):
             row = Text()
-            row.append((label if n == 0 else "").ljust(11), DIM)
+            row.append((label if n == 0 else "").ljust(13), DIM)
             lt = left[n] if n < len(left) else Text()
             lt = lt.copy()
             lt.truncate(cols, overflow="ellipsis", pad=True)
@@ -876,12 +876,12 @@ def d_matrix(store, it) -> Doc:
             doc.lines.append(row)
 
     head = Text()
-    head.append(" " * 11)
+    head.append(" " * 13)
     head.append("facilidade ≥ 3".ljust(cols), DIM)
     head.append(" │ facilidade < 3", DIM)
     doc.lines.append(head)
     put(block("ganho rápido"), block("aposta"), "impacto ≥ 3")
-    doc.lines.append(Text("─" * 11 + "─" * cols + "─┼─" + "─" * 24, DIM))
+    doc.lines.append(Text("─" * 13 + "─" * cols + "─┼─" + "─" * 24, DIM))
     put(block("preencher depois"), block("evitar"), "impacto < 3")
     doc.sec("No quadrante " + sel)
     for i in mx[sel]:

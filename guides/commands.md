@@ -32,6 +32,7 @@ comandos, use o cockpit de terminal (`brain tui`); o guia interativo está em [`
 19. [Slash commands do agente → CLI](#19-slash-commands-do-agente--cli)
 20. [Serviços desta máquina](#20-serviços-desta-máquina-fora-do-cli)
 21. [Receitas rápidas](#21-receitas-rápidas)
+22. [Portfólio](#22-portfólio--area--process--opportunity--doc) — `area` · `process` · `opportunity` · `doc`
 
 ---
 
@@ -72,6 +73,9 @@ brain --version              # brain 2.0.0
 | `M-####` | mensagem no outbox | `M-0001` |
 | `S-####` | pedido de publicação | `S-0001` |
 | `F-####` | plano de foco | `F-0001` |
+| `PROC-####` | processo (portfólio) | `PROC-0003` |
+| `OPP-####` | oportunidade / iniciativa (portfólio) | `OPP-0007` |
+| slug | área do portfólio (`area.added`) | `operacoes` |
 | `G#` / `P#` / `P#.n` | goal / projeto / entregável (em `PLANNING/goals.md`) | `G1`, `P1`, `P1.2` |
 
 Pessoas usam um id curto (`marina-demo`) e aliases (`Marina-demo`, `M.-demo`). Em qualquer opção que
@@ -818,6 +822,8 @@ Gera um export **autocontido** em `vault/reports/share/`, sem jargão interno, p
 | `goal G#` | `brain share goal G1` |
 | `status` | `brain share status` |
 | `period AAAA-MM-DD:AAAA-MM-DD` | `brain share period 2026-09-01:2026-09-30` |
+| `portfolio [--area ÁREA]` | `brain share portfolio --area Growth` — roadmap priorizado (ranking, matriz, status) |
+| `opportunity OPP-####` | `brain share opportunity OPP-0003` — one-pager de uma oportunidade |
 | `--format html\|md` | padrão `html` |
 
 ```bash
@@ -967,6 +973,8 @@ lê, julga e mostra; o `brain` valida e grava.
 | `/share` | export para colega | `share` |
 | `/recap` | histórico e impacto datado | `search`, ledger |
 | `/publish` | postar no espaço do time | `publish` |
+| `/process <termo\|PROC-####>` | panorama ou cadastro guiado de um processo | `process`, `area`, `doc link` |
+| `/opportunity <termo\|OPP-####>` · `onepager` · `triage` | oportunidades, one-pager e ICE sugerido | `opportunity`, `share opportunity` |
 | `/backup` | zip do vault | `backup` |
 | `/upgrade` | atualizar o framework e devolver melhorias da instância | `update`, `upstream scan`, `git`, `doctor` |
 
@@ -1027,3 +1035,38 @@ brain share status --format md
 # Conferir tudo
 brain validate && brain doctor --online
 ```
+
+---
+
+## 22. Portfólio — `area` · `process` · `opportunity` · `doc`
+
+Mapa de processos (`PROC-####`) e oportunidades/iniciativas (`OPP-####`) por área. Opções de registro (`--by`, `--prov`,
+`--source`, `--date`) valem como nas outras entidades; `status`, `score` e `promote` já assumem `--by owner`.
+
+### `brain area add|update|list`
+`area add <slug> --name "…" [--alias …]` · `area update <slug> [--name] [--alias] [--note]` · `area list`.
+
+### `brain process`
+| Subcomando | Uso |
+|---|---|
+| `add "título" --area ÁREA` | `[--owner P] [--executor P…] [--recurrence diaria\|semanal\|quinzenal\|mensal\|trimestral\|sob-demanda\|por-evento] [--per-month N] [--duration 1h30m] [--tools …] [--io "entradas → saídas"] [--pain …] [--maturity 1-5] [--note …]`. Agente: `--by agent --source …` obrigatório |
+| `update PROC-####` | mesmos campos; executores/ferramentas substituem a lista, dor e nota acrescentam |
+| `retire PROC-#### --reason "…"` | aposenta |
+| `show PROC-####` · `list [--area] [--gaps]` | leitura. **Horas/mês** = execuções/mês × duração × nº de executores, calculado pelo CLI |
+
+### `brain opportunity`
+| Subcomando | Uso |
+|---|---|
+| `add "título" --area ÁREA` | `[--process PROC-####] [--kind melhoria-de-processo\|novo-processo\|estruturante] [--problem] [--suggestion] [--gain] [--hours-saved N] [--person …] [--goal G#]`. Antes de gravar roda o **detector de duplicatas** (código 2, nada gravado; `--force` grava). Agente: só status `ideia`, `--source` obrigatório |
+| `update OPP-####` | mesmos campos |
+| `status OPP-#### STATUS [--reason]` | `ideia · triagem · priorizada · em-andamento · piloto · validando · entregue · em-espera · descartada`; vai e volta livremente; `em-espera`/`descartada` exigem `--reason`; `em-andamento` só com projeto (use `promote`); agente só grava `ideia` |
+| `score OPP-#### --impact I --confidence C --ease F` | ICE 1–5 cada (score 1–125, calculado pelo CLI). `--suggest --reason "…"` (agente) grava só uma sugestão; o dono confirma ou muda |
+| `evidence OPP-#### --source ARTEFATO` | mais uma fonte que reforça a oportunidade |
+| `promote OPP-#### --goal G# [--title] [--approval "ok"]` | **gate**: sem `--approval` imprime o diff proposto do `goals.md` e sai com código 4; com ele cria o projeto, liga OPP ↔ P# e põe `em-andamento` (mesmo lote do ledger + linha em `PLANNING/log.md`). Proibido no noturno |
+| `show OPP-####` · `list [--status] [--area] [--sort score]` | leitura |
+
+### `brain doc`
+`doc link PROC-####|OPP-#### --kind playbook\|one-pager\|planilha\|artefato\|apresentacao\|outro --ref <url|id|caminho> [--title] [--watch]` ·
+`doc unlink <alvo> --ref …`. `--kind playbook --watch` com um doc do Drive cria a fonte `drive-doc` no `watch.toml`
+(`playbook-proc-0001`): o `/update` só relê o doc quando o `modifiedTime` muda. Um artefato do `/dump` ligado ao processo
+(`brain artifact … --link PROC-####`) mostra "playbook lido em …".

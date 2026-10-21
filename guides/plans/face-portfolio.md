@@ -278,11 +278,4 @@ O ledger é append-only: `A-0146` não pode ser reescrito. Caminho possível sem
 nada: aceitar aliases na **entrada** (`ACT-0146` ≡ `A-0146`, `DEC-`≡`D-`, …) e,
 opcionalmente, um modo de exibição. Fica fora deste plano até o dono decidir.
 
-## Pós-implementação (local, não vai pro repo)
-
-Feito pelo agente da instância, com o dono:
-1. `brain area add` para as áreas do dono.
-2. `/dump` dos dois snapshots da planilha "Opportunity Mapping" já na inbox: cria processos
-   (coluna Processo) e oportunidades (por agente, status `ideia`, `--source` = o CSV no RAW),
-   liga os links da coluna Artefato com `doc link --kind artefato`.
-3. Marcar `P3.3` com evidência (`brain plan deliverable`).
+> A seção "Pós-implementação" do plano original é local da instância do dono (cadastros e dados reais) e não vai para o repo público.
