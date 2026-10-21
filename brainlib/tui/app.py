@@ -33,7 +33,7 @@ from .. import util
 from . import bridge, dates, rows
 from .modals import (AgentModal, ChoiceModal, ConfirmModal, Field, FilterModal, FormModal, FormSpec, PickerModal,
                      PickItem, TextModal)
-from .store import PANELS, SYS_OPS, Item, Store
+from .store import FACE_START, FACES, SYS_OPS, Item, Store
 
 UCAP = 3                      # linhas visíveis de um painel sem foco
 
@@ -45,73 +45,73 @@ def _editor_argv() -> list[str]:
         argv.append("--wait")
     return argv
 
-CMD_CATALOG = [               # paleta de comandos: nome, linha da CLI, (painel, aba, tecla)
-    ("Nova ação", 'brain action open "…" --by owner', (2, 0, "n")),
-    ("Fechar ação", 'brain action close A-#### --how "…"', (2, 0, "c")),
-    ("Editar ação", "brain action update A-#### …", (2, 0, "e")),
-    ("Prazo da ação", "brain action update A-#### --due …", (2, 0, "t")),
-    ("Descartar ação", 'brain action drop A-#### --reason "…"', (2, 0, "D")),
-    ("Reabrir ação", 'brain action reopen A-#### --reason "…"', (2, 0, "o")),
-    ("O que me devem", "brain action list --list waiting", (2, 1, None)),
-    ("Cobrar alguém", 'brain outbox draft --to … --text "…"', (2, 1, "m")),
-    ("Árvore do plano", "brain plan show", (3, 0, None)),
-    ("Marcar entregável", "brain plan deliverable P#.n --status …", (3, 0, "space")),
-    ("Declarar progresso", "brain progress G1 45", (3, 0, "P")),
-    ("Editar goal / projeto / entregável", 'brain plan edit G#|P#|P#.n … [--approval "ok"]', (3, 0, "e")),
-    ("Mudança estrutural (gate)", 'brain plan log --diff … --approval "ok"', (3, 0, "E")),
-    ("Novo goal (gate)", 'brain plan add-goal "…" --approval "ok"', (3, 0, "G")),
-    ("Novo projeto / entregável / ação no item (n)", "brain plan add-project|add-deliverable · brain action open", (3, 0, "n")),
-    ("Exportar para colega", "brain share project P1", (3, 0, "S")),
-    ("Propostas pendentes", "brain proposal list", (4, 0, None)),
-    ("Aceitar proposta", 'brain proposal accept R-#### --quote "…"', (4, 0, "a")),
-    ("Rejeitar proposta", 'brain proposal reject R-#### --quote "…"', (4, 0, "r")),
-    ("Rascunhar mensagem", 'brain outbox draft --to … --text "…"', (4, 1, "n")),
-    ("Aprovar mensagem", 'brain outbox approve M-#### --quote "enviar N"', (4, 1, "A")),
-    ("Enviar mensagem aprovada", "agente → Slack MCP → brain outbox sent", (4, 1, "S")),
-    ("Planejar foco", "brain focus plan --days 5", (4, 2, "p")),
-    ("Aprovar plano de foco", 'brain focus approve F-#### --quote "ok"', (4, 2, "A")),
-    ("Aplicar foco na agenda", "brain focus apply F-#### --mode ics|google", (4, 2, "a")),
-    ("Pedir publicação", "brain publish request … --to slack:#canal", (4, 3, "n")),
-    ("Nova decisão", 'brain decision add "…" --decided-by …', (5, 0, "n")),
-    ("Registrar entrega", 'brain delivery "…" --ref …', (5, 1, "n")),
-    ("Nova pessoa", 'brain person add "…" --id …', (5, 2, "n")),
-    ("Saúde da instância", "brain doctor --online", (1, 1, None)),
-    ("Regenerar views", "brain render", (1, 3, "enter", "sys:render")),
-    ("Abrir painel HTML", "brain render --open", (1, 3, "enter", "sys:open")),
-    ("Validar ledger", "brain validate", (1, 3, "enter", "sys:validate")),
-    ("Backup do vault", "brain backup", (1, 3, "enter", "sys:backup")),
-    ("Atualizar framework", "brain update --check", (1, 3, "enter", "sys:update")),
-    ("Varredura upstream", "brain upstream scan", (1, 3, "enter", "sys:upstream")),
-    ("Memória: sincronizar", "brain memory sync", (1, 3, "enter", "sys:memory")),
-    ("Memória: perguntar", 'brain memory recall|reflect "…"', (1, 3, "enter", "sys:recall")),
-    ("Memória: status", "brain memory status", (1, 3, "enter", "sys:memstatus")),
-    ("Saúde online", "brain doctor --online", (1, 3, "enter", "sys:doctor")),
-    ("Colher edições do dono", "brain sync", (1, 3, "enter", "sys:sync")),
-    ("Backup: ver últimos", "brain backup --status", (1, 3, "enter", "sys:backupst")),
-    ("Agendamento: ver", "brain schedule status", (1, 3, "enter", "sys:schedst")),
-    ("Agendamento: remover", "brain schedule remove", (1, 3, "enter", "sys:unsched")),
-    ("Editar pessoa", "brain person update ID …", (5, 2, "u")),
-    ("Quem é…?", 'brain person resolve "…"', (5, 2, "R")),
-    ("Sincronizar o foco", "brain focus sync [--dry-run]", (4, 2, "s")),
-    ("Primeira entrevista", "agente: /init", (1, 0, "i")),
-    ("Cockpit da semana", "agente: /week", (1, 3, "enter", "sys:ai-week")),
-    ("Ler emails", "agente: /gmail [filtro]", (1, 3, "enter", "sys:ai-gmail")),
-    ("Ler Slack", "agente: /slack #canal [período]", (1, 3, "enter", "sys:ai-slack")),
-    ("Ler doc do Drive", "agente: /drive <termo|id>", (1, 3, "enter", "sys:ai-drive")),
-    ("Ler a agenda", "agente: /calendar [janela]", (1, 3, "enter", "sys:ai-calendar")),
-    ("Recap", "agente: /recap <G#|P#|período>", (1, 3, "enter", "sys:ai-recap")),
-    ("Reconciliar o framework", "agente: /upgrade", (1, 3, "enter", "sys:ai-upgrade")),
-    ("Atualizar tudo", "agente: /update", (1, 0, "u")),
-    ("Puxar uma fonte", "agente: /connect <fonte>", (1, 0, "c")),
-    ("Fontes do watch.toml", "brain watch list", (1, 2, None)),
-    ("Adicionar fonte", "brain watch add KEY --kind …", (1, 2, "n")),
-    ("Editar fonte", "brain watch edit KEY …", (1, 2, "e")),
-    ("Remover fonte", "brain watch remove KEY", (1, 2, "x")),
-    ("Processar a inbox", "agente: /dump", (1, 0, "d")),
-    ("Brief do dia", "agente: /brief", (1, 0, "b")),
-    ("Buscar no ledger", 'brain search "…"', (None, None, "g")),
-    ("Nova nota", 'brain note add --link A-#### --text "…"', (None, None, "N")),
-    ("Ver o log de comandos", "painel 6", (6, 0, None)),
+CMD_CATALOG = [               # paleta de comandos: nome, linha da CLI, (face, painel, aba, tecla[, id])
+    ("Nova ação", 'brain action open "…" --by owner', (0, 2, 0, "n")),
+    ("Fechar ação", 'brain action close A-#### --how "…"', (0, 2, 0, "c")),
+    ("Editar ação", "brain action update A-#### …", (0, 2, 0, "e")),
+    ("Prazo da ação", "brain action update A-#### --due …", (0, 2, 0, "t")),
+    ("Descartar ação", 'brain action drop A-#### --reason "…"', (0, 2, 0, "D")),
+    ("Reabrir ação", 'brain action reopen A-#### --reason "…"', (0, 2, 0, "o")),
+    ("O que me devem", "brain action list --list waiting", (0, 2, 1, None)),
+    ("Cobrar alguém", 'brain outbox draft --to … --text "…"', (0, 2, 1, "m")),
+    ("Árvore do plano", "brain plan show", (0, 3, 0, None)),
+    ("Marcar entregável", "brain plan deliverable P#.n --status …", (0, 3, 0, "space")),
+    ("Declarar progresso", "brain progress G1 45", (0, 3, 0, "P")),
+    ("Editar goal / projeto / entregável", 'brain plan edit G#|P#|P#.n … [--approval "ok"]', (0, 3, 0, "e")),
+    ("Mudança estrutural (gate)", 'brain plan log --diff … --approval "ok"', (0, 3, 0, "E")),
+    ("Novo goal (gate)", 'brain plan add-goal "…" --approval "ok"', (0, 3, 0, "G")),
+    ("Novo projeto / entregável / ação no item (n)", "brain plan add-project|add-deliverable · brain action open", (0, 3, 0, "n")),
+    ("Exportar para colega", "brain share project P1", (0, 3, 0, "S")),
+    ("Propostas pendentes", "brain proposal list", (0, 4, 0, None)),
+    ("Aceitar proposta", 'brain proposal accept R-#### --quote "…"', (0, 4, 0, "a")),
+    ("Rejeitar proposta", 'brain proposal reject R-#### --quote "…"', (0, 4, 0, "r")),
+    ("Rascunhar mensagem", 'brain outbox draft --to … --text "…"', (0, 4, 1, "n")),
+    ("Aprovar mensagem", 'brain outbox approve M-#### --quote "enviar N"', (0, 4, 1, "A")),
+    ("Enviar mensagem aprovada", "agente → Slack MCP → brain outbox sent", (0, 4, 1, "S")),
+    ("Planejar foco", "brain focus plan --days 5", (0, 4, 2, "p")),
+    ("Aprovar plano de foco", 'brain focus approve F-#### --quote "ok"', (0, 4, 2, "A")),
+    ("Aplicar foco na agenda", "brain focus apply F-#### --mode ics|google", (0, 4, 2, "a")),
+    ("Pedir publicação", "brain publish request … --to slack:#canal", (0, 4, 3, "n")),
+    ("Nova decisão", 'brain decision add "…" --decided-by …', (0, 5, 0, "n")),
+    ("Registrar entrega", 'brain delivery "…" --ref …', (0, 5, 1, "n")),
+    ("Nova pessoa", 'brain person add "…" --id …', (0, 5, 2, "n")),
+    ("Saúde da instância", "brain doctor --online", (0, 1, 1, None)),
+    ("Regenerar views", "brain render", (0, 1, 3, "enter", "sys:render")),
+    ("Abrir painel HTML", "brain render --open", (0, 1, 3, "enter", "sys:open")),
+    ("Validar ledger", "brain validate", (0, 1, 3, "enter", "sys:validate")),
+    ("Backup do vault", "brain backup", (0, 1, 3, "enter", "sys:backup")),
+    ("Atualizar framework", "brain update --check", (0, 1, 3, "enter", "sys:update")),
+    ("Varredura upstream", "brain upstream scan", (0, 1, 3, "enter", "sys:upstream")),
+    ("Memória: sincronizar", "brain memory sync", (0, 1, 3, "enter", "sys:memory")),
+    ("Memória: perguntar", 'brain memory recall|reflect "…"', (0, 1, 3, "enter", "sys:recall")),
+    ("Memória: status", "brain memory status", (0, 1, 3, "enter", "sys:memstatus")),
+    ("Saúde online", "brain doctor --online", (0, 1, 3, "enter", "sys:doctor")),
+    ("Colher edições do dono", "brain sync", (0, 1, 3, "enter", "sys:sync")),
+    ("Backup: ver últimos", "brain backup --status", (0, 1, 3, "enter", "sys:backupst")),
+    ("Agendamento: ver", "brain schedule status", (0, 1, 3, "enter", "sys:schedst")),
+    ("Agendamento: remover", "brain schedule remove", (0, 1, 3, "enter", "sys:unsched")),
+    ("Editar pessoa", "brain person update ID …", (0, 5, 2, "u")),
+    ("Quem é…?", 'brain person resolve "…"', (0, 5, 2, "R")),
+    ("Sincronizar o foco", "brain focus sync [--dry-run]", (0, 4, 2, "s")),
+    ("Primeira entrevista", "agente: /init", (0, 1, 0, "i")),
+    ("Cockpit da semana", "agente: /week", (0, 1, 3, "enter", "sys:ai-week")),
+    ("Ler emails", "agente: /gmail [filtro]", (0, 1, 3, "enter", "sys:ai-gmail")),
+    ("Ler Slack", "agente: /slack #canal [período]", (0, 1, 3, "enter", "sys:ai-slack")),
+    ("Ler doc do Drive", "agente: /drive <termo|id>", (0, 1, 3, "enter", "sys:ai-drive")),
+    ("Ler a agenda", "agente: /calendar [janela]", (0, 1, 3, "enter", "sys:ai-calendar")),
+    ("Recap", "agente: /recap <G#|P#|período>", (0, 1, 3, "enter", "sys:ai-recap")),
+    ("Reconciliar o framework", "agente: /upgrade", (0, 1, 3, "enter", "sys:ai-upgrade")),
+    ("Atualizar tudo", "agente: /update", (0, 1, 0, "u")),
+    ("Puxar uma fonte", "agente: /connect <fonte>", (0, 1, 0, "c")),
+    ("Fontes do watch.toml", "brain watch list", (0, 1, 2, None)),
+    ("Adicionar fonte", "brain watch add KEY --kind …", (0, 1, 2, "n")),
+    ("Editar fonte", "brain watch edit KEY …", (0, 1, 2, "e")),
+    ("Remover fonte", "brain watch remove KEY", (0, 1, 2, "x")),
+    ("Processar a inbox", "agente: /dump", (0, 1, 0, "d")),
+    ("Brief do dia", "agente: /brief", (0, 1, 0, "b")),
+    ("Buscar no ledger", 'brain search "…"', (None, None, None, "g")),
+    ("Nova nota", 'brain note add --link A-#### --text "…"', (None, None, None, "N")),
+    ("Ver o log de comandos", "painel 6", (0, 6, 0, None)),
 ]
 
 
@@ -167,31 +167,96 @@ class BrainApp(App):
         super().__init__()
         self.inst = inst
         self.store: Store | None = None
-        self.lp = 2                   # último painel de lista (1-5) em foco; o log (6) mantém o detalhe dele
-        self.p = 2
-        self.tab = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0}
-        self.sel_idx: dict[tuple[int, int], int] = {}
-        self.sel_id: dict[tuple[int, int], str] = {}
-        self.win: dict[tuple[int, int], int] = {}
+        self.face = 0                 # índice em FACES; a navegação de cada face fica em self.nav[face]
+        self.nav = [self._new_nav(start) for start in FACE_START]
         self.collapsed: set[str] = set()
-        self.show_all = False
-        self.filt: tuple[int, int, str] | None = None
-        self.zoom = False
-        self._items: dict[tuple[int, int], list[Item]] = {}
         self._lock: asyncio.Lock | None = None
         self.busy = ""
         self._quit_armed = False
         self._suggest_for: str | None = None
 
+    @staticmethod
+    def _new_nav(start: int) -> dict:
+        """Estado de navegação de uma face: cada face volta exatamente onde estava."""
+        return {"p": start, "lp": start,   # lp: último painel de lista (1-5) em foco; o log (6) mantém o detalhe dele
+                "tab": {1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0}, "sel_idx": {}, "sel_id": {}, "win": {},
+                "filt": None, "zoom": False, "show_all": False, "items": {}}
+
+    # As propriedades abaixo apontam para a face atual: o resto do app lê e escreve `self.p`, `self.tab[p]`,
+    # `self.filt`… sem saber de faces. Trocar de face é só trocar `self.face`.
+    @property
+    def _nv(self) -> dict:
+        return self.nav[self.face]
+
+    @property
+    def panels(self) -> dict:
+        return FACES[self.face][1]
+
     @property
     def p(self) -> int:
-        return self._p
+        return self._nv["p"]
 
     @p.setter
     def p(self, v: int) -> None:
-        self._p = v
+        self._nv["p"] = v
         if v != 6:
-            self.lp = v
+            self._nv["lp"] = v
+
+    @property
+    def lp(self) -> int:
+        return self._nv["lp"]
+
+    @property
+    def tab(self) -> dict:
+        return self._nv["tab"]
+
+    @property
+    def sel_idx(self) -> dict:
+        return self._nv["sel_idx"]
+
+    @property
+    def sel_id(self) -> dict:
+        return self._nv["sel_id"]
+
+    @property
+    def win(self) -> dict:
+        return self._nv["win"]
+
+    @property
+    def filt(self) -> tuple[int, int, str] | None:
+        return self._nv["filt"]
+
+    @filt.setter
+    def filt(self, v) -> None:
+        self._nv["filt"] = v
+
+    @property
+    def zoom(self) -> bool:
+        return self._nv["zoom"]
+
+    @zoom.setter
+    def zoom(self, v: bool) -> None:
+        self._nv["zoom"] = v
+
+    @property
+    def show_all(self) -> bool:
+        return self._nv["show_all"]
+
+    @show_all.setter
+    def show_all(self, v: bool) -> None:
+        self._nv["show_all"] = v
+
+    @property
+    def _items(self) -> dict:
+        return self._nv["items"]
+
+    @_items.setter
+    def _items(self, v: dict) -> None:
+        self._nv["items"] = v
+
+    def _summary_on(self) -> bool:
+        """Painel 1 › Resumo da face Execução: o placar fixo (sem lista, sem seleção)."""
+        return self.face == 0 and self.p == 1 and self.tab[1] == 0
 
     # ── estrutura ──────────────────────────────────────────────────────────
     def compose(self) -> ComposeResult:
@@ -204,6 +269,7 @@ class BrainApp(App):
                     yield Static("", id="detail")
                 yield Log(id="log", markup=False, wrap=True, max_lines=500, auto_scroll=True)
         with Horizontal(id="bar"):
+            yield Static("", id="faces")
             yield Static("", id="hints")
             yield Static("", id="globals")
 
@@ -235,7 +301,7 @@ class BrainApp(App):
                 self._items[key] = []
             else:
                 f = self.filt[2] if self.filt and self.filt[:2] == key else ""
-                self._items[key] = self.store.items(p, t, self.show_all, f, self.collapsed)
+                self._items[key] = self.store.items(self.face, p, t, self.show_all, f, self.collapsed)
         return self._items[key]
 
     def sel_index(self, p: int) -> int:
@@ -267,14 +333,14 @@ class BrainApp(App):
         return its[self.sel_index(p)] if its else None
 
     def fill_panel(self) -> int:
-        return 2 if (self.lp == 1 and self.tab[1] == 0) else self.lp
+        return 2 if (self.face == 0 and self.lp == 1 and self.tab[1] == 0) else self.lp
 
     # ── desenho ────────────────────────────────────────────────────────────
     def panel_body(self, pid: int, width: int, height: int) -> Text:
         if self.store is None:
             return Text("Sem dados: ledger ilegível.", "red")
         t = self.tab[pid]
-        if pid == 1 and t == 0:
+        if self.face == 0 and pid == 1 and t == 0:
             return self._summary()
         its = self.items(pid)
         if not its:
@@ -340,7 +406,7 @@ class BrainApp(App):
         return t
 
     def _title(self, pid: int) -> Text:
-        name, tabs = PANELS[pid]
+        name, tabs = self.panels[pid]
         t = Text.assemble((f" [{pid}] ", "bold"), (name, "bold"))
         spans: list[tuple[int, int, int]] = []
         if len(tabs) > 1:
@@ -360,7 +426,7 @@ class BrainApp(App):
         return t
 
     def _badge(self, pid: int, i: int) -> str:
-        if self.store is None:
+        if self.store is None or self.face != 0:
             return ""
         c, m = self.store.counts, self.store.m
         n = 0
@@ -387,7 +453,7 @@ class BrainApp(App):
         for pid in (1, 2, 3, 4, 5):
             panel = self.query_one(f"#p{pid}", ListPanel)
             panel.set_class(pid == self.p, "-on")
-            compact = pid == 1 and self.tab[1] == 0
+            compact = self.face == 0 and pid == 1 and self.tab[1] == 0
             panel.set_class(pid == fill and not compact, "-fill")
             panel.border_title = self._title(pid)
             n = len(self.items(pid)) if self.store and not compact else 0
@@ -402,6 +468,7 @@ class BrainApp(App):
         log.border_title = Text.assemble((" [6] ", "bold"), ("Log de comandos ", "bold"))
         log.border_subtitle = " j k rolam · c limpa · 1-5 voltam " if on else ""
         self.set_class(self.zoom, "-zoom")
+        self.refresh_faces()
         self.refresh_hints()
 
     def _detail_subtitle(self) -> str:
@@ -413,6 +480,23 @@ class BrainApp(App):
         if self.busy:
             bits.append(self.busy)
         return " · ".join(bits)
+
+    def refresh_faces(self) -> None:
+        """Faixa de faces no rodapé: `Execução · [Portfólio]`, a atual em negrito e entre colchetes; clicar troca."""
+        t = Text(no_wrap=True)
+        t.append(" ")
+        for i, (name, _) in enumerate(FACES):
+            click = Style(meta={"@click": f"app.face_to({i})"})
+            if i:
+                t.append(" · ", "dim")
+            if i == self.face:
+                t.append(f"[{name}]", Style.parse("bold") + click)
+            else:
+                t.append(name, Style.parse("dim") + click)
+        t.append("  ")
+        w = self.query_one("#faces", Static)
+        w.update(t)
+        w.styles.width = t.cell_len
 
     def refresh_hints(self) -> None:
         def hint(t: Text, key: str, label: str, color: str, mark: str = "") -> None:
@@ -455,7 +539,7 @@ class BrainApp(App):
             self.redraw()
             return
         self.p = pid
-        if pid == 1 and self.tab[1] == 0:
+        if self.face == 0 and pid == 1 and self.tab[1] == 0:
             self.redraw()
             return
         its = self.items(pid)
@@ -468,7 +552,7 @@ class BrainApp(App):
             self.press("enter")
 
     def panel_wheel(self, pid: int, d: int) -> None:
-        if pid == 1 and self.tab[1] == 0:
+        if self.face == 0 and pid == 1 and self.tab[1] == 0:
             return
         self.p = pid
         self.move(d)
@@ -541,7 +625,7 @@ class BrainApp(App):
 
     def press(self, k: str) -> bool:
         k = "enter" if k == "\r" else k
-        if k == "enter" and (self.p == 6 or (self.p == 1 and self.tab[1] == 0)):
+        if k == "enter" and (self.p == 6 or self._summary_on()):
             return False
         for key in self.ctx_keys():
             if key.k == k:
@@ -553,6 +637,34 @@ class BrainApp(App):
             return True
         return False
 
+    def face_move(self, d: int) -> None:
+        """Tab / Shift+Tab: próxima / anterior face, em carrossel. Cada face guarda onde estava (painel, aba, seleção, zoom, filtro)."""
+        self.face_to((self.face + d) % len(FACES))
+
+    def face_to(self, i: int) -> None:
+        if self.store is None or not 0 <= i < len(FACES) or i == self.face:
+            return
+        self.face = i
+        self.redraw()
+
+    def action_face_to(self, i: int) -> None:
+        if len(self.screen_stack) == 1:
+            self.face_to(i)
+
+    # Tab/Shift+Tab são do Textual para mudar o foco (os formulários em modals.py dependem disso). Na tela principal
+    # não há nada focável, então a tecla gira as faces; em qualquer modal, o comportamento padrão continua valendo.
+    def action_focus_next(self) -> None:
+        if len(self.screen_stack) == 1:
+            self.face_move(1)
+        else:
+            super().action_focus_next()
+
+    def action_focus_previous(self) -> None:
+        if len(self.screen_stack) == 1:
+            self.face_move(-1)
+        else:
+            super().action_focus_previous()
+
     def goto_panel(self, p: int) -> None:
         self.p = ((p - 1) % 6) + 1
         if self.p == 6:
@@ -560,7 +672,7 @@ class BrainApp(App):
         self.redraw()
 
     def tab_move(self, d: int) -> None:
-        n = len(PANELS[self.p][1])
+        n = len(self.panels[self.p][1])
         self.tab[self.p] = min(max(self.tab[self.p] + d, 0), n - 1)
         self.redraw()
 
@@ -576,7 +688,7 @@ class BrainApp(App):
             w = self.query_one("#detailwrap")
             w.scroll_relative(y=d * 3, animate=False)
             return
-        if self.p == 1 and self.tab[1] == 0:
+        if self._summary_on():
             return
         its = self.items(self.p)
         if not its:
@@ -591,7 +703,8 @@ class BrainApp(App):
         if not loc:
             self.log_line(f"{node}: não encontrei onde mostrar", "dim")
             return
-        p, t = loc
+        face, p, t = loc
+        self.face = face
         self.p, self.tab[p] = p, t
         self.zoom, self.filt = False, None
         if p == 3 and node[:1] == "P":
@@ -617,6 +730,12 @@ class BrainApp(App):
         K: list[Key] = []
         add = lambda k, label, fn, **kw: K.append(Key(k, label, fn, **kw))  # noqa: E731
         w = lambda cond: every or cond  # noqa: E731
+        if self.face != 0:
+            if p == 6:
+                add("c", "limpar o log", self.clear_log)
+            else:
+                self.ctx_keys_face(K, p, t, it, every)
+            return K
         if p == 1:
             if t == 0:
                 if w(self.store and self.store.is_empty()):
@@ -725,13 +844,16 @@ class BrainApp(App):
                     add("o", "abrir RAW", self.open_raw)
         return K
 
+    def ctx_keys_face(self, K: list[Key], p: int, t: int, it: Item | None, every: bool) -> None:
+        """Teclas das faces além da Execução (preenchidas no passo 7 do plano)."""
+
     # ── execução ───────────────────────────────────────────────────────────
     def exec(self, cmds: list[list[str]], render: bool = True, after: Callable[[], None] | None = None,
              show: str | None = None) -> None:
         """Roda comandos `brain` em sequência (para no primeiro erro). `show` abre a saída inteira num modal."""
-        self.run_worker(self._exec(cmds, render, after, show), exclusive=False)
+        self.run_worker(self._exec(cmds, render, after, show, self.face), exclusive=False)
 
-    async def _exec(self, cmds: list[list[str]], render: bool, after, show: str | None = None) -> None:
+    async def _exec(self, cmds: list[list[str]], render: bool, after, show: str | None = None, face: int = 0) -> None:
         async with self._lock:
             ok = True
             outs: list[str] = []
@@ -762,7 +884,13 @@ class BrainApp(App):
             if show and ok and any(outs):
                 self.push_screen(TextModal(show, Text("\n\n".join(o for o in outs if o))))
             if ok and after:
-                after()
+                shown, self.face = self.face, face       # o `after` mexe na navegação da face onde o comando nasceu
+                try:
+                    after()
+                finally:
+                    if self.face == face:
+                        self.face = shown
+                self.redraw()
 
     async def _watch(self) -> None:
         """Relê o vault quando algo mudou fora do TUI (agente, outro terminal, editor)."""
@@ -1792,8 +1920,8 @@ class BrainApp(App):
             for name, cmd, go in CMD_CATALOG:
                 if all(t in util.fold(name + " " + cmd) for t in terms):
                     t = Text.assemble((name.ljust(30), "bold"), (cmd, "cyan"))
-                    if go[2]:
-                        t.append("   " + ("space" if go[2] == "space" else go[2]), "yellow")
+                    if go[3]:
+                        t.append("   " + ("space" if go[3] == "space" else go[3]), "yellow")
                     out.append(PickItem(t, go))
             return out
 
@@ -1803,17 +1931,18 @@ class BrainApp(App):
         self.push_screen(PickerModal("Comandos", "digite para buscar: fechar, foco, backup…", source), done)
 
     def run_catalog(self, go: tuple) -> None:
-        p, t, k = go[0], go[1], go[2]
+        face, p, t, k = go[0], go[1], go[2], go[3]
         if p is None:
             if k == "g":
                 self.search()
             elif k == "N":
                 self.f_note()
             return
+        self.face = face
         self.p, self.tab[p] = p, t
         self.filt = None
-        if len(go) > 3:
-            self.set_sel(p, [o["id"] for o in SYS_OPS].index(go[3]))
+        if len(go) > 4:
+            self.set_sel(p, [o["id"] for o in SYS_OPS].index(go[4]))
         self.redraw()
         if k:
             self.press(k)
@@ -1831,7 +1960,7 @@ class BrainApp(App):
         self.push_screen(PickerModal("Buscar no ledger e nos artefatos", "brain search …", source, empty="Nada encontrado. “Não consta” também é resposta."), done)
 
     def open_filter(self) -> None:
-        if self.p == 6 or (self.p == 1 and self.tab[1] == 0):
+        if self.p == 6 or self._summary_on():
             return
         key = (self.p, self.tab[self.p])
 
@@ -1841,14 +1970,14 @@ class BrainApp(App):
         self.push_screen(FilterModal(self.filt[2] if self.filt and self.filt[:2] == key else "", change))
 
     def help(self) -> None:
-        name, tabs = PANELS[self.p]
+        name, tabs = self.panels[self.p]
         body = Text()
         body.append("Neste contexto\n", "dim")
         for k in self.ctx_keys():
             body.append(f"  {('space' if k.k == ' ' else k.k):<7}", "bold cyan")
             body.append(("⚡ " if k.agent else "◆ " if k.gate else "") + k.label + "\n")
         body.append("\nNavegação\n", "dim")
-        for k, d in (("j k ↑ ↓", "mover na lista"), ("1-6", "ir ao painel (6 = log)"), ("[ ] ← →", "aba anterior / próxima (h l também)"),
+        for k, d in (("j k ↑ ↓", "mover na lista"), ("tab / shift+tab", "próxima / anterior face (Execução · Portfólio)"), ("1-6", "ir ao painel (6 = log)"), ("[ ] ← →", "aba anterior / próxima (h l também)"),
                      ("enter", "ampliar o detalhe"), ("esc", "voltar")):
             body.append(f"  {k:<9}", "bold cyan")
             body.append(d + "\n")
@@ -1858,7 +1987,8 @@ class BrainApp(App):
             body.append(f"  {k:<9}", "bold cyan")
             body.append(d + "\n")
         body.append("\n⚡ roda o agente  ·  ◆ pede aprovação digitada\n", "dim")
-        self.push_screen(TextModal(f"Atalhos · {name} › {tabs[self.tab[self.p]]}", body))
+        face = f"{FACES[self.face][0]} · " if self.face else ""
+        self.push_screen(TextModal(f"Atalhos · {face}{name} › {tabs[self.tab[self.p]]}", body))
 
 
 def run(inst) -> None:

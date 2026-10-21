@@ -198,7 +198,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(app.sel_index(2), 1)
             await pilot.press("k")
             self.assertEqual(app.sel_index(2), 0)
-            # painéis só mudam pelos números; setas (e h l) trocam de aba como [ ]
+            # painéis só mudam pelos números; setas (e h l) trocam de aba como [ ]; Tab gira as faces (ida e volta)
             await pilot.press("tab", "shift+tab")
             self.assertEqual(app.p, 2)
             await pilot.press("right")
@@ -211,6 +211,90 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual((app.p, app.tab[2]), (2, 0))
             await pilot.press("3", "right", "left")             # painel de uma aba só: nada muda
             self.assertEqual((app.p, app.tab[3]), (3, 0))
+
+    # ── faces (carrossel no Tab) ───────────────────────────────────────────
+    async def test_tab_cycles_faces_and_each_face_remembers_where_it_was(self):
+        app = self.app()
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause(0.4)
+            self.assertEqual((app.face, app.p), (0, 2))
+            self.assertIn("[Execução]", self.text_of(app.query_one("#faces")))
+            await pilot.press("j", "]")                              # Execução: segunda ação, aba "aguardando"
+            sel, tab = app.cur().id, app.tab[2]
+            await pilot.press("tab")
+            self.assertEqual((app.face, app.p), (1, 3))              # Portfólio abre em Oportunidades
+            self.assertIn("[Portfólio]", self.text_of(app.query_one("#faces")))
+            self.assertIn("Oportunidades", str(app.query_one("#p3").border_title))
+            self.assertIn("Visão", str(app.query_one("#p1").border_title))
+            self.assertEqual(self.text_of(app.query_one("#p3")).strip(), "vazio")        # sem itens ainda
+            await pilot.press("5", "]", "enter")                     # Registro › Documentos, detalhe ampliado
+            self.assertTrue(app.zoom)
+            await pilot.press("tab")                                 # volta à Execução (carrossel)
+            self.assertEqual((app.face, app.p, app.tab[2], app.cur().id), (0, 2, tab, sel))
+            self.assertFalse(app.zoom)
+            await pilot.press("shift+tab")                           # para trás: também gira (0 → 1)
+            self.assertEqual((app.face, app.p, app.tab[5], app.zoom), (1, 5, 1, True))
+            await pilot.press("shift+tab")
+            self.assertEqual(app.face, 0)
+
+    async def test_filter_and_zoom_are_saved_on_the_face_of_origin(self):
+        app = self.app()
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause(0.4)
+            app.filt = (2, 0, "bancada")
+            app._items = {}
+            app.zoom = True
+            app.redraw()
+            await pilot.press("tab")
+            self.assertEqual((app.filt, app.zoom), (None, False))
+            await pilot.press("tab")
+            self.assertEqual((app.filt, app.zoom), ((2, 0, "bancada"), True))
+            await pilot.press("escape", "escape")                    # esc desfaz zoom e depois o filtro
+            self.assertEqual((app.filt, app.zoom), (None, False))
+
+    async def test_tab_inside_a_modal_still_moves_the_form_field(self):
+        app = self.app()
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause(0.4)
+            await pilot.press("n")
+            await pilot.pause(0.3)
+            self.assertEqual(type(app.screen).__name__, "FormModal")
+            before = app.screen.focused.id
+            await pilot.press("tab")
+            await pilot.pause(0.1)
+            self.assertNotEqual(app.screen.focused.id, before)
+            await pilot.press("shift+tab")
+            await pilot.pause(0.1)
+            self.assertEqual(app.screen.focused.id, before)
+            self.assertEqual(app.face, 0)                            # o Tab do modal não girou a face
+            await pilot.press("escape")
+            await pilot.pause(0.2)
+            await pilot.press("tab")                                 # fechado o modal, volta a girar
+            self.assertEqual(app.face, 1)
+
+    async def test_jump_and_catalog_switch_face_and_click_on_the_strip(self):
+        app = self.app()
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause(0.4)
+            aid = app.items(2)[0].id
+            await pilot.press("tab")
+            self.assertEqual(app.store.locate(aid)[0], 0)
+            app.jump(aid)                                            # id da Execução, estando no Portfólio
+            self.assertEqual((app.face, app.p, app.cur().id), (0, 2, aid))
+            app.run_catalog((1, 3, 3, None))                         # item de outra face na paleta
+            self.assertEqual((app.face, app.p, app.tab[3]), (1, 3, 3))
+            strip = self.text_of(app.query_one("#faces"))
+            await pilot.click("#faces", offset=(strip.index("Execução") + 1, 0))
+            self.assertEqual(app.face, 0)
+
+    async def test_help_and_palette_know_the_face(self):
+        app = self.app()
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause(0.4)
+            await pilot.press("tab", "question_mark")
+            await pilot.pause(0.2)
+            self.assertIn("Portfólio", str(app.screen.title_) if hasattr(app.screen, "title_") else "")
+            await pilot.press("escape")
 
     async def test_context_keys_change_with_panel_and_tab(self):
         app = self.app()
@@ -458,10 +542,10 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
         app = self.app()
         async with app.run_test(size=(140, 44)) as pilot:
             await pilot.pause(0.4)
-            app.run_catalog((1, 3, "enter", "sys:validate"))
+            app.run_catalog((0, 1, 3, "enter", "sys:validate"))
             await self.settle(app, pilot)
             self.assertIn("$ brain validate", self.log_text(app))
-            app.run_catalog((1, 3, "enter", "sys:backup"))
+            app.run_catalog((0, 1, 3, "enter", "sys:backup"))
             await pilot.pause(0.3)
             self.assertEqual(type(app.screen).__name__, "ConfirmModal")
             await pilot.press("escape")                               # porta: cancelar não executa nada
@@ -554,11 +638,11 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
         app = self.app()
         async with app.run_test(size=(140, 44)) as pilot:
             await pilot.pause(0.4)
-            app.run_catalog((1, 3, "enter", "sys:ai-week"))            # sem argumento: vai direto ao modal ⚡
+            app.run_catalog((0, 1, 3, "enter", "sys:ai-week"))            # sem argumento: vai direto ao modal ⚡
             await self.settle_modal(app, pilot, "AgentModal")
             self.assertEqual(app.screen.prompt, "/week")
             await pilot.press("escape")
-            app.run_catalog((1, 3, "enter", "sys:ai-slack"))           # argumento obrigatório: pede antes
+            app.run_catalog((0, 1, 3, "enter", "sys:ai-slack"))           # argumento obrigatório: pede antes
             await self.settle_modal(app, pilot, "FormModal")
             await pilot.press("enter")
             await pilot.pause(0.2)
@@ -568,7 +652,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             await self.settle_modal(app, pilot, "AgentModal")
             self.assertEqual(app.screen.prompt, "/slack #time-estrategia 3d")
             await pilot.press("escape")
-            app.run_catalog((1, 3, "enter", "sys:ai-dump"))            # os cinco antigos reaproveitam o fluxo próprio
+            app.run_catalog((0, 1, 3, "enter", "sys:ai-dump"))            # os cinco antigos reaproveitam o fluxo próprio
             await self.settle_modal(app, pilot, "AgentModal")
             self.assertEqual(app.screen.prompt, "/dump")
             await pilot.press("escape")
@@ -577,7 +661,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
         app = self.app()
         async with app.run_test(size=(140, 44)) as pilot:
             await pilot.pause(0.4)
-            app.run_catalog((1, 3, "enter", "sys:doctor"))
+            app.run_catalog((0, 1, 3, "enter", "sys:doctor"))
             await self.settle_modal(app, pilot, "TextModal")
             self.assertIn("ledger", self.text_of(app.screen.query_one("#mb")))
             await pilot.press("escape")
@@ -593,7 +677,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
         app = self.app()
         async with app.run_test(size=(140, 44)) as pilot:
             await pilot.pause(0.4)
-            app.run_catalog((1, 3, "enter", "sys:recall"))
+            app.run_catalog((0, 1, 3, "enter", "sys:recall"))
             await pilot.pause(0.3)
             await self.typ(pilot, "o que foi decidido")
             await pilot.press("enter")

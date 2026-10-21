@@ -12,7 +12,7 @@ from typing import Any
 from .. import config, doctor, model, notes as notes_mod, util, watch
 from ..core import Brain
 
-PANELS = {
+PANELS_EXEC = {
     1: ("Status", ["Resumo", "Saúde", "Fontes", "Sistema"]),
     2: ("Ações", ["mine", "waiting", "watching"]),
     3: ("Plano", ["Árvore"]),
@@ -20,6 +20,21 @@ PANELS = {
     5: ("Registro", ["Decisões", "Entregas", "Pessoas", "Artefatos"]),
     6: ("Log de comandos", ["Log"]),
 }
+
+PANELS_PORT = {
+    1: ("Visão", ["Resumo", "Por área", "Por goal"]),
+    2: ("Processos", ["Todos", "Por área", "Lacunas"]),
+    3: ("Oportunidades", ["Triagem", "Priorizadas", "Em curso", "Arquivo"]),
+    4: ("Matriz", ["Matriz", "Ranking"]),
+    5: ("Registro", ["Áreas", "Documentos"]),
+    6: ("Log de comandos", ["Log"]),
+}
+
+# Face = conjunto de painéis 1–5 com abas próprias; o painel 6 (Log) é comum. Tab/Shift+Tab giram entre as faces
+# (carrossel). Uma face nova entra só declarando-se aqui (e em FACE_START: o painel em que ela abre).
+FACES = [("Execução", PANELS_EXEC), ("Portfólio", PANELS_PORT)]
+FACE_START = [2, 3]
+PANELS = PANELS_EXEC                 # compatibilidade: os painéis da face Execução
 
 SYS_OPS = [
     {"id": "sys:render", "name": "Regenerar views", "args": ["render"],
@@ -361,8 +376,10 @@ class Store:
         return None
 
     # ── listas por painel ──────────────────────────────────────────────────
-    def items(self, panel: int, tab: int, show_all: bool = False, filt: str = "",
+    def items(self, face: int, panel: int, tab: int, show_all: bool = False, filt: str = "",
               collapsed: set[str] | None = None) -> list[Item]:
+        if face != 0:
+            return self._items_face(face, panel, tab, show_all, filt)
         m, collapsed = self.m, (set() if filt else collapsed or set())     # filtrando, a árvore abre sozinha
         out: list[Item] = []
         if panel == 1:
@@ -425,6 +442,10 @@ class Store:
                 out = [i for i in out if f in util.fold(i.q)]
         return out
 
+    def _items_face(self, face: int, panel: int, tab: int, show_all: bool, filt: str) -> list[Item]:
+        """Listas das faces além da Execução (preenchidas no passo 7 do plano; por ora, abas vazias)."""
+        return []
+
     def _shown(self, it: Item, rel: set[str], f: str) -> bool:
         if it.kind in ("action", "g", "p", "d", "prop", "msg", "dec", "del", "per", "art"):
             return it.id in rel
@@ -432,8 +453,12 @@ class Store:
             return any(b["action"] in rel for b in it.data["blocks"])
         return f in util.fold(it.q)
 
-    def locate(self, node: str) -> tuple[int, int] | None:
-        """Onde um id aparece: (painel, aba). Usado nos links do detalhe, na busca e na paleta."""
+    def locate(self, node: str) -> tuple[int, int, int] | None:
+        """Onde um id aparece: (face, painel, aba). Usado nos links do detalhe, na busca e na paleta."""
+        loc = self._locate_exec(node)
+        return (0, *loc) if loc else None
+
+    def _locate_exec(self, node: str) -> tuple[int, int] | None:
         if node.startswith("A-"):
             a = self.by_action.get(node)
             return (2, ["mine", "waiting", "watching"].index(a["list"])) if a else None
