@@ -45,6 +45,7 @@ class PortfolioKeys:
                     add("c", "confirmar ICE", self.confirm_ice)
                 add("l", "ligar doc", lambda: self.f_doc_link(it.id))
                 add("v", "evidência", self.f_evidence)
+                add("O", "one-pager", self.agent_onepager, agent=True)
                 if w(it and not it.data["project"]):
                     add("p", "promover", self.f_promote, gate=True)
                 if w(it and it.data["status"] not in ("descartada", "entregue")):
@@ -329,6 +330,14 @@ class PortfolioKeys:
         self.form(FormSpec(f"Evidência de {o['id']}", [Field("source", "fonte", req=True, ph="PROCESSED/2026/10/reuniao.md")],
                            lambda v: [["opportunity", "evidence", o["id"], "--source", v["source"] or "…", "--by", "owner"]],
                            sub="Artefato ou RAW que reforça esta oportunidade."))
+
+    def agent_onepager(self) -> None:
+        o = self.cur().data
+        self.ask_agent(f"One-pager de {o['id']}", [
+            "Confere os campos e as evidências (o que não consta, não consta)",
+            f"Gera o documento: brain share opportunity {o['id']} (vault/reports/share/)",
+            f"Liga ao registro: brain doc link {o['id']} --kind one-pager … · publicar é outro gate (/publish)"],
+            f"/opportunity onepager {o['id']}")
 
     def f_promote(self) -> None:
         o = self.cur().data

@@ -30,6 +30,12 @@ no RAW (`notes/`) **sem renomear** (o TUI as acha pelo nome, no detalhe do vínc
 `--projects` = o projeto do vínculo (`P#`/`P#.n` → `P#`; `A-####` → o projeto da ação; goal → deixe vazio e cite
 o `G#` no resumo). Extraia ações/decisões só do que a nota afirmar; o vínculo já é a ligação.
 
+**Portfólio (processos e oportunidades)** — ao extrair dores, ineficiências ou sugestões de melhoria de um item:
+- **Oportunidade:** `./brain opportunity add "<título>" --area <slug> --problem "…" --suggestion "…" --by agent --prov observado --source <artefato>`. O CLI checa duplicata sozinho (código 2, nada gravado): se for a mesma ideia, `./brain opportunity evidence OPP-#### --source <artefato>` (mais uma fonte reforça, não duplica); se for nova, repita com `--force`. O agente **só cria em `ideia`** — nunca mova status, nunca grave ICE como firme (sugestão é `/opportunity triage`) e nunca promova.
+- **Processo citado e ainda sem ficha:** `./brain process add "<título>" --area <slug> --by agent --prov observado --source <artefato>` (confira antes com `./brain search`). Só o que o texto afirma; recorrência, duração e responsável que não constam ficam vazios (viram lacuna).
+- A área precisa existir (`./brain area list`); não existe → proponha ao dono, não invente.
+- Artefato lido de um playbook vigiado (`kind = "drive-doc"` no watch): registre com `--link PROC-####`.
+
 Regras transversais: proveniência em toda extração · `brain person resolve` antes de qualquer menção · IDs só o CLI numera.
 
 ## Como gravar

@@ -129,6 +129,7 @@ CMD_CATALOG = [               # paleta de comandos: nome, linha da CLI, (face, p
     ("ICE da oportunidade", "brain opportunity score OPP-#### --impact … --confidence … --ease …", (1, 3, 0, "i")),
     ("Confirmar ICE sugerido", "brain opportunity score OPP-#### (valores sugeridos)", (1, 3, 0, "c")),
     ("Evidência da oportunidade", "brain opportunity evidence OPP-#### --source …", (1, 3, 0, "v")),
+    ("One-pager da oportunidade", "agente: /opportunity onepager OPP-####", (1, 3, 0, "O")),
     ("Promover a projeto (gate)", 'brain opportunity promote OPP-#### --goal G# --approval "ok"', (1, 3, 0, "p")),
     ("Descartar oportunidade", 'brain opportunity status OPP-#### descartada --reason "…"', (1, 3, 0, "x")),
     ("Matriz impacto × facilidade", "brain opportunity list --sort score", (1, 4, 0, None)),

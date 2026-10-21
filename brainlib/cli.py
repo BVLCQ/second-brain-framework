@@ -930,8 +930,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(fn=cmd_outbox)
 
     p = sub.add_parser("share", help="exporta página compartilhável (HTML/MD) em vault/reports/share/")
-    p.add_argument("kind", choices=["project", "goal", "status", "period"])
-    p.add_argument("target", nargs="?", help="P#/G# ou AAAA-MM-DD:AAAA-MM-DD")
+    p.add_argument("kind", choices=["project", "goal", "status", "period", "portfolio", "opportunity"])
+    p.add_argument("target", nargs="?", help="P#/G# · AAAA-MM-DD:AAAA-MM-DD · OPP-#### (opportunity)")
+    p.add_argument("--area", help="portfolio: só uma área (id, nome ou alias)")
     p.add_argument("--format", choices=["html", "md"], default="html")
     p.add_argument("--json", action="store_true")
     p.set_defaults(fn=cmd_share)

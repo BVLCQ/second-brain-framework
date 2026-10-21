@@ -1715,5 +1715,50 @@ class PortfolioViewsTests(unittest.TestCase):
             self.assertEqual(r.returncode, 0, r.stderr)
 
 
+class PortfolioOutputsTests(unittest.TestCase):
+    """Passos 8–9: exports (/share portfolio, one-pager), skills e as ferramentas MCP somente-leitura."""
+
+    def test_share_portfolio_and_onepager(self):
+        with tempfile.TemporaryDirectory() as td:
+            b, p1, ids = PortfolioModelTests._seed(None, td)
+            b.record_one({"type": "opportunity.evidence", "id": ids["rapido"], "by": "owner", "data": {"source": "PROCESSED/x.md"}})
+            path = share.export(b, "portfolio", None, "md")
+            text = path.read_text(encoding="utf-8")
+            self.assertIn("# Roadmap de oportunidades", text)
+            self.assertIn("Ganho rápido — prioridade 80", text)
+            self.assertIn("**ganho rápido:**", text)
+            self.assertIn("ganho declarado: 8 h/mês", text)
+            body = text.split("**Fontes**")[0]
+            self.assertNotIn(ids["rapido"], body)                       # IDs internos só na seção de fontes
+            self.assertIn("Sem ICE — prioridade 27 (preliminar)", body)  # sugestão do agente não vira número firme
+            only = share.export(b, "portfolio", None, "md", area="Growth").read_text(encoding="utf-8")
+            self.assertIn("— Growth", only.splitlines()[0])
+            self.assertNotIn("Ganho rápido", only)                      # é da área Operações
+            with self.assertRaises(util.BrainError):
+                share.export(b, "portfolio", None, "md", area="nao-existe")
+            one = share.export(b, "opportunity", ids["rapido"], "html").read_text(encoding="utf-8")
+            self.assertIn("Ganho rápido", one)
+            self.assertIn("prioridade 80", one)
+            self.assertIn("Fechamento mensal", one)                     # processo ligado
+            self.assertIn("PROCESSED/x.md", one)
+            sug = share.export(b, "opportunity", ids["semice"], "md").read_text(encoding="utf-8")
+            self.assertIn("estimativa preliminar", sug)                 # ICE só sugerido não vira firme no documento
+            with self.assertRaises(util.BrainError):
+                share.export(b, "opportunity", "OPP-9999", "md")
+
+    def test_new_skills_and_constitution(self):
+        import re
+        for name in ("process", "opportunity"):
+            text = (ROOT / "commands" / name / "SKILL.md").read_text(encoding="utf-8")
+            self.assertTrue(re.match(rf'---\nname: {name}\ndescription: ".+"\n---\n', text), name)
+        agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+        for needle in ("`PROC-####`", "`OPP-####`", "commands/process/SKILL.md", "commands/opportunity/SKILL.md",
+                       "só cria em `ideia`", "processes.md"):
+            self.assertIn(needle, agents.replace("**O agente cria oportunidade sozinho, sempre em `ideia`**", "só cria em `ideia`"))
+        self.assertIn("## 13. Face Portfólio", (ROOT / "guides" / "user-guide.md").read_text(encoding="utf-8"))
+        self.assertIn("opportunity add", (ROOT / "commands" / "dump" / "SKILL.md").read_text(encoding="utf-8"))
+        self.assertIn("share portfolio", (ROOT / "commands" / "share" / "SKILL.md").read_text(encoding="utf-8"))
+
+
 if __name__ == "__main__":
     unittest.main()

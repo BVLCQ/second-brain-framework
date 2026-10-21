@@ -320,7 +320,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             app.set_sel(3, [i.id for i in app.items(3)].index(ids["sugerida"]))
             app.redraw()
             keys = {k.k for k in app.ctx_keys()}
-            self.assertEqual({"n", "e", "s", "i", "c", "l", "v", "p", "x"}, keys)
+            self.assertEqual({"n", "e", "s", "i", "c", "l", "v", "O", "p", "x"}, keys)
             # c: confirmar ICE sugerido → o mesmo ICE, agora do dono
             await pilot.press("c")
             self.assertEqual(got[-1][0], [["opportunity", "score", ids["sugerida"], "--impact", "4", "--confidence", "3", "--ease", "4", "--by", "owner"]])
