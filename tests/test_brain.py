@@ -1746,6 +1746,31 @@ class PortfolioOutputsTests(unittest.TestCase):
             with self.assertRaises(util.BrainError):
                 share.export(b, "opportunity", "OPP-9999", "md")
 
+    def test_mcp_portfolio_tools_are_read_only_and_answer(self):
+        with tempfile.TemporaryDirectory() as td:
+            b, p1, ids = PortfolioModelTests._seed(None, td)
+            os.environ["BRAIN_HOME"] = str(b.inst.root)
+            try:
+                ov = mcp_server.call_tool("portfolio_overview", {})
+                self.assertEqual(ov["counts"]["opportunities"], 5)
+                self.assertEqual(ov["ranking"][0]["id"], ids["rapido"])
+                self.assertEqual(ov["gaps"]["areas_without_process"], ["vazia"])
+                self.assertEqual(mcp_server.call_tool("process", {"id": p1.lower()})["hours_month"], 2.0)
+                self.assertIn("erro", mcp_server.call_tool("process", {"id": "PROC-9999"}))
+                o = mcp_server.call_tool("opportunity", {"id": ids["semice"]})
+                self.assertEqual((o["score"], o["ice_suggested"]), (27, True))
+                self.assertIn("erro", mcp_server.call_tool("opportunity", {"id": "OPP-9999"}))
+                self.assertEqual([x["id"] for x in mcp_server.call_tool("opportunities", {"status": "priorizada"})], [ids["rapido"]])
+                growth = mcp_server.call_tool("opportunities", {"area": "growth"})
+                self.assertEqual([x["id"] for x in growth][0], ids["depois"])      # maior score primeiro
+                self.assertNotIn("status_history", growth[0])
+            finally:
+                os.environ.pop("BRAIN_HOME", None)
+            listed = mcp_server.handle({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})["result"]["tools"]
+            names = {t["name"] for t in listed}
+            self.assertTrue({"portfolio_overview", "process", "opportunity", "opportunities"} <= names)
+            self.assertTrue(all(t["annotations"]["readOnlyHint"] for t in listed))
+
     def test_new_skills_and_constitution(self):
         import re
         for name in ("process", "opportunity"):
