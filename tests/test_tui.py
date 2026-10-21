@@ -212,6 +212,285 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             await pilot.press("3", "right", "left")             # painel de uma aba só: nada muda
             self.assertEqual((app.p, app.tab[3]), (3, 0))
 
+    # ── face Portfólio ─────────────────────────────────────────────────────
+    def seed_portfolio(self) -> dict:
+        """Áreas, processos e oportunidades genéricos no ledger do demo; devolve os ids criados."""
+        from brainlib.core import Brain
+        b = Brain(self.inst)
+        owner = b.owner
+        for slug, name in (("operacoes", "Operações"), ("growth", "Growth"), ("vazia", "Área vazia")):
+            b.record_one({"type": "area.added", "id": slug, "by": "owner", "data": {"name": name}})
+        p1 = b.record_one({"type": "process.added", "by": "owner", "data": {
+            "title": "Fechamento mensal", "area": "operacoes", "owner": owner, "executors": [owner],
+            "recurrence": "mensal", "duration": "2h", "pains": ["retrabalho"]}})["id"]
+        p2 = b.record_one({"type": "process.added", "by": "owner", "data": {"title": "Relatório semanal", "area": "growth"}})["id"]
+        b.record_one({"type": "doc.linked", "by": "owner", "data": {
+            "target": p1, "kind": "playbook", "ref": "https://example.com/playbook", "title": "Playbook do fechamento"}})
+
+        def opp(title, area, ice=None, status=None, suggested=False, **data):
+            oid = b.record_one({"type": "opportunity.added", "by": "owner", "data": {"title": title, "area": area, **data}})["id"]
+            if ice:
+                b.record_one({"type": "opportunity.scored", "id": oid, "by": "agent" if suggested else "owner", "prov": "observado",
+                              "data": {**dict(zip(("impact", "confidence", "ease"), ice)), **({"ice_suggested": True, "reason": "parece simples"} if suggested else {})}})
+            if status:
+                b.record_one({"type": "opportunity.status", "id": oid, "by": "owner", "data": {"status": status, "reason": "x"}})
+            return oid
+        ids = {"p1": p1, "p2": p2,
+               "rapido": opp("Automatizar conciliação", "operacoes", (5, 4, 4), "priorizada", process=p1, hours_saved=8, problem="conciliação manual demora"),
+               "aposta": opp("Plataforma de dados", "growth", (5, 3, 1), "triagem"),
+               "sugerida": opp("Alerta de metas", "growth", (4, 3, 4), None, suggested=True),
+               "semice": opp("Revisar templates", "growth"),
+               "arquivo": opp("Ideia antiga", "operacoes", (1, 1, 1), "descartada"),
+               "prior": opp("Revisão de SLAs", "operacoes", (3, 3, 3), "priorizada")}
+        b.record_one({"type": "opportunity.promoted", "id": ids["rapido"], "by": "owner", "data": {"project": "P1", "goal": "G1"}})
+        b.record_one({"type": "opportunity.status", "id": ids["rapido"], "by": "owner", "data": {"status": "em-andamento", "reason": "promovida"}})
+        return ids
+
+    async def test_portfolio_tabs_render_with_data(self):
+        from brainlib.tui import rows
+        ids = self.seed_portfolio()
+        app = self.app()
+        async with app.run_test(size=(150, 46)) as pilot:
+            await pilot.pause(0.4)
+            await pilot.press("tab")
+            seen = 0
+            for panel, name in ((1, "Visão"), (2, "Processos"), (3, "Oportunidades"), (4, "Matriz"), (5, "Registro")):
+                for tab in range(len(app.panels[panel][1])):
+                    await pilot.press(str(panel))
+                    app.tab[panel] = tab
+                    app.redraw()
+                    its = app.items(panel)
+                    self.assertTrue(its, f"{name} aba {tab} vazia")
+                    for it in its:
+                        self.assertTrue(rows.row(app.store, it, 80).plain)
+                        self.assertTrue(rows.detail(app.store, it).plain)
+                        seen += 1
+            self.assertGreater(seen, 30)
+            # abas de Oportunidades pelo status
+            app.tab[3] = 0
+            self.assertEqual({i.id for i in app.items(3)}, {ids["aposta"], ids["sugerida"], ids["semice"]})
+            app.tab[3] = 2
+            self.assertEqual([i.id for i in app.items(3)], [ids["rapido"]])
+            app.tab[3] = 3
+            self.assertEqual([i.id for i in app.items(3)], [ids["arquivo"]])
+            app.tab[2] = 2                                            # lacunas: só o processo incompleto
+            self.assertEqual([i.id for i in app.items(2)], [ids["p2"]])
+            app.tab[4] = 1                                            # ranking: sem a descartada, maior ICE primeiro
+            self.assertEqual([i.id for i in app.items(4)][0], ids["rapido"])
+            self.assertNotIn(ids["arquivo"], [i.id for i in app.items(4)])
+            app.tab[1] = 1                                            # Por área: cabeçalhos + oportunidades
+            self.assertEqual([i.kind for i in app.items(1)][:1], ["pgrp"])
+            app.filt = (1, 1, "plataforma")
+            app._items = {}
+            self.assertEqual([i.kind for i in app.items(1)], ["opp"])    # filtro tira os cabeçalhos
+
+    async def test_portfolio_row_shows_pink_score_when_suggested(self):
+        from brainlib.tui import rows
+        ids = self.seed_portfolio()
+        app = self.app()
+        async with app.run_test(size=(150, 46)) as pilot:
+            await pilot.pause(0.4)
+            by_id = {i.id: i for i in app.store.items(1, 3, 0)}
+            sug = rows.row(app.store, by_id[ids["sugerida"]], 100)
+            self.assertTrue(any(rows.PNK in str(sp.style) for sp in sug.spans))
+            firm = rows.row(app.store, by_id[ids["aposta"]], 100)
+            self.assertFalse(any(rows.PNK in str(sp.style) for sp in firm.spans))
+
+    async def test_jump_to_opportunity_and_process_switches_face_and_tab(self):
+        ids = self.seed_portfolio()
+        app = self.app()
+        async with app.run_test(size=(150, 46)) as pilot:
+            await pilot.pause(0.4)
+            app.jump(ids["rapido"])
+            self.assertEqual((app.face, app.p, app.tab[3], app.cur().id), (1, 3, 2, ids["rapido"]))
+            app.jump(ids["p2"])
+            self.assertEqual((app.face, app.p, app.cur().id), (1, 2, ids["p2"]))
+            app.jump("P1")                                           # plano é da Execução
+            self.assertEqual((app.face, app.p), (0, 3))
+
+    async def test_portfolio_keys_build_the_right_commands(self):
+        ids = self.seed_portfolio()
+        app = self.app()
+        got: list = []
+        app.exec = lambda cmds, **kw: got.append((cmds, kw))
+        async with app.run_test(size=(150, 46)) as pilot:
+            await pilot.pause(0.4)
+            await pilot.press("tab", "3")                            # Oportunidades › Triagem
+            app.tab[3] = 0
+            app.set_sel(3, [i.id for i in app.items(3)].index(ids["sugerida"]))
+            app.redraw()
+            keys = {k.k for k in app.ctx_keys()}
+            self.assertEqual({"n", "e", "s", "i", "c", "l", "v", "p", "x"}, keys)
+            # c: confirmar ICE sugerido → o mesmo ICE, agora do dono
+            await pilot.press("c")
+            self.assertEqual(got[-1][0], [["opportunity", "score", ids["sugerida"], "--impact", "4", "--confidence", "3", "--ease", "4", "--by", "owner"]])
+            # s: status por picker; lateral pede motivo
+            await pilot.press("s")
+            await pilot.pause(0.3)
+            await self.typ(pilot, "triagem")
+            await pilot.pause(0.4)
+            await pilot.press("enter")
+            await pilot.pause(0.2)
+            self.assertEqual(got[-1][0], [["opportunity", "status", ids["sugerida"], "triagem", "--by", "owner"]])
+            await pilot.press("s")
+            await pilot.pause(0.3)
+            await self.typ(pilot, "descartada")
+            await pilot.pause(0.4)
+            await pilot.press("enter")
+            await pilot.pause(0.3)
+            self.assertEqual(type(app.screen).__name__, "FormModal")
+            await self.fill(pilot, reason="duplicada")
+            await pilot.press("ctrl+s")
+            await pilot.pause(0.2)
+            self.assertEqual(got[-1][0], [["opportunity", "status", ids["sugerida"], "descartada", "--reason", "duplicada", "--by", "owner"]])
+            # i: ICE
+            await pilot.press("i")
+            await pilot.pause(0.3)
+            await self.fill(pilot, impact="9")
+            await pilot.press("ctrl+s")
+            await pilot.pause(0.2)
+            self.assertIn("1 a 5", self.text_of(app.screen.query_one("#err")))
+            await self.fill(pilot, impact="2", confidence="3", ease="4")
+            await pilot.press("ctrl+s")
+            await pilot.pause(0.2)
+            self.assertEqual(got[-1][0], [["opportunity", "score", ids["sugerida"], "--impact", "2", "--confidence", "3", "--ease", "4", "--by", "owner"]])
+            self.assertEqual(got[-1][1]["show"], "ICE gravado")
+            # v: evidência · l: documento (vigiar pede Drive)
+            await pilot.press("v")
+            await pilot.pause(0.3)
+            await self.fill(pilot, source="PROCESSED/2026/10/reuniao.md")
+            await pilot.press("ctrl+s")
+            await pilot.pause(0.2)
+            self.assertEqual(got[-1][0], [["opportunity", "evidence", ids["sugerida"], "--source", "PROCESSED/2026/10/reuniao.md", "--by", "owner"]])
+            await pilot.press("l")
+            await pilot.pause(0.3)
+            await self.fill(pilot, ref="https://example.com/x", watch="sim")
+            await pilot.press("ctrl+s")
+            await pilot.pause(0.2)
+            self.assertEqual(type(app.screen).__name__, "FormModal")             # sim sem playbook do Drive: erro
+            await self.fill(pilot, kind="playbook", ref="1AbCdEfGhIjKlMnOpQrS")
+            await pilot.press("ctrl+s")
+            await pilot.pause(0.2)
+            self.assertEqual(got[-1][0], [["doc", "link", ids["sugerida"], "--kind", "playbook", "--ref", "1AbCdEfGhIjKlMnOpQrS", "--by", "owner", "--watch"]])
+
+    async def test_new_opportunity_warns_about_duplicates_before_writing(self):
+        ids = self.seed_portfolio()
+        app = self.app()
+        got: list = []
+        app.exec = lambda cmds, **kw: got.append(cmds)
+        async with app.run_test(size=(150, 46)) as pilot:
+            await pilot.pause(0.4)
+            await pilot.press("tab", "3", "n")
+            await pilot.pause(0.3)
+            await self.fill(pilot, title="Automatizar a conciliação", problem="conciliação manual demora", area="operacoes")
+            await pilot.press("ctrl+s")
+            await pilot.pause(0.3)
+            self.assertEqual(type(app.screen).__name__, "ConfirmModal")
+            self.assertIn(ids["rapido"], app.screen.body)
+            await pilot.press("escape")
+            await pilot.pause(0.2)
+            self.assertEqual(got, [])                                            # nada gravado
+            await pilot.press("n")
+            await pilot.pause(0.3)
+            await self.fill(pilot, title="Algo totalmente novo", problem="outro assunto", area="growth", hours="12")
+            await pilot.press("ctrl+s")
+            await pilot.pause(0.3)
+            self.assertEqual(got[-1], [["opportunity", "add", "Algo totalmente novo", "--by", "owner", "--area", "growth",
+                                        "--kind", "melhoria-de-processo", "--problem", "outro assunto", "--hours-saved", "12.0"]])
+
+    async def test_process_keys_and_open_playbook(self):
+        ids = self.seed_portfolio()
+        app = self.app()
+        got: list = []
+        opened: list = []
+        app.exec = lambda cmds, **kw: got.append(cmds)
+        async with app.run_test(size=(150, 46)) as pilot:
+            await pilot.pause(0.4)
+            await pilot.press("tab", "2")
+            app.set_sel(2, [i.id for i in app.items(2)].index(ids["p1"]))
+            app.redraw()
+            self.assertEqual({k.k for k in app.ctx_keys()}, {"n", "e", "l", "o", "a", "x"})
+            with mock.patch("webbrowser.open", side_effect=opened.append):
+                await pilot.press("o")
+            self.assertEqual(opened, ["https://example.com/playbook"])
+            await pilot.press("x")
+            await pilot.pause(0.3)
+            await self.fill(pilot, reason="acabou")
+            await pilot.press("ctrl+s")
+            await pilot.pause(0.2)
+            self.assertEqual(got[-1], [["process", "retire", ids["p1"], "--reason", "acabou", "--by", "owner"]])
+            await pilot.press("a")                                               # nova OPP a partir do processo
+            await pilot.pause(0.3)
+            self.assertEqual(app.screen.query_one("#f_process").value, ids["p1"])
+            self.assertEqual(app.screen.query_one("#f_area").value, "operacoes")
+            await pilot.press("escape")
+            await pilot.pause(0.2)
+            await pilot.press("e")
+            await pilot.pause(0.3)
+            await self.fill(pilot, owner="", tools="Sheets, Jira", per_month="")
+            await pilot.press("ctrl+s")
+            await pilot.pause(0.2)
+            self.assertEqual(got[-1], [["process", "update", ids["p1"], "--by", "owner", "--tools", "Sheets, Jira"]])
+
+    async def test_areas_and_documents_tabs_have_their_keys(self):
+        ids = self.seed_portfolio()
+        app = self.app()
+        got: list = []
+        app.exec = lambda cmds, **kw: got.append(cmds)
+        async with app.run_test(size=(150, 46)) as pilot:
+            await pilot.pause(0.4)
+            await pilot.press("tab", "5", "n")
+            await pilot.pause(0.3)
+            await self.fill(pilot, slug="Ops Ruim")
+            await pilot.press("ctrl+s")
+            await pilot.pause(0.2)
+            self.assertEqual(type(app.screen).__name__, "FormModal")             # slug inválido
+            await self.fill(pilot, slug="suporte", name="Suporte", alias="CS, Atendimento")
+            await pilot.press("ctrl+s")
+            await pilot.pause(0.2)
+            self.assertEqual(got[-1], [["area", "add", "suporte", "--by", "owner", "--name", "Suporte", "--alias", "CS, Atendimento"]])
+            await pilot.press("]")
+            keys = {k.k for k in app.ctx_keys()}
+            self.assertEqual(keys, {"enter", "u"})
+            await pilot.press("u")
+            await pilot.pause(0.3)
+            self.assertEqual(type(app.screen).__name__, "ConfirmModal")
+            await pilot.press("enter")
+            await pilot.pause(0.2)
+            self.assertEqual(got[-1], [["doc", "unlink", ids["p1"], "--ref", "https://example.com/playbook", "--by", "owner"]])
+
+    async def test_promote_is_a_gate_and_really_creates_the_project(self):
+        ids = self.seed_portfolio()
+        from brainlib.core import Brain
+        Brain(self.inst).record_one({"type": "opportunity.status", "id": ids["aposta"], "by": "owner", "data": {"status": "priorizada"}})
+        app = self.app()
+        async with app.run_test(size=(150, 46)) as pilot:
+            await pilot.pause(0.4)
+            await pilot.press("tab", "3")
+            app.tab[3] = 1
+            app.set_sel(3, [i.id for i in app.items(3)].index(ids["aposta"]))
+            app.redraw()
+            await pilot.press("p")
+            await pilot.pause(0.3)
+            self.assertEqual(type(app.screen).__name__, "FormModal")
+            self.assertTrue(app.screen.spec.gate)
+            self.assertIn("### P", str(app.screen.spec.extra))                    # o diff proposto aparece antes de qualquer escrita
+            before = (self.inst.planning_file).read_text(encoding="utf-8")
+            await pilot.press("ctrl+s")                                           # sem aprovação digitada não passa
+            await pilot.pause(0.2)
+            self.assertEqual(type(app.screen).__name__, "FormModal")
+            self.assertEqual(self.inst.planning_file.read_text(encoding="utf-8"), before)
+            await self.fill(pilot, quote="ok")
+            await pilot.press("ctrl+s")
+            await self.settle(app, pilot)
+            st = self.state(app)
+            o = st.opportunities[ids["aposta"]]
+            self.assertEqual((o.status, o.goal), ("em-andamento", "G1"))
+            self.assertIn(f"### {o.project} — Plataforma de dados", self.inst.planning_file.read_text(encoding="utf-8"))
+            self.assertEqual((app.face, app.cur().id), (1, ids["aposta"]))
+            self.assertEqual(app.tab[3], 2)                                        # a aba segue o status novo
+
+
     # ── faces (carrossel no Tab) ───────────────────────────────────────────
     async def test_tab_cycles_faces_and_each_face_remembers_where_it_was(self):
         app = self.app()
@@ -1357,23 +1636,18 @@ class CoverageTest(unittest.TestCase):
     READ_ONLY_VIEWS = {   # a leitura já está num painel (modelo em processo), sem precisar chamar a CLI
         "person list", "action show", "action list", "decision list", "plan show", "focus show", "outbox show",
         "outbox list", "proposal list", "publish list", "doctor", "search", "status", "artifact", "watch list", "watch since", "watch folders",
-        "note list", "raw where"}
+        "note list", "raw where", "area list", "process show", "process list", "opportunity show", "opportunity list"}
     AGENT_ONLY = {        # quem escreve é o agente (extração, snapshot, envio), conforme a Constituição
         "init", "add", "snapshot", "proposal add", "outbox sent", "outbox failed", "publish done",
         "pdf text", "pdf render", "video transcribe", "video frames", "person merge",
         "raw archive", "raw sort"}
     NOT_IN_TUI = {"demo", "tui"}
-    PORTFOLIO_PENDING = {   # a face Portfólio chega nos passos 6–7 do plano; as teclas entram lá e este conjunto some
-        "area add", "area update", "area list", "process add", "process update", "process retire",
-        "process show", "process list", "opportunity add", "opportunity update", "opportunity status",
-        "opportunity score", "opportunity evidence", "opportunity promote", "opportunity show",
-        "opportunity list", "doc link", "doc unlink"}
     DYNAMIC = {"memory recall", "memory reflect"}      # o formulário "Memória: perguntar" monta o subcomando
 
     def test_every_cli_subcommand_is_accounted_for(self):
         import re
         from brainlib import cli
-        src = "".join((ROOT / "brainlib" / "tui" / f).read_text(encoding="utf-8") for f in ("app.py", "store.py"))
+        src = "".join((ROOT / "brainlib" / "tui" / f).read_text(encoding="utf-8") for f in ("app.py", "store.py", "portfolio_keys.py"))
         sub = next(a for a in cli.build_parser()._actions if a.__class__.__name__ == "_SubParsersAction")
         uncovered = []
         for name, p in sub.choices.items():
@@ -1381,7 +1655,7 @@ class CoverageTest(unittest.TestCase):
             for sc in (inner[0].choices if inner else [None]):
                 label = f"{name} {sc}" if sc else name
                 pat = re.compile(r'\[\s*"%s"\s*,\s*"%s"' % (name, sc)) if sc else re.compile(r'\[\s*"%s"\s*[,\]]' % name)
-                if pat.search(src) or label in self.READ_ONLY_VIEWS | self.AGENT_ONLY | self.NOT_IN_TUI | self.DYNAMIC | self.PORTFOLIO_PENDING:
+                if pat.search(src) or label in self.READ_ONLY_VIEWS | self.AGENT_ONLY | self.NOT_IN_TUI | self.DYNAMIC:
                     continue
                 uncovered.append(label)
         self.assertEqual(uncovered, [], "subcomandos sem lugar no TUI (e sem justificativa em CoverageTest)")

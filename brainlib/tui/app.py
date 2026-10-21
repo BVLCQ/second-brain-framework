@@ -33,6 +33,7 @@ from .. import util
 from . import bridge, dates, rows
 from .modals import (AgentModal, ChoiceModal, ConfirmModal, Field, FilterModal, FormModal, FormSpec, PickerModal,
                      PickItem, TextModal)
+from .portfolio_keys import PortfolioKeys
 from .store import FACE_START, FACES, SYS_OPS, Item, Store
 
 UCAP = 3                      # linhas visíveis de um painel sem foco
@@ -112,6 +113,30 @@ CMD_CATALOG = [               # paleta de comandos: nome, linha da CLI, (face, p
     ("Buscar no ledger", 'brain search "…"', (None, None, None, "g")),
     ("Nova nota", 'brain note add --link A-#### --text "…"', (None, None, None, "N")),
     ("Ver o log de comandos", "painel 6", (0, 6, 0, None)),
+    # face Portfólio
+    ("Visão do portfólio", "brain opportunity list --sort score", (1, 1, 0, None)),
+    ("Processos", "brain process list", (1, 2, 0, None)),
+    ("Processos com lacuna", "brain process list --gaps", (1, 2, 2, None)),
+    ("Novo processo", 'brain process add "…" --area … --owner …', (1, 2, 0, "n")),
+    ("Editar processo", "brain process update PROC-#### …", (1, 2, 0, "e")),
+    ("Ligar documento", "brain doc link PROC-####|OPP-#### --kind … --ref …", (1, 2, 0, "l")),
+    ("Abrir playbook", "abre o doc do playbook do processo", (1, 2, 0, "o")),
+    ("Aposentar processo", 'brain process retire PROC-#### --reason "…"', (1, 2, 0, "x")),
+    ("Oportunidades", "brain opportunity list", (1, 3, 0, None)),
+    ("Nova oportunidade", 'brain opportunity add "…" --area …', (1, 3, 0, "n")),
+    ("Editar oportunidade", "brain opportunity update OPP-#### …", (1, 3, 0, "e")),
+    ("Status da oportunidade", "brain opportunity status OPP-#### <status>", (1, 3, 0, "s")),
+    ("ICE da oportunidade", "brain opportunity score OPP-#### --impact … --confidence … --ease …", (1, 3, 0, "i")),
+    ("Confirmar ICE sugerido", "brain opportunity score OPP-#### (valores sugeridos)", (1, 3, 0, "c")),
+    ("Evidência da oportunidade", "brain opportunity evidence OPP-#### --source …", (1, 3, 0, "v")),
+    ("Promover a projeto (gate)", 'brain opportunity promote OPP-#### --goal G# --approval "ok"', (1, 3, 0, "p")),
+    ("Descartar oportunidade", 'brain opportunity status OPP-#### descartada --reason "…"', (1, 3, 0, "x")),
+    ("Matriz impacto × facilidade", "brain opportunity list --sort score", (1, 4, 0, None)),
+    ("Áreas", "brain area list", (1, 5, 0, None)),
+    ("Nova área", 'brain area add <slug> --name "…"', (1, 5, 0, "n")),
+    ("Editar área", "brain area update <slug> …", (1, 5, 0, "e")),
+    ("Documentos ligados", "brain doc link … · brain doc unlink …", (1, 5, 1, None)),
+    ("Desligar documento", "brain doc unlink PROC-####|OPP-#### --ref …", (1, 5, 1, "u")),
 ]
 
 
@@ -158,7 +183,7 @@ class Log(RichLog):
         self.app.goto_panel(6)
 
 
-class BrainApp(App):
+class BrainApp(PortfolioKeys, App):
     CSS_PATH = "tui.tcss"
     TITLE = "brain"
     ENABLE_COMMAND_PALETTE = False
@@ -583,6 +608,8 @@ class BrainApp(App):
             self.move(8 if k == "pagedown" else -8)
         elif k in "123456" and len(k) == 1:
             self.goto_panel(int(k))
+        elif k in ("l", "h") and any(key.k == k for key in self.ctx_keys()):
+            return self.press(k)                   # tecla de contexto vence o atalho de aba (Portfólio: l liga documento); ← → seguem trocando de aba
         elif k in ("l", "right"):                  # trocar de painel é só pelos números 1-5
             self.tab_move(1)
         elif k in ("h", "left"):
@@ -843,9 +870,6 @@ class BrainApp(App):
                 if w(it):
                     add("o", "abrir RAW", self.open_raw)
         return K
-
-    def ctx_keys_face(self, K: list[Key], p: int, t: int, it: Item | None, every: bool) -> None:
-        """Teclas das faces além da Execução (preenchidas no passo 7 do plano)."""
 
     # ── execução ───────────────────────────────────────────────────────────
     def exec(self, cmds: list[list[str]], render: bool = True, after: Callable[[], None] | None = None,

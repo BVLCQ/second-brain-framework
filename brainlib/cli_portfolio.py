@@ -235,6 +235,15 @@ def cmd_opportunity(args, b: Brain) -> None:
              "\n".join(_opp_line(b, o) for o in rows) or "(nenhuma oportunidade)")
 
 
+def promote_proposal(b: Brain, o, title: str | None = None) -> tuple[str, list[str]]:
+    """O projeto que a promoção criaria: (id, linhas do goals.md). Usado pelo CLI e pelo gate do TUI."""
+    why = " ".join((o.problem or "").split())[:160]
+    owner = b.owner if b.owner in b.state.people else ""
+    nid = planning.next_project_id(b.plan)
+    return nid, [f"### {nid} — {title or o.title}", "- status: ativo"] + ([f"- dono: {owner}"] if owner else []) \
+        + ([f"- por quê: {why}"] if why else [])
+
+
 def _promote(args, b: Brain) -> None:
     """Promove OPP a projeto num goal. Sem --approval só mostra o diff proposto e sai com código de gate."""
     o = _need_opp(b, args.id)
@@ -245,11 +254,9 @@ def _promote(args, b: Brain) -> None:
     if args.goal not in b.plan.goals:
         raise util.BrainError(f"goal {args.goal} não existe em PLANNING/goals.md", code=3)
     title = args.title or o.title
+    nid, diff = promote_proposal(b, o, title)
     why = " ".join((o.problem or "").split())[:160]
     owner = b.owner if b.owner in b.state.people else ""
-    nid = planning.next_project_id(b.plan)
-    diff = [f"### {nid} — {title}", "- status: ativo"] + ([f"- dono: {owner}"] if owner else []) \
-        + ([f"- por quê: {why}"] if why else [])
     if not (args.approval or "").strip():
         print(f"Proposta (sob {args.goal} — {b.plan.goals[args.goal].title}):\n  " + "\n  ".join(diff))
         raise util.BrainError(f"promover {o.id} cria projeto: mudança estrutural — exige --approval com a "
