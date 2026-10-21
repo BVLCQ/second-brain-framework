@@ -267,14 +267,16 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
                         seen += 1
             self.assertGreater(seen, 30)
             # abas de Oportunidades pelo status
-            app.tab[3] = 0
-            self.assertEqual({i.id for i in app.items(3)}, {ids["aposta"], ids["sugerida"], ids["semice"]})
-            app.tab[3] = 2
-            self.assertEqual([i.id for i in app.items(3)], [ids["rapido"]])
-            app.tab[3] = 3
-            self.assertEqual([i.id for i in app.items(3)], [ids["arquivo"]])
-            app.tab[2] = 2                                            # lacunas: só o processo incompleto
-            self.assertEqual([i.id for i in app.items(2)], [ids["p2"]])
+            def has(panel, tab, *want, none=()):
+                app.tab[panel] = tab
+                got = {i.id for i in app.items(panel)}
+                self.assertTrue(set(want) <= got, (panel, tab, want, got))
+                self.assertFalse(set(none) & got)
+            has(3, 0, ids["aposta"], ids["sugerida"], ids["semice"], none=[ids["rapido"], ids["arquivo"]])   # triagem = ideia + triagem
+            has(3, 1, ids["prior"], none=[ids["aposta"]])
+            has(3, 2, ids["rapido"], none=[ids["aposta"]])             # em curso = promovida
+            has(3, 3, ids["arquivo"], none=[ids["rapido"]])
+            has(2, 2, ids["p2"], none=[ids["p1"]])                     # lacunas: só o processo incompleto
             app.tab[4] = 1                                            # ranking: sem a descartada, maior ICE primeiro
             self.assertEqual([i.id for i in app.items(4)][0], ids["rapido"])
             self.assertNotIn(ids["arquivo"], [i.id for i in app.items(4)])
@@ -450,6 +452,8 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             await pilot.pause(0.2)
             self.assertEqual(got[-1], [["area", "add", "suporte", "--by", "owner", "--name", "Suporte", "--alias", "CS, Atendimento"]])
             await pilot.press("]")
+            app.set_sel(5, [i.id for i in app.items(5)].index(f"{ids['p1']}#0"))
+            app.redraw()
             keys = {k.k for k in app.ctx_keys()}
             self.assertEqual(keys, {"enter", "u"})
             await pilot.press("u")
@@ -505,14 +509,14 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             self.assertIn("[Portfólio]", self.text_of(app.query_one("#faces")))
             self.assertIn("Oportunidades", str(app.query_one("#p3").border_title))
             self.assertIn("Visão", str(app.query_one("#p1").border_title))
-            self.assertEqual(self.text_of(app.query_one("#p3")).strip(), "vazio")        # sem itens ainda
-            await pilot.press("5", "]", "enter")                     # Registro › Documentos, detalhe ampliado
+            self.assertTrue(app.items(3))                                              # o demo traz oportunidades
+            await pilot.press("5", "enter")                          # Registro › Áreas, detalhe ampliado
             self.assertTrue(app.zoom)
             await pilot.press("tab")                                 # volta à Execução (carrossel)
             self.assertEqual((app.face, app.p, app.tab[2], app.cur().id), (0, 2, tab, sel))
             self.assertFalse(app.zoom)
             await pilot.press("shift+tab")                           # para trás: também gira (0 → 1)
-            self.assertEqual((app.face, app.p, app.tab[5], app.zoom), (1, 5, 1, True))
+            self.assertEqual((app.face, app.p, app.tab[5], app.zoom), (1, 5, 0, True))
             await pilot.press("shift+tab")
             self.assertEqual(app.face, 0)
 

@@ -289,11 +289,79 @@ def build(target: Path) -> Path:
                              "pode ganhar prazo ligado à reforma (P1.3)?",
                   "evidence": src["reuniao-numeros"]}},
     ])
+    _portfolio(b, src, d)
     from . import outbox
     outbox.draft(b, "caio-demo", "Oi Caio-demo! O orçamento da reforma da galeria estava previsto para "
                             f"{util.fmt_date(d(-1))}. Consegue me mandar até amanhã? Ele define o prazo da "
                             "reforma do lado de cá.", "A-0008", "cobrar orçamento atrasado")
     return target
+
+
+def _portfolio(b: Brain, src: dict, d) -> None:
+    """Portfólio fictício: 3 áreas, 3 processos, 6 oportunidades em status variados (uma promovida a P3)."""
+    owner = {"by": "owner"}
+    agent = lambda s: {"by": "agent", "prov": "observado", "source": src[s]}  # noqa: E731
+    b.record([
+        {"type": "area.added", "id": "producao", "date": d(-9), **owner, "data": {"name": "Produção", "aliases": ["Cozinha"]}},
+        {"type": "area.added", "id": "atendimento", "date": d(-9), **owner, "data": {"name": "Atendimento", "aliases": ["Balcão"]}},
+        {"type": "area.added", "id": "financeiro", "date": d(-9), **owner, "data": {"name": "Financeiro"}},
+        {"type": "process.added", "date": d(-9), **owner, "data": {
+            "title": "Fornada da manhã", "area": "producao", "owner": "heitor-demo", "executors": ["heitor-demo", "voce"],
+            "recurrence": "diaria", "duration": "3h", "tools": ["forno a lenha", "balança"],
+            "io": "massa fermentada → pães prontos às 7h", "pains": ["rendimento varia sem registro"], "maturity": 4}},
+        {"type": "process.added", "date": d(-9), **owner, "data": {
+            "title": "Atendimento no balcão", "area": "atendimento", "owner": "marina-demo", "executors": ["marina-demo"],
+            "recurrence": "diaria", "duration": "2h", "io": "pedido do freguês → venda registrada",
+            "pains": ["pedidos antecipados anotados em papel"], "maturity": 2}},
+        {"type": "process.added", "date": d(-9), **owner, "data": {
+            "title": "Fechamento mensal", "area": "financeiro", "owner": "sonia-demo", "recurrence": "mensal",
+            "duration": "4h", "tools": ["planilha"], "io": "extratos e notas → fechamento conferido", "maturity": 3}},
+        {"type": "doc.linked", "id": "PROC-0001", "date": d(-9), **owner, "data": {
+            "target": "PROC-0001", "kind": "playbook", "ref": "https://example.com/playbooks/fornada-da-manha",
+            "title": "Playbook da fornada"}},
+    ])
+
+    def opp(date: int, who: dict, **data) -> None:
+        b.record_one({"type": "opportunity.added", "date": d(date), **who, "data": data})
+
+    opp(-8, owner, title="Registrar o rendimento de cada fornada", area="producao", process="PROC-0001", goal="G2",
+        problem="o rendimento varia e ninguém sabe por quê", suggestion="planilha simples preenchida ao fim da fornada",
+        gain="menos perda de massa", hours_saved=3, kind="melhoria-de-processo")
+    opp(-6, agent("1a1-marina-demo"), title="Planilha de pedidos antecipados", area="atendimento", process="PROC-0002",
+        problem="encomendas anotadas em papel se perdem", suggestion="uma planilha compartilhada com o atendimento",
+        kind="melhoria-de-processo")
+    opp(-5, owner, title="Conciliação automática do caixa", area="financeiro", process="PROC-0003", goal="G2",
+        problem="o fechamento consome uma manhã inteira", suggestion="importar o extrato e cruzar com as vendas do dia",
+        gain="fechamento em 1h", hours_saved=6, kind="melhoria-de-processo")
+    opp(-4, owner, title="Cardápio digital no balcão", area="atendimento", problem="o freguês pergunta preço toda hora",
+        suggestion="QR code com cardápio e preços", gain="balcão mais livre", kind="novo-processo")
+    opp(-3, owner, title="Compra coletiva de insumos", area="financeiro", problem="cada ponto compra farinha separado",
+        suggestion="negociar em conjunto com outras padarias do bairro", kind="estruturante")
+    opp(-2, agent("reuniao-numeros"), title="Painel de desperdício", area="producao",
+        problem="sobra de pães no fim do dia sem medição", kind="melhoria-de-processo")
+
+    def score(oid: str, ice: tuple, who: dict | None = None, **extra) -> None:
+        b.record_one({"type": "opportunity.scored", "id": oid, "date": d(-1), **(who or owner),
+                      "data": {**dict(zip(("impact", "confidence", "ease"), ice)), **extra}})
+
+    def status(oid: str, st: str, reason: str = "") -> None:
+        b.record_one({"type": "opportunity.status", "id": oid, "date": d(-1), **owner,
+                      "data": {"status": st, **({"reason": reason} if reason else {})}})
+
+    score("OPP-0001", (4, 4, 3))
+    score("OPP-0002", (4, 3, 4), agent("1a1-marina-demo"), ice_suggested=True, reason="planilha simples; atendimento já pediu")
+    score("OPP-0003", (5, 3, 3))
+    score("OPP-0004", (3, 4, 5))
+    score("OPP-0005", (4, 2, 2))
+    status("OPP-0001", "priorizada")
+    status("OPP-0004", "triagem")
+    status("OPP-0005", "em-espera", "depende do segundo ponto abrir")
+    b.record_one({"type": "opportunity.evidence", "id": "OPP-0003", "date": d(-3), **agent("reuniao-numeros"),
+                  "data": {"source": src["reuniao-numeros"]}})
+    b.record_one({"type": "opportunity.promoted", "id": "OPP-0003", "date": d(-1), **owner, "data": {"project": "P3", "goal": "G2"}})
+    status("OPP-0003", "em-andamento", "promovida a P3")
+    b.record_one({"type": "doc.linked", "id": "OPP-0004", "date": d(-1), **owner, "data": {
+        "target": "OPP-0004", "kind": "artefato", "ref": "https://example.com/artefatos/cardapio-digital", "title": "Protótipo do cardápio"}})
 
 
 def cli(args) -> None:

@@ -725,6 +725,14 @@ class DemoTests(unittest.TestCase):
             self.assertTrue((target / "vault" / "FRESH" / "todo.md").exists())
             self.assertTrue((target / "vault" / "FRESH" / "dashboard" / "index.html").exists())
             self.assertFalse((target / "vault" / "FRESH" / "bases").exists())
+            st = b.state
+            self.assertEqual((len(st.areas), len(st.processes), len(st.opportunities)), (3, 3, 6))
+            self.assertEqual(st.opportunities["OPP-0003"].status, "em-andamento")        # uma promovida, ligada a P3/G2
+            self.assertEqual((st.opportunities["OPP-0003"].project, st.opportunities["OPP-0003"].goal), ("P3", "G2"))
+            self.assertTrue(st.opportunities["OPP-0002"].ice_suggested)
+            self.assertEqual(st.processes["PROC-0001"].hours_month, 21 * 3 * 2)
+            self.assertTrue((target / "vault" / "FRESH" / "opportunities.md").exists())
+            self.assertIn("Portfólio", dash)
             self.assertTrue((target / "vault" / "FRESH" / "projects" / "P1.md").exists())
 
 
