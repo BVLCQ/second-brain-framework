@@ -199,5 +199,72 @@ class WatchSinceTest(_WatchBase):
         self.assertNotIn("slack-y", self.keys())
 
 
+class DriveDocTest(_WatchBase):
+    """Passo 3 do portfólio: playbook do Drive vigiado pelo watch (kind = drive-doc)."""
+    DOC = "1AbCdEfGhIjKlMnOpQrStUv"
+
+    def setUp(self):
+        super().setUp()
+        from brainlib.core import Brain
+        self.brain = Brain(self.inst)
+        self.brain.record_one({"type": "area.added", "id": "operacoes", "by": "owner", "data": {"name": "Operações"}})
+        self.pid = self.brain.record_one({"type": "process.added", "by": "owner", "data": {
+            "title": "Fechamento", "area": "operacoes"}})["id"]
+
+    def test_drive_doc_id_from_url_or_id(self):
+        self.assertEqual(watch.drive_doc_id(f"https://docs.google.com/document/d/{self.DOC}/edit"), self.DOC)
+        self.assertEqual(watch.drive_doc_id(f"https://drive.google.com/open?id={self.DOC}"), self.DOC)
+        self.assertEqual(watch.drive_doc_id(self.DOC), self.DOC)
+        self.assertIsNone(watch.drive_doc_id("https://example.com/pagina"))
+
+    def test_link_playbook_creates_stable_source_and_is_idempotent(self):
+        src = watch.link_playbook(self.brain, self.pid, f"https://docs.google.com/document/d/{self.DOC}/edit")
+        self.assertEqual(src["key"], "playbook-proc-0001")
+        self.assertEqual(watch.list_sources(self.inst), [
+            {"key": "playbook-proc-0001", "kind": "drive-doc", "doc": self.DOC, "link": self.pid,
+             "note": f"playbook de {self.pid}"}])
+        watch.link_playbook(self.brain, self.pid, "1ZzZzZzZzZzZzZzZzZzZz")       # outro doc: edita, não duplica
+        self.assertEqual([s["doc"] for s in watch.list_sources(self.inst)], ["1ZzZzZzZzZzZzZzZzZzZz"])
+        self.assertFalse(watch.unlink_playbook(self.brain, self.pid, self.DOC))   # não é o doc vigiado
+        self.assertTrue(watch.unlink_playbook(self.brain, self.pid, "1ZzZzZzZzZzZzZzZzZzZz"))
+        self.assertEqual(self.keys(), [])
+
+    def test_validation_requires_existing_link(self):
+        for bad in ({"kind": "drive-doc", "link": self.pid},                      # sem doc
+                    {"kind": "drive-doc", "doc": self.DOC},                       # sem link
+                    {"kind": "drive-doc", "doc": self.DOC, "link": "PROC-9999"},  # link inexistente
+                    {"kind": "drive-doc", "doc": "!!", "link": self.pid}):        # doc inválido
+            with self.assertRaises(util.BrainError, msg=str(bad)):
+                watch.check_fields(self.brain, bad)
+        with self.assertRaises(util.BrainError):
+            watch.link_playbook(self.brain, "PROC-9999", self.DOC)
+        with self.assertRaises(util.BrainError):
+            watch.link_playbook(self.brain, self.pid, "https://example.com/x")
+        watch.check_fields(self.brain, {"kind": "drive-doc", "doc": self.DOC, "link": self.pid})
+        self.assertEqual(watch.broken_links(self.brain), [])
+
+    def test_cli_link_watch_and_artifact_link_marks_playbook_read(self):
+        env = {**os.environ, "BRAIN_HOME": str(self.root)}
+        run = lambda *a: subprocess.run([sys.executable, str(ROOT / "brain"), *a], capture_output=True,  # noqa: E731
+                                        text=True, env=env)
+        r = run("doc", "link", self.pid, "--kind", "outro", "--ref", self.DOC, "--watch", "--by", "owner")
+        self.assertEqual(r.returncode, 4)                                         # --watch só para playbook
+        r = run("doc", "link", self.pid, "--kind", "playbook", "--ref", self.DOC, "--watch", "--by", "owner")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("playbook-proc-0001", r.stdout)
+        self.assertEqual(self.keys(), ["playbook-proc-0001"])
+        r = run("artifact", "PROCESSED/2026/10/playbook.md", "--kind", "documento", "--title", "Playbook",
+                "--link", self.pid, "--by", "owner")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        from brainlib.core import Brain
+        p = Brain(self.inst).state.processes[self.pid]
+        self.assertIsNotNone(p.playbook.read)
+        self.assertEqual(run("artifact", "PROCESSED/x.md", "--kind", "documento", "--title", "x",
+                             "--link", "PROC-9999", "--by", "owner").returncode, 4)
+        r = run("doc", "unlink", self.pid, "--ref", self.DOC, "--by", "owner")
+        self.assertIn("fonte do watch removida", r.stdout)
+        self.assertEqual(self.keys(), [])
+
+
 if __name__ == "__main__":
     unittest.main()

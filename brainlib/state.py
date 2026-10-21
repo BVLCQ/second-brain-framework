@@ -106,6 +106,7 @@ class Artifact:
     projects: list[str] = field(default_factory=list)
     summary: str = ""
     prov: str = ""
+    link: str = ""                   # PROC-####/OPP-#### a que o artefato pertence (ex.: leitura de um playbook)
 
 
 @dataclass
@@ -190,6 +191,7 @@ class DocLink:
     title: str = ""
     date: date | None = None
     watch: bool = False
+    read: date | None = None         # última leitura registrada pelo /dump (artefato com data.link)
 
 
 @dataclass
@@ -467,9 +469,14 @@ def apply(st: State, ev: dict) -> None:
     elif t == "artifact.added":
         st.artifacts[eid] = Artifact(eid, data["kind"], data["title"], when, data.get("raw", ""),
                                      list(data.get("people", [])), list(data.get("projects", [])),
-                                     data.get("summary", ""), ev.get("prov", ""))
+                                     data.get("summary", ""), ev.get("prov", ""), data.get("link", ""))
         if data.get("raw"):
             st.raw_index[data["raw"]] = eid
+        tgt = st.processes.get(data.get("link", "")) or st.opportunities.get(data.get("link", ""))
+        if tgt is not None:
+            for d in tgt.docs:
+                if d.kind == "playbook":
+                    d.read = when
 
     elif t == "proposal.opened":
         st.proposals[eid] = Proposal(eid, data["kind"], data["summary"], data.get("target", ""),

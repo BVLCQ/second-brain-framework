@@ -197,6 +197,9 @@ def validate(ev: dict, state, plan) -> None:
             _person(state, p, "people")
         for p in data.get("projects", []):
             _plan_node(plan, p, "projects")
+        if data.get("link"):
+            _need(data["link"] in state.processes or data["link"] in state.opportunities,
+                  f"link: {data['link']!r} não existe (PROC-… ou OPP-…)")
     if t == "proposal.opened":
         _need(data["kind"] in PROPOSAL_KINDS, f"kind de proposta inválido: {data['kind']!r}")
     if t in {"proposal.accepted", "proposal.rejected"}:

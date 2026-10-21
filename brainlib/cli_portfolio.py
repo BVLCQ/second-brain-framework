@@ -9,7 +9,7 @@ import argparse
 import json
 import os
 
-from . import planning, portfolio, util
+from . import planning, portfolio, util, watch
 from .cli import _common, _create_project, _fact_opts, _out, _resolve_people
 from .core import Brain
 
@@ -269,13 +269,22 @@ def _promote(args, b: Brain) -> None:
 # ── documentos ──────────────────────────────────────────────────────────────
 def cmd_doc(args, b: Brain) -> None:
     if args.dcmd == "link":
+        if args.watch and args.kind != "playbook":
+            raise util.BrainError("--watch vale só para --kind playbook (doc do Drive)", code=4)
+        if args.watch and not watch.drive_doc_id(args.ref):
+            raise util.BrainError(f"--watch pede um doc do Drive (URL ou id); recebi {args.ref!r}", code=4)
         data = {"target": args.target, "kind": args.kind, "ref": args.ref, "title": args.title,
                 "watch": True if args.watch else None}
         ev = b.record_one(_common({"type": "doc.linked", "data": data}, args))
-        _out(args, ev, f"✓ {args.target} · doc [{args.kind}] {args.title or args.ref}")
+        watched = ""
+        if args.watch:
+            src = watch.link_playbook(b, args.target, args.ref)
+            watched = f"\n  ↳ fonte {src['key']} no watch.toml: o /update relê quando o doc mudar"
+        _out(args, ev, f"✓ {args.target} · doc [{args.kind}] {args.title or args.ref}{watched}")
     else:
         ev = b.record_one(_common({"type": "doc.unlinked", "data": {"target": args.target, "ref": args.ref}}, args))
-        _out(args, ev, f"✓ {args.target} · doc desligado: {args.ref}")
+        gone = watch.unlink_playbook(b, args.target, args.ref)
+        _out(args, ev, f"✓ {args.target} · doc desligado: {args.ref}" + (" (fonte do watch removida)" if gone else ""))
 
 
 # ── parser ──────────────────────────────────────────────────────────────────

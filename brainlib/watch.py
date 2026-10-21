@@ -24,7 +24,10 @@ HEADER = ("# Universo observável do /update e do noturno.\n"
           "# Leituras passam pelos MCPs do agente; o resultado cai na inbox via:\n"
           "#   ./brain snapshot --key <key> --prefix <kind>\n"
           "# Hash idêntico ao último pull da mesma key = silêncio (nada escrito).\n")
-FIELD_ORDER = ["key", "kind", "window", "channel", "jql", "note"]
+FIELD_ORDER = ["key", "kind", "window", "channel", "jql", "doc", "link", "note"]
+DRIVE_DOC = "drive-doc"             # playbook de um processo: relido só quando o modifiedTime muda
+DRIVE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{10,}$")
+DRIVE_URL_RE = re.compile(r"/(?:d|folders)/([A-Za-z0-9_-]{10,})|[?&]id=([A-Za-z0-9_-]{10,})")
 SOURCE_RE = re.compile(r"^\[\[source\]\]\s*(#.*)?$")
 TABLE_RE = re.compile(r"^\s*\[")
 ASSIGN_RE = re.compile(r"^(\s*)([A-Za-z0-9_.-]+)(\s*=\s*)(.*)$")
@@ -297,6 +300,68 @@ def remove(inst, key: str) -> None:
     _commit(inst, new)
 
 
+def drive_doc_id(ref: str) -> str | None:
+    """Id do Drive a partir de uma URL (`/d/<id>`, `?id=<id>`) ou do próprio id. None = não parece do Drive."""
+    ref = (ref or "").strip()
+    m = DRIVE_URL_RE.search(ref)
+    if m:
+        return m.group(1) or m.group(2)
+    return ref if DRIVE_ID_RE.match(ref) else None
+
+
+def playbook_key(target: str) -> str:
+    return f"playbook-{target.lower()}"
+
+
+def check_fields(brain, fields: dict) -> None:
+    """Regras das fontes `drive-doc`: `doc` (id do Drive) e `link` (PROC-…/OPP-… que existe no ledger)."""
+    if fields.get("kind") != DRIVE_DOC:
+        return
+    if not fields.get("doc"):
+        raise util.BrainError("fonte drive-doc precisa de `doc` (id do doc no Drive)", code=4)
+    if not drive_doc_id(str(fields["doc"])):
+        raise util.BrainError(f"doc inválido: {fields['doc']!r} (id do Drive)", code=4)
+    link = fields.get("link")
+    if not link:
+        raise util.BrainError("fonte drive-doc precisa de `link` (PROC-#### ou OPP-####)", code=4)
+    if link not in brain.state.processes and link not in brain.state.opportunities:
+        raise util.BrainError(f"link: {link!r} não existe no ledger (PROC-… ou OPP-…)", code=4)
+
+
+def broken_links(brain) -> list[str]:
+    """Fontes drive-doc cujo `link` não existe (mais) no ledger — para o doctor."""
+    out = []
+    for s in list_sources(brain.inst):
+        if s.get("kind") == DRIVE_DOC:
+            try:
+                check_fields(brain, s)
+            except util.BrainError as e:
+                out.append(f"{s.get('key')}: {e}")
+    return out
+
+
+def link_playbook(brain, target: str, ref: str) -> dict:
+    """`doc link --kind playbook --watch`: cria (ou atualiza) a fonte drive-doc estável do alvo."""
+    doc = drive_doc_id(ref)
+    if not doc:
+        raise util.BrainError(f"--watch pede um doc do Drive (URL ou id); recebi {ref!r}", code=4)
+    key = playbook_key(target)
+    fields = {"kind": DRIVE_DOC, "doc": doc, "link": target, "note": f"playbook de {target}"}
+    check_fields(brain, fields)
+    if key in {s.get("key") for s in list_sources(brain.inst)}:
+        return edit(brain.inst, key, {"doc": doc, "link": target})
+    return add(brain.inst, key, fields)
+
+
+def unlink_playbook(brain, target: str, ref: str) -> bool:
+    key = playbook_key(target)
+    src = next((s for s in list_sources(brain.inst) if s.get("key") == key), None)
+    if src is None or src.get("doc") != drive_doc_id(ref):
+        return False
+    remove(brain.inst, key)
+    return True
+
+
 def parse_pairs(items: list[str] | None) -> dict:
     out = {}
     for it in items or []:
@@ -344,10 +409,17 @@ def cli(args, brain) -> None:
                 print(f"{'descer' if x['descend'] else 'pular '}\t{x['id']}\t{x['call_at'] or '—'}\t{x['name']}\t({x['why']})")
     elif c == "add":
         f = {"kind": args.kind, "window": args.window, "note": args.note, **parse_pairs(args.set)}
+        check_fields(brain, {k: str(v).strip() for k, v in f.items() if v})
         add(inst, args.key, f)
         print(f"✓ fonte {args.key} adicionada ao watch.toml — o /update passa a puxá-la")
     elif c == "edit":
         f = {"kind": args.kind, "window": args.window, "note": args.note, **parse_pairs(args.set)}
+        cur = next((s for s in list_sources(inst) if s.get("key") == args.key), None)
+        if cur:
+            merged = {**cur, **{k: str(v).strip() for k, v in f.items() if v}}
+            for u in args.unset or []:
+                merged.pop(u, None)
+            check_fields(brain, merged)
         edit(inst, args.key, f, args.unset, args.rename)
         extra = (" · o histórico de pulls fica na key antiga" if args.rename and args.rename != args.key else "")
         print(f"✓ fonte {args.rename or args.key} atualizada{extra}")

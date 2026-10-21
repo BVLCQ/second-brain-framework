@@ -37,6 +37,9 @@ def checks(brain, online: bool = False) -> list[dict]:
                       + (f" · {no_due} sem prazo" if no_due else "")))
     else:
         out.append(_c("warn", "PLANNING", "nenhum goal — rode /init"))
+    from . import watch
+    for msg in watch.broken_links(brain):
+        out.append(_c("warn", "watch", msg))
     coll = people.alias_collisions(st)
     if coll:
         out.append(_c("warn", "identidades", "aliases ambíguos: " + "; ".join(f"{a} → {', '.join(i)}"

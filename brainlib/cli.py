@@ -287,7 +287,8 @@ def cmd_delivery(args, b: Brain) -> None:
 def cmd_artifact(args, b: Brain) -> None:
     ev = b.record_one(_common({"type": "artifact.added", "id": args.path, "data": {
         "kind": args.kind, "title": args.title, "raw": args.raw, "summary": args.summary,
-        "people": _resolve_people(b, args.people or []), "projects": util.split_csv(args.projects)}}, args))
+        "people": _resolve_people(b, args.people or []), "projects": util.split_csv(args.projects),
+        "link": args.link}}, args))
     _out(args, ev, f"✓ artefato {ev['id']} ({args.kind})")
 
 
@@ -778,6 +779,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--people", action="append")
     p.add_argument("--projects")
     p.add_argument("--summary")
+    p.add_argument("--link", help="PROC-####/OPP-#### a que o artefato pertence (ex.: leitura de playbook)")
     _fact_opts(p)
     p.set_defaults(fn=cmd_artifact)
 
