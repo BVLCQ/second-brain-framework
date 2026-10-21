@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import re
 
+from . import util
 from .util import BrainError, parse_date
 
 PROV = {"doc", "observado", "declarado", "sem-fonte", "sistema"}
@@ -18,8 +19,18 @@ PRIORITIES = {"alta", "normal", "baixa"}
 DELIVERABLE_STATUS = {"nao-iniciado", "em-andamento", "feito", "cancelado"}
 ARTIFACT_KINDS = {"reuniao", "documento", "nota", "conector"}
 PROPOSAL_KINDS = {"fechar-acao", "atualizar-acao", "mudar-plano", "reestimar", "outro"}
+RECURRENCE = {"diaria", "semanal", "quinzenal", "mensal", "trimestral", "sob-demanda", "por-evento"}
+RECURRENCE_NEEDS_COUNT = {"sob-demanda", "por-evento"}     # exigem per_month (execuções/mês)
+OPP_STATUS = {"ideia", "triagem", "em-espera", "descartada", "priorizada", "em-andamento", "piloto",
+              "validando", "entregue"}
+OPP_REASON_STATUS = {"em-espera", "descartada"}            # laterais: exigem motivo
+OPP_KINDS = {"melhoria-de-processo", "novo-processo", "estruturante"}
+DOC_KINDS = {"playbook", "one-pager", "planilha", "artefato", "apresentacao", "outro"}
 
 ACTION_ID = re.compile(r"^A-\d{4,}$")
+PROC_ID = re.compile(r"^PROC-\d{4,}$")
+OPP_ID = re.compile(r"^OPP-\d{4,}$")
+AREA_ID = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 PLAN_NODE = re.compile(r"^(G\d+|P\d+|P\d+\.\d+)$")
 
 # entity: a qual coleção o id pertence · new: o evento cria a entidade ·
@@ -60,6 +71,19 @@ TYPES: dict[str, dict] = {
     "connector.pulled": {"entity": "connector", "req": ["changed"]},
     "connector.failed": {"entity": "connector", "req": ["error"]},
     "run.completed": {"entity": "run", "req": ["ok"]},
+    "area.added": {"entity": "area", "new": True, "req": ["name"]},
+    "area.updated": {"entity": "area", "req": []},
+    "process.added": {"entity": "process", "new": True, "prefix": "PROC", "req": ["title", "area"]},
+    "process.updated": {"entity": "process", "req": []},
+    "process.retired": {"entity": "process", "req": ["reason"]},
+    "opportunity.added": {"entity": "opportunity", "new": True, "prefix": "OPP", "req": ["title", "area"]},
+    "opportunity.updated": {"entity": "opportunity", "req": []},
+    "opportunity.status": {"entity": "opportunity", "req": ["status"]},
+    "opportunity.scored": {"entity": "opportunity", "req": ["impact", "confidence", "ease"]},
+    "opportunity.evidence": {"entity": "opportunity", "req": ["source"]},
+    "opportunity.promoted": {"entity": "opportunity", "req": ["project", "goal"]},
+    "doc.linked": {"entity": "doclink", "req": ["target", "kind", "ref"]},
+    "doc.unlinked": {"entity": "doclink", "req": ["target", "ref"]},
 }
 
 
@@ -102,7 +126,7 @@ def validate(ev: dict, state, plan) -> None:
     ent = spec["entity"]
     eid = ev.get("id")
     if not spec.get("new") and ent in {"person", "action", "decision", "proposal", "message",
-                                       "share", "focus"}:
+                                       "share", "focus", "area", "process", "opportunity"}:
         _need(eid in state.collection(ent), f"{t}: {ent} {eid!r} não existe")
 
     if t == "person.added":
@@ -180,3 +204,106 @@ def validate(ev: dict, state, plan) -> None:
     if t == "progress.declared":
         _plan_node(plan, eid or "", "progress")
         _need(isinstance(data["pct"], int) and 0 <= data["pct"] <= 100, "pct deve ser inteiro 0–100")
+    if ent in {"area", "process", "opportunity", "doclink"}:
+        _validate_portfolio(t, ev, data, state, plan)
+
+
+def _int15(data: dict, field: str) -> None:
+    if field in data:
+        v = data[field]
+        _need(isinstance(v, int) and not isinstance(v, bool) and 1 <= v <= 5,
+              f"{field} deve ser inteiro 1–5 (recebido {v!r})")
+
+
+def _people_fields(data: dict, state) -> None:
+    for f in ("owner",):
+        if data.get(f):
+            _person(state, data[f], f)
+    for f in ("executors", "executors_add", "people", "people_add"):
+        for p in data.get(f, []):
+            _person(state, p, f)
+
+
+def _validate_portfolio(t: str, ev: dict, data: dict, state, plan) -> None:
+    eid = ev.get("id")
+    by = ev.get("by")
+    if t == "area.added":
+        _need(bool(AREA_ID.match(eid or "")), f"area: id inválido {eid!r} (slug minúsculo-com-hífens)")
+        _need(eid not in state.areas, f"área '{eid}' já existe — use area.updated")
+    if t.startswith("process.") or t.startswith("opportunity."):
+        _people_fields(data, state)
+        if data.get("area"):
+            _need(data["area"] in state.areas, f"area: '{data['area']}' não cadastrada — `brain area add`")
+    if t.startswith("process."):
+        if "recurrence" in data:
+            _need(data["recurrence"] in RECURRENCE, f"recurrence inválida: {data['recurrence']!r} — {sorted(RECURRENCE)}")
+        if "per_month" in data:
+            v = data["per_month"]
+            _need(isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0,
+                  "per_month deve ser número > 0")
+        if "duration" in data:                       # aceita '1h30m'/'45m'/minutos; guarda em minutos
+            mins = util.parse_duration(data.pop("duration"))
+            _need(bool(mins) and mins > 0, "duration deve ser > 0")
+            data["duration_min"] = mins
+        if "duration_min" in data:
+            v = data["duration_min"]
+            _need(isinstance(v, int) and not isinstance(v, bool) and v > 0, "duration_min deve ser inteiro positivo (minutos)")
+        if t in {"process.added", "process.updated"} and data.get("recurrence") in RECURRENCE_NEEDS_COUNT:
+            _need(data.get("per_month") or (eid in state.processes and state.processes[eid].per_month),
+                  f"recurrence '{data['recurrence']}' exige per_month (execuções por mês)")
+        _int15(data, "maturity")
+        if t == "process.added":
+            _need(by != "agent" or ev.get("source"), "process.added por agente exige --source")
+        if t in {"process.updated", "process.retired"}:
+            _need(state.processes[eid].status == "ativo", f"processo {eid} já foi aposentado")
+    if t.startswith("opportunity."):
+        if data.get("process"):
+            _need(data["process"] in state.processes, f"process: {data['process']} não existe")
+        if data.get("kind"):
+            _need(data["kind"] in OPP_KINDS, f"kind inválido: {data['kind']!r} — {sorted(OPP_KINDS)}")
+        if "hours_saved" in data:
+            v = data["hours_saved"]
+            _need(isinstance(v, (int, float)) and not isinstance(v, bool) and v >= 0, "hours_saved deve ser número ≥ 0")
+        if data.get("goal"):
+            _need(data["goal"] in plan.goals, f"goal: '{data['goal']}' não existe no PLANNING/goals.md")
+        if data.get("project"):
+            _need(data["project"] in plan.projects, f"project: '{data['project']}' não existe no PLANNING/goals.md")
+        for f in ("impact", "confidence", "ease"):
+            _int15(data, f)
+        if data.get("ice_suggested"):
+            _need(by == "agent", f"{t}: só o agente sugere ICE (by=agent); ICE do dono é declaração, sem ice_suggested")
+        if t == "opportunity.added":
+            _need(by != "agent" or ev.get("source"), "opportunity.added por agente exige --source")
+            _need(by != "agent" or data.get("status", "ideia") == "ideia",
+                  "agente só cria oportunidade em status 'ideia'")
+            if data.get("status"):
+                _need(data["status"] in OPP_STATUS, f"status inválido: {data['status']!r}")
+        if t == "opportunity.status":
+            st = data["status"]
+            _need(st in OPP_STATUS, f"status inválido: {st!r} — {sorted(OPP_STATUS)}")
+            _need(by != "agent" or st == "ideia",
+                  "agente só pode gravar status 'ideia' — mover oportunidade é do dono")
+            if st in OPP_REASON_STATUS:
+                _need(data.get("reason"), f"status '{st}' exige reason (motivo)")
+            if st == "em-andamento":
+                _need(state.opportunities[eid].project,
+                      f"{eid}: 'em-andamento' só com projeto vinculado — use `brain opportunity promote`")
+        if t == "opportunity.scored" and by == "agent":
+            _need(data.get("ice_suggested"), "agente só grava ICE como sugestão (ice_suggested)")
+        if t == "opportunity.promoted":
+            _need(by != "agent", "promover oportunidade é do dono (gate)")
+            proj = plan.projects.get(data["project"])
+            _need(data["goal"] in plan.goals and proj is not None,
+                  "promoted: goal/projeto não existem no PLANNING/goals.md")
+            _need( proj.goal_id == data["goal"],
+                  f"promoted: projeto {data['project']} não pertence a {data['goal']}")
+            _need(not state.opportunities[eid].project, f"{eid} já foi promovida")
+    if t.startswith("doc."):
+        tgt = data["target"]
+        _need(tgt in state.processes or tgt in state.opportunities, f"doc: alvo {tgt!r} não existe (PROC-… ou OPP-…)")
+        _need(ev.get("id") == tgt, "doc: id do evento deve ser o alvo")
+        if t == "doc.linked":
+            _need(data["kind"] in DOC_KINDS, f"kind de documento inválido: {data['kind']!r} — {sorted(DOC_KINDS)}")
+        else:
+            coll = state.processes if tgt in state.processes else state.opportunities
+            _need(any(d.ref == data["ref"] for d in coll[tgt].docs), f"doc: {data['ref']!r} não está ligado a {tgt}")

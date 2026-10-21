@@ -21,7 +21,8 @@ except ImportError:  # pragma: no cover — Windows não é alvo (cron/launchd)
 
 LEDGER_REL = Path("PROCESSED") / "_ledger" / "events.jsonl"
 FACT_TYPES = {"action.opened", "action.closed", "decision.made", "delivery.recorded",
-              "artifact.added", "deliverable.updated", "proposal.opened"}
+              "artifact.added", "deliverable.updated", "proposal.opened", "process.added",
+              "opportunity.added", "opportunity.evidence"}
 # No noturno (BRAIN_NIGHTLY=1) não há dono presente: nenhuma aprovação, envio ou publicação.
 NIGHT_FORBIDDEN = {"message.approved", "message.sent", "share.approved", "share.published", "focus.approved"}
 FIELD_ORDER = ["seq", "ts", "type", "id", "date", "actor", "by", "prov", "source", "data"]
@@ -116,6 +117,10 @@ class Brain:
             while pid in working.people:
                 pid, n = f"{base}-{n}", n + 1
             ev["id"] = pid
+        elif t == "area.added":
+            ev["id"] = util.slugify(ev.get("id") or data.get("name", ""), 32)
+        elif t in ("doc.linked", "doc.unlinked"):
+            ev["id"] = data.get("target")
         elif t == "artifact.added":
             ev["id"] = self._vault_rel(ev.get("id") or data.get("path", ""))
             data.pop("path", None)

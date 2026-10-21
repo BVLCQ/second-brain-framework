@@ -1268,5 +1268,155 @@ class RunnerTest(unittest.TestCase):
                 self.assertFalse(plist.exists())
 
 
+class PortfolioStateTests(unittest.TestCase):
+    """Passo 1 do portfólio: áreas, processos, oportunidades, ICE e documentos no ledger."""
+
+    def _b(self, td):
+        b = _brain(Path(td))
+        b.record_one({"type": "area.added", "id": "operacoes", "by": "owner", "data": {"name": "Operações"}})
+        b.record_one({"type": "area.added", "id": "growth", "by": "owner", "data": {"name": "Growth"}})
+        return b
+
+    def _proc(self, b, **data):
+        base = {"title": "Fechamento mensal", "area": "operacoes", "owner": "eu"}
+        return b.record_one({"type": "process.added", "by": "owner", "data": {**base, **data}})
+
+    def _opp(self, b, **kw):
+        ev = {"type": "opportunity.added", "by": "owner",
+              "data": {"title": "Automatizar conciliação", "area": "operacoes", **kw.pop("data", {})}}
+        ev.update(kw)
+        return b.record_one(ev)
+
+    def test_area_and_ids(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = self._b(td)
+            self.assertEqual(list(b.state.areas), ["operacoes", "growth"])
+            with self.assertRaises(util.BrainError):                    # área duplicada
+                b.record_one({"type": "area.added", "id": "growth", "by": "owner", "data": {"name": "G"}})
+            with self.assertRaises(util.BrainError):                    # área inexistente
+                self._proc(b, area="nao-existe")
+            self.assertEqual(self._proc(b)["id"], "PROC-0001")
+            self.assertEqual(self._proc(b, title="Outro")["id"], "PROC-0002")
+            self.assertEqual(self._opp(b)["id"], "OPP-0001")
+            self.assertEqual(b.state.next_id("A"), "A-0001")           # os antigos seguem iguais
+            self.assertEqual(b.validate_all(), [])
+
+    def test_process_hours_and_validation(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = self._b(td)
+            pid = self._proc(b, executors=["eu", "marina-demo"], recurrence="semanal", duration="1h30m")["id"]
+            p = b.state.processes[pid]
+            self.assertEqual(p.duration_min, 90)
+            self.assertAlmostEqual(p.hours_month, 4.33 * 1.5 * 2, places=2)
+            sob = self._proc(b, title="Sob demanda", recurrence="sob-demanda", per_month=3, duration="45m")["id"]
+            self.assertAlmostEqual(b.state.processes[sob].hours_month, 2.25)
+            vazio = self._proc(b, title="Sem dados")["id"]
+            self.assertIsNone(b.state.processes[vazio].hours_month)
+            for bad in ({"recurrence": "anual"}, {"recurrence": "sob-demanda"}, {"maturity": 6},
+                        {"duration": "0m"}, {"owner": "ninguem"}, {"executors": ["ninguem"]}):
+                with self.assertRaises(util.BrainError, msg=str(bad)):
+                    self._proc(b, **bad)
+            with self.assertRaises(util.BrainError):                    # agente sem --source
+                b.record_one({"type": "process.added", "by": "agent", "prov": "observado",
+                              "data": {"title": "X", "area": "growth"}})
+            b.record_one({"type": "process.retired", "id": pid, "by": "owner", "data": {"reason": "acabou"}})
+            self.assertEqual(b.state.processes[pid].status, "aposentado")
+            self.assertEqual(b.validate_all(), [])
+
+    def test_opportunity_score_and_agent_rules(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = self._b(td)
+            ev = b.record_one({"type": "opportunity.added", "by": "agent", "prov": "observado", "source": "chat",
+                               "data": {"title": "Ideia do agente", "area": "growth"}})
+            oid = ev["id"]
+            self.assertEqual(b.state.opportunities[oid].status, "ideia")
+            with self.assertRaises(util.BrainError):                    # agente sem --source
+                b.record_one({"type": "opportunity.added", "by": "agent", "prov": "observado",
+                              "data": {"title": "Sem fonte", "area": "growth"}})
+            with self.assertRaises(util.BrainError):                    # agente não move status
+                b.record_one({"type": "opportunity.status", "id": oid, "by": "agent", "prov": "observado",
+                              "data": {"status": "triagem"}})
+            b.record_one({"type": "opportunity.scored", "id": oid, "by": "agent", "prov": "observado",
+                          "data": {"impact": 4, "confidence": 3, "ease": 2, "ice_suggested": True, "reason": "x"}})
+            o = b.state.opportunities[oid]
+            self.assertEqual((o.score, o.ice_suggested), (24, True))
+            with self.assertRaises(util.BrainError):                    # dono não marca ice_suggested
+                b.record_one({"type": "opportunity.scored", "id": oid, "by": "owner",
+                              "data": {"impact": 1, "confidence": 1, "ease": 1, "ice_suggested": True}})
+            with self.assertRaises(util.BrainError):
+                b.record_one({"type": "opportunity.scored", "id": oid, "by": "owner",
+                              "data": {"impact": 6, "confidence": 1, "ease": 1}})
+            b.record_one({"type": "opportunity.scored", "id": oid, "by": "owner",
+                          "data": {"impact": 5, "confidence": 5, "ease": 5}})
+            o = b.state.opportunities[oid]
+            self.assertEqual((o.score, o.ice_suggested), (125, False))   # dono limpa a sugestão
+            sem_ice = self._opp(b)["id"]
+            self.assertIsNone(b.state.opportunities[sem_ice].score)
+            self.assertEqual(b.validate_all(), [])
+
+    def test_status_rules_and_history(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = self._b(td)
+            oid = self._opp(b)["id"]
+            st = lambda s, **d: b.record_one({"type": "opportunity.status", "id": oid, "by": "owner",  # noqa: E731
+                                              "data": {"status": s, **d}})
+            st("triagem")
+            st("priorizada")
+            st("triagem")                                               # vai e volta
+            for bad in ("descartada", "em-espera", "em-andamento", "invalido"):
+                with self.assertRaises(util.BrainError, msg=bad):
+                    st(bad)                                             # laterais sem motivo; em-andamento sem projeto
+            st("descartada", reason="duplicada")
+            hist = b.state.opportunities[oid].status_history
+            self.assertEqual([(h["from"], h["to"]) for h in hist],
+                             [("ideia", "triagem"), ("triagem", "priorizada"), ("priorizada", "triagem"),
+                              ("triagem", "descartada")])
+            self.assertEqual(hist[-1]["reason"], "duplicada")
+
+    def test_promoted_links_goal_and_project(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = self._b(td)
+            oid = self._opp(b)["id"]
+            for goal, proj in (("G9", "P1"), ("G1", "P9")):
+                with self.assertRaises(util.BrainError):
+                    b.record_one({"type": "opportunity.promoted", "id": oid, "by": "owner",
+                                  "data": {"goal": goal, "project": proj}})
+            b.record_one({"type": "opportunity.promoted", "id": oid, "by": "owner",
+                          "data": {"goal": "G1", "project": "P1"}})
+            b.record_one({"type": "opportunity.status", "id": oid, "by": "owner", "data": {"status": "em-andamento"}})
+            o = b.state.opportunities[oid]
+            self.assertEqual((o.project, o.goal, o.status), ("P1", "G1", "em-andamento"))
+            self.assertEqual(b.validate_all(), [])
+
+    def test_docs_evidence_and_person_merge(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = self._b(td)
+            b.record_one({"type": "person.added", "id": "mari-dup", "by": "owner", "data": {"name": "Mari Dup"}})
+            pid = self._proc(b, owner="mari-dup", executors=["mari-dup", "marina-demo"])["id"]
+            oid = self._opp(b, data={"people": ["mari-dup"]})["id"]
+            b.record_one({"type": "doc.linked", "by": "owner", "data": {
+                "target": pid, "kind": "playbook", "ref": "https://example.com/doc", "title": "Playbook"}})
+            self.assertEqual(b.state.processes[pid].playbook.ref, "https://example.com/doc")
+            with self.assertRaises(util.BrainError):
+                b.record_one({"type": "doc.linked", "by": "owner",
+                              "data": {"target": pid, "kind": "foo", "ref": "x"}})
+            with self.assertRaises(util.BrainError):
+                b.record_one({"type": "doc.linked", "by": "owner",
+                              "data": {"target": "OPP-9999", "kind": "outro", "ref": "x"}})
+            b.record_one({"type": "doc.unlinked", "by": "owner",
+                          "data": {"target": pid, "ref": "https://example.com/doc"}})
+            self.assertEqual(b.state.processes[pid].docs, [])
+            for _ in range(2):
+                b.record_one({"type": "opportunity.evidence", "id": oid, "by": "agent", "prov": "observado",
+                              "source": "PROCESSED/x.md", "data": {"source": "PROCESSED/x.md"}})
+            o = b.state.opportunities[oid]
+            self.assertEqual((o.evidence, o.evidence_count), (["PROCESSED/x.md"], 2))
+            b.record_one({"type": "person.merged", "id": "mari-dup", "by": "owner", "data": {"into": "marina-demo"}})
+            p = b.state.processes[pid]
+            self.assertEqual((p.owner, p.executors), ("marina-demo", ["marina-demo"]))
+            self.assertEqual(b.state.opportunities[oid].people, ["marina-demo"])
+            self.assertEqual(b.validate_all(), [])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -9,6 +9,11 @@ from datetime import date
 
 from . import util
 
+# Execuções por mês de cada recorrência (sob-demanda/por-evento usam `per_month` do processo).
+RUNS_PER_MONTH = {"diaria": 21, "semanal": 4.33, "quinzenal": 2.17, "mensal": 1, "trimestral": 1 / 3}
+# Prefixo do ID → nome da coleção em State (o ID é PREFIXO-####, de qualquer tamanho de prefixo).
+PREFIX_COLL = {"A": "actions", "D": "decisions", "E": "deliveries", "R": "proposals", "M": "messages",
+               "S": "shares", "F": "focus_plans", "PROC": "processes", "OPP": "opportunities"}
 LIST_LABEL = {"mine": "minhas", "waiting": "aguardando", "watching": "observando"}
 _new_list = list  # Action tem um campo chamado `list`, que sombreia o builtin no corpo da classe
 
@@ -170,6 +175,105 @@ class Connector:
 
 
 @dataclass
+class Area:
+    id: str
+    name: str
+    aliases: list[str] = field(default_factory=list)
+    note: str = ""
+    added: str = ""
+
+
+@dataclass
+class DocLink:
+    ref: str                         # URL, id do Drive ou caminho RAW/PROCESSED
+    kind: str
+    title: str = ""
+    date: date | None = None
+    watch: bool = False
+
+
+@dataclass
+class Process:
+    id: str
+    title: str
+    area: str
+    owner: str = ""
+    executors: list[str] = field(default_factory=list)
+    recurrence: str = ""
+    per_month: float | None = None
+    duration_min: int | None = None
+    tools: list[str] = field(default_factory=list)
+    io: str = ""                     # "entradas → saídas"
+    pains: list[str] = field(default_factory=list)
+    maturity: int | None = None
+    notes: list[str] = field(default_factory=list)
+    docs: list[DocLink] = field(default_factory=list)
+    status: str = "ativo"            # ativo | aposentado
+    retired_reason: str = ""
+    source: str = ""
+    prov: str = ""
+    by: str = ""
+    added: date | None = None
+    last_activity: date | None = None
+
+    @property
+    def runs_month(self) -> float | None:
+        if self.recurrence in RUNS_PER_MONTH:
+            return RUNS_PER_MONTH[self.recurrence]
+        return self.per_month
+
+    @property
+    def hours_month(self) -> float | None:
+        """execuções/mês × duração (h) × nº de executores (mín. 1). None se faltar recorrência ou duração."""
+        runs = self.runs_month
+        if not runs or not self.duration_min:
+            return None
+        return round(runs * self.duration_min / 60 * max(1, len(self.executors)), 2)
+
+    @property
+    def playbook(self) -> DocLink | None:
+        return next((d for d in self.docs if d.kind == "playbook"), None)
+
+
+@dataclass
+class Opportunity:
+    id: str
+    title: str
+    area: str
+    process: str | None = None
+    kind: str = "melhoria-de-processo"
+    problem: str = ""
+    suggestion: str = ""
+    gain: str = ""
+    hours_saved: float | None = None
+    docs: list[DocLink] = field(default_factory=list)
+    status: str = "ideia"
+    impact: int | None = None
+    confidence: int | None = None
+    ease: int | None = None
+    ice_suggested: bool = False      # ICE sugerido pelo agente; o dono confirma ou muda
+    ice_reason: str = ""
+    goal: str | None = None
+    project: str | None = None
+    people: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+    evidence: list[str] = field(default_factory=list)   # fontes (artefatos/RAW) que reforçam a oportunidade
+    evidence_count: int = 0
+    status_history: list[dict] = field(default_factory=list)   # {date, from, to, reason}
+    source: str = ""
+    prov: str = ""
+    by: str = ""
+    added: date | None = None
+    last_activity: date | None = None
+
+    @property
+    def score(self) -> int | None:
+        if self.impact and self.confidence and self.ease:
+            return self.impact * self.confidence * self.ease
+        return None
+
+
+@dataclass
 class State:
     events: list[dict] = field(default_factory=list)
     people: dict[str, Person] = field(default_factory=dict)
@@ -188,6 +292,9 @@ class State:
     deliverable_events: dict[str, list[dict]] = field(default_factory=dict)
     progress: dict[str, list[dict]] = field(default_factory=dict)
     plan_changes: list[dict] = field(default_factory=list)
+    areas: dict[str, Area] = field(default_factory=dict)
+    processes: dict[str, Process] = field(default_factory=dict)
+    opportunities: dict[str, Opportunity] = field(default_factory=dict)
 
     def max_seq(self) -> int:
         return self.events[-1]["seq"] if self.events else 0
@@ -196,11 +303,11 @@ class State:
         return {"person": self.people, "action": self.actions, "decision": self.decisions,
                 "delivery": self.deliveries, "artifact": self.artifacts,
                 "proposal": self.proposals, "message": self.messages, "share": self.shares,
-                "focus": self.focus_plans}[entity]
+                "focus": self.focus_plans, "area": self.areas, "process": self.processes,
+                "opportunity": self.opportunities}[entity]
 
     def next_id(self, prefix: str) -> str:
-        coll = {"A": self.actions, "D": self.decisions, "E": self.deliveries, "R": self.proposals,
-                "M": self.messages, "S": self.shares, "F": self.focus_plans}[prefix]
+        coll = getattr(self, PREFIX_COLL[prefix])
         nums = [int(k.split("-")[1]) for k in coll]
         return f"{prefix}-{(max(nums) + 1 if nums else 1):04d}"
 
@@ -260,6 +367,12 @@ def _merge_person(st: State, old_id: str, into: str) -> None:
     for m in st.messages.values():
         if m.to == old_id:
             m.to = into
+    for pr in st.processes.values():
+        if pr.owner == old_id:
+            pr.owner = into
+        swap(pr.executors)
+    for o in st.opportunities.values():
+        swap(o.people)
 
 
 def apply(st: State, ev: dict) -> None:
@@ -426,8 +539,101 @@ def apply(st: State, ev: dict) -> None:
             c.last_fail, c.last_error = ev["ts"], data["error"]
             c.consecutive_failures += 1
 
+    elif t.startswith(("area.", "process.", "opportunity.", "doc.")):
+        _apply_portfolio(st, ev, t, eid, data, when)
+
     elif t == "run.completed":
         st.runs[eid] = {"ts": ev["ts"], "ok": data["ok"], "steps": data.get("steps", {})}
+
+
+def _apply_portfolio(st: State, ev: dict, t: str, eid: str, data: dict, when: date | None) -> None:
+    if t == "area.added":
+        st.areas[eid] = Area(eid, data["name"], list(data.get("aliases", [])), data.get("note", ""),
+                             ev.get("date", ""))
+    elif t == "area.updated":
+        a = st.areas[eid]
+        for al in data.get("aliases_add", []):
+            if al not in a.aliases:
+                a.aliases.append(al)
+        for f in ("name", "note"):
+            if data.get(f):
+                setattr(a, f, data[f])
+
+    elif t.startswith("process."):
+        if t == "process.added":
+            st.processes[eid] = Process(
+                id=eid, title=data["title"], area=data["area"], source=ev.get("source", ""),
+                prov=ev.get("prov", ""), by=ev.get("by", ""), added=when)
+        p = st.processes[eid]
+        if t in ("process.added", "process.updated"):
+            for f in ("title", "area", "owner", "recurrence", "io"):
+                if data.get(f):
+                    setattr(p, f, data[f])
+            for f in ("per_month", "duration_min", "maturity"):
+                if data.get(f) is not None:
+                    setattr(p, f, data[f])
+            for f, attr in (("executors", "executors"), ("tools", "tools"), ("pains", "pains")):
+                if f in data:
+                    setattr(p, attr, list(data[f]))
+            for f, attr in (("executors_add", "executors"), ("tools_add", "tools"), ("pains_add", "pains")):
+                for v in data.get(f, []):
+                    if v not in getattr(p, attr):
+                        getattr(p, attr).append(v)
+            if data.get("note"):
+                p.notes.append(data["note"])
+        elif t == "process.retired":
+            p.status, p.retired_reason = "aposentado", data["reason"]
+        p.last_activity = when
+
+    elif t.startswith("opportunity."):
+        if t == "opportunity.added":
+            st.opportunities[eid] = Opportunity(
+                id=eid, title=data["title"], area=data["area"], source=ev.get("source", ""),
+                prov=ev.get("prov", ""), by=ev.get("by", ""), added=when,
+                status=data.get("status", "ideia"))
+        o = st.opportunities[eid]
+        if t in ("opportunity.added", "opportunity.updated"):
+            for f in ("title", "area", "process", "kind", "problem", "suggestion", "gain", "goal", "project"):
+                if data.get(f):
+                    setattr(o, f, data[f])
+            if data.get("hours_saved") is not None:
+                o.hours_saved = data["hours_saved"]
+            for pid in data.get("people", []) + data.get("people_add", []):
+                if pid not in o.people:
+                    o.people.append(pid)
+            if data.get("note"):
+                o.notes.append(data["note"])
+            if t == "opportunity.added" and data.get("impact"):
+                _score(o, data, ev)
+        elif t == "opportunity.status":
+            o.status_history.append({"date": when, "from": o.status, "to": data["status"],
+                                     "reason": data.get("reason", "")})
+            o.status = data["status"]
+        elif t == "opportunity.scored":
+            _score(o, data, ev)
+        elif t == "opportunity.evidence":
+            o.evidence_count += 1
+            if data["source"] not in o.evidence:
+                o.evidence.append(data["source"])
+        elif t == "opportunity.promoted":
+            o.project, o.goal = data["project"], data["goal"]
+        o.last_activity = when
+
+    elif t in ("doc.linked", "doc.unlinked"):
+        tgt = st.processes.get(data["target"]) or st.opportunities[data["target"]]
+        if t == "doc.linked":
+            tgt.docs = [d for d in tgt.docs if d.ref != data["ref"]]
+            tgt.docs.append(DocLink(data["ref"], data["kind"], data.get("title", ""), when,
+                                    bool(data.get("watch"))))
+        else:
+            tgt.docs = [d for d in tgt.docs if d.ref != data["ref"]]
+        tgt.last_activity = when
+
+
+def _score(o: Opportunity, data: dict, ev: dict) -> None:
+    o.impact, o.confidence, o.ease = data["impact"], data["confidence"], data["ease"]
+    o.ice_suggested = bool(data.get("ice_suggested")) and ev.get("by") == "agent"
+    o.ice_reason = data.get("reason", "") if o.ice_suggested else ""
 
 
 def build(events: list[dict]) -> State:
