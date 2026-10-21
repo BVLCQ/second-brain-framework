@@ -8,7 +8,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 from pathlib import Path
 
-from . import util
+from . import portfolio, util
 from .state import Action, State
 
 KANBAN = {"aberta": "a fazer", "fazendo": "fazendo", "aguardando": "aguardando",
@@ -297,6 +297,7 @@ class ModelBuilder:
                         "link": s.link, "date": _iso(s.date)} for s in st.shares.values()],
             "plan_changes": [{**c, "date": _iso(c["date"])} for c in st.plan_changes],
             "plan_warnings": plan.warnings,
+            "portfolio": portfolio.build(st, plan, today),
             "counts": {
                 "mine_open": len(mine_open),
                 "mine_overdue": sum(1 for a in mine_open if a["overdue_days"]),
