@@ -347,35 +347,61 @@ def cmd_plan(args, b: Brain) -> None:
         _out(args, ev, "✓ mudança registrada em PLANNING/log.md e no ledger")
 
 
+def _create_project(b: Brain, goal: str, title: str, owner: str, approval: str, reason: str,
+                    evidence: str | None = None, why: str = "", extra=None) -> tuple[str, list[dict]]:
+    """Cria projeto num goal (GATE: exige `approval`): goals.md + plan.changed (+ eventos `extra(nid)`) no
+    mesmo lote do ledger + linha no PLANNING/log.md. Se o ledger recusar, o goals.md volta ao que era."""
+    inst = b.inst
+    if os.environ.get("BRAIN_NIGHTLY") == "1":
+        raise util.BrainError("plan add-project: proibido no noturno — a árvore é do dono, que precisa estar presente", code=4)
+    if goal not in b.plan.goals:
+        raise util.BrainError(f"goal {goal} não existe em PLANNING/goals.md", code=3)
+    if not (approval or "").strip():
+        raise util.BrainError("criar project é mudança estrutural: exige --approval com a resposta literal do dono", code=4)
+    path, today = inst.planning_file, util.today().isoformat()
+    before = path.read_text(encoding="utf-8") if path.exists() else ""
+    nid = planning.add_project(path, goal, title, owner, why)
+    what = f"projeto criado sob {goal}: {title}"
+    reason = reason or f"novo projeto sob {goal}"
+    try:
+        events = b.record([{"type": "plan.changed", "by": "owner", "data": {
+            "diff": f"{nid} {what}", "reason": reason, "evidence": evidence, "approval": approval}},
+            *(extra(nid) if extra else [])])
+        _append_plan_log(inst, f"{today} · {nid} {what} · {reason} · evidência: {evidence or '—'}"
+                               f" · aprovado: \"{approval}\"")
+    except util.BrainError:
+        util.atomic_write(path, before)          # o ledger recusou: o goals.md volta ao que era
+        raise
+    b.reload()
+    return nid, events
+
+
 def _plan_add(args, b: Brain) -> None:
     """Cria goal/projeto (gate: exige --approval do dono, vira plan.changed + PLANNING/log.md) ou entregável (sem gate)."""
     inst, kind = b.inst, args.plcmd.removeprefix("add-")
+    if kind == "project":
+        owner = _resolve_people(b, [args.owner])[0] if args.owner else ""
+        nid, events = _create_project(b, args.goal, args.title, owner, args.approval, args.reason,
+                                      args.evidence)
+        _out(args, {"id": nid, "event": events[0]},
+             f"✓ {nid} criado em PLANNING/goals.md (aprovado, registrado em PLANNING/log.md e no ledger)")
+        return
     if os.environ.get("BRAIN_NIGHTLY") == "1":
         raise util.BrainError(f"plan {args.plcmd}: proibido no noturno — a árvore é do dono, que precisa estar presente", code=4)
     plan, today = b.plan, util.today().isoformat()
     if kind == "goal":
         nid, what = planning.next_goal_id(plan), f"goal criado: {args.title}"
         reason = args.reason or args.why or "novo goal"
-    elif kind == "project":
-        if args.goal not in plan.goals:
-            raise util.BrainError(f"goal {args.goal} não existe em PLANNING/goals.md", code=3)
-        nid, what = planning.next_project_id(plan), f"projeto criado sob {args.goal}: {args.title}"
-        reason = args.reason or f"novo projeto sob {args.goal}"
     else:
         if args.project not in plan.projects:
             raise util.BrainError(f"projeto {args.project} não existe em PLANNING/goals.md", code=3)
         nid = planning.next_deliverable_id(plan, args.project)
     if kind != "deliverable" and not (args.approval or "").strip():
         raise util.BrainError(f"criar {kind} é mudança estrutural: exige --approval com a resposta literal do dono", code=4)
-    owner = ""
-    if kind == "project" and args.owner:
-        owner = _resolve_people(b, [args.owner])[0]
     path = inst.planning_file
     before = path.read_text(encoding="utf-8") if path.exists() else ""
     if kind == "goal":
         planning.add_goal(path, args.title, args.horizon or "", args.why or "")
-    elif kind == "project":
-        planning.add_project(path, args.goal, args.title, owner)
     else:
         planning.add_deliverable(path, args.project, args.title, args.due or "", args.weight)
     try:
@@ -818,6 +844,9 @@ def build_parser() -> argparse.ArgumentParser:
     for x in [pls.choices["add-goal"], pls.choices["add-project"], pls.choices["add-deliverable"], pls.choices["edit"]]:
         x.add_argument("--json", action="store_true")
     p.set_defaults(fn=cmd_plan)
+
+    from . import cli_portfolio
+    cli_portfolio.add_parsers(sub)
 
     p = sub.add_parser("progress", help="progresso DECLARADO pelo dono (G#/P#)")
     p.add_argument("node")

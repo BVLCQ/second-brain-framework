@@ -1279,6 +1279,11 @@ class CoverageTest(unittest.TestCase):
         "pdf text", "pdf render", "video transcribe", "video frames", "person merge",
         "raw archive", "raw sort"}
     NOT_IN_TUI = {"demo", "tui"}
+    PORTFOLIO_PENDING = {   # a face Portfólio chega nos passos 6–7 do plano; as teclas entram lá e este conjunto some
+        "area add", "area update", "area list", "process add", "process update", "process retire",
+        "process show", "process list", "opportunity add", "opportunity update", "opportunity status",
+        "opportunity score", "opportunity evidence", "opportunity promote", "opportunity show",
+        "opportunity list", "doc link", "doc unlink"}
     DYNAMIC = {"memory recall", "memory reflect"}      # o formulário "Memória: perguntar" monta o subcomando
 
     def test_every_cli_subcommand_is_accounted_for(self):
@@ -1292,7 +1297,7 @@ class CoverageTest(unittest.TestCase):
             for sc in (inner[0].choices if inner else [None]):
                 label = f"{name} {sc}" if sc else name
                 pat = re.compile(r'\[\s*"%s"\s*,\s*"%s"' % (name, sc)) if sc else re.compile(r'\[\s*"%s"\s*[,\]]' % name)
-                if pat.search(src) or label in self.READ_ONLY_VIEWS | self.AGENT_ONLY | self.NOT_IN_TUI | self.DYNAMIC:
+                if pat.search(src) or label in self.READ_ONLY_VIEWS | self.AGENT_ONLY | self.NOT_IN_TUI | self.DYNAMIC | self.PORTFOLIO_PENDING:
                     continue
                 uncovered.append(label)
         self.assertEqual(uncovered, [], "subcomandos sem lugar no TUI (e sem justificativa em CoverageTest)")

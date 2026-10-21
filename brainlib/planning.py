@@ -382,7 +382,7 @@ def add_goal(path: Path, title: str, horizon: str = "", why: str = "") -> str:
     return gid
 
 
-def add_project(path: Path, goal_id: str, title: str, owner: str = "") -> str:
+def add_project(path: Path, goal_id: str, title: str, owner: str = "", why: str = "") -> str:
     plan = load(path)
     if goal_id not in plan.goals:
         raise util.BrainError(f"goal {goal_id} não existe em {path.name}", code=3)
@@ -390,6 +390,8 @@ def add_project(path: Path, goal_id: str, title: str, owner: str = "") -> str:
     block = ["", f"### {pid} — {_clean(title, 'título')}", "- status: ativo"]
     if owner:
         block.append(f"- dono: {_clean(owner, 'dono')}")
+    if why:
+        block.append(f"- por quê: {_clean(why, 'por quê')}")
     _insert(path, pid, goal_id, block, ("## ",), GOAL_RE)
     return pid
 

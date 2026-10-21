@@ -1418,5 +1418,113 @@ class PortfolioStateTests(unittest.TestCase):
             self.assertEqual(b.validate_all(), [])
 
 
+class PortfolioCliTests(unittest.TestCase):
+    """Passo 2: `brain area|process|opportunity|doc` (sempre com BRAIN_HOME numa pasta temporária)."""
+
+    def _run(self, td, *a):
+        env = {**os.environ, "BRAIN_HOME": td}
+        return subprocess.run([sys.executable, str(ROOT / "brain"), *a], capture_output=True, text=True, env=env)
+
+    def _ok(self, td, *a):
+        r = self._run(td, *a)
+        self.assertEqual(r.returncode, 0, f"{a}: {r.stderr}")
+        return r.stdout
+
+    def _setup(self, td):
+        _brain(Path(td))
+        self._ok(td, "area", "add", "operacoes", "--name", "Operações", "--alias", "Ops", "--by", "owner")
+        self._ok(td, "area", "add", "growth", "--by", "owner")
+
+    def test_area_process_flow(self):
+        with tempfile.TemporaryDirectory() as td:
+            self._setup(td)
+            self.assertIn("Operações", self._ok(td, "area", "list"))
+            out = self._ok(td, "process", "add", "Fechamento mensal", "--area", "Ops", "--owner", "marina-demo",
+                           "--executor", "marina-demo", "--executor", "eu", "--recurrence", "semanal",
+                           "--duration", "1h30m", "--tools", "Sheets, Jira", "--pain", "retrabalho",
+                           "--maturity", "2", "--by", "owner")
+            self.assertIn("PROC-0001", out)
+            self.assertIn("12,99 h/mês", out)
+            self.assertIn("sem playbook", out)
+            self.assertEqual(self._run(td, "process", "add", "X", "--area", "nada", "--by", "owner").returncode, 3)
+            self.assertEqual(self._run(td, "process", "add", "Y", "--area", "growth", "--recurrence", "sob-demanda",
+                                       "--by", "owner").returncode, 4)           # exige --per-month
+            self._ok(td, "process", "update", "PROC-0001", "--recurrence", "sob-demanda", "--per-month", "2",
+                     "--by", "owner")
+            shown = json.loads(self._ok(td, "process", "show", "PROC-0001", "--json"))
+            self.assertEqual((shown["hours_month"], shown["tools"]), (6.0, ["Sheets", "Jira"]))
+            self.assertIn("PROC-0001", self._ok(td, "process", "list", "--gaps"))
+            self._ok(td, "doc", "link", "PROC-0001", "--kind", "playbook", "--ref", "https://example.com/pb",
+                     "--by", "owner")
+            self.assertNotIn("PROC-0001", self._ok(td, "process", "list", "--area", "operacoes", "--gaps"))
+            self._ok(td, "process", "retire", "PROC-0001", "--reason", "fim", "--by", "owner")
+            self.assertEqual(self._ok(td, "process", "list").strip(), "(nenhum processo)")
+            self.assertIn("✓", self._ok(td, "validate"))
+
+    def test_opportunity_flow_duplicates_and_agent(self):
+        with tempfile.TemporaryDirectory() as td:
+            self._setup(td)
+            self._ok(td, "opportunity", "add", "Automatizar conciliação bancária", "--area", "operacoes",
+                     "--problem", "conciliação manual consome horas da equipe", "--hours-saved", "10", "--by", "owner")
+            dup = self._run(td, "opportunity", "add", "Automatizar a conciliação bancária", "--area", "operacoes",
+                            "--problem", "conciliação manual consome horas", "--by", "owner")
+            self.assertEqual(dup.returncode, 2)
+            self.assertIn("OPP-0001", dup.stderr)
+            self._ok(td, "opportunity", "add", "Automatizar a conciliação bancária", "--area", "operacoes",
+                     "--by", "owner", "--force")
+            self.assertEqual(self._run(td, "opportunity", "add", "Do agente", "--area", "growth").returncode, 4)  # sem fonte
+            self._ok(td, "opportunity", "add", "Dashboard de metas", "--area", "growth", "--by", "agent",
+                     "--prov", "observado", "--source", "chat")
+            self.assertEqual(self._run(td, "opportunity", "status", "OPP-0003", "triagem", "--by", "agent",
+                                       "--prov", "observado").returncode, 4)
+            self._ok(td, "opportunity", "score", "OPP-0003", "--impact", "4", "--confidence", "3", "--ease", "5",
+                     "--suggest", "--reason", "parece simples", "--prov", "observado")
+            out = self._ok(td, "opportunity", "show", "OPP-0003")
+            self.assertIn("60 (sugerido)", out)
+            out = self._ok(td, "opportunity", "score", "OPP-0003", "--impact", "4", "--confidence", "3", "--ease", "5")
+            self.assertIn("=60", out)
+            self.assertNotIn("sugerido", out)
+            self.assertEqual(self._run(td, "opportunity", "status", "OPP-0003", "descartada").returncode, 4)  # sem motivo
+            self._ok(td, "opportunity", "status", "OPP-0003", "descartada", "--reason", "fora do foco")
+            self._ok(td, "opportunity", "evidence", "OPP-0001", "--source", "PROCESSED/x.md", "--prov", "observado")
+            ranked = self._ok(td, "opportunity", "list", "--sort", "score").splitlines()
+            self.assertTrue(ranked[0].startswith("OPP-0003"))
+            self.assertEqual(len(json.loads(self._ok(td, "opportunity", "list", "--status", "ideia", "--json"))), 2)
+            self._ok(td, "doc", "link", "OPP-0001", "--kind", "one-pager", "--ref", "reports/share/x.md", "--by", "owner")
+            self._ok(td, "doc", "unlink", "OPP-0001", "--ref", "reports/share/x.md", "--by", "owner")
+            self.assertEqual(self._run(td, "doc", "unlink", "OPP-0001", "--ref", "nao-existe").returncode, 4)
+            hits = json.loads(self._ok(td, "search", "conciliação", "--json"))
+            self.assertIn("OPP-0001", {h["id"] for h in hits})
+
+    def test_promote_is_a_gate(self):
+        with tempfile.TemporaryDirectory() as td:
+            self._setup(td)
+            self._ok(td, "opportunity", "add", "Playbook de onboarding", "--area", "growth",
+                     "--problem", "time novo demora a render", "--by", "owner")
+            goals = Path(td) / "vault" / "PLANNING" / "goals.md"
+            before = goals.read_text(encoding="utf-8")
+            r = self._run(td, "opportunity", "promote", "OPP-0001", "--goal", "G1")
+            self.assertEqual(r.returncode, 4)
+            self.assertIn("### P2 — Playbook de onboarding", r.stdout)
+            self.assertIn("- por quê: time novo demora a render", r.stdout)
+            self.assertEqual(goals.read_text(encoding="utf-8"), before)           # nada gravado sem "ok"
+            self.assertEqual(self._run(td, "opportunity", "promote", "OPP-0001", "--goal", "G9",
+                                       "--approval", "ok").returncode, 3)
+            self._ok(td, "opportunity", "promote", "OPP-0001", "--goal", "G1", "--approval", "ok")
+            self.assertIn("### P2 — Playbook de onboarding", goals.read_text(encoding="utf-8"))
+            o = json.loads(self._ok(td, "opportunity", "show", "OPP-0001", "--json"))
+            self.assertEqual((o["status"], o["project"], o["goal"]), ("em-andamento", "P2", "G1"))
+            self.assertIn("promoção de OPP-0001", (Path(td) / "vault" / "PLANNING" / "log.md").read_text(encoding="utf-8"))
+            self.assertEqual(self._run(td, "opportunity", "promote", "OPP-0001", "--goal", "G1",
+                                       "--approval", "ok").returncode, 4)          # já promovida
+            types = [e["type"] for e in Brain(config.load(Path(td))).read_events()][-3:]
+            self.assertEqual(types, ["plan.changed", "opportunity.promoted", "opportunity.status"])
+            self.assertIn("✓", self._ok(td, "validate"))
+            nightly = {**os.environ, "BRAIN_HOME": td, "BRAIN_NIGHTLY": "1"}
+            r = subprocess.run([sys.executable, str(ROOT / "brain"), "opportunity", "promote", "OPP-0001",
+                                "--goal", "G1", "--approval", "ok"], capture_output=True, text=True, env=nightly)
+            self.assertEqual(r.returncode, 4)
+
+
 if __name__ == "__main__":
     unittest.main()
