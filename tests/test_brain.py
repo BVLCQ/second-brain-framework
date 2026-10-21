@@ -1624,5 +1624,96 @@ class PortfolioModelTests(unittest.TestCase):
             json.dumps(pf)                                                     # serializável
 
 
+class PortfolioViewsTests(unittest.TestCase):
+    """Passo 5: processes.md, opportunities.md, fichas, home, painel e a colheita de `status:` da ficha de OPP."""
+
+    def _render(self, td):
+        b, p1, ids = PortfolioModelTests._seed(None, td)
+        render.render_all(b, do_harvest=False)
+        return b, p1, ids, b.inst.fresh
+
+    def test_pages_and_records(self):
+        with tempfile.TemporaryDirectory() as td:
+            b, p1, ids, fresh = self._render(td)
+            procs = (fresh / "processes.md").read_text(encoding="utf-8")
+            self.assertIn("generated-at:", procs)
+            self.assertIn("fontes:", procs)
+            self.assertIn("## Operações · 1 processos · 2 h/mês", procs)
+            self.assertIn("⚠ sem playbook", procs)
+            opps = (fresh / "opportunities.md").read_text(encoding="utf-8")
+            self.assertIn("generated-at:", opps)
+            self.assertIn("5×4×4 = **80**", opps)
+            self.assertIn("(sugerido)", opps)                                   # ICE do agente em destaque
+            self.assertIn("ganho rápido: [OPP-0001]", opps)
+            self.assertIn("preencher depois: [OPP-0003]", opps)
+            rec = (fresh / "records" / "opportunities" / f"{ids['rapido']}.md").read_text(encoding="utf-8")
+            self.assertIn('status: "priorizada"', rec)
+            self.assertIn("## Histórico de status", rec)
+            prec = (fresh / "records" / "processes" / f"{p1}.md").read_text(encoding="utf-8")
+            self.assertIn("horas_mes: 2.0", prec)
+            self.assertIn("[playbook]", prec)
+            home = (fresh / "home.md").read_text(encoding="utf-8")
+            self.assertIn("Portfólio: **5** oportunidades · **1** priorizadas · **3** lacunas", home)
+            dash = (fresh / "dashboard" / "index.html").read_text(encoding="utf-8")
+            self.assertIn('"portfolio"', dash)
+            self.assertIn("Aposta grande", dash)
+
+    def test_no_portfolio_no_line_in_home(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            render.render_all(b, do_harvest=False)
+            self.assertNotIn("Portfólio:", (b.inst.fresh / "home.md").read_text(encoding="utf-8"))
+            self.assertTrue((b.inst.fresh / "processes.md").exists())
+
+    def test_edit_status_in_record_is_harvested(self):
+        with tempfile.TemporaryDirectory() as td:
+            b, p1, ids, fresh = self._render(td)
+            path = fresh / "records" / "opportunities" / f"{ids['aposta']}.md"
+            path.write_text(path.read_text(encoding="utf-8").replace('status: "triagem"', 'status: "priorizada"'),
+                            encoding="utf-8")
+            report = render.render_all(b)
+            self.assertIn(f"opportunity.status {ids['aposta']}", report["harvested"])
+            ev = [e for e in Brain(b.inst).read_events() if e["type"] == "opportunity.status"][-1]
+            self.assertEqual((ev["by"], ev["prov"], ev["data"]["status"]), ("owner", "declarado", "priorizada"))
+            self.assertEqual(Brain(b.inst).state.opportunities[ids["aposta"]].status, "priorizada")
+            # lateral sem motivo na ficha ganha motivo padrão; não colhe de novo no render seguinte
+            path.write_text(path.read_text(encoding="utf-8").replace('status: "priorizada"', 'status: "em-espera"'),
+                            encoding="utf-8")
+            render.render_all(b)
+            o = Brain(b.inst).state.opportunities[ids["aposta"]]
+            self.assertEqual((o.status, o.status_history[-1]["reason"]), ("em-espera", "alterado na ficha (status)"))
+            self.assertEqual(render.render_all(b)["harvested"], [])
+
+    def test_invalid_status_in_record_warns_and_does_not_write(self):
+        with tempfile.TemporaryDirectory() as td:
+            b, p1, ids, fresh = self._render(td)
+            before = len(Brain(b.inst).read_events())
+            for bad in ("quase-pronta", "em-andamento"):                        # inexistente · sem projeto vinculado
+                path = fresh / "records" / "opportunities" / f"{ids['aposta']}.md"
+                path.write_text(path.read_text(encoding="utf-8").replace('status: "triagem"', f'status: "{bad}"'),
+                                encoding="utf-8")
+                report = render.render_all(b)
+                self.assertEqual(report["harvested"], [])
+                self.assertTrue(any(w["title"] == "ficha" and ids["aposta"] in w["detail"] for w in report["warnings"]), bad)
+                self.assertIn("ficha", render.summary(report))
+                self.assertEqual(len(Brain(b.inst).read_events()), before)
+                self.assertEqual(Brain(b.inst).state.opportunities[ids["aposta"]].status, "triagem")
+                before = len(Brain(b.inst).read_events())
+
+    def test_dashboard_script_is_valid_js(self):
+        import shutil
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("node ausente")
+        with tempfile.TemporaryDirectory() as td:
+            b, p1, ids, fresh = self._render(td)
+            html = (fresh / "dashboard" / "index.html").read_text(encoding="utf-8")
+            script = html.split("<script>", 1)[1].rsplit("</script>", 1)[0]
+            js = Path(td) / "dash.js"
+            js.write_text(script, encoding="utf-8")
+            r = subprocess.run([node, "--check", str(js)], capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()

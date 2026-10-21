@@ -364,9 +364,57 @@ V.search = (q) => {
   return "<h1>Busca: " + esc(q.get("q")) + "</h1><div class=panel>" + (res.length ? '<ul class="clean">' + res.map(r => "<li>" + chip("info", r[0]) + " " + r[1] + "</li>").join("") + "</ul>" : empty("não consta")) + "</div>";
 };
 
+// ── portfólio: processos e oportunidades ───────────────────────────────
+const PF = M.portfolio, AREA = idx(PF.areas), OPP = idx(PF.opportunities), PROC = idx(PF.processes);
+const hrs = v => v == null ? "—" : String(v).replace(".", ",") + " h/mês";
+const iceTxt = o => o.score == null ? '<span class="muted">sem ICE</span>' : '<span class="' + (o.ice_suggested ? "sug" : "") + '" title="' + esc(o.ice_reason || "") + '">' +
+  o.impact + "×" + o.confidence + "×" + o.ease + " = <b>" + o.score + "</b>" + (o.ice_suggested ? " · sugerido" : "") + "</span>";
+const areaName = a => AREA[a] ? AREA[a].name : a;
+function oppRow(o, i){
+  return "<tr><td>" + (i != null ? i + "</td><td>" : "") + "<b>" + esc(o.id) + "</b></td><td><details><summary>" + esc(o.title) + "</summary>" +
+    "<p><b>Problema:</b> " + esc(o.problem || "não consta") + "</p><p><b>Sugestão:</b> " + esc(o.suggestion || "não consta") + "</p>" +
+    (o.evidence_count ? "<p class=muted>" + o.evidence_count + " evidência(s): " + o.evidence.map(esc).join(", ") + "</p>" : "") +
+    (o.docs.length ? "<p>" + o.docs.map(d => chip("info", d.kind) + " " + esc(d.title || d.ref)).join(" · ") + "</p>" : "") +
+    (o.status_history.length ? '<p class="muted">' + o.status_history.map(h => fmtD(h.date) + " " + esc(h.from) + "→" + esc(h.to) + (h.reason ? " (" + esc(h.reason) + ")" : "")).join(" · ") + "</p>" : "") +
+    "</details></td><td>" + esc(areaName(o.area)) + "</td><td>" + iceTxt(o) + "</td><td>" + chip("info", o.status) + "</td><td>" + esc(o.quadrant || "—") +
+    "</td><td>" + (o.project ? pL(o.project, true) + " · " + esc(o.goal) : '<span class="muted">—</span>') + "</td><td>" + hrs(o.hours_saved) + "</td></tr>";
+}
+V.portfolio = () => {
+  if (!PF.areas.length && !PF.processes.length && !PF.opportunities.length)
+    return "<h1>Portfólio</h1>" + empty("Nada cadastrado — `brain area add` e `brain process add` (ou deixe o /dump extrair).");
+  const g = PF.gaps;
+  let h = "<h1>Portfólio</h1>" +
+    '<div class="kpis"><div class="kpi"><b>' + PF.counts.opportunities + "</b><span>oportunidades</span></div>" +
+    '<div class="kpi"><b>' + PF.counts.prioritized + "</b><span>priorizadas</span></div>" +
+    '<div class="kpi"><b>' + PF.counts.processes + "</b><span>processos ativos</span></div>" +
+    '<div class="kpi ' + (g.total ? "risk" : "ok") + '"><b>' + g.total + "</b><span>lacunas</span></div></div>";
+  h += '<div class="panel" style="margin-top:14px"><h2>Funil</h2>' + Object.entries(PF.funnel).filter(([, n]) => n).map(([s, n]) => chip("info", s + " " + n)).join(" ") + "</div>";
+  h += '<div class="panel" style="margin-top:14px"><h2>Matriz impacto × facilidade</h2><div class="grid g2">' +
+    [["ganho rápido", "impacto alto · facilidade alta"], ["aposta", "impacto alto · facilidade baixa"], ["preencher depois", "impacto baixo · facilidade alta"], ["evitar", "impacto baixo · facilidade baixa"]]
+      .map(([q, d]) => '<div class="col"><h3>' + esc(q) + ' <span class="muted">· ' + d + "</span></h3>" +
+        (PF.matrix[q].map(i => '<div class="card"><b>' + esc(i) + "</b> " + esc(OPP[i].title) + '<div class="card-meta">' + iceTxt(OPP[i]) + " · " + esc(OPP[i].status) + "</div></div>").join("") || empty("—")) + "</div>").join("") + "</div></div>";
+  h += '<div class="panel" style="margin-top:14px"><h2>Oportunidades</h2>' + (PF.opportunities.length ?
+    "<table><tr><th>ID</th><th>Oportunidade</th><th>Área</th><th>ICE</th><th>Status</th><th>Quadrante</th><th>Projeto</th><th>Ganho</th></tr>" +
+    PF.opportunities.slice().sort((a, b) => (b.score || 0) - (a.score || 0) || a.id.localeCompare(b.id)).map(o => oppRow(o)).join("") + "</table>" : empty("nenhuma")) + "</div>";
+  h += '<div class="panel" style="margin-top:14px"><h2>Processos por área</h2>' + (PF.areas.map(a => {
+    const rows = PF.processes.filter(p => p.area === a.id && p.status === "ativo");
+    return rows.length ? "<h3>" + esc(a.name) + " · " + rows.length + " · " + hrs(rows.reduce((t, p) => t + (p.hours_month || 0), 0)) + "</h3><table><tr><th>ID</th><th>Processo</th><th>Responsável</th><th>Horas</th><th>Playbook</th><th>Lacunas</th></tr>" +
+      rows.map(p => "<tr><td><b>" + esc(p.id) + "</b></td><td>" + esc(p.title) + "</td><td>" + esc(p.owner_name || "—") + "</td><td>" + hrs(p.hours_month) + "</td><td>" +
+        (p.playbook ? (p.playbook.read ? "lido " + fmtD(p.playbook.read) : "ligado") : '<span class="muted">—</span>') + "</td><td>" +
+        (p.gaps.length ? '<span class="late">⚠ ' + p.gaps.map(esc).join("; ") + "</span>" : "✓") + "</td></tr>").join("") + "</table>" : "";
+  }).join("") || empty("nenhum processo")) + "</div>";
+  const gl = [];
+  g.areas_without_process.forEach(a => gl.push("área sem processo: " + esc(areaName(a))));
+  g.no_ice.forEach(i => gl.push(esc(i) + " sem ICE"));
+  g.ice_suggested.forEach(i => gl.push(esc(i) + ' ICE só sugerido — <span class="sug">confirme ou mude</span>'));
+  g.stale.forEach(s => gl.push(esc(s.id) + " parada há " + s.days + " dias"));
+  h += '<div class="panel" style="margin-top:14px"><h2>Lacunas</h2>' + (gl.length ? '<ul class="clean">' + gl.map(x => "<li>" + x + "</li>").join("") + "</ul>" : empty("nenhuma")) + "</div>";
+  return h;
+};
+
 // ── router ──────────────────────────────────────────────────────────────
 const TABS = [["home", "Início"], ["todo", "TODO", () => M.counts.mine_overdue], ["projects", "Projetos"], ["decisions", "Decisões"], ["wins", "Conquistas"],
-  ["people", "Pessoas"], ["timeline", "Linha do tempo"], ["focus", "Foco", () => M.focus && M.focus.status === "proposto" ? 1 : 0],
+  ["people", "Pessoas"], ["portfolio", "Portfólio"], ["timeline", "Linha do tempo"], ["focus", "Foco", () => M.focus && M.focus.status === "proposto" ? 1 : 0],
   ["outbox", "Mensagens", () => M.counts.outbox_pending], ["health", "Saúde", () => (M.health || []).filter(c => c.level !== "ok").length]];
 const PARENT = {project: "projects", person: "people", action: "todo", decision: "decisions"};
 function go(view, params){ const q = new URLSearchParams(Object.entries(params || {}).filter(([, v]) => v)).toString(); location.hash = view + (q ? "?" + q : ""); }

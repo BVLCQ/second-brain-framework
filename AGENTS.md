@@ -202,6 +202,7 @@ Antes de sobrescrever, **colhe** edições do dono:
 
 - checkbox em `FRESH/todo.md` → fecha/reabre ação
 - `status:` em `FRESH/records/actions/A-*.md` (ficha da ação, qualquer editor) → o mesmo
+- `status:` em `FRESH/records/opportunities/OPP-*.md` → status da oportunidade (valor inválido: aviso, não grava)
 - checkbox de entregável em `PLANNING/goals.md` → estado factual
 
 Qualquer outra edição em FRESH é descartada. Narrativas do agente
@@ -209,7 +210,8 @@ Qualquer outra edição em FRESH é descartada. Narrativas do agente
 
 Views: `home.md`, `todo.md`, `goals.md`, `projects/P#.md`, `decisions.md`,
 `wins.md`, `people/<id>.md`, `timeline.md`, `map.md`, `focus.md`, `outbox.md`,
-`health.md`, `records/`, `dashboard/index.html`.
+`processes.md`, `opportunities.md`, `health.md`, `records/` (ações, decisões, processos,
+oportunidades), `dashboard/index.html`.
 `/map` e `/timeline` são sob demanda só no sentido de "o dono pediu para
 olhar"; o arquivo já existe depois de qualquer render.
 

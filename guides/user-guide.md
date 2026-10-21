@@ -130,8 +130,8 @@ falha.
 livro-razão + PLANNING. Qualquer hora, `./brain render` apaga e redesenha
 tudo do zero. Você nunca precisa "manter" nada ali — e nada que você
 estragar ali tem valor perdido. As três exceções colhidas antes de
-sobrescrever (seção 9): checkbox no `todo.md`, `status:` na ficha da ação e
-checkbox de entregável em `PLANNING/goals.md`.
+sobrescrever (seção 9): checkbox no `todo.md`, `status:` na ficha da ação, `status:`
+na ficha da oportunidade e checkbox de entregável em `PLANNING/goals.md`.
 
 ### 2.5 Aprovação explícita: silêncio não é "sim"
 
@@ -638,6 +638,8 @@ busca global. Abas:
   ações fechadas.
 - **Pessoas** — ficha por pessoa: papel, o que cada um deve ao outro,
   decisões que tomou, menções recentes.
+- **Portfólio** — processos por área (horas/mês, responsável, playbook, lacunas),
+  oportunidades com ICE, funil de status e a matriz impacto × facilidade.
 - **Linha do tempo** — o que aconteceu e o que vem: prazos e marcos.
 - **Foco** (badge: plano proposto) — o plano da semana e seus blocos.
 - **Mensagens** (badge: rascunhos pendentes) — o outbox: rascunhos,
@@ -668,6 +670,7 @@ próxima renderização — automática no noturno ou via `/brief`):
 |---|---|
 | Checkbox em `FRESH/todo.md` (`- [x] **A-0012**…`) | fecha (ou reabre) a ação — vira declaração sua `[declarado]` |
 | `status:` no frontmatter de `FRESH/records/actions/A-0012.md` | o mesmo, pelo vocabulário: `a fazer` · `fazendo` · `aguardando` · `feita` · `descartada` |
+| `status:` no frontmatter de `FRESH/records/opportunities/OPP-0003.md` | muda o status da oportunidade (`ideia` · `triagem` · `priorizada` · `piloto` · `validando` · `entregue` · `em-espera` · `descartada`); `em-andamento` só vem de `brain opportunity promote`; valor inválido vira aviso e não grava |
 | Checkbox de entregável em `PLANNING/goals.md` | atualiza o estado factual (com data) |
 | Qualquer outra coisa em `FRESH/` | **descartada** no próximo render — FRESH é retrato |
 

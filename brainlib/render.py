@@ -6,11 +6,12 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from . import doctor, model, render_md, util
+from . import doctor, model, render_md, render_portfolio, util
 from . import harvest as harvest_mod
 
 ASSET = Path(__file__).resolve().parent / "assets" / "dashboard.html"
-MANAGED_DIRS = ("projects", "people", "records/actions", "records/decisions")
+MANAGED_DIRS = ("projects", "people", "records/actions", "records/decisions",
+                "records/processes", "records/opportunities")
 
 
 def _notes(fresh: Path) -> list[dict]:
@@ -42,7 +43,8 @@ def _cleanup(fresh: Path, keep: set[Path]) -> list[str]:
 
 
 def render_all(brain, do_harvest: bool = True) -> dict:
-    harvested = harvest_mod.run(brain) if do_harvest else []
+    notices: list[dict] = []
+    harvested = harvest_mod.run(brain, notices) if do_harvest else []
     m = model.build(brain)
     m["health"] = doctor.checks(brain)
     m["notes"] = _notes(brain.inst.fresh)
@@ -59,6 +61,7 @@ def render_all(brain, do_harvest: bool = True) -> dict:
     pages.focus_page()
     pages.outbox_page()
     record_status = pages.records()
+    record_status.update(render_portfolio.render(pages))
     pages.health_page(m["health"])
     dashboard = brain.inst.fresh / "dashboard" / "index.html"
     pages.files[dashboard] = render_html(m)
@@ -67,7 +70,7 @@ def render_all(brain, do_harvest: bool = True) -> dict:
     harvest_mod.save_state(brain.inst.fresh, todo_checks, record_status)
     return {"harvested": [f"{e['type']} {e.get('id', '')}" for e in harvested], "written": written,
             "total": len(pages.files), "removed": removed, "dashboard": str(dashboard),
-            "warnings": [c for c in m["health"] if c["level"] != "ok"]}
+            "warnings": notices + [c for c in m["health"] if c["level"] != "ok"]}
 
 
 def summary(report: dict) -> str:
