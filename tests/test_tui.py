@@ -1063,6 +1063,45 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
         app.set_sel(3, [i.id for i in app.items(3)].index(node))
         app.redraw()
 
+    async def test_plan_e_edits_goal_project_deliverable(self):
+        app = self.app()
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause(0.4)
+            # entregável: sem gate
+            self._select3(app, "P1.1")
+            self.assertIn("e", {k.k for k in app.ctx_keys()})
+            await pilot.press("e")
+            await pilot.pause(0.3)
+            self.assertIn("Editar P1.1", self.text_of(app.screen.query_one("#mt")))
+            await self.fill(pilot, title="Entregável editado", due="2026-12-20", weight="3")
+            await pilot.press("ctrl+s")
+            await self.settle(app, pilot)
+            d = app.store.brain.plan.deliverables["P1.1"]
+            self.assertEqual((d.title, d.due, d.weight), ("Entregável editado", date(2026, 12, 20), 3))
+            self.assertIn("$ brain plan edit P1.1", self.log_text(app))
+            # projeto: gate (sem aprovação não passa)
+            self._select3(app, "P1")
+            await pilot.press("e")
+            await pilot.pause(0.3)
+            await self.fill(pilot, title="Projeto editado")
+            await pilot.press("ctrl+s")
+            await pilot.pause(0.2)
+            self.assertEqual(type(app.screen).__name__, "FormModal")
+            await self.fill(pilot, quote="ok")
+            await pilot.press("ctrl+s")
+            await self.settle(app, pilot)
+            self.assertEqual(app.store.brain.plan.projects["P1"].title, "Projeto editado")
+            # goal: gate
+            self._select3(app, "G1")
+            await pilot.press("e")
+            await pilot.pause(0.3)
+            await self.fill(pilot, title="Goal editado", horizon="2027-05-01", quote="ok")
+            await pilot.press("ctrl+s")
+            await self.settle(app, pilot)
+            g = app.store.brain.plan.goals["G1"]
+            self.assertEqual((g.title, g.horizon), ("Goal editado", "2027-05-01"))
+            self.assertEqual(sum(1 for e in app.store.brain.read_events() if e["type"] == "plan.changed"), 2)
+
     async def test_plan_n_is_contextual_goal_project_deliverable(self):
         app = self.app()
         async with app.run_test(size=(140, 44)) as pilot:

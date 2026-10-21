@@ -573,6 +573,45 @@ class PlanAddTests(unittest.TestCase):
             self.assertIn('aprovado: "ok"', log)
             self.assertEqual(sum(1 for e in Brain(b.inst).read_events() if e["type"] == "plan.changed"), 2)
 
+    def test_edit_gate_and_factual(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            goals = b.inst.planning_file
+            before = goals.read_text(encoding="utf-8")
+            self.assertEqual(self._run(td, "plan", "edit", "G1", "--title", "Sem ok").returncode, 4)   # gate sem aprovação
+            self.assertEqual(goals.read_text(encoding="utf-8"), before)
+            self.assertEqual(self._run(td, "plan", "edit", "G9", "--title", "x", "--approval", "ok").returncode, 3)
+            self.assertEqual(self._run(td, "plan", "edit", "G1").returncode, 3)                           # nada para mudar
+            self.assertEqual(self._run(td, "plan", "edit", "G1", "--due", "2026-12-01", "--approval", "ok").returncode, 3)  # campo de outro tipo
+            r = self._run(td, "plan", "edit", "G1", "--title", "Goal renomeado", "--horizon", "2027-03-01",
+                          "--status", "congelado", "--reason", "pausa", "--approval", "ok")
+            self.assertEqual(r.returncode, 0, r.stderr)
+            r = self._run(td, "plan", "edit", "P1", "--title", "Projeto renomeado", "--approval", "ok")
+            self.assertEqual(r.returncode, 0, r.stderr)
+            r = self._run(td, "plan", "edit", "P1.1", "--title", "Entregável novo", "--due", "2026-12-15", "--weight", "3")   # sem gate
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertEqual(self._run(td, "plan", "edit", "P1.1", "--title", "a · b").returncode, 3)
+            plan = planning.load(goals)
+            self.assertEqual(plan.warnings, [])
+            self.assertEqual((plan.goals["G1"].title, plan.goals["G1"].horizon, plan.goals["G1"].status),
+                             ("Goal renomeado", "2027-03-01", "congelado"))
+            d = plan.deliverables["P1.1"]
+            self.assertEqual((plan.projects["P1"].title, d.title, d.due, d.weight),
+                             ("Projeto renomeado", "Entregável novo", date(2026, 12, 15), 3))
+            self.assertEqual(Brain(b.inst).validate_all(), [])
+            self.assertEqual(sum(1 for e in Brain(b.inst).read_events() if e["type"] == "plan.changed"), 2)
+            log = b.inst.planning_log.read_text(encoding="utf-8")
+            self.assertIn("G1 editado", log)
+            self.assertIn("P1.1 entregável editado", log)
+
+    def test_edit_nightly_refuses(self):
+        with tempfile.TemporaryDirectory() as td:
+            _brain(Path(td))
+            env = {**os.environ, "BRAIN_HOME": td, "BRAIN_NIGHTLY": "1"}
+            r = subprocess.run([sys.executable, str(ROOT / "brain"), "plan", "edit", "P1.1", "--title", "x"],
+                               capture_output=True, text=True, env=env)
+            self.assertEqual(r.returncode, 4)
+
     def test_nightly_refuses(self):
         with tempfile.TemporaryDirectory() as td:
             _brain(Path(td))

@@ -57,6 +57,7 @@ CMD_CATALOG = [               # paleta de comandos: nome, linha da CLI, (painel,
     ("Árvore do plano", "brain plan show", (3, 0, None)),
     ("Marcar entregável", "brain plan deliverable P#.n --status …", (3, 0, "space")),
     ("Declarar progresso", "brain progress G1 45", (3, 0, "P")),
+    ("Editar goal / projeto / entregável", 'brain plan edit G#|P#|P#.n … [--approval "ok"]', (3, 0, "e")),
     ("Mudança estrutural (gate)", 'brain plan log --diff … --approval "ok"', (3, 0, "E")),
     ("Novo goal (gate)", 'brain plan add-goal "…" --approval "ok"', (3, 0, "G")),
     ("Novo projeto / entregável / ação no item (n)", "brain plan add-project|add-deliverable · brain action open", (3, 0, "n")),
@@ -663,6 +664,8 @@ class BrainApp(App):
             add("n", {"g": "novo projeto", "p": "novo entregável", "d": "nova ação"}.get(kind, "novo goal ou filho"),
                 self.f_new_child, gate=kind in ("g", "") and not every)
             add("G", "novo goal", self.f_new_goal, gate=True)
+            if w(it):
+                add("e", "editar", self.f_edit_node, gate=not every and it.kind in ("g", "p"))
             if w(it and it.kind == "d"):
                 add("space", "feito", self.toggle_done)
                 add("s", "estado", self.f_deliv_state)
@@ -910,6 +913,61 @@ class BrainApp(App):
             Field("weight", "peso", value="1", ph="1 · 2 · 3…", check=chk)], build,
             sub=f"{proj['id']} · {proj['title']}. Entregável não é goal nem projeto: entra no goals.md sem gate (o título não pode ter “·”).",
             after=lambda: self.jump(nid)))
+
+    def f_edit_node(self) -> None:
+        """Painel 3, `e`: edita o item selecionado. Goal e projeto são gate (aprovação digitada); entregável não."""
+        it = self.cur()
+        if it is None:
+            return
+        d, nid = it.data, it.id
+        owner0 = d.get("owner") or ""
+        status_opts = lambda cur: planning.NODE_STATUS + ([cur] if cur not in planning.NODE_STATUS else [])  # noqa: E731
+
+        def build(v):
+            c = ["plan", "edit", nid]
+            if v["title"] != d["title"]:
+                c += ["--title", v["title"]]
+            if it.kind in ("g", "p") and v["status"] != d["status"]:
+                c += ["--status", v["status"]]
+            if it.kind == "g":
+                if v["horizon"] != (d["horizon"] or ""):
+                    c += ["--horizon", self._iso(v["horizon"])]
+                if v["why"] != (d["why"] or ""):
+                    c += ["--why", v["why"]]
+            elif it.kind == "p":
+                if v["owner"] != owner0:
+                    c += ["--owner", v["owner"]]
+            else:
+                if v["due"] != (d["due"] or ""):
+                    c += ["--due", self._iso(v["due"])]
+                if v["weight"] != str(d["weight"]):
+                    c += ["--weight", v["weight"]]
+            if it.kind in ("g", "p"):
+                if v["reason"]:
+                    c += ["--reason", v["reason"]]
+                c += ["--approval", v["quote"] or "…"]
+            return [c]
+
+        if it.kind == "g":
+            fields = [Field("title", "título", value=d["title"], req=True),
+                      Field("status", "status", choice=status_opts(d["status"]), value=d["status"]),
+                      Field("horizon", "horizonte", value=d["horizon"] or "", ph="vazio remove · " + dates.HELP, check=self._due_check, res=dates.describe),
+                      Field("why", "por quê", value=d["why"] or "", ph="vazio remove")]
+        elif it.kind == "p":
+            fields = [Field("title", "título", value=d["title"], req=True),
+                      Field("status", "status", choice=status_opts(d["status"]), value=d["status"]),
+                      Field("owner", "dono", value=owner0, ph="id ou alias da pessoa · vazio remove")]
+        else:
+            chk = lambda v: "" if v.isdigit() and int(v) >= 1 else "Use um inteiro a partir de 1."  # noqa: E731
+            fields = [Field("title", "título", value=d["title"], req=True, check=lambda v: "O título não pode ter “·”." if "·" in v else ""),
+                      Field("due", "prazo", value=d["due"] or "", ph="vazio remove · " + dates.HELP, check=self._due_check, res=dates.describe),
+                      Field("weight", "peso", value=str(d["weight"]), ph="1 · 2 · 3…", check=chk)]
+        gate = it.kind in ("g", "p")
+        if gate:
+            fields += self._gate_fields("opcional: por que mudar")
+        sub = (f"Editar {'goal' if it.kind == 'g' else 'projeto'} é mudança estrutural: pede a sua aprovação digitada."
+               if gate else "Entregável não é goal nem projeto: a edição entra no goals.md sem gate (o estado — feito, em andamento — segue em space/s).")
+        self.form(FormSpec(f"Editar {nid}", fields, build, sub=sub, gate=gate))
 
     # entregável por número: dentro do projeto P1, "9" vale P1.9
     @staticmethod

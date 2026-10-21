@@ -337,6 +337,8 @@ def cmd_plan(args, b: Brain) -> None:
         _out(args, ev, f"✓ {args.id} → {args.status}" + ("" if changed else " (goals.md já estava assim)"))
     elif args.plcmd.startswith("add-"):
         _plan_add(args, b)
+    elif args.plcmd == "edit":
+        _plan_edit(args, b)
     elif args.plcmd == "log":
         ev = b.record_one({"type": "plan.changed", "by": "owner", "data": {
             "diff": args.diff, "reason": args.reason, "evidence": args.evidence, "approval": args.approval}})
@@ -391,6 +393,48 @@ def _plan_add(args, b: Brain) -> None:
         raise
     b.reload()
     _out(args, {"id": nid, "event": ev}, f"✓ {nid} criado em PLANNING/goals.md" + ("" if kind == "deliverable" else " (aprovado, registrado em PLANNING/log.md e no ledger)"))
+
+
+def _plan_edit(args, b: Brain) -> None:
+    """Edita goal/projeto (gate: exige --approval, vira plan.changed + PLANNING/log.md) ou entregável (sem gate)."""
+    inst = b.inst
+    if os.environ.get("BRAIN_NIGHTLY") == "1":
+        raise util.BrainError("plan edit: proibido no noturno — a árvore é do dono, que precisa estar presente", code=4)
+    kind = planning.node_kind(b.plan, args.id)
+    if kind is None:
+        raise util.BrainError(f"{args.id} não existe em PLANNING/goals.md", code=3)
+    fields = {"title": args.title, "status": args.status, "horizon": args.horizon, "why": args.why,
+              "owner": args.owner, "due": args.due, "weight": args.weight}
+    if args.owner:
+        fields["owner"] = _resolve_people(b, [args.owner])[0]
+    if not any(v is not None for v in fields.values()):
+        raise util.BrainError("plan edit: nada para mudar (use --title, --status, --horizon, --why, --owner, --due, --weight)", code=3)
+    if kind != "deliverable" and not (args.approval or "").strip():
+        raise util.BrainError(f"editar {kind} é mudança estrutural: exige --approval com a resposta literal do dono", code=4)
+    path = inst.planning_file
+    before = path.read_text(encoding="utf-8")
+    changes = planning.edit_node(path, args.id, **fields)
+    if not changes:
+        _out(args, {"id": args.id, "changes": []}, f"{args.id}: nada mudou (goals.md já estava assim)")
+        return
+    what = "; ".join(f"{f}: {old} → {new}" for f, old, new in changes)
+    today = util.today().isoformat()
+    try:
+        if kind != "deliverable":
+            reason = args.reason or f"edição de {args.id}"
+            ev = b.record_one({"type": "plan.changed", "by": "owner", "data": {
+                "diff": f"{args.id} editado · {what}", "reason": reason, "evidence": args.evidence, "approval": args.approval}})
+            _append_plan_log(inst, f"{today} · {args.id} editado · {what} · {reason} · evidência: {args.evidence or '—'}"
+                                   f" · aprovado: \"{args.approval}\"")
+        else:
+            ev = None
+            _append_plan_log(inst, f"{today} · {args.id} entregável editado · {what} · sem gate (não é goal nem projeto)")
+    except util.BrainError:
+        util.atomic_write(path, before)          # o ledger recusou: o goals.md volta ao que era
+        raise
+    b.reload()
+    _out(args, {"id": args.id, "changes": changes, "event": ev},
+         f"✓ {args.id} editado ({what})" + ("" if kind == "deliverable" else " · aprovado, registrado em PLANNING/log.md e no ledger"))
 
 
 def _append_plan_log(inst, line: str) -> None:
@@ -753,16 +797,25 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("goal")
     x.add_argument("title")
     x.add_argument("--owner", help="id ou alias da pessoa dona")
+    x = pls.add_parser("edit", help="edita goal/projeto (GATE: exige --approval) ou entregável (sem gate)")
+    x.add_argument("id", help="G# · P# · P#.n")
+    x.add_argument("--title")
+    x.add_argument("--status", help="goal/projeto: ativo · congelado · fechado")
+    x.add_argument("--horizon", help="goal: AAAA-MM-DD (vazio remove)")
+    x.add_argument("--why", help="goal: por quê (vazio remove)")
+    x.add_argument("--owner", help="projeto: id ou alias da pessoa dona (vazio remove)")
+    x.add_argument("--due", help="entregável: AAAA-MM-DD (vazio remove)")
+    x.add_argument("--weight", type=int, help="entregável: inteiro a partir de 1")
     x = pls.add_parser("add-deliverable", help="cria entregável num projeto (sem gate)")
     x.add_argument("project")
     x.add_argument("title")
     x.add_argument("--due", help="AAAA-MM-DD")
     x.add_argument("--weight", type=int, default=1)
-    for x in [pls.choices["add-goal"], pls.choices["add-project"]]:
+    for x in [pls.choices["add-goal"], pls.choices["add-project"], pls.choices["edit"]]:
         x.add_argument("--reason", help="motivo (padrão: derivado)")
         x.add_argument("--evidence")
         x.add_argument("--approval", help="resposta literal do dono (ex.: 'ok')")
-    for x in [pls.choices["add-goal"], pls.choices["add-project"], pls.choices["add-deliverable"]]:
+    for x in [pls.choices["add-goal"], pls.choices["add-project"], pls.choices["add-deliverable"], pls.choices["edit"]]:
         x.add_argument("--json", action="store_true")
     p.set_defaults(fn=cmd_plan)
 

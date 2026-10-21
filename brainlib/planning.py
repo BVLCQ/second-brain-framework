@@ -271,6 +271,13 @@ def load(path: Path) -> Plan:
     return parse(path.read_text(encoding="utf-8"))
 
 
+def _deliv_line(head: str, box: str, mid: str, did: str, title: str, seg: dict) -> str:
+    order = ["prazo", "peso", "estado", "feito"]
+    keys = sorted(seg, key=lambda k: order.index(k) if k in order else len(order))
+    tail = "".join(f" · {k}: {seg[k]}" if seg[k] != "sim" else f" · {k}" for k in keys)
+    return f"{head}{box}{mid}{did} {title}{tail}"
+
+
 def set_deliverable(path: Path, did: str, status: str, when: date | None) -> bool:
     """Atualiza o checkbox (estado factual) de um entregável. Retorna True se mudou."""
     lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
@@ -295,10 +302,7 @@ def set_deliverable(path: Path, did: str, status: str, when: date | None) -> boo
         box = "-"
     elif status == "em-andamento":
         seg["estado"] = "em-andamento"
-    order = ["prazo", "peso", "estado", "feito"]
-    keys = sorted(seg, key=lambda k: order.index(k) if k in order else len(order))
-    tail = "".join(f" · {k}: {seg[k]}" if seg[k] != "sim" else f" · {k}" for k in keys)
-    new = f"{head}{box}{mid}{did} {title}{tail}{eol}"
+    new = _deliv_line(head, box, mid, did, title, seg) + eol
     if new == ln:
         return False
     lines[d.line_no - 1] = new
@@ -404,3 +408,131 @@ def add_deliverable(path: Path, project_id: str, title: str, due: str = "", weig
         line += f" · peso: {weight}"
     _insert(path, did, project_id, [line], ("## ", "### "), PROJ_RE)
     return did
+
+
+# ── editar nós (goal, projeto, entregável) ───────────────────────────────────
+NODE_STATUS = ["ativo", "congelado", "fechado"]          # goal e projeto; fora de "ativo" o projeto sai da saúde normal
+_META_LABEL = {"status": "status", "horizonte": "horizonte", "por que": "por quê", "dono": "dono"}
+
+
+def node_kind(plan: Plan, node: str) -> str | None:
+    return "goal" if node in plan.goals else "project" if node in plan.projects else \
+        "deliverable" if node in plan.deliverables else None
+
+
+def _set_meta(lines: list[str], start: int, key: str, value: str | None) -> None:
+    """Troca (ou cria, ou remove quando `value` é vazio) a linha `- chave: valor` do título em `start`.
+    As linhas de metadado ficam entre o título e o próximo título (de qualquer nível)."""
+    clean = _strip_comments(lines)
+    end = next((i for i in range(start + 1, len(lines)) if clean[i].startswith(("## ", "### "))), len(lines))
+    last = start
+    for i in range(start + 1, end):
+        m = META_RE.match(clean[i])
+        if m:
+            last = i
+            if util.fold(m.group(1)) == key:
+                if value:
+                    lines[i] = re.sub(r":\s*.+?\s*$", f": {value}", lines[i], count=1)
+                else:
+                    del lines[i]
+                return
+    if value:
+        lines.insert(last + 1, f"- {_META_LABEL[key]}: {value}")
+
+
+def _fold_eq(a: str | None, b: str | None) -> bool:
+    return (a or "") == (b or "")
+
+
+def edit_node(path: Path, node: str, **fields) -> list[tuple[str, str, str]]:
+    """Edita goal/projeto/entregável no goals.md. `None` = não mexe; "" = remove (horizonte, por quê, dono, prazo).
+
+    Campos: goal → title, status, horizon, why · projeto → title, status, owner · entregável → title, due, weight.
+    Devolve [(campo, antes, depois)] só do que mudou; arquivo intacto se o resultado não passar pelo parser."""
+    text = path.read_text(encoding="utf-8")
+    lines = text.splitlines()
+    plan = parse(text)
+    kind = node_kind(plan, node)
+    if kind is None:
+        raise util.BrainError(f"{node} não existe em {path.name}", code=3)
+    allowed = {"goal": {"title", "status", "horizon", "why"}, "project": {"title", "status", "owner"},
+               "deliverable": {"title", "due", "weight"}}[kind]
+    fields = {k: v for k, v in fields.items() if v is not None}
+    bad = sorted(set(fields) - allowed)
+    if bad:
+        raise util.BrainError(f"{node} é {kind}: não tem {', '.join(bad)}", code=3)
+    changes: list[tuple[str, str, str]] = []
+
+    if kind == "deliverable":
+        d = plan.deliverables[node]
+        ln = lines[d.line_no - 1]
+        m = DELIV_RE.match(ln)
+        if m is None:
+            raise util.BrainError(f"linha {d.line_no} de {node} não está no formato do parser — não alterei o arquivo", code=5)
+        head, box, mid, _, rest = m.groups()
+        title, seg = _parse_segments(rest)
+        if "title" in fields:
+            new = _clean(fields["title"], "título", "·")
+            if new != title:
+                changes.append(("título", title, new))
+                title = new
+        if "due" in fields:
+            new = util.parse_date(fields["due"]).isoformat() if fields["due"] else ""
+            if new != (d.due.isoformat() if d.due else ""):
+                changes.append(("prazo", d.due.isoformat() if d.due else "—", new or "—"))
+                seg.pop("prazo", None)
+                if new:
+                    seg["prazo"] = new
+        if "weight" in fields:
+            w = int(fields["weight"])
+            if w < 1:
+                raise util.BrainError("peso: use um inteiro a partir de 1", code=3)
+            if w != d.weight:
+                changes.append(("peso", str(d.weight), str(w)))
+                seg.pop("peso", None)
+                if w != 1:
+                    seg["peso"] = str(w)
+        if changes:
+            lines[d.line_no - 1] = _deliv_line(head, box, mid, node, title, seg)
+    else:
+        node_obj = plan.goals[node] if kind == "goal" else plan.projects[node]
+        clean = _strip_comments(lines)
+        rx = GOAL_RE if kind == "goal" else PROJ_RE
+        start = next(i for i, c in enumerate(clean) if (m := rx.match(c)) and m.group(1) == node)
+        meta = {"status": ("status", node_obj.meta.get("status", "ativo")),
+                "horizon": ("horizonte", node_obj.meta.get("horizonte", "")),
+                "why": ("por que", node_obj.meta.get("por que") or node_obj.meta.get("porque") or ""),
+                "owner": ("dono", node_obj.meta.get("dono", ""))}
+        if "title" in fields:
+            new = _clean(fields["title"], "título")
+            if new != node_obj.title:
+                changes.append(("título", node_obj.title, new))
+                lines[start] = re.sub(r"^(#+\s+\S+\s*[—–-]\s*).+?\s*$", lambda m: m.group(1) + new, lines[start])
+        edits = []
+        for f, value in fields.items():
+            if f == "title":
+                continue
+            key, old = meta[f]
+            if f == "status":
+                value = util.fold(value)
+                if value not in NODE_STATUS:
+                    raise util.BrainError(f"status: use {', '.join(NODE_STATUS)}", code=3)
+            elif f == "horizon":
+                value = util.parse_date(value).isoformat() if value else ""
+            else:
+                value = _clean(value, f) if value else ""
+            if not _fold_eq(value, old):
+                changes.append((_META_LABEL[key], old or "—", value or "—"))
+                edits.append((key, value))
+        for key, value in edits:
+            _set_meta(lines, start, key, value)
+    if not changes:
+        return []
+    out = "\n".join(lines) + "\n"
+    after = parse(out)
+    if len(after.warnings) > len(plan.warnings) or node_kind(after, node) != kind or \
+            list(after.goals) != list(plan.goals) or list(after.projects) != list(plan.projects) or \
+            list(after.deliverables) != list(plan.deliverables):
+        raise util.BrainError(f"não consegui editar {node} em {path.name} no formato do parser — arquivo intacto", code=5)
+    util.atomic_write(path, out)
+    return changes

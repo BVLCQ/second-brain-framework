@@ -629,6 +629,25 @@ linha em `PLANNING/log.md`; `--reason` e `--evidence` são opcionais. Entregáve
 Código `4` sem `--approval` ou com `BRAIN_NIGHTLY=1`; `3` para pai inexistente ou título inválido. No TUI, no painel 3, `n` cria o que
 o item selecionado comporta (goal → projeto, projeto → entregável, entregável → ação ligada a ele) e `G` cria um goal.
 
+### `brain plan edit ID`
+Edita um nó que já existe em `PLANNING/goals.md`, mantendo o id e o resto do arquivo como está. Só os campos passados mudam; `""`
+remove o campo opcional. Se o arquivo não ficar válido, nada é gravado.
+
+| Nó | Campos | Gate |
+|---|---|---|
+| `G#` | `--title` · `--status ativo\|congelado\|fechado` · `--horizon DATA` · `--why TEXTO` | **sim** |
+| `P#` | `--title` · `--status` · `--owner PESSOA` | **sim** |
+| `P#.n` | `--title` (sem `·`) · `--due DATA` · `--weight N` | não |
+
+Goal e projeto exigem `--approval "ok"` e gravam `plan.changed` (com o antes → depois) no ledger e em `PLANNING/log.md`; `--reason` e
+`--evidence` são opcionais. Entregável entra só com uma linha no log. O estado do entregável (feito, em andamento) continua em
+`plan deliverable`. Código `4` sem `--approval` ou com `BRAIN_NIGHTLY=1`; `3` para nó inexistente, campo que não é do tipo ou valor inválido.
+```bash
+brain plan edit P1 --title "Padronização de métricas" --approval "ok"
+brain plan edit P1.3 --due 2026-12-15 --weight 2
+```
+No TUI, no painel 3, `e` abre o formulário do item selecionado (goal e projeto pedem a aprovação digitada).
+
 ### `brain progress NÓ PCT`
 Seu percentual "de feeling" para um goal/projeto. Aparece **ao lado** do calculado, nunca o substitui.
 ```bash
