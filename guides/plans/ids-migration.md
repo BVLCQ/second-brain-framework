@@ -7,7 +7,7 @@ commit local por passo, sem push, nada do dono no repo.
 
 | Antigo | Novo | Entidade |
 |---|---|---|
-| `A-0146` | `ACT-0146` | ação |
+| `A-0146` | `TASK-0146` | ação |
 | `D-0012` | `DEC-0012` | decisão |
 | `E-0003` | `WIN-0003` | entrega/conquista (alimenta `wins.md`) |
 | `R-0007` | `PROP-0007` | proposta |
@@ -19,7 +19,7 @@ commit local por passo, sem push, nada do dono no repo.
 | `P3.2` | `PROJ-3.2` | entregável |
 
 `PROC-####`, `OPP-####` e slugs de área não mudam. A numeração continua (a próxima ação
-depois de `A-0146` é `ACT-0147`).
+depois de `A-0146` é `TASK-0147`).
 
 **Migração completa, por decisão explícita do dono**: o ledger é reescrito uma vez
 (exceção histórica à regra append-only), e também RAW, PROCESSED, notas, PLANNING,
@@ -63,7 +63,7 @@ na hora — isso não reescreve nada, só evita erro de digitação por hábito.
    (`text_sha` de mensagem, `content_sha` de share, `sha` de focus) e grava um evento
    final `ids.migrated` (novo tipo em `schema.py`, `by system`) com o mapa e o sha do
    backup. Escrita atômica; `brain validate` precisa passar no resultado antes do swap.
-5. **Arquivos com ID no nome**: `RAW/**/notes/A-0001-…-note.md` → `ACT-0001-…`, e o que
+5. **Arquivos com ID no nome**: `RAW/**/notes/A-0001-…-note.md` → `TASK-0001-…`, e o que
    mais o `find` achar; atualiza os caminhos no ledger no mesmo passo.
 6. **Texto**:
    - Arquivos **escritos pelo cérebro** (notas em RAW, `PROCESSED/**`, `PLANNING/goals.md`,

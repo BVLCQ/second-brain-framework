@@ -125,7 +125,7 @@ IDs, sempre com zeros à esquerda, nunca reusados:
 
 | ID | Coisa |
 |---|---|
-| `ACT-0001` | ação |
+| `TASK-0001` | ação |
 | `DEC-0001` | decisão |
 | `WIN-0001` | entrega (conquista) |
 | `PROP-0001` | proposta para você aceitar ou rejeitar |
@@ -164,8 +164,8 @@ Uma ação de outra pessoa não cai em "minhas" só porque você se importa.
 
 ### Bloqueio
 
-`blocked_by: ACT-0002` — esta ação não anda enquanto a outra estiver aberta.
-`unblocks: ACT-0009` — fechar esta destrava a outra (o motor anota; não fecha
+`blocked_by: TASK-0002` — esta ação não anda enquanto a outra estiver aberta.
+`unblocks: TASK-0009` — fechar esta destrava a outra (o motor anota; não fecha
 a outra por você). Atraso se calcula na leitura: não existe uma varredura
 que "marque vencida".
 
@@ -224,7 +224,7 @@ Abas:
 Busca no topo: duas letras já filtram ações, decisões, projetos, pessoas,
 entregas e artefatos. "Não consta" é uma resposta da busca.
 
-Clicar num `ACT-####` ou `DEC-####` abre a ficha: histórico, bloqueio, fonte,
+Clicar num `TASK-####` ou `DEC-####` abre a ficha: histórico, bloqueio, fonte,
 proveniência. O painel não edita nada. Fechar ação é no chat, no checkbox
 do Markdown — e só entra no livro-razão no próximo
 `./brain render`.
@@ -285,7 +285,7 @@ Cada uma tem no topo `generated-at` e `fontes`.
 | `FRESH/focus.md` | plano da semana |
 | `FRESH/outbox.md` | mensagens |
 | `FRESH/health.md` | saúde |
-| `FRESH/records/actions/ACT-0001.md` | uma nota por ação |
+| `FRESH/records/actions/TASK-0001.md` | uma nota por ação |
 | `FRESH/records/decisions/DEC-0001.md` | uma nota por decisão |
 | `FRESH/notes/` | brief e semana, escritos pelo agente |
 
@@ -296,7 +296,7 @@ status que você grava.
 
 Ficha já **descartada** marcada como "feita" não faz nada: descarte não vira
 feito. Reabra antes (`/done` não; use o chat pedindo para reabrir, ou
-`./brain action reopen ACT-#### --reason "…"`).
+`./brain action reopen TASK-#### --reason "…"`).
 
 Depois de editar `todo.md` ou uma ficha, rode `./brain render` (ou peça
 `/brief`). Sem isso, o painel e o livro-razão ainda mostram o estado antigo.
@@ -342,14 +342,14 @@ Lista padrão: sua. Se a ação é de outra pessoa para você, ela nasce
 
 ### `/done` — fechar
 
-`/done ACT-0014 enviei o draft pro Heitor-demo`.
+`/done TASK-0014 enviei o draft pro Heitor-demo`.
 
 ID exato fecha direto. Texto sem ID: um match só, o agente confirma em uma
 linha; vários matches, ele lista; ação de terceiro ou muito antiga, ele
 sempre confirma.
 
 ```bash
-./brain action close ACT-0014 --how "enviei o draft" --outcome "Heitor-demo confirmou" --by owner
+./brain action close TASK-0014 --how "enviei o draft" --outcome "Heitor-demo confirmou" --by owner
 ```
 
 Se houver resultado observável **e** projeto, entregável ou `unblocks`, nasce
@@ -535,16 +535,16 @@ doctor. Isso é para você decidir, não para o app fundir sozinho.
 
 ```bash
 ./brain action open "Publicar o manual" --due 2026-10-20 --effort 2h \
-  --project PROJ-1 --deliverable PROJ-1.1 --blocked-by ACT-0002 --people heitor-demo \
+  --project PROJ-1 --deliverable PROJ-1.1 --blocked-by TASK-0002 --people heitor-demo \
   --priority alta --by owner
 
-./brain action update ACT-0003 --status fazendo --note "comecei a revisão"
-./brain action update ACT-0003 --clear-due
+./brain action update TASK-0003 --status fazendo --note "comecei a revisão"
+./brain action update TASK-0003 --clear-due
 ./brain action list --list waiting
 ./brain action list --project PROJ-1 --all
-./brain action show ACT-0003
-./brain action drop ACT-0008 --reason "não faz mais sentido" --by owner
-./brain action reopen ACT-0008 --reason "voltou a fazer" --by owner
+./brain action show TASK-0003
+./brain action drop TASK-0008 --reason "não faz mais sentido" --by owner
+./brain action reopen TASK-0008 --reason "voltou a fazer" --by owner
 ```
 
 Estados que você grava: `aberta`, `fazendo`, `aguardando`. `bloqueada`,
@@ -573,11 +573,11 @@ cadastrada.
 Quando a conquista não nasceu de um `/done`:
 
 ```bash
-./brain delivery "Draft do manual" --ref ACT-0001 \
+./brain delivery "Draft do manual" --ref TASK-0001 \
   --result "em revisão com o Heitor-demo" --evidence "e-mail" --by owner
 ```
 
-`--ref` pode ser `ACT-####`, `PROJ-1`, `PROJ-1.1` ou `GOAL-1`. Sem resultado declarado, a
+`--ref` pode ser `TASK-####`, `PROJ-1`, `PROJ-1.1` ou `GOAL-1`. Sem resultado declarado, a
 ficha diz "resultado não declarado" — o app não inventa impacto.
 
 ### Proposta
@@ -586,7 +586,7 @@ O agente acha que uma ação pode fechar, ou que o plano deveria mudar, e não
 faz isso sozinho:
 
 ```bash
-./brain proposal add --kind fechar-acao --target ACT-0006 \
+./brain proposal add --kind fechar-acao --target TASK-0006 \
   --summary "O report já traz a fechamento de setembro" \
   --evidence PROCESSED/2026/10/status.md \
   --prov observado --source PROCESSED/2026/10/status.md
@@ -687,7 +687,7 @@ pelo Slack.
 2. Rascunho:
 
 ```bash
-./brain outbox draft --to caio-demo --text "Oi Caio-demo, …" --ref ACT-0005 \
+./brain outbox draft --to caio-demo --text "Oi Caio-demo, …" --ref TASK-0005 \
   --why "cobrar o MVP"
 ```
 
@@ -702,7 +702,7 @@ pelo Slack.
 Mudou uma vírgula depois do "enviar 1"? Cancela e faz outro rascunho.
 Aprovação não herda. Teto: `[outbound].daily_max` (padrão 10 por dia).
 
-O corpo da mensagem não leva `ACT-####`. Isso é jargão interno.
+O corpo da mensagem não leva `TASK-####`. Isso é jargão interno.
 
 Não existe porta de e-mail. Cobrar por e-mail é você quem escreve. O
 `/gmail` só lê.
@@ -758,7 +758,7 @@ Dois bancos:
 | `brain-raw` | arquivos do RAW (texto e PDF/Office até o tamanho máximo), fora da inbox | pedaços, sem interpretar |
 | `brain-mem` | artefatos do PROCESSED, uma página por ação/decisão/entrega/pessoa, PLANNING e PROFILE | fatos duráveis |
 
-Cada lembrança aponta para um caminho (`PROCESSED/…` ou `ledger/ACT-0001`).
+Cada lembrança aponta para um caminho (`PROCESSED/…` ou `ledger/TASK-0001`).
 
 Desligado por padrão (`engine = "none"`). Para ligar: suba o servidor
 ([Hindsight](https://github.com/vectorize-io/hindsight); o modelo de

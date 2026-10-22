@@ -10,7 +10,7 @@ para achar mais rápido. Se o servidor cair, nada se perde.
 | `brain-raw` | arquivos do RAW como estão (texto e binários até `max_file_mb`) | `chunks` — sem interpretação |
 | `brain-mem` | artefatos do PROCESSED + uma página por ação/decisão/entrega/pessoa + PLANNING/PROFILE | `chunks` — páginas como estão |
 
-`document_id` = caminho no vault (ou `ledger/ACT-####`). Toda lembrança aponta
+`document_id` = caminho no vault (ou `ledger/TASK-####`). Toda lembrança aponta
 para algo que você pode abrir.
 
 Os dois bancos são disjuntos de propósito: `brain-raw` responde "o que foi dito"

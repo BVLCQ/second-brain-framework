@@ -195,7 +195,7 @@ td code,.kb{font:500 12px var(--mono);background:var(--code);border:1px solid va
   <section class="sect note">
     <h2>Experimente isto</h2>
     <div class="try">
-      <div><span class="kb">2</span> <span class="kb">c</span><p>Feche a ação ACT-0021. A linha <code>brain action close …</code> muda enquanto você digita, e o resultado cai no log.</p></div>
+      <div><span class="kb">2</span> <span class="kb">c</span><p>Feche a ação TASK-0021. A linha <code>brain action close …</code> muda enquanto você digita, e o resultado cai no log.</p></div>
       <div><span class="kb">:</span><p>Abra a paleta e digite "foco" ou "backup". Cada comando mostra a linha da CLI e a tecla que o atalha.</p></div>
       <div><span class="kb">4</span> <span class="kb">]</span> <span class="kb">A</span><p>Aprove o rascunho para o Caio-demo. Só a sua resposta digitada libera o texto exato.</p></div>
       <div><span class="kb">3</span> <span class="kb">E</span><p>Veja o único gate estrutural: diff do <code>goals.md</code> e aprovação literal antes do <code>plan log</code>.</p></div>
@@ -303,21 +303,21 @@ var PEOPLE={
   caio-demo:{name:'Caio-demo',role:'Empreiteiro da reforma (externo)',rel:'fornecedor',email:'caio-demo@example.com',al:['Caio-demo']}
 };
 var A=[
- {id:'ACT-0021',title:'Montar cardápio com precificação',list:'mine',status:'fazendo',due:'2026-10-14',effort:'3h',project:'PROJ-2',deliv:'PROJ-2.2',prio:'alta',people:['marina-demo'],origin:'1:1 com Marina-demo (qui 09/10)',prov:'observado',source:'PROCESSED/2026/10/1a1-marina-demo.md',
+ {id:'TASK-0021',title:'Montar cardápio com precificação',list:'mine',status:'fazendo',due:'2026-10-14',effort:'3h',project:'PROJ-2',deliv:'PROJ-2.2',prio:'alta',people:['marina-demo'],origin:'1:1 com Marina-demo (qui 09/10)',prov:'observado',source:'PROCESSED/2026/10/1a1-marina-demo.md',
   hist:[['2026-10-09','aberta a partir do 1:1: "eu monto o cardápio com precificação até semana que vem"','observado'],['2026-10-13','status → fazendo','declarado']]},
- {id:'ACT-0023',title:'Fechar ficha técnica das 8 receitas novas',list:'mine',status:'aberta',due:'2026-10-16',effort:'1h30',project:'PROJ-2',deliv:'PROJ-2.2',prio:'normal',people:['marina-demo'],blocked:'ACT-0017',origin:'1:1 com Marina-demo',prov:'observado',source:'PROCESSED/2026/10/1a1-marina-demo.md',hist:[['2026-10-11','aberta; depende da aprovação das receitas pela Marina-demo','observado']]},
- {id:'ACT-0026',title:'Preparar pauta do 1:1 com a Marina-demo',list:'mine',status:'aberta',due:'2026-10-16',effort:'30m',project:null,deliv:null,prio:'normal',people:['marina-demo'],origin:'chat',prov:'declarado',source:'chat',hist:[['2026-10-14','aberta por você','declarado']]},
- {id:'ACT-0019',title:'Fechar escopo da reforma da galeria',list:'mine',status:'aberta',due:'2026-10-17',effort:'3h',project:'PROJ-1',deliv:'PROJ-1.3',prio:'alta',people:['caio-demo'],blocked:'ACT-0016',origin:'Reunião de números',prov:'observado',source:'PROCESSED/2026/10/reuniao-numeros.md',hist:[['2026-10-12','aberta; depende do orçamento do Caio-demo','observado']]},
- {id:'ACT-0024',title:'Ler o novo regulamento de exaustão',list:'mine',status:'aberta',due:'2026-10-20',effort:'1h',project:'PROJ-1',deliv:null,prio:'baixa',people:[],origin:'documento compartilhado',prov:'doc',source:'PROCESSED/2026/10/regulamento-exaustao.md',hist:[['2026-10-12','aberta a partir do documento','doc']]},
- {id:'ACT-0025',title:'Agendar degustação com os produtores',list:'mine',status:'aberta',due:'2026-10-22',effort:'2h',project:'PROJ-4',deliv:'PROJ-4.1',prio:'normal',people:[],origin:'1:1 com Marina-demo',prov:'observado',source:'PROCESSED/2026/10/1a1-marina-demo.md',hist:[['2026-10-10','aberta no 1:1','observado']]},
- {id:'ACT-0029',title:'Definir roteiro de treino da equipe',list:'mine',status:'aberta',due:'2026-10-30',effort:'2h',project:'PROJ-3',deliv:'PROJ-3.2',prio:'normal',people:['heitor-demo'],origin:'Manual de rotinas v1',prov:'observado',source:'PROCESSED/2026/10/manual-rotinas.md',hist:[['2026-10-05','aberta na publicação do manual','observado']]},
- {id:'ACT-0027',title:'Responder dúvida da Sônia-demo sobre o aluguel',list:'mine',status:'aberta',due:null,effort:null,project:'PROJ-1',deliv:null,prio:'normal',people:['sonia-demo'],origin:'Slack #padaria',prov:'observado',source:'RAW/2026/10/slack-padaria.md',hist:[['2026-10-14','aberta a partir do Slack','observado']]},
- {id:'ACT-0028',title:'Estimar custo do duto de exaustão',list:'mine',status:'aberta',due:null,effort:null,project:'PROJ-1',deliv:'PROJ-1.3',prio:'normal',people:['caio-demo'],origin:'chat',prov:'declarado',source:'chat',hist:[['2026-10-13','aberta por você','declarado']]},
- {id:'ACT-0016',title:'Orçamento da reforma da galeria',list:'waiting',owner:'caio-demo',status:'aberta',due:'2026-10-20',effort:null,project:'PROJ-1',deliv:'PROJ-1.3',prio:'alta',people:['caio-demo'],unblocks:'ACT-0019',origin:'Reunião de números',prov:'observado',source:'PROCESSED/2026/10/reuniao-numeros.md',hist:[['2026-10-12','Caio-demo prometeu enviar','observado']]},
- {id:'ACT-0017',title:'Aprovar as 8 receitas novas para escala',list:'waiting',owner:'marina-demo',status:'aberta',due:'2026-10-14',effort:null,project:'PROJ-2',deliv:'PROJ-2.2',prio:'normal',people:['marina-demo'],unblocks:'ACT-0023',origin:'1:1 com Marina-demo',prov:'observado',source:'PROCESSED/2026/10/1a1-marina-demo.md',hist:[['2026-10-11','Marina-demo assumiu a aprovação','observado']]},
- {id:'ACT-0018',title:'Entregar fechamento mensal revisado',list:'waiting',owner:'sonia-demo',status:'aberta',due:'2026-10-22',effort:null,project:null,deliv:null,prio:'normal',people:['sonia-demo'],origin:'Slack #contabilidade',prov:'observado',source:'RAW/2026/10/slack-contabilidade.md',hist:[['2026-10-12','Sônia-demo vai revisar o fechamento','observado']]},
- {id:'ACT-0020',title:'Prazo da declaração anual do Simples',list:'watching',owner:'sonia-demo',status:'aberta',due:null,effort:null,project:null,deliv:null,prio:'normal',people:['sonia-demo'],origin:'Reunião de números',prov:'observado',source:'PROCESSED/2026/10/reuniao-numeros.md',hist:[['2026-10-04','contexto: o cérebro não cobra','declarado']]},
- {id:'ACT-0022',title:'Renovação do contrato do fornecedor de farinha',list:'watching',owner:'heitor-demo',status:'aberta',due:null,effort:null,project:'PROJ-3',deliv:null,prio:'baixa',people:['heitor-demo'],origin:'Slack #compras',prov:'observado',source:'RAW/2026/10/slack-compras.md',hist:[['2026-10-06','contexto','observado']]}
+ {id:'TASK-0023',title:'Fechar ficha técnica das 8 receitas novas',list:'mine',status:'aberta',due:'2026-10-16',effort:'1h30',project:'PROJ-2',deliv:'PROJ-2.2',prio:'normal',people:['marina-demo'],blocked:'TASK-0017',origin:'1:1 com Marina-demo',prov:'observado',source:'PROCESSED/2026/10/1a1-marina-demo.md',hist:[['2026-10-11','aberta; depende da aprovação das receitas pela Marina-demo','observado']]},
+ {id:'TASK-0026',title:'Preparar pauta do 1:1 com a Marina-demo',list:'mine',status:'aberta',due:'2026-10-16',effort:'30m',project:null,deliv:null,prio:'normal',people:['marina-demo'],origin:'chat',prov:'declarado',source:'chat',hist:[['2026-10-14','aberta por você','declarado']]},
+ {id:'TASK-0019',title:'Fechar escopo da reforma da galeria',list:'mine',status:'aberta',due:'2026-10-17',effort:'3h',project:'PROJ-1',deliv:'PROJ-1.3',prio:'alta',people:['caio-demo'],blocked:'TASK-0016',origin:'Reunião de números',prov:'observado',source:'PROCESSED/2026/10/reuniao-numeros.md',hist:[['2026-10-12','aberta; depende do orçamento do Caio-demo','observado']]},
+ {id:'TASK-0024',title:'Ler o novo regulamento de exaustão',list:'mine',status:'aberta',due:'2026-10-20',effort:'1h',project:'PROJ-1',deliv:null,prio:'baixa',people:[],origin:'documento compartilhado',prov:'doc',source:'PROCESSED/2026/10/regulamento-exaustao.md',hist:[['2026-10-12','aberta a partir do documento','doc']]},
+ {id:'TASK-0025',title:'Agendar degustação com os produtores',list:'mine',status:'aberta',due:'2026-10-22',effort:'2h',project:'PROJ-4',deliv:'PROJ-4.1',prio:'normal',people:[],origin:'1:1 com Marina-demo',prov:'observado',source:'PROCESSED/2026/10/1a1-marina-demo.md',hist:[['2026-10-10','aberta no 1:1','observado']]},
+ {id:'TASK-0029',title:'Definir roteiro de treino da equipe',list:'mine',status:'aberta',due:'2026-10-30',effort:'2h',project:'PROJ-3',deliv:'PROJ-3.2',prio:'normal',people:['heitor-demo'],origin:'Manual de rotinas v1',prov:'observado',source:'PROCESSED/2026/10/manual-rotinas.md',hist:[['2026-10-05','aberta na publicação do manual','observado']]},
+ {id:'TASK-0027',title:'Responder dúvida da Sônia-demo sobre o aluguel',list:'mine',status:'aberta',due:null,effort:null,project:'PROJ-1',deliv:null,prio:'normal',people:['sonia-demo'],origin:'Slack #padaria',prov:'observado',source:'RAW/2026/10/slack-padaria.md',hist:[['2026-10-14','aberta a partir do Slack','observado']]},
+ {id:'TASK-0028',title:'Estimar custo do duto de exaustão',list:'mine',status:'aberta',due:null,effort:null,project:'PROJ-1',deliv:'PROJ-1.3',prio:'normal',people:['caio-demo'],origin:'chat',prov:'declarado',source:'chat',hist:[['2026-10-13','aberta por você','declarado']]},
+ {id:'TASK-0016',title:'Orçamento da reforma da galeria',list:'waiting',owner:'caio-demo',status:'aberta',due:'2026-10-20',effort:null,project:'PROJ-1',deliv:'PROJ-1.3',prio:'alta',people:['caio-demo'],unblocks:'TASK-0019',origin:'Reunião de números',prov:'observado',source:'PROCESSED/2026/10/reuniao-numeros.md',hist:[['2026-10-12','Caio-demo prometeu enviar','observado']]},
+ {id:'TASK-0017',title:'Aprovar as 8 receitas novas para escala',list:'waiting',owner:'marina-demo',status:'aberta',due:'2026-10-14',effort:null,project:'PROJ-2',deliv:'PROJ-2.2',prio:'normal',people:['marina-demo'],unblocks:'TASK-0023',origin:'1:1 com Marina-demo',prov:'observado',source:'PROCESSED/2026/10/1a1-marina-demo.md',hist:[['2026-10-11','Marina-demo assumiu a aprovação','observado']]},
+ {id:'TASK-0018',title:'Entregar fechamento mensal revisado',list:'waiting',owner:'sonia-demo',status:'aberta',due:'2026-10-22',effort:null,project:null,deliv:null,prio:'normal',people:['sonia-demo'],origin:'Slack #contabilidade',prov:'observado',source:'RAW/2026/10/slack-contabilidade.md',hist:[['2026-10-12','Sônia-demo vai revisar o fechamento','observado']]},
+ {id:'TASK-0020',title:'Prazo da declaração anual do Simples',list:'watching',owner:'sonia-demo',status:'aberta',due:null,effort:null,project:null,deliv:null,prio:'normal',people:['sonia-demo'],origin:'Reunião de números',prov:'observado',source:'PROCESSED/2026/10/reuniao-numeros.md',hist:[['2026-10-04','contexto: o cérebro não cobra','declarado']]},
+ {id:'TASK-0022',title:'Renovação do contrato do fornecedor de farinha',list:'watching',owner:'heitor-demo',status:'aberta',due:null,effort:null,project:'PROJ-3',deliv:null,prio:'baixa',people:['heitor-demo'],origin:'Slack #compras',prov:'observado',source:'RAW/2026/10/slack-compras.md',hist:[['2026-10-06','contexto','observado']]}
 ];
 var PL=[
  {id:'GOAL-1',title:'Abrir o segundo ponto da Forno & Farinha',status:'ativo',horizon:'2026-12-29',why:'o primeiro ponto esgotou a capacidade; o novo bairro amplia a clientela',declared:{pct:40,date:'2026-10-14',note:'projeto aprovado; reforma da galeria nem começou'},projects:[
@@ -339,23 +339,23 @@ var PL=[
      {id:'PROJ-4.1',title:'Contratos com 3 produtores',due:'2026-11-14',w:3,st:'nao-iniciado'}]}]}
 ];
 var R=[
- {id:'PROP-0003',kind:'fechar-acao',target:'ACT-0017',summary:'Marina-demo confirmou no Slack que aprovou as 8 receitas para escala',evidence:'slack #padaria 14/10 18:20',source:'RAW/2026/10/slack-padaria.md',prov:'observado',st:'pendente'},
- {id:'PROP-0004',kind:'reestimar',target:'ACT-0021',summary:'3h parece curto: são 8 receitas novas a precificar',evidence:'1a1-marina-demo.md, linha 12',source:'PROCESSED/2026/10/1a1-marina-demo.md',prov:'observado',st:'pendente',newEffort:'5h'},
+ {id:'PROP-0003',kind:'fechar-acao',target:'TASK-0017',summary:'Marina-demo confirmou no Slack que aprovou as 8 receitas para escala',evidence:'slack #padaria 14/10 18:20',source:'RAW/2026/10/slack-padaria.md',prov:'observado',st:'pendente'},
+ {id:'PROP-0004',kind:'reestimar',target:'TASK-0021',summary:'3h parece curto: são 8 receitas novas a precificar',evidence:'1a1-marina-demo.md, linha 12',source:'PROCESSED/2026/10/1a1-marina-demo.md',prov:'observado',st:'pendente',newEffort:'5h'},
  {id:'PROP-0005',kind:'mudar-plano',target:'GOAL-2',summary:'Criar PROJ-5 "Fornada noturna" sob GOAL-2, a pedido da Marina-demo',evidence:'reunião de planejamento 14/10',source:'PROCESSED/2026/10/reuniao-numeros.md',prov:'observado',st:'pendente'}
 ];
 var M=[
- {id:'MSG-0003',to:'marina-demo',chan:'slack',text:'Oi Marina-demo, mandei a precificação das clássicas no doc. Consegue olhar até amanhã? Preciso do ok para fechar o cardápio.',ref:'ACT-0021',why:'prazo venceu ontem',st:'aprovada',quote:'enviar 3',hash:'a1f3c9e2'},
- {id:'MSG-0002',to:'caio-demo',chan:'slack',text:'Oi Caio-demo, tudo bem? Como está o orçamento da reforma da galeria? Preciso dele para fechar o escopo.',ref:'ACT-0016',why:'prazo vence em breve, escopo depende dele',st:'rascunho',hash:'7be04d51'},
- {id:'MSG-0001',to:'sonia-demo',chan:'slack',text:'Sônia-demo, pode revisar o contrato da galeria até quinta?',ref:'ACT-0018',why:'revisão contábil',st:'enviada',quote:'enviar 1',hash:'c2d9aa07',link:'https://seu-workspace.slack.com/archives/…'}
+ {id:'MSG-0003',to:'marina-demo',chan:'slack',text:'Oi Marina-demo, mandei a precificação das clássicas no doc. Consegue olhar até amanhã? Preciso do ok para fechar o cardápio.',ref:'TASK-0021',why:'prazo venceu ontem',st:'aprovada',quote:'enviar 3',hash:'a1f3c9e2'},
+ {id:'MSG-0002',to:'caio-demo',chan:'slack',text:'Oi Caio-demo, tudo bem? Como está o orçamento da reforma da galeria? Preciso dele para fechar o escopo.',ref:'TASK-0016',why:'prazo vence em breve, escopo depende dele',st:'rascunho',hash:'7be04d51'},
+ {id:'MSG-0001',to:'sonia-demo',chan:'slack',text:'Sônia-demo, pode revisar o contrato da galeria até quinta?',ref:'TASK-0018',why:'revisão contábil',st:'enviada',quote:'enviar 1',hash:'c2d9aa07',link:'https://seu-workspace.slack.com/archives/…'}
 ];
 
 var F={id:'FOCUS-0004',st:'proposto',days:[
- {d:'2026-10-15',b:[['14:00','16:00','ACT-0021','parte 1/2'],['16:15','17:45','ACT-0023','']]},
- {d:'2026-10-16',b:[['09:30','11:30','ACT-0021','parte 2/2'],['11:30','12:00','ACT-0026',''],['14:00','15:30','ACT-0019','parte 1/2']]},
- {d:'2026-10-19',b:[['10:00','11:00','ACT-0024','']]},
- {d:'2026-10-20',b:[['14:00','16:00','ACT-0025','']]},
+ {d:'2026-10-15',b:[['14:00','16:00','TASK-0021','parte 1/2'],['16:15','17:45','TASK-0023','']]},
+ {d:'2026-10-16',b:[['09:30','11:30','TASK-0021','parte 2/2'],['11:30','12:00','TASK-0026',''],['14:00','15:30','TASK-0019','parte 1/2']]},
+ {d:'2026-10-19',b:[['10:00','11:00','TASK-0024','']]},
+ {d:'2026-10-20',b:[['14:00','16:00','TASK-0025','']]},
  {d:'2026-10-21',b:[]}],
- nofit:[['ACT-0019','1h30','até sex 17/10, teto de 4h por dia']]};
+ nofit:[['TASK-0019','1h30','até sex 17/10, teto de 4h por dia']]};
 var PUB=[{id:'PUB-0001',report:'reports/share/2026-10-14-project-p1.md',to:'slack:#padaria-socios',st:'pedido',hash:'5d8e1b30'}];
 var DEC=[
  {id:'DEC-0005',date:'2026-10-12',title:'Trocar a esquina pelo espaço da galeria',by:['voce','marina-demo'],project:'PROJ-1',ctx:'Reunião de números do ponto novo.',why:'Break-even no 9º mês (contra o 14º) e reforma de até 25 mil.',source:'PROCESSED/2026/10/reuniao-numeros.md',prov:'observado'},
@@ -413,12 +413,12 @@ var DOC=[
 ];
 var CMDS=[
  ['Nova ação','brain action open "…" --by owner',{p:2,t:0,k:'n'}],
- ['Fechar ação','brain action close ACT-#### --how "…"',{p:2,t:0,k:'c'}],
- ['Editar ação','brain action update ACT-#### …',{p:2,t:0,k:'e'}],
- ['Descartar ação','brain action drop ACT-#### --reason "…"',{p:2,t:0,k:'D'}],
- ['Reabrir ação','brain action reopen ACT-#### --reason "…"',{p:2,t:0,k:'o'}],
+ ['Fechar ação','brain action close TASK-#### --how "…"',{p:2,t:0,k:'c'}],
+ ['Editar ação','brain action update TASK-#### …',{p:2,t:0,k:'e'}],
+ ['Descartar ação','brain action drop TASK-#### --reason "…"',{p:2,t:0,k:'D'}],
+ ['Reabrir ação','brain action reopen TASK-#### --reason "…"',{p:2,t:0,k:'o'}],
  ['O que me devem','brain action list --list waiting',{p:2,t:1}],
- ['Ver ficha da ação','brain action show ACT-####',{p:2,t:0}],
+ ['Ver ficha da ação','brain action show TASK-####',{p:2,t:0}],
  ['Árvore do plano','brain plan show',{p:3,t:0}],
  ['Marcar entregável','brain plan deliverable PROJ-#.# --status …',{p:3,t:0,k:' '}],
  ['Declarar progresso','brain progress GOAL-1 45',{p:3,t:0,k:'P'}],
@@ -764,7 +764,7 @@ function newAction(extra){
     {id:'list',label:'lista',choice:['mine','waiting','watching'],value:l},
     {id:'owner',label:'dono',ph:'você (ou id da pessoa)',value:ow}],
    cmd:function(v){var d=parseDue(v.due);return 'brain action open '+q(v.title||'…')+' --by owner'+(v.list!=='mine'?' --list '+v.list:'')+(v.owner?' --owner '+v.owner:'')+(d?' --due '+d:'')+(v.effort?' --effort '+v.effort:'')+(v.project&&v.project!=='—'?' --project '+v.project:'')+(v.prio!=='normal'?' --priority '+v.prio:'')},
-   ok:function(v){var id='ACT-'+String(S.nextA++).padStart(4,'0');var d=parseDue(v.due);
+   ok:function(v){var id='TASK-'+String(S.nextA++).padStart(4,'0');var d=parseDue(v.due);
      run(this.cmd(v),'✓ '+id+' aberta'+(d?' · prazo '+short(d):' · sem prazo (o foco vai ignorar)'),function(){A.push({id:id,title:v.title,list:v.list,owner:v.owner||undefined,status:'aberta',due:d,effort:v.effort||null,project:v.project==='—'?null:v.project,deliv:null,prio:v.prio,people:[],origin:'chat',prov:'declarado',source:'chat',hist:[[fmt(T0),'aberta por você','declarado']]});S.p=2;S.tab[2]=['mine','waiting','watching'].indexOf(v.list);setSel(2,items(2,S.tab[2]).map(function(i){return i.id}).indexOf(id))})}});
 }
 function closeAction(){var it=cur(),a=it&&it.a;if(!a)return;
@@ -828,7 +828,7 @@ var ALLOW=['marina-demo','caio-demo','sonia-demo','#padaria-socios'];
 function newMsg(pre){pre=pre&&pre.to?pre:{};
   openForm({title:'Rascunhar mensagem no Slack',sub:'O agente enviará depois da sua aprovação, como você. O texto aprovado fica travado por hash.',fields:[
     {id:'to',label:'para',req:1,value:pre.to||'',ph:'id da pessoa ou #canal',chk:function(v){return ALLOW.indexOf(v)<0?'Destinatário fora de [outbound].allow. Edite config/brain.toml para liberar.':''}},
-    {id:'text',label:'texto',req:1,value:pre.text||'',ph:'Oi …'},{id:'ref',label:'ref',value:pre.ref||'',ph:'ACT-####'},{id:'why',label:'por quê',value:pre.why||''}],
+    {id:'text',label:'texto',req:1,value:pre.text||'',ph:'Oi …'},{id:'ref',label:'ref',value:pre.ref||'',ph:'TASK-####'},{id:'why',label:'por quê',value:pre.why||''}],
    cmd:function(v){return 'brain outbox draft --to '+(v.to||'…')+' --text '+q(v.text||'…')+(v.ref?' --ref '+v.ref:'')+(v.why?' --why '+q(v.why):'')},
    ok:function(v){var id='MSG-'+String(S.nextM++).padStart(4,'0');run(this.cmd(v),'✓ '+id+' rascunhada · aguardando sua aprovação',function(){M.unshift({id:id,to:v.to,chan:'slack',text:v.text,ref:v.ref||'—',why:v.why||'—',st:'rascunho',hash:Math.random().toString(16).slice(2,10)});S.p=4;S.tab[4]=1;setSel(4,0)})}});}
 function approveMsg(){var it=cur(),m=it&&it.m;if(!m||m.st!=='rascunho')return;var n=m.id.slice(-1);
@@ -856,7 +856,7 @@ function newDecision(){openForm({title:'Registrar decisão',fields:[{id:'title',
   cmd:function(v){return 'brain decision add '+q(v.title||'…')+' --decided-by '+(v.by||'…')+(v.project&&v.project!=='—'?' --project '+v.project:'')+(v.why?' --rationale '+q(v.why):'')+' --by owner'},
   ok:function(v){var id='DEC-'+String(S.nextD++).padStart(4,'0');run(this.cmd(v),'✓ '+id+' registrada',function(){DEC.unshift({id:id,date:fmt(T0),title:v.title,by:v.by.split(/[ ,]+/).filter(Boolean),project:v.project==='—'?null:v.project,ctx:'—',why:v.why||'—',source:'chat',prov:'declarado'});S.p=5;S.tab[5]=0;setSel(5,0)})}})}
 function supersede(){var it=cur(),d=it&&it.d;if(!d)return;openForm({title:'Superar '+d.id,fields:[{id:'reason',label:'motivo',req:1}],cmd:function(v){return 'brain decision supersede '+d.id+' --reason '+q(v.reason||'…')+' --by owner'},ok:function(v){run(this.cmd(v),'✓ '+d.id+' marcada como superada',null)}})}
-function newDelivery(){openForm({title:'Registrar entrega',sub:'Conquista com resultado, sem precisar fechar uma ação.',fields:[{id:'title',label:'título',req:1},{id:'ref',label:'ligada a',ph:'PROJ-2 · ACT-#### · GOAL-1'},{id:'result',label:'resultado'},{id:'impact',label:'impacto'}],
+function newDelivery(){openForm({title:'Registrar entrega',sub:'Conquista com resultado, sem precisar fechar uma ação.',fields:[{id:'title',label:'título',req:1},{id:'ref',label:'ligada a',ph:'PROJ-2 · TASK-#### · GOAL-1'},{id:'result',label:'resultado'},{id:'impact',label:'impacto'}],
   cmd:function(v){return 'brain delivery '+q(v.title||'…')+(v.ref?' --ref '+v.ref:'')+(v.result?' --result '+q(v.result):'')+(v.impact?' --impact '+q(v.impact):'')+' --by owner'},
   ok:function(v){var id='WIN-'+String(S.nextE++).padStart(4,'0');run(this.cmd(v),'✓ '+id+' registrada',function(){DEL.unshift({id:id,date:fmt(T0),title:v.title,ref:v.ref||null,result:v.result||'—',impact:v.impact||'—',evidence:'chat'});setSel(5,0)})}})}
 function newPerson(){openForm({title:'Nova pessoa',fields:[{id:'name',label:'nome',req:1},{id:'id',label:'id curto',ph:'derivado do nome'},{id:'alias',label:'aliases',ph:'Lu, Lu M.'},{id:'role',label:'papel'},{id:'rel',label:'relação',choice:['par','gestor','stakeholder','time']}],
@@ -877,8 +877,8 @@ function agent(kind){
   if(kind==='dump'){
     if(!S.inbox){L('dim','inbox vazia, nada a processar');draw();return}
     agentBox({slash:'/dump',title:'Processar a inbox',bullets:['Arquiva '+S.inbox+' itens em RAW/2026/10/ (mover, nunca editar)','Extrai decisões, ações e fatos com proveniência','Grava tudo pelo ./brain e regenera as views'],
-     lines:['lendo vault/RAW/inbox/ · '+S.inbox+' itens','arquivando em RAW/2026/10/','classificando: reunião "alinhamento-semanal", nota "ideias-cardapio"','$ brain add lote.json','✓ ACT-0030 · ACT-0031 · DEC-0007','$ brain render','inbox: 0 restantes'],
-     done:function(){S.inbox=0;A.push({id:'ACT-0030',title:'Enviar notas do alinhamento ao time',list:'mine',status:'aberta',due:'2026-10-17',effort:'30m',project:'PROJ-1',deliv:null,prio:'normal',people:['heitor-demo'],origin:'alinhamento semanal (qui)',prov:'observado',source:'PROCESSED/2026/10/alinhamento-semanal.md',hist:[[fmt(T0),'extraída do /dump','observado']]},{id:'ACT-0031',title:'Lista de produtores da feira',list:'waiting',owner:'marina-demo',status:'aberta',due:'2026-10-21',effort:null,project:'PROJ-4',deliv:'PROJ-4.1',prio:'normal',people:['marina-demo'],origin:'alinhamento semanal (qui)',prov:'observado',source:'PROCESSED/2026/10/alinhamento-semanal.md',hist:[[fmt(T0),'extraída do /dump','observado']]});
+     lines:['lendo vault/RAW/inbox/ · '+S.inbox+' itens','arquivando em RAW/2026/10/','classificando: reunião "alinhamento-semanal", nota "ideias-cardapio"','$ brain add lote.json','✓ TASK-0030 · TASK-0031 · DEC-0007','$ brain render','inbox: 0 restantes'],
+     done:function(){S.inbox=0;A.push({id:'TASK-0030',title:'Enviar notas do alinhamento ao time',list:'mine',status:'aberta',due:'2026-10-17',effort:'30m',project:'PROJ-1',deliv:null,prio:'normal',people:['heitor-demo'],origin:'alinhamento semanal (qui)',prov:'observado',source:'PROCESSED/2026/10/alinhamento-semanal.md',hist:[[fmt(T0),'extraída do /dump','observado']]},{id:'TASK-0031',title:'Lista de produtores da feira',list:'waiting',owner:'marina-demo',status:'aberta',due:'2026-10-21',effort:null,project:'PROJ-4',deliv:'PROJ-4.1',prio:'normal',people:['marina-demo'],origin:'alinhamento semanal (qui)',prov:'observado',source:'PROCESSED/2026/10/alinhamento-semanal.md',hist:[[fmt(T0),'extraída do /dump','observado']]});
        DEC.unshift({id:'DEC-0007',date:fmt(T0),title:'Treinamento da equipe só depois do manual v1',by:['heitor-demo'],project:'PROJ-3',ctx:'alinhamento semanal',why:'Evitar treinar duas vezes.',source:'PROCESSED/2026/10/alinhamento-semanal.md',prov:'observado'})}});
   }
   if(kind==='update')agentBox({slash:'/update',title:'Atualizar tudo (/update)',bullets:['Lê '+SRC.filter(function(x){return x.in_watch}).length+' fonte(s) do watch.toml pelo MCP de leitura: '+SRC.filter(function(x){return x.in_watch}).map(function(x){return x.key}).join(', '),'Grava cada leitura com brain snapshot (hash igual = silêncio)','Processa a inbox (/dump), roda o render e sincroniza a memória, se ligada','Precisa de permissão para as ferramentas MCP de leitura ([runner].allow ou [runner].command no brain.toml)'],lines:['watch.toml: 4 fontes','slack-padaria-socios: 2 novidades','gmail-hoje: sem novidades','gcal-14d: sem novidades','jira-me: ⚠ token expirado (2 falhas seguidas)','/dump no que chegou','$ brain render','✓ atualizado: 1 de 4 fontes com novidade · 1 falha'],done:function(){}});
@@ -1069,16 +1069,16 @@ term.addEventListener('click',function(e){
 term.addEventListener('wheel',function(e){var b=e.target.closest&&e.target.closest('.pb[data-pb]');if(!b||S.modal)return;e.preventDefault();var p=+b.dataset.pb;if(p===1&&S.tab[1]===0)return;S.p=p;move(e.deltaY>0?1:-1)},{passive:false});
 term.addEventListener('dblclick',function(e){if(!S.modal&&e.target.closest('.r[data-p]')){if(!pressKey('enter'))zoom()}});
 function jump(id){
-  var map=[[/^ACT-/,function(){var a=getA(id);return {p:2,t:['mine','waiting','watching'].indexOf(a.list),all:!isOpen(a)}}],[/^(GOAL|PROJ)-\d/,function(){return {p:3,t:0}}],[/^PROP-/,function(){return {p:4,t:0}}],[/^MSG-/,function(){return {p:4,t:1}}],[/^d:/,function(){return {p:4,t:2}}],[/^PUB-/,function(){return {p:4,t:3}}]];
+  var map=[[/^TASK-/,function(){var a=getA(id);return {p:2,t:['mine','waiting','watching'].indexOf(a.list),all:!isOpen(a)}}],[/^(GOAL|PROJ)-\d/,function(){return {p:3,t:0}}],[/^PROP-/,function(){return {p:4,t:0}}],[/^MSG-/,function(){return {p:4,t:1}}],[/^d:/,function(){return {p:4,t:2}}],[/^PUB-/,function(){return {p:4,t:3}}]];
   for(var i=0;i<map.length;i++)if(map[i][0].test(id)){var g=map[i][1]();S.p=g.p;S.tab[g.p]=g.t;if(g.all)S.showAll=true;S.filter='';S.collapsed={};var ix=items(g.p,g.t).map(function(x){return x.id}).indexOf(id);if(ix<0&&/^PROP-/.test(id)){S.showAll=true;ix=items(g.p,g.t).map(function(x){return x.id}).indexOf(id)}if(ix>=0)setSel(g.p,ix);draw();return}
 }
 
 /* ---------------- cenas, tema, mapa de teclas ---------------- */
-var SCENES=[['Hoje',function(){S.p=1;S.tab[1]=0},0],['Ficha de uma ação',function(){jump('ACT-0021')}],['Árvore do plano',function(){jump('PROJ-2')}],['Aprovar mensagem',function(){jump('MSG-0002')}],['Foco da semana',function(){jump('d:2026-10-16')}],['Saúde',function(){S.p=1;S.tab[1]=1;setSel(1,1)}]];
+var SCENES=[['Hoje',function(){S.p=1;S.tab[1]=0},0],['Ficha de uma ação',function(){jump('TASK-0021')}],['Árvore do plano',function(){jump('PROJ-2')}],['Aprovar mensagem',function(){jump('MSG-0002')}],['Foco da semana',function(){jump('d:2026-10-16')}],['Saúde',function(){S.p=1;S.tab[1]=1;setSel(1,1)}]];
 var sc=$('#scenes');
 SCENES.forEach(function(s){var b=document.createElement('button');b.type='button';b.className='chip';b.textContent=s[0];b.addEventListener('click',function(){if(S.modal)closeModal();S.zoom=false;s[1]();draw();term.focus({preventScroll:true})});sc.appendChild(b)});
 var pal=document.createElement('button');pal.type='button';pal.className='chip';pal.textContent='Paleta de comandos (:)';pal.addEventListener('click',function(){S.zoom=false;palette()});sc.appendChild(pal);
-var cl=document.createElement('button');cl.type='button';cl.className='chip';cl.textContent='Fechar uma ação (c)';cl.addEventListener('click',function(){if(S.modal)closeModal();S.zoom=false;jump('ACT-0021');closeAction()});sc.appendChild(cl);
+var cl=document.createElement('button');cl.type='button';cl.className='chip';cl.textContent='Fechar uma ação (c)';cl.addEventListener('click',function(){if(S.modal)closeModal();S.zoom=false;jump('TASK-0021');closeAction()});sc.appendChild(cl);
 var th=$('#theme'),modes=['auto','escuro','claro'],mi=0;
 th.addEventListener('click',function(){mi=(mi+1)%3;var r=document.documentElement;if(mi===0)r.removeAttribute('data-theme');else r.setAttribute('data-theme',mi===1?'dark':'light');th.textContent='tema: '+modes[mi]});
 function buildKeymap(){

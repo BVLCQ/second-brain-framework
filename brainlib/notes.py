@@ -1,6 +1,6 @@
 """Notas avulsas: o dono escreve, o arquivo cai na inbox (a porta única) e o /dump arquiva depois.
 
-Nome: `<VÍNCULO>-AAAA-MM-DD-note.md` (`ACT-0146-…`, `GOAL-1-…`, `PROJ-2-…`, `PROJ-2.1-…`; os nomes antigos `A-0146-…`, `G1-…`, `P2-…` ainda são lidos); sem vínculo, `note-…`.
+Nome: `<VÍNCULO>-AAAA-MM-DD-note.md` (`TASK-0146-…`, `GOAL-1-…`, `PROJ-2-…`, `PROJ-2.1-…`; os nomes antigos `A-0146-…`, `G1-…`, `P2-…` ainda são lidos); sem vínculo, `note-…`.
 Mesmo dia e mesmo alvo ganham sufixo: `…-note-2.md`. O arquivo carrega um frontmatter com o vínculo e a
 hora (AAAA-MM-DD HH:mm), então o TUI mostra a nota no detalhe do alvo sem depender do /dump — na inbox
 ou, depois de arquivada, em `RAW/<ano>/<mês>/` (conteúdo imutável: o cérebro só lê).
@@ -21,7 +21,7 @@ LINK_RE = ids.LINK_ID
 # o nome aceita também os prefixos antigos (nota ainda não migrada): o vínculo é sempre devolvido no formato novo
 NAME_RE = re.compile(rf"^(?P<link>{ids.LINK_SRC}|{ids.LEGACY_LINK_SRC}|note)"
                      r"-(?P<day>\d{4}-\d{2}-\d{2})-note(?:-(?P<n>\d+))?\.md$")
-KINDS = {"ACT": "ação", "GOAL": "goal", "PROJ": "projeto"}
+KINDS = {"TASK": "ação", "GOAL": "goal", "PROJ": "projeto"}
 MAX_CHARS = 200_000
 
 
@@ -55,11 +55,11 @@ def kind_of(link: str) -> str:
 
 
 def normalize_link(value: str) -> str:
-    """'a-146' → 'ACT-0146'; 'p2.1' → 'PROJ-2.1'; 'g1' → 'GOAL-1'. Vazio continua vazio; formato inválido devolve o texto em maiúsculas."""
+    """'a-146' → 'TASK-0146'; 'p2.1' → 'PROJ-2.1'; 'g1' → 'GOAL-1'. Vazio continua vazio; formato inválido devolve o texto em maiúsculas."""
     v = (value or "").strip().upper()
-    m = re.fullmatch(r"(?:A|ACT)-?(\d{1,})", v)
+    m = re.fullmatch(r"(?:A|TASK)-?(\d{1,})", v)
     if m:
-        return f"ACT-{int(m.group(1)):04d}"
+        return f"TASK-{int(m.group(1)):04d}"
     return ids.normalize(v)
 
 
@@ -68,8 +68,8 @@ def check_link(brain, link: str) -> str:
     if not link:
         return ""
     if not LINK_RE.match(link):
-        return f"vínculo inválido: {link!r} (use ACT-####, GOAL-#, PROJ-# ou PROJ-#.#)"
-    if link.startswith("ACT-"):
+        return f"vínculo inválido: {link!r} (use TASK-####, GOAL-#, PROJ-# ou PROJ-#.#)"
+    if link.startswith("TASK-"):
         return "" if link in brain.state.actions else f"{link}: ação não encontrada"
     return "" if brain.plan.has(link) else f"{link}: não existe em PLANNING/goals.md"
 

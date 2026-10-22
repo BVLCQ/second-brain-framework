@@ -11,4 +11,4 @@ description: "Pergunta livre ao cérebro ('o que sabemos sobre X?'). Responde se
 4. Responda diferenciando proveniência: "a política diz" ≠ "alguém comentou numa reunião" ≠ "você declarou".
 5. **Não consta** é resposta válida. Não complete com conhecimento de mundo se o vault não tem.
 
-Cite caminho (`PROCESSED/…`, `ledger/ACT-####`, `PLANNING/goals.md`) em toda afirmação.
+Cite caminho (`PROCESSED/…`, `ledger/TASK-####`, `PLANNING/goals.md`) em toda afirmação.

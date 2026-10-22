@@ -36,7 +36,7 @@ TOOLS = [
      _schema({"name": S}, ["name"])),
     ("brain_decisions", "Decisões, filtráveis por projeto, pessoa e data mínima (AAAA-MM-DD).",
      _schema({"project": S, "person": S, "since": S})),
-    ("brain_actions", "Ações (ACT-####). list: mine|waiting|watching. Por padrão só abertas.",
+    ("brain_actions", "Ações (TASK-####). list: mine|waiting|watching. Por padrão só abertas.",
      _schema({"list": S, "project": S, "owner": S, "include_closed": {"type": "boolean"}})),
     ("brain_timeline", "Linha do tempo: o que aconteceu (dias para trás) e prazos (dias à frente).",
      _schema({"days_back": I, "days_ahead": I})),

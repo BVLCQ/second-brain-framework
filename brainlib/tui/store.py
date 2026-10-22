@@ -267,7 +267,7 @@ class Store:
         return set()
 
     def node_for(self, text: str) -> str | None:
-        """O texto do filtro é exatamente um id (ACT-####, DEC-####, GOAL-#, PROJ-#, PROJ-#.#…; os nomes antigos também)?
+        """O texto do filtro é exatamente um id (TASK-####, DEC-####, GOAL-#, PROJ-#, PROJ-#.#…; os nomes antigos também)?
         Devolve o id no formato do ledger."""
         t = ids.normalize((text or "").strip().upper())
         if not self.ID_RE.match(t):
@@ -307,7 +307,7 @@ class Store:
         return sorted((d for d in self.m["decisions"] if d["project"] in pids), key=lambda d: d["date"] or "", reverse=True)
 
     def notes_of(self, link: str) -> list[notes_mod.Note]:
-        """Notas vinculadas a ACT-####/GOAL-#/PROJ-#/PROJ-#.#, da mais nova para a mais antiga."""
+        """Notas vinculadas a TASK-####/GOAL-#/PROJ-#/PROJ-#.#, da mais nova para a mais antiga."""
         return self.notes_by_link.get(link, [])
 
     def person_name(self, pid: str) -> str:
@@ -534,7 +534,7 @@ class Store:
 
     def _locate_exec(self, node: str) -> tuple[int, int] | None:
         node = ids.normalize(node)
-        if node.startswith("ACT-"):
+        if node.startswith("TASK-"):
             a = self.by_action.get(node)
             return (2, ["mine", "waiting", "watching"].index(a["list"])) if a else None
         if ids.PLAN_NODE.match(node):

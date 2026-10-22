@@ -681,7 +681,7 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--json", action="store_true")
     p.set_defaults(fn=cmd_person)
 
-    p = sub.add_parser("action", help="ações ACT-####")
+    p = sub.add_parser("action", help="ações TASK-####")
     acs = p.add_subparsers(dest="acmd", required=True)
     x = acs.add_parser("open")
     x.add_argument("title")
@@ -769,7 +769,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("delivery", help="entregas WIN-#### (conquistas)")
     p.add_argument("title")
-    p.add_argument("--ref", help="ACT-#### / PROJ-# / PROJ-#.# / GOAL-#")
+    p.add_argument("--ref", help="TASK-#### / PROJ-# / PROJ-#.# / GOAL-#")
     p.add_argument("--result")
     p.add_argument("--evidence")
     p.add_argument("--impact")
@@ -1004,10 +1004,10 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--out", help="pasta de saída (padrão: temporária)")
     p.set_defaults(fn=cmd_video)
 
-    p = sub.add_parser("note", help="notas avulsas na inbox, com vínculo opcional a ACT-####/GOAL-#/PROJ-#/PROJ-#.#")
+    p = sub.add_parser("note", help="notas avulsas na inbox, com vínculo opcional a TASK-####/GOAL-#/PROJ-#/PROJ-#.#")
     ns = p.add_subparsers(dest="ncmd", required=True)
     x = ns.add_parser("add", help="cria AAAA…-note.md na inbox (o /dump arquiva)")
-    x.add_argument("--link", help="ACT-#### · GOAL-# · PROJ-# · PROJ-#.# (opcional; os nomes antigos A-/G#/P# valem)")
+    x.add_argument("--link", help="TASK-#### · GOAL-# · PROJ-# · PROJ-#.# (opcional; os nomes antigos A-/G#/P# valem)")
     x.add_argument("--text", help="texto da nota (padrão: stdin)")
     x.add_argument("--json", action="store_true")
     x = ns.add_parser("edit", help="reescreve o texto de uma nota que ainda está na inbox")
@@ -1098,7 +1098,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("migrate", help="migrações de formato (exceção histórica ao append-only, com backup): `migrate ids`")
     ms = p.add_subparsers(dest="what", required=True)
-    x = ms.add_parser("ids", help="A-0146→ACT-0146, G1→GOAL-1, P3.2→PROJ-3.2 em ledger, PLANNING, notas, PROCESSED, reports e nomes de arquivo")
+    x = ms.add_parser("ids", help="A-0146→TASK-0146, G1→GOAL-1, P3.2→PROJ-3.2 em ledger, PLANNING, notas, PROCESSED, reports e nomes de arquivo")
     x.add_argument("--apply", action="store_true", help="aplica (sem isto é dry-run: só escreve o relatório em vault/reports/migration/)")
     x.add_argument("--include-external", action="store_true",
                    help="migra também G#/P# em RAW externo (reuniões, Slack…), onde 'P1' costuma ser outra coisa")

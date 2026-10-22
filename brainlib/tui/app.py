@@ -49,11 +49,11 @@ def _editor_argv() -> list[str]:
 
 CMD_CATALOG = [               # paleta de comandos: nome, linha da CLI, (face, painel, aba, tecla[, id])
     ("Nova ação", 'brain action open "…" --by owner', (0, 2, 0, "n")),
-    ("Fechar ação", 'brain action close ACT-#### --how "…"', (0, 2, 0, "c")),
-    ("Editar ação", "brain action update ACT-#### …", (0, 2, 0, "e")),
-    ("Prazo da ação", "brain action update ACT-#### --due …", (0, 2, 0, "t")),
-    ("Descartar ação", 'brain action drop ACT-#### --reason "…"', (0, 2, 0, "D")),
-    ("Reabrir ação", 'brain action reopen ACT-#### --reason "…"', (0, 2, 0, "o")),
+    ("Fechar ação", 'brain action close TASK-#### --how "…"', (0, 2, 0, "c")),
+    ("Editar ação", "brain action update TASK-#### …", (0, 2, 0, "e")),
+    ("Prazo da ação", "brain action update TASK-#### --due …", (0, 2, 0, "t")),
+    ("Descartar ação", 'brain action drop TASK-#### --reason "…"', (0, 2, 0, "D")),
+    ("Reabrir ação", 'brain action reopen TASK-#### --reason "…"', (0, 2, 0, "o")),
     ("O que me devem", "brain action list --list waiting", (0, 2, 1, None)),
     ("Cobrar alguém", 'brain outbox draft --to … --text "…"', (0, 2, 1, "m")),
     ("Árvore do plano", "brain plan show", (0, 3, 0, None)),
@@ -112,7 +112,7 @@ CMD_CATALOG = [               # paleta de comandos: nome, linha da CLI, (face, p
     ("Processar a inbox", "agente: /dump", (0, 1, 0, "d")),
     ("Brief do dia", "agente: /brief", (0, 1, 0, "b")),
     ("Buscar no ledger", 'brain search "…"', (None, None, None, "g")),
-    ("Nova nota", 'brain note add --link ACT-#### --text "…"', (None, None, None, "N")),
+    ("Nova nota", 'brain note add --link TASK-#### --text "…"', (None, None, None, "N")),
     ("Ver o log de comandos", "painel 6", (0, 6, 0, None)),
     # face Portfólio
     ("Visão do portfólio", "brain opportunity list --sort score", (1, 1, 0, None)),
@@ -1201,7 +1201,7 @@ class BrainApp(PortfolioKeys, App):
             Field("deliv", "entregável", ph="9 (do projeto escolhido) ou PROJ-#.# · opcional", value=pre.get("deliv", ""),
                   check=self._deliv_check, res=self._deliv_res),
             Field("people", "pessoas", ph="marina-demo, heitor-demo (opcional)"),
-            Field("blocked", "bloqueada por", ph="ACT-#### (opcional)"),
+            Field("blocked", "bloqueada por", ph="TASK-#### (opcional)"),
             Field("link", "link", ph="URL (opcional)")],
             build_and_remember, sub="Equivalente ao /todo. Sem prazo, o agente oferece uma sugestão (rosa).",
             after=after_suggest))
@@ -1258,7 +1258,7 @@ class BrainApp(PortfolioKeys, App):
 
         self.form(FormSpec("Nova nota", [
             Field("text", "nota", value=pre.get("text", ""), req=True, multi=True, ph="escreva à vontade: ideias, contexto, o que ouviu…"),
-            Field("link", "vínculo", value=pre.get("link", link0), ph="ACT-#### · GOAL-# · PROJ-# · PROJ-#.# (opcional)", check=err, res=res)],
+            Field("link", "vínculo", value=pre.get("link", link0), ph="TASK-#### · GOAL-# · PROJ-# · PROJ-#.# (opcional)", check=err, res=res)],
             build, render=False, intercept=intercept,
             sub="Cai na inbox como arquivo .md (nome: vínculo-data-note). O /dump arquiva no RAW; até lá e depois, "
                 "a nota aparece no detalhe do vínculo, abaixo do histórico. Markdown: ctrl+o abre no seu editor."))
@@ -1326,7 +1326,7 @@ class BrainApp(PortfolioKeys, App):
             Field("project", "projeto", choice=["—"] + self.store.project_ids(), value=proj0),
             Field("deliv", "entregável", value=deliv_shown, ph="só o número, no projeto escolhido (9 → PROJ-1.9), ou PROJ-#.#",
                   check=self._deliv_check, res=self._deliv_res),
-            Field("blocked", "bloqueada por", value=blocked0, ph="ACT-#### (a CLI não remove bloqueio)"),
+            Field("blocked", "bloqueada por", value=blocked0, ph="TASK-#### (a CLI não remove bloqueio)"),
             Field("people", "pessoas", ph="adiciona: marina-demo, heitor-demo"),
             Field("list", "lista", choice=["mine", "waiting", "watching"], value=a["list"]),
             Field("owner", "dono", value=owner0, ph="reatribui: id ou alias"),
@@ -1526,7 +1526,7 @@ class BrainApp(PortfolioKeys, App):
         self.form(FormSpec("Rascunhar mensagem no Slack", [
             Field("to", "para", value=to, req=True, ph="id da pessoa ou #canal", check=self._check_recipient),
             Field("text", "texto", value=text, req=True, ph="Oi …"),
-            Field("ref", "ref", value=ref, ph="ACT-####"), Field("why", "por quê", value=why)], build,
+            Field("ref", "ref", value=ref, ph="TASK-####"), Field("why", "por quê", value=why)], build,
             sub="O agente envia depois da sua aprovação, como você. O texto aprovado fica travado por hash.", after=after))
 
     def f_approve_msg(self) -> None:
@@ -1613,7 +1613,7 @@ class BrainApp(PortfolioKeys, App):
                     c += [opt, v[key]]
             return [c + ["--by", "owner"]]
 
-        self.form(FormSpec("Registrar entrega", [Field("title", "título", req=True), Field("ref", "ligada a", ph="PROJ-2 · ACT-#### · GOAL-1"),
+        self.form(FormSpec("Registrar entrega", [Field("title", "título", req=True), Field("ref", "ligada a", ph="PROJ-2 · TASK-#### · GOAL-1"),
                                                  Field("result", "resultado"), Field("impact", "impacto")], build,
                            sub="Conquista com resultado, sem precisar fechar uma ação."))
 

@@ -119,17 +119,17 @@ class LedgerTests(unittest.TestCase):
             b = _brain(Path(td))
             a1 = b.record_one({"type": "action.opened", "by": "owner",
                                "data": {"title": "Revisar", "owner": "marina-demo", "list": "waiting"}})
-            self.assertEqual(a1["id"], "ACT-0001")
+            self.assertEqual(a1["id"], "TASK-0001")
             a2 = b.record_one({"type": "action.opened", "by": "owner",
                                "data": {"title": "Publicar", "owner": "eu", "due": "2026-10-12",
-                                        "effort_min": 60, "project": "PROJ-1", "blocked_by": ["ACT-0001"]}})
-            self.assertEqual(a2["id"], "ACT-0002")
-            self.assertEqual(b.state.blocked(b.state.actions["ACT-0002"]), ["ACT-0001"])
-            b.record_one({"type": "action.closed", "id": "ACT-0001", "by": "owner",
+                                        "effort_min": 60, "project": "PROJ-1", "blocked_by": ["TASK-0001"]}})
+            self.assertEqual(a2["id"], "TASK-0002")
+            self.assertEqual(b.state.blocked(b.state.actions["TASK-0002"]), ["TASK-0001"])
+            b.record_one({"type": "action.closed", "id": "TASK-0001", "by": "owner",
                           "data": {"how": "revisou"}})
             # cascade is CLI-level; ledger just closes
-            self.assertFalse(b.state.actions["ACT-0001"].open)
-            self.assertEqual(b.state.blocked(b.state.actions["ACT-0002"]), [])
+            self.assertFalse(b.state.actions["TASK-0001"].open)
+            self.assertEqual(b.state.blocked(b.state.actions["TASK-0002"]), [])
             self.assertEqual(b.validate_all(), [])
 
     def test_suggested_due_lifecycle(self):
@@ -279,18 +279,18 @@ class FocusTests(unittest.TestCase):
             plan = focus.build_plan(b, busy, days=5)
             self.assertTrue(plan["blocks"])
             first = plan["blocks"][0]
-            self.assertEqual(first["action"], "ACT-0001")
+            self.assertEqual(first["action"], "TASK-0001")
             # não começa dentro do busy (11-12 + buffer tratado em parse_busy; aqui busy já cortado)
             start = util.parse_dt(first["start"])
             self.assertFalse(datetime(2026, 10, 9, 11, 0, tzinfo=util.tz()) <= start <
                              datetime(2026, 10, 9, 12, 0, tzinfo=util.tz()))
 
     def test_ics_roundtrip_shape(self):
-        ics = focus.to_ics("FOCUS-0001", [{"action": "ACT-0001", "start": "2026-10-09T14:00:00-03:00",
+        ics = focus.to_ics("FOCUS-0001", [{"action": "TASK-0001", "start": "2026-10-09T14:00:00-03:00",
                                        "end": "2026-10-09T15:00:00-03:00", "minutes": 60}],
-                           {"ACT-0001": "Ler"}, "Foco")
+                           {"TASK-0001": "Ler"}, "Foco")
         self.assertIn("BEGIN:VEVENT", ics)
-        self.assertIn("SUMMARY:Foco · ACT-0001 · Ler", ics)
+        self.assertIn("SUMMARY:Foco · TASK-0001 · Ler", ics)
 
     def test_apply_requires_approval(self):
         with tempfile.TemporaryDirectory() as td:
@@ -378,18 +378,18 @@ class NoteTests(unittest.TestCase):
             b = _brain(Path(td))
             b.record_one({"type": "action.opened", "by": "owner", "data": {"title": "x", "owner": "eu"}})
             names = [notes_mod.create(b, "t", link).name for link in ("a-1", "GOAL-1", "PROJ-1", "PROJ-1.2", "", "PROJ-1")]
-            self.assertEqual(names, ["ACT-0001-2026-10-09-note.md", "GOAL-1-2026-10-09-note.md", "PROJ-1-2026-10-09-note.md",
+            self.assertEqual(names, ["TASK-0001-2026-10-09-note.md", "GOAL-1-2026-10-09-note.md", "PROJ-1-2026-10-09-note.md",
                                      "PROJ-1.2-2026-10-09-note.md", "note-2026-10-09-note.md", "PROJ-1-2026-10-09-note-2.md"])
             got = {n.path.split("/")[-1]: n for n in notes_mod.scan(b.inst)}
-            n = got["ACT-0001-2026-10-09-note.md"]
-            self.assertEqual((n.link, n.kind, n.created, n.text, n.archived), ("ACT-0001", "ação", "2026-10-09 10:00", "t", False))
+            n = got["TASK-0001-2026-10-09-note.md"]
+            self.assertEqual((n.link, n.kind, n.created, n.text, n.archived), ("TASK-0001", "ação", "2026-10-09 10:00", "t", False))
             self.assertEqual(got["note-2026-10-09-note.md"].link, "")
             self.assertEqual(got["PROJ-1.2-2026-10-09-note.md"].kind, "entregável")
 
     def test_rejects_unknown_link_empty_text_and_nightly(self):
         with tempfile.TemporaryDirectory() as td:
             b = _brain(Path(td))
-            for text, link in (("x", "ACT-0009"), ("x", "PROJ-9"), ("x", "../x"), ("  \n", "")):
+            for text, link in (("x", "TASK-0009"), ("x", "PROJ-9"), ("x", "../x"), ("  \n", "")):
                 with self.assertRaises(util.BrainError):
                     notes_mod.create(b, text, link)
             os.environ["BRAIN_NIGHTLY"] = "1"
@@ -637,7 +637,7 @@ class GcalTests(unittest.TestCase):
 
         cal = GoogleCalendar(_inst(Path(tempfile.mkdtemp())), http=http, token="t")
         with self.assertRaises(util.BrainError):
-            cal.delete_guarded("evt1", "ACT-0001")
+            cal.delete_guarded("evt1", "TASK-0001")
         self.assertFalse(any(c[0] == "DELETE" for c in calls))
 
     def test_insert_falls_back_without_focustime(self):
@@ -1310,7 +1310,7 @@ class PortfolioStateTests(unittest.TestCase):
             self.assertEqual(self._proc(b)["id"], "PROC-0001")
             self.assertEqual(self._proc(b, title="Outro")["id"], "PROC-0002")
             self.assertEqual(self._opp(b)["id"], "OPP-0001")
-            self.assertEqual(b.state.next_id("ACT"), "ACT-0001")
+            self.assertEqual(b.state.next_id("TASK"), "TASK-0001")
             self.assertEqual(b.validate_all(), [])
 
     def test_process_hours_and_validation(self):
@@ -1803,34 +1803,34 @@ class IdsTests(unittest.TestCase):
     def test_normalize_translates_legacy_and_keeps_new(self):
         n = ids.normalize
         self.assertEqual([n(x) for x in ("A-0146", "a-146", "D-12", "E-0003", "R-7", "M-2", "S-1", "F-1")],
-                         ["ACT-0146", "ACT-0146", "DEC-0012", "WIN-0003", "PROP-0007", "MSG-0002", "PUB-0001", "FOCUS-0001"])
+                         ["TASK-0146", "TASK-0146", "DEC-0012", "WIN-0003", "PROP-0007", "MSG-0002", "PUB-0001", "FOCUS-0001"])
         self.assertEqual([n(x) for x in ("G1", "g01", "P3", "p3.2", "P10.12")],
                          ["GOAL-1", "GOAL-1", "PROJ-3", "PROJ-3.2", "PROJ-10.12"])
-        for new in ("ACT-0146", "DEC-0012", "WIN-0003", "PROP-0007", "MSG-0002", "PUB-0001", "FOCUS-0001", "PROC-0003",
+        for new in ("TASK-0146", "DEC-0012", "WIN-0003", "PROP-0007", "MSG-0002", "PUB-0001", "FOCUS-0001", "PROC-0003",
                     "OPP-0004", "GOAL-1", "PROJ-3", "PROJ-3.2"):
             self.assertEqual(n(new), new)
         # o que não é ID fica como veio (URL, texto, slug de área ou pessoa, lista com mistura)
         for other in ("https://example.com/P3", "marina-demo", "operacoes", "Reunião P3 de ontem", "", "A-1B"):
             self.assertEqual(n(other), other)
-        self.assertEqual(n(["A-1", "G2", "texto"]), ["ACT-0001", "GOAL-2", "texto"])
-        self.assertEqual(ids.normalize_csv("A-1, P2.1 ,x"), "ACT-0001,PROJ-2.1,x")
+        self.assertEqual(n(["A-1", "G2", "texto"]), ["TASK-0001", "GOAL-2", "texto"])
+        self.assertEqual(ids.normalize_csv("A-1, P2.1 ,x"), "TASK-0001,PROJ-2.1,x")
         self.assertEqual((ids.entity_of("A-0001"), ids.entity_of("PROJ-3.2"), ids.entity_of("GOAL-1"), ids.entity_of("x")),
                          ("action", "deliverable", "goal", None))
-        self.assertEqual((ids.make("action", 147), ids.make("goal", 4), ids.make("project", 12)), ("ACT-0147", "GOAL-4", "PROJ-12"))
+        self.assertEqual((ids.make("action", 147), ids.make("goal", 4), ids.make("project", 12)), ("TASK-0147", "GOAL-4", "PROJ-12"))
 
     def test_legacy_input_is_stored_in_the_new_format_and_sequence_continues(self):
         with tempfile.TemporaryDirectory() as td:
             b = _brain(Path(td))
             ev = b.record_one({"type": "action.opened", "by": "owner", "data": {
                 "title": "Ligada ao plano", "owner": "eu", "project": "P1", "deliverable": "P1.1"}})
-            self.assertEqual((ev["id"], ev["data"]["project"], ev["data"]["deliverable"]), ("ACT-0001", "PROJ-1", "PROJ-1.1"))
+            self.assertEqual((ev["id"], ev["data"]["project"], ev["data"]["deliverable"]), ("TASK-0001", "PROJ-1", "PROJ-1.1"))
             b.record_one({"type": "action.opened", "by": "owner", "data": {
                 "title": "Bloqueada", "owner": "eu", "blocked_by": ["A-0001"]}})
-            self.assertEqual(b.state.actions["ACT-0002"].blocked_by, ["ACT-0001"])
+            self.assertEqual(b.state.actions["TASK-0002"].blocked_by, ["TASK-0001"])
             b.record_one({"type": "action.updated", "id": "A-0002", "by": "owner", "data": {"note": "x"}})   # id antigo na entrada
             b.record_one({"type": "delivery.recorded", "by": "owner", "data": {"title": "Entrega", "ref": "P1.2"}})
             self.assertEqual(b.state.deliveries["WIN-0001"].ref, "PROJ-1.2")
-            self.assertEqual(b.state.next_id("ACT"), "ACT-0003")
+            self.assertEqual(b.state.next_id("TASK"), "TASK-0003")
             lines = b.ledger_path.read_text(encoding="utf-8")
             self.assertNotIn('"A-0', lines)
             self.assertNotIn('"P1', lines)
@@ -1852,12 +1852,12 @@ class IdsTests(unittest.TestCase):
                 for e in old:
                     fh.write(json.dumps(e) + "\n")
             b2 = Brain(b.inst)
-            self.assertEqual(sorted(b2.state.actions), ["ACT-0146", "ACT-0147"])
-            self.assertEqual(b2.state.actions["ACT-0147"].blocked_by, ["ACT-0146"])
-            self.assertEqual(b2.state.deliveries["WIN-0003"].ref, "ACT-0146")
+            self.assertEqual(sorted(b2.state.actions), ["TASK-0146", "TASK-0147"])
+            self.assertEqual(b2.state.actions["TASK-0147"].blocked_by, ["TASK-0146"])
+            self.assertEqual(b2.state.deliveries["WIN-0003"].ref, "TASK-0146")
             self.assertIn("GOAL-1", b2.state.progress)
             self.assertEqual(b2.validate_all(), [])
-            self.assertEqual(b2.record_one({"type": "action.opened", "by": "owner", "data": {"title": "Nova", "owner": "eu"}})["id"], "ACT-0148")
+            self.assertEqual(b2.record_one({"type": "action.opened", "by": "owner", "data": {"title": "Nova", "owner": "eu"}})["id"], "TASK-0148")
 
     def test_goals_md_reads_both_formats_and_writes_the_new_one(self):
         legacy = ("# PLANNING\n\n## G1 — Meta\n- status: ativo\n\n### P1 — Projeto\n- status: ativo\n"
@@ -1893,7 +1893,7 @@ class IdsTests(unittest.TestCase):
                                             env={**os.environ, "BRAIN_HOME": td})
             r = run("action", "open", "Pelo CLI", "--project", "P1", "--deliverable", "P1.2", "--by", "owner")
             self.assertEqual(r.returncode, 0, r.stderr)
-            self.assertIn("ACT-0001", r.stdout)
+            self.assertIn("TASK-0001", r.stdout)
             self.assertIn("PROJ-1", r.stdout)
             r = run("action", "update", "A-0001", "--note", "x", "--by", "owner")
             self.assertEqual(r.returncode, 0, r.stderr)
@@ -1904,7 +1904,7 @@ class IdsTests(unittest.TestCase):
             self.assertIn("GOAL-1", run("plan", "show").stdout)
             r = run("note", "add", "--link", "a-1", "--text", "nota de teste")
             self.assertEqual(r.returncode, 0, r.stderr)
-            self.assertTrue(any(p.name.startswith("ACT-0001-") for p in (Path(td) / "vault" / "RAW" / "inbox").glob("*")))
+            self.assertTrue(any(p.name.startswith("TASK-0001-") for p in (Path(td) / "vault" / "RAW" / "inbox").glob("*")))
             self.assertIn("✓", run("validate").stdout)
 
     def test_old_note_names_are_still_read_and_linked_to_the_new_id(self):
@@ -1914,14 +1914,14 @@ class IdsTests(unittest.TestCase):
             (inbox / "A-0001-2026-10-09-note.md").write_text("---\ntipo: nota\nvinculo: A-0001\ncriada: 2026-10-09 10:00\n---\ncorpo", encoding="utf-8")
             (inbox / "P1-2026-10-09-note.md").write_text("sem frontmatter", encoding="utf-8")
             got = {n.link for n in notes_mod.scan(b.inst)}
-            self.assertEqual(got, {"ACT-0001", "PROJ-1"})
+            self.assertEqual(got, {"TASK-0001", "PROJ-1"})
 
 
 class MigrateIdsTests(unittest.TestCase):
     """Passo 2: `brain migrate ids` — a instância de demo é levada de volta aos nomes antigos e migrada de novo;
     a volta tem de reproduzir exatamente o original (ledger, hashes e arquivos)."""
 
-    INV = [(r"(?<![A-Za-z0-9_-])ACT-(\d{4})", r"A-\1"), (r"(?<![A-Za-z0-9_-])DEC-(\d{4})", r"D-\1"),
+    INV = [(r"(?<![A-Za-z0-9_-])TASK-(\d{4})", r"A-\1"), (r"(?<![A-Za-z0-9_-])DEC-(\d{4})", r"D-\1"),
            (r"(?<![A-Za-z0-9_-])WIN-(\d{4})", r"E-\1"), (r"(?<![A-Za-z0-9_-])PROP-(\d{4})", r"R-\1"),
            (r"(?<![A-Za-z0-9_-])MSG-(\d{4})", r"M-\1"), (r"(?<![A-Za-z0-9_-])PUB-(\d{4})", r"S-\1"),
            (r"(?<![A-Za-z0-9_-])FOCUS-(\d{4})", r"F-\1"), (r"(?<![A-Za-z0-9_-])PROJ-(\d+)", r"P\1"),
@@ -1941,7 +1941,7 @@ class MigrateIdsTests(unittest.TestCase):
             demo_mod.cli(argparse.Namespace(dir=str(root), open=False))
         b = Brain(config.load(root))
         from brainlib import outbox as outbox_mod
-        m = outbox_mod.draft(b, "caio-demo", "Olha a ACT-0008 e a PROJ-1.3, por favor.", "ACT-0008", "cobrar")
+        m = outbox_mod.draft(b, "caio-demo", "Olha a TASK-0008 e a PROJ-1.3, por favor.", "TASK-0008", "cobrar")
         outbox_mod.approve(b, m["id"], "enviar 1")
         report = share.export(b, "project", "PROJ-1", "md")
         rel = b.inst.rel(report)
@@ -1951,9 +1951,9 @@ class MigrateIdsTests(unittest.TestCase):
             "quote": "ok", "content_sha": util.sha(report.read_bytes())}})
         fid = next(iter(b.state.focus_plans))
         b.record_one({"type": "focus.approved", "id": fid, "by": "owner", "data": {"quote": "ok", "sha": b.state.focus_plans[fid].sha}})
-        note = b.inst.vault / "RAW" / "2026" / "10" / "notes" / "ACT-0002-2026-10-09-note.md"
+        note = b.inst.vault / "RAW" / "2026" / "10" / "notes" / "TASK-0002-2026-10-09-note.md"
         note.parent.mkdir(parents=True, exist_ok=True)
-        note.write_text("---\ntipo: nota\nvinculo: ACT-0002\ncriada: 2026-10-09 10:00\n---\nVer ACT-0002 e PROJ-2.2.\n", encoding="utf-8")
+        note.write_text("---\ntipo: nota\nvinculo: TASK-0002\ncriada: 2026-10-09 10:00\n---\nVer TASK-0002 e PROJ-2.2.\n", encoding="utf-8")
         orig = {"events": Brain(b.inst).read_events(), "files": {}}
         zones = ("PLANNING", "PROCESSED", "reports", "RAW")
         for p in sorted((b.inst.vault).rglob("*")):
@@ -2018,7 +2018,7 @@ class MigrateIdsTests(unittest.TestCase):
             self.assertIn("+## GOAL-1 —", text)
             self.assertIn("reuniao-externa.md", text)
             self.assertIn("O bug virou P1 no Jira", text)                       # contexto de ±40 caracteres
-            self.assertIn("ACT-0001-2026-10-09-note.md".replace("0001", "0002"), text)   # renomeação listada
+            self.assertIn("TASK-0001-2026-10-09-note.md".replace("0001", "0002"), text)   # renomeação listada
             self.assertFalse((inst.vault / "PROCESSED" / "_ledger" / "MIGRATED-ids").exists())
 
     def test_apply_round_trips_ledger_hashes_files_and_names(self):
@@ -2032,17 +2032,17 @@ class MigrateIdsTests(unittest.TestCase):
             self.assertEqual(events[:-1], orig["events"])                      # ledger idêntico ao original, hashes incluídos
             last = events[-1]
             self.assertEqual((last["type"], last["by"], last["seq"]), ("ids.migrated", "system", orig["events"][-1]["seq"] + 1))
-            self.assertEqual(last["data"]["map"]["A-0002"], "ACT-0002")
+            self.assertEqual(last["data"]["map"]["A-0002"], "TASK-0002")
             self.assertEqual(last["data"]["map"]["P1.2"], "PROJ-1.2")
             self.assertEqual(b.validate_all(), [])
             for rel, text in orig["files"].items():                             # texto e nomes de arquivo voltam ao original
                 self.assertEqual((inst.vault / rel).read_text(encoding="utf-8"), text, rel)
             self.assertFalse(list(inst.vault.rglob("A-0*-note*.md")))
             ext = (inst.vault / "RAW" / "2026" / "10" / "meetings" / "reuniao-externa.md").read_text(encoding="utf-8")
-            self.assertEqual(ext, "Falamos da ACT-0002. O bug virou P1 no Jira (prioridade) e o G1 do trimestre.\n")
+            self.assertEqual(ext, "Falamos da TASK-0002. O bug virou P1 no Jira (prioridade) e o G1 do trimestre.\n")
             self.assertIn('note = "acompanha o GOAL-1"', (inst.config_dir / "watch.toml").read_text(encoding="utf-8"))
             self.assertTrue((inst.vault / "PROCESSED" / "_ledger" / "MIGRATED-ids").exists())
-            self.assertTrue((inst.fresh / "records" / "actions" / "ACT-0001.md").exists())      # FRESH regenerado
+            self.assertTrue((inst.fresh / "records" / "actions" / "TASK-0001.md").exists())      # FRESH regenerado
             self.assertFalse((inst.fresh / "records" / "actions" / "A-0001.md").exists())
             backups = list(inst.vault.parent.glob("brain-pre-ids-migration-*.zip"))
             self.assertEqual(len(backups), 1)
@@ -2054,7 +2054,7 @@ class MigrateIdsTests(unittest.TestCase):
             # a numeração continua e a segunda execução recusa
             top = max(int(k.split("-")[1]) for k in b.state.actions)
             self.assertEqual(b.record_one({"type": "action.opened", "by": "owner", "data": {"title": "Nova", "owner": "voce"}})["id"],
-                             f"ACT-{top + 1:04d}")
+                             f"TASK-{top + 1:04d}")
             again = self.run_cli(inst, "--apply")
             self.assertEqual(again.returncode, 4)
             self.assertIn("já foi migrada", again.stderr)
@@ -2065,7 +2065,7 @@ class MigrateIdsTests(unittest.TestCase):
             r = self.run_cli(inst, "--apply", "--include-external")
             self.assertEqual(r.returncode, 0, r.stderr + r.stdout)
             ext = (inst.vault / "RAW" / "2026" / "10" / "meetings" / "reuniao-externa.md").read_text(encoding="utf-8")
-            self.assertEqual(ext, "Falamos da ACT-0002. O bug virou PROJ-1 no Jira (prioridade) e o GOAL-1 do trimestre.\n")
+            self.assertEqual(ext, "Falamos da TASK-0002. O bug virou PROJ-1 no Jira (prioridade) e o GOAL-1 do trimestre.\n")
 
     def test_refuses_nightly_and_is_a_noop_on_a_new_instance(self):
         with tempfile.TemporaryDirectory() as td:
@@ -2084,7 +2084,7 @@ class MigrateIdsTests(unittest.TestCase):
     def test_rename_conflict_aborts_before_touching_anything(self):
         with tempfile.TemporaryDirectory() as td:
             inst, _ = self.make(td)
-            clash = inst.vault / "RAW" / "2026" / "10" / "notes" / "ACT-0002-2026-10-09-note.md"
+            clash = inst.vault / "RAW" / "2026" / "10" / "notes" / "TASK-0002-2026-10-09-note.md"
             clash.write_text("já existe", encoding="utf-8")
             before = self.tree(inst)
             r = self.run_cli(inst, "--apply")

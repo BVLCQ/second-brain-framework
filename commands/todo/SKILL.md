@@ -1,6 +1,6 @@
 ---
 name: todo
-description: "Cria uma ação ACT-#### a partir do que o dono digitou: '/todo preciso ler X até quarta' → ledger com prazo resolvido, pessoas e projeto linkados. Sem prazo dito, sugere um pelo contexto (rosa até o dono decidir). '/todo prazo ACT-####' sugere prazo para ação existente. Use quando o dono disser 'preciso', 'tenho que', 'lembra de', ou pedir criação direta."
+description: "Cria uma ação TASK-#### a partir do que o dono digitou: '/todo preciso ler X até quarta' → ledger com prazo resolvido, pessoas e projeto linkados. Sem prazo dito, sugere um pelo contexto (rosa até o dono decidir). '/todo prazo TASK-####' sugere prazo para ação existente. Use quando o dono disser 'preciso', 'tenho que', 'lembra de', ou pedir criação direta."
 ---
 
 # /todo — declaração do dono vira ação
@@ -23,7 +23,7 @@ Isto é `[declarado]`. Não passe pela inbox.
 
 ## Sugerir prazo
 
-Quando a ação nasce sem prazo (ou o dono pede `/todo prazo ACT-####`), o agente **sugere** uma data pelo contexto.
+Quando a ação nasce sem prazo (ou o dono pede `/todo prazo TASK-####`), o agente **sugere** uma data pelo contexto.
 Sugestão é julgamento seu; a data fica marcada no ledger (`due_suggested`) e aparece **em rosa** na TUI e no painel
 até o dono definir outra data ou confirmar. O CLI só guarda e colore — você escolhe a data.
 
@@ -39,10 +39,10 @@ Regras: data ≥ hoje, de preferência dia útil; nunca inventar âncora — **s
 ```
 ./brain action open "<título>" --due AAAA-MM-DD --due-suggested --due-reason "entregável PROJ-1.6 vence 30/11; folga de 1 semana" \
   --project PROJ-1 --by agent --prov observado --source chat
-./brain action update ACT-#### --due AAAA-MM-DD --due-suggested --due-reason "…" --by agent --prov observado --source chat
+./brain action update TASK-#### --due AAAA-MM-DD --due-suggested --due-reason "…" --by agent --prov observado --source chat
 ```
 
 Quando é o dono quem cria (`--by owner`) e não disse prazo: crie a ação com `--by owner` e, em seguida, registre a sugestão
 com o `action update … --due-suggested --by agent` acima (sugestão nunca vem como `owner`).
 O dono decide depois: outra data (`action update --due …`, volta às cores normais) ou aceita como está
-(`action update ACT-#### --confirm-due --by owner`). Mostre a data sugerida e o porquê na linha de resposta.
+(`action update TASK-#### --confirm-due --by owner`). Mostre a data sugerida e o porquê na linha de resposta.

@@ -115,7 +115,7 @@ validado (`seq`, `ts`, `type`, `id`, `date`, `actor`, `by`, `prov`, `source`,
 
 | Prefixo | Entidade | Quem numera |
 |---|---|---|
-| `ACT-####` | ação | `./brain` |
+| `TASK-####` | ação | `./brain` |
 | `DEC-####` | decisão | `./brain` |
 | `WIN-####` | entrega | `./brain` |
 | `PROP-####` | proposta (o dono aceita/rejeita) | `./brain` |
@@ -127,7 +127,7 @@ validado (`seq`, `ts`, `type`, `id`, `date`, `actor`, `by`, `prov`, `source`,
 | slug (`operacoes`) | área (`area.added`, com nome e aliases) | o dono, via `brain area add` |
 | `GOAL-#` / `PROJ-#` / `PROJ-#.#` | goal / projeto / entregável | o dono, em `PLANNING/goals.md` |
 
-Prefixos declarativos: o nome diz o que é (`ACT-0146`, `DEC-`, `WIN-`, `PROP-`, `MSG-`, `PUB-`, `FOCUS-`; `GOAL-1`,
+Prefixos declarativos: o nome diz o que é (`TASK-0146`, `DEC-`, `WIN-`, `PROP-`, `MSG-`, `PUB-`, `FOCUS-`; `GOAL-1`,
 `PROJ-3`, `PROJ-3.2` sem zeros, porque nascem do `goals.md` que o dono edita). O código só **emite** os nomes novos;
 os antigos (`A-0146`, `D-`, `E-`, `R-`, `M-`, `S-`, `F-`, `G1`, `P3`, `P3.2`) seguem **aceitos na entrada** (CLI, `brain add`,
 parser do `goals.md`, TUI, MCP) como sinônimo, traduzidos na hora, sem reescrever nada. A numeração continua de onde estava.

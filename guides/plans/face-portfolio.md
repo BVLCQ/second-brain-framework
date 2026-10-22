@@ -274,8 +274,8 @@ promovida) com dados genéricos. `config/watch.toml.example`: exemplo comentado 
 
 ## Passo 12 — (opcional, decidir depois) prefixos longos para os IDs antigos
 
-O ledger é append-only: `ACT-0146` não pode ser reescrito. Caminho possível sem quebrar
-nada: aceitar aliases na **entrada** (`ACT-0146` ≡ `ACT-0146`, `DEC-`≡`D-`, …) e,
+O ledger é append-only: `TASK-0146` não pode ser reescrito. Caminho possível sem quebrar
+nada: aceitar aliases na **entrada** (`TASK-0146` ≡ `TASK-0146`, `DEC-`≡`D-`, …) e,
 opcionalmente, um modo de exibição. Fica fora deste plano até o dono decidir.
 
 > A seção "Pós-implementação" do plano original é local da instância do dono (cadastros e dados reais) e não vai para o repo público.

@@ -139,7 +139,7 @@ function decisionTable(list){
 function timelineList(items, limit){
   if (!items.length) return empty("Sem eventos registrados.");
   return '<div class="tl">' + items.slice(0, limit || 60).map(it => '<div class="it k-' + esc(it.kind) + '"><span class="muted">' + fmtD(it.date) + "</span> · " +
-    esc(it.kind) + " · " + (it.id.startsWith("ACT-") ? aL(it.id) + " " : it.id.startsWith("DEC-") ? dL(it.id) + " " : it.id.includes("/") ? "" : esc(it.id) + " ") + esc(it.title) +
+    esc(it.kind) + " · " + (it.id.startsWith("TASK-") ? aL(it.id) + " " : it.id.startsWith("DEC-") ? dL(it.id) + " " : it.id.includes("/") ? "" : esc(it.id) + " ") + esc(it.title) +
     (it.who ? ' <span class="muted">(' + esc(it.who) + ")</span>" : "") + (it.project && P[it.project] ? " · " + pL(it.project) : "") + "</div>").join("") + "</div>";
 }
 
@@ -173,7 +173,7 @@ V.home = () => {
   M.agenda.forEach(it => (days[it.date] = days[it.date] || []).push(it));
   h += '<div class="panel"><h2>Hoje e próximos 7 dias</h2>' + (Object.keys(days).length ? Object.keys(days).sort().map(d => "<h3>" + fmtDW(d) + (d < M.today ? ' <span class="late">atrasado</span>' : d === M.today ? " · hoje" : "") + "</h3>" +
     '<ul class="clean">' + days[d].map(it => "<li>" + chip(it.kind === "foco" ? "info" : it.overdue_days ? "em-risco" : "atencao", it.kind) + " " +
-      (it.id.startsWith("ACT-") ? aL(it.id) : esc(it.id)) + " " + esc(it.title) + (it.project ? " · " + pL(it.project) : "") + "</li>").join("") + "</ul>").join("") : empty("Nada com data nos próximos 7 dias.")) + "</div>";
+      (it.id.startsWith("TASK-") ? aL(it.id) : esc(it.id)) + " " + esc(it.title) + (it.project ? " · " + pL(it.project) : "") + "</li>").join("") + "</ul>").join("") : empty("Nada com data nos próximos 7 dias.")) + "</div>";
   const wins = [...M.deliveries.map(e => ({date: e.date, html: "✓ <b>" + esc(e.title) + "</b> — " + esc(e.result) + (e.project ? " · " + pL(e.project) : "")})),
     ...M.deliverables_done.map(x => ({date: x.date, html: "✓ entregável <b>" + x.id + "</b> " + esc(x.title) + " · " + pL(x.project)}))]
     .sort((a, b) => (b.date || "").localeCompare(a.date || "")).slice(0, 7);
@@ -304,7 +304,7 @@ V.timeline = () => {
       svg += '<path d="M' + x + " " + (y - 7) + " l7 7 l-7 7 l-7 -7z" + '" fill="' + col + '"><title>' + esc(it.id + " " + it.title + " · " + fmtD(it.date)) + "</title></path>"; }); });
   svg += "</svg>";
   let h = '<h1>Linha do tempo</h1><div class="panel"><h2>Próximos prazos</h2><div class="legend"><span><i style="background:#7048e8"></i>entregável</span><span><i style="background:#1c7ed6"></i>ação sua</span><span><i style="background:#e03131"></i>atrasado / hoje</span></div>' +
-    (tl.future.length ? svg + '<ul class="clean">' + tl.future.map(it => "<li>" + fmtDW(it.date) + " · " + esc(it.kind) + " " + (it.id.startsWith("ACT-") ? aL(it.id) : "<b>" + esc(it.id) + "</b>") + " " + esc(it.title) + (it.project ? " · " + pL(it.project) : "") + (it.overdue ? ' <span class="late">atrasado</span>' : "") + "</li>").join("") + "</ul>" :
+    (tl.future.length ? svg + '<ul class="clean">' + tl.future.map(it => "<li>" + fmtDW(it.date) + " · " + esc(it.kind) + " " + (it.id.startsWith("TASK-") ? aL(it.id) : "<b>" + esc(it.id) + "</b>") + " " + esc(it.title) + (it.project ? " · " + pL(it.project) : "") + (it.overdue ? ' <span class="late">atrasado</span>' : "") + "</li>").join("") + "</ul>" :
       empty("Nenhum prazo à frente — itens sem data não aparecem aqui.")) + "</div>";
   h += '<div class="panel" style="margin-top:14px"><h2>O que aconteceu (desde ' + fmtD(tl.back) + ")</h2>" + timelineList(tl.past, 200) + "</div>";
   return h;

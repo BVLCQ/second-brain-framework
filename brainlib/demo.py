@@ -253,7 +253,7 @@ def build(target: Path) -> Path:
                   "people": ["caio-demo"]}},
         {"type": "action.opened", "date": d(-6), **agent("1a1-marina-demo"),
          "data": {"title": "Aprovar as 8 receitas novas para escala", "owner": "marina-demo", "list": "waiting",
-                  "due": d(2), "project": "PROJ-2", "unblocks": ["ACT-0002"]}},
+                  "due": d(2), "project": "PROJ-2", "unblocks": ["TASK-0002"]}},
         {"type": "action.opened", "date": d(-3), **agent("reuniao-numeros"),
          "data": {"title": "Revisar orçamento da reforma da galeria", "owner": "caio-demo", "list": "waiting",
                   "due": d(-1), "project": "PROJ-1", "deliverable": "PROJ-1.3", "people": ["caio-demo"]}},
@@ -262,17 +262,17 @@ def build(target: Path) -> Path:
         {"type": "action.opened", "date": d(-10), "by": "owner",
          "data": {"title": "Entrevistar Heitor-demo sobre fermentação natural", "owner": "voce", "due": d(-7),
                   "effort_min": 60, "project": "PROJ-3", "deliverable": "PROJ-3.1", "people": ["heitor-demo"]}},
-        {"type": "action.updated", "id": "ACT-0002", "date": d(-6), "by": "owner",
-         "data": {"blocked_by": ["ACT-0007"]}},
+        {"type": "action.updated", "id": "TASK-0002", "date": d(-6), "by": "owner",
+         "data": {"blocked_by": ["TASK-0007"]}},
     ])
     b.record([
-        {"type": "action.closed", "id": "ACT-0001", "date": d(-8), "by": "owner",
+        {"type": "action.closed", "id": "TASK-0001", "date": d(-8), "by": "owner",
          "data": {"how": "aprovado sem ressalvas"}},
-        {"type": "action.closed", "id": "ACT-0010", "date": d(-7), "by": "owner",
+        {"type": "action.closed", "id": "TASK-0010", "date": d(-7), "by": "owner",
          "data": {"how": "entrevista feita", "outcome": "alimentou o manual de rotinas"}},
-        {"type": "action.dropped", "id": "ACT-0006", "date": d(-3), "by": "owner",
+        {"type": "action.dropped", "id": "TASK-0006", "date": d(-3), "by": "owner",
          "data": {"reason": "ponto trocado para a galeria — DEC-0005"}},
-        {"type": "action.updated", "id": "ACT-0002", "date": d(-1), "by": "owner",
+        {"type": "action.updated", "id": "TASK-0002", "date": d(-1), "by": "owner",
          "data": {"status": "fazendo", "note": "começou a precificar as clássicas"}},
         {"type": "delivery.recorded", "date": d(-4), "by": "owner",
          "data": {"title": "Manual de rotinas v1 publicado", "ref": "PROJ-3.1",
@@ -284,8 +284,8 @@ def build(target: Path) -> Path:
         {"type": "progress.declared", "id": "GOAL-1", "date": d(-1), "by": "owner",
          "data": {"pct": 40, "note": "projeto aprovado; reforma da galeria nem começou"}},
         {"type": "proposal.opened", "date": d(0), "by": "agent", "prov": "observado", "source": src["reuniao-numeros"],
-         "data": {"kind": "atualizar-acao", "target": "ACT-0003",
-                  "summary": "A reunião de números fixou o ponto na galeria — a compra da bancada fria (ACT-0003, sem prazo) "
+         "data": {"kind": "atualizar-acao", "target": "TASK-0003",
+                  "summary": "A reunião de números fixou o ponto na galeria — a compra da bancada fria (TASK-0003, sem prazo) "
                              "pode ganhar prazo ligado à reforma (PROJ-1.3)?",
                   "evidence": src["reuniao-numeros"]}},
     ])
@@ -293,7 +293,7 @@ def build(target: Path) -> Path:
     from . import outbox
     outbox.draft(b, "caio-demo", "Oi Caio-demo! O orçamento da reforma da galeria estava previsto para "
                             f"{util.fmt_date(d(-1))}. Consegue me mandar até amanhã? Ele define o prazo da "
-                            "reforma do lado de cá.", "ACT-0008", "cobrar orçamento atrasado")
+                            "reforma do lado de cá.", "TASK-0008", "cobrar orçamento atrasado")
     return target
 
 

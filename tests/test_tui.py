@@ -55,8 +55,8 @@ class DatesTest(unittest.TestCase):
 
 class BridgeTest(unittest.TestCase):
     def test_display_quotes_arguments(self):
-        self.assertEqual(bridge.display(["action", "close", "ACT-0001", "--how", "enviei o draft"]),
-                         "brain action close ACT-0001 --how 'enviei o draft'")
+        self.assertEqual(bridge.display(["action", "close", "TASK-0001", "--how", "enviei o draft"]),
+                         "brain action close TASK-0001 --how 'enviei o draft'")
 
     def test_agent_argv_uses_custom_command_and_prompt(self):
         cfg = config.DEFAULTS | {"runner": {**config.DEFAULTS["runner"], "command": "meu-agente --p {prompt}"}}
@@ -712,7 +712,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
         app = self.app()
         async with app.run_test(size=(140, 44)) as pilot:
             await pilot.pause(0.4)
-            app.exec([["action", "close", "ACT-9999", "--how", "x", "--by", "owner"]])
+            app.exec([["action", "close", "TASK-9999", "--how", "x", "--by", "owner"]])
             await self.settle(app, pilot)
             log = self.log_text(app)
             self.assertIn("ERRO", log)
@@ -1310,7 +1310,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             await pilot.press("3", "N")
             await pilot.pause(0.3)
             app.screen.query_one("#f_text").text = "ideia solta"
-            app.screen.query_one("#f_link").value = "ACT-9999"
+            app.screen.query_one("#f_link").value = "TASK-9999"
             await pilot.press("ctrl+s")
             await pilot.pause(0.2)
             self.assertEqual(type(app.screen).__name__, "FormModal")            # vínculo inexistente barra

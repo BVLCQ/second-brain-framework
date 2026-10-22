@@ -1,6 +1,6 @@
 """Registro único dos prefixos de ID — o resto do código não escreve prefixo literal.
 
-Prefixos declarativos: `ACT-0146` (ação), `DEC-` (decisão), `WIN-` (entrega/conquista), `PROP-` (proposta),
+Prefixos declarativos: `TASK-0146` (ação), `DEC-` (decisão), `WIN-` (entrega/conquista), `PROP-` (proposta),
 `MSG-` (mensagem), `PUB-` (publicação), `FOCUS-` (plano de foco), `PROC-` (processo), `OPP-` (oportunidade),
 `GOAL-1` · `PROJ-3` · `PROJ-3.2` (goal · projeto · entregável, sem zeros: nascem do `goals.md`, que o dono edita).
 
@@ -14,13 +14,13 @@ import re
 
 # entidade → (prefixo, largura do número; 0 = sem zeros à esquerda)
 PREFIXES: dict[str, tuple[str, int]] = {
-    "action": ("ACT", 4), "decision": ("DEC", 4), "delivery": ("WIN", 4), "proposal": ("PROP", 4),
+    "action": ("TASK", 4), "decision": ("DEC", 4), "delivery": ("WIN", 4), "proposal": ("PROP", 4),
     "message": ("MSG", 4), "share": ("PUB", 4), "focus": ("FOCUS", 4),
     "process": ("PROC", 4), "opportunity": ("OPP", 4),
     "goal": ("GOAL", 0), "project": ("PROJ", 0),
 }
 # prefixo antigo (letra) → prefixo novo, para as entidades de ID longo (`A-0146`)
-LEGACY_LONG = {"A": "ACT", "D": "DEC", "E": "WIN", "R": "PROP", "M": "MSG", "S": "PUB", "F": "FOCUS"}
+LEGACY_LONG = {"A": "TASK", "D": "DEC", "E": "WIN", "R": "PROP", "M": "MSG", "S": "PUB", "F": "FOCUS"}
 LONG_PREFIXES = [PREFIXES[e][0] for e in ("action", "decision", "delivery", "proposal", "message", "share", "focus",
                                           "process", "opportunity")]
 
@@ -28,18 +28,18 @@ _LONG = "|".join(LONG_PREFIXES)
 _OLD = "".join(LEGACY_LONG)
 
 # IDs novos (anchored) — o que o ledger e o PLANNING guardam
-ACTION_ID = re.compile(r"^ACT-\d{4,}$")
+ACTION_ID = re.compile(r"^TASK-\d{4,}$")
 LONG_ID = re.compile(rf"^(?:{_LONG})-\d{{4,}}$")
 GOAL_ID = re.compile(r"^GOAL-\d+$")
 PROJ_ID = re.compile(r"^PROJ-\d+$")
 DELIV_ID = re.compile(r"^PROJ-\d+\.\d+$")
 PLAN_NODE = re.compile(r"^(GOAL-\d+|PROJ-\d+|PROJ-\d+\.\d+)$")
-LINK_ID = re.compile(r"^(ACT-\d{4,}|GOAL-\d+|PROJ-\d+(?:\.\d+)?)$")           # alvo de nota / vínculo
+LINK_ID = re.compile(r"^(TASK-\d{4,}|GOAL-\d+|PROJ-\d+(?:\.\d+)?)$")           # alvo de nota / vínculo
 ANY_ID = re.compile(rf"^(?:(?:{_LONG})-\d{{4,}}|GOAL-\d+|PROJ-\d+(?:\.\d+)?)$")
 
 # fragmentos para compor outras regexes (sem âncoras)
 PLAN_NODE_SRC = r"GOAL-\d+|PROJ-\d+\.\d+|PROJ-\d+"
-LINK_SRC = r"ACT-\d{4,}|GOAL-\d+|PROJ-\d+(?:\.\d+)?"
+LINK_SRC = r"TASK-\d{4,}|GOAL-\d+|PROJ-\d+(?:\.\d+)?"
 
 # fragmentos dos nomes ANTIGOS, só para quem lê arquivos ainda não migrados (goals.md, nome de nota)
 LEGACY_GOAL_SRC, LEGACY_PROJ_SRC, LEGACY_DELIV_SRC = r"G\d+", r"P\d+", r"P\d+\.\d+"
@@ -81,7 +81,7 @@ def normalize(ref):
 
 
 def normalize_csv(value):
-    """'A-1, A-2' → 'ACT-0001,ACT-0002' (para opções da CLI que aceitam vírgula)."""
+    """'A-1, A-2' → 'TASK-0001,TASK-0002' (para opções da CLI que aceitam vírgula)."""
     if not isinstance(value, str):
         return normalize(value)
     return ",".join(normalize(p.strip()) for p in value.split(",") if p.strip())
@@ -92,7 +92,7 @@ def is_id(ref: str) -> bool:
 
 
 def entity_of(ref: str) -> str | None:
-    """`ACT-0001` → 'action'; `GOAL-1` → 'goal'; `PROJ-3` → 'project'; `PROJ-3.2` → 'deliverable'; senão None."""
+    """`TASK-0001` → 'action'; `GOAL-1` → 'goal'; `PROJ-3` → 'project'; `PROJ-3.2` → 'deliverable'; senão None."""
     ref = normalize(ref or "")
     if DELIV_ID.match(ref):
         return "deliverable"
@@ -112,7 +112,7 @@ def make(entity: str, n: int) -> str:
 
 
 def number(ref: str) -> int:
-    """Número de um ID longo ou de goal/projeto (`ACT-0146` → 146, `PROJ-3` → 3, `PROJ-3.2` → 3)."""
+    """Número de um ID longo ou de goal/projeto (`TASK-0146` → 146, `PROJ-3` → 3, `PROJ-3.2` → 3)."""
     return int(re.search(r"-(\d+)", ref).group(1))
 
 
@@ -122,5 +122,5 @@ OLD_PLAN_RE = re.compile(r"(?<![A-Za-z0-9_.-])(?:P(\d+)\.(\d+)|P(\d+)|G(\d+))(?!
 
 
 def old_to_new(old: str) -> str:
-    """Tradução do nome antigo de um ID que existe (sem tocar em largura de zeros: `A-0146` → `ACT-0146`)."""
+    """Tradução do nome antigo de um ID que existe (sem tocar em largura de zeros: `A-0146` → `TASK-0146`)."""
     return normalize(old)

@@ -24,10 +24,10 @@ Toda entidade (ação, decisão, pessoa, artefato) entra pelo `./brain` — nunc
 - esforço (`90m`, `2h`) se alguém falou tempo
 - **não feche** ação só porque o texto "parece" resolver — abra `brain proposal add --kind fechar-acao` com a evidência
 
-**Notas do dono (`<ACT-####|GOAL-#|PROJ-#|PROJ-#.#|note>-AAAA-MM-DD-note.md`)** — criadas pelo TUI (`N`) ou por
+**Notas do dono (`<TASK-####|GOAL-#|PROJ-#|PROJ-#.#|note>-AAAA-MM-DD-note.md`)** — criadas pelo TUI (`N`) ou por
 `./brain note add`. O frontmatter traz `vinculo:` e `criada:`. Trate como **nota** sem reclassificar: arquive
 no RAW (`notes/`) **sem renomear** (o TUI as acha pelo nome, no detalhe do vínculo) e registre o artefato com
-`--projects` = o projeto do vínculo (`PROJ-#`/`PROJ-#.#` → `PROJ-#`; `ACT-####` → o projeto da ação; goal → deixe vazio e cite
+`--projects` = o projeto do vínculo (`PROJ-#`/`PROJ-#.#` → `PROJ-#`; `TASK-####` → o projeto da ação; goal → deixe vazio e cite
 o `GOAL-#` no resumo). Extraia ações/decisões só do que a nota afirmar; o vínculo já é a ligação.
 
 **Portfólio (processos e oportunidades)** — ao extrair dores, ineficiências ou sugestões de melhoria de um item:

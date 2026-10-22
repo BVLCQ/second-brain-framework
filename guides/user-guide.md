@@ -98,7 +98,7 @@ Os prefixos que você vai ver o dia inteiro:
 
 | Prefixo | Entidade | Exemplo |
 |---|---|---|
-| `ACT-####` | ação (tarefa) | `ACT-0014` |
+| `TASK-####` | ação (tarefa) | `TASK-0014` |
 | `DEC-####` | decisão | `DEC-0005` |
 | `WIN-####` | entrega (conquista com resultado) | `WIN-0002` |
 | `PROP-####` | proposta (o agente sugere, você decide) | `PROP-0001` |
@@ -107,7 +107,7 @@ Os prefixos que você vai ver o dia inteiro:
 | `FOCUS-####` | plano de foco | `FOCUS-0001` |
 | `GOAL-#` / `PROJ-#` / `PROJ-#.#` | goal / projeto / entregável | `GOAL-1`, `PROJ-1`, `PROJ-1.2` |
 
-O `#` é para você não precisar decorar: cite "ACT-0014" e pronto.
+O `#` é para você não precisar decorar: cite "TASK-0014" e pronto.
 
 ### 2.3 Proveniência: de onde veio cada fato
 
@@ -198,7 +198,7 @@ material. Peça `/dump` — o pipeline completo, explicado de leigo:
 3. **Extrai** para um artefato em `PROCESSED/2026/10/`: do que trata, decisões
    (com quem decidiu e a base), ações por dono, prazos, menções a pessoas.
    Cada extração leva proveniência.
-4. **Registra no livro-razão** cada ação (`ACT-####`), decisão (`DEC-####`),
+4. **Registra no livro-razão** cada ação (`TASK-####`), decisão (`DEC-####`),
    pessoa nova. Pessoas já conhecidas são resolvidas por alias — nunca uma
    segunda ficha.
 5. Roda `./brain render` e o **painel nasce**: `vault/FRESH/dashboard/index.html`,
@@ -328,7 +328,7 @@ jogar coisa na inbox.
 **Durante o dia (zero esforço — só captura)**
 
 - Precisa lembrar de algo? `/todo falar com o Heitor-demo sobre o draft até sexta`.
-- Terminou algo? `/done ACT-0014 enviado, ele confirmou`.
+- Terminou algo? `/done TASK-0014 enviado, ele confirmou`.
 - Meeting gravada/transcrita? Arraste o arquivo para `vault/RAW/inbox/`.
 - Doc importante, print, nota solta? Mesma coisa: inbox. Sem organizar,
   sem renomear bonito — organizar é trabalho do agente, não seu.
@@ -404,14 +404,14 @@ em outros agentes, o texto é entendido do mesmo jeito.)
   desconhecida → oferece cadastrar); projeto casado se for óbvio; esforço se
   você falou tempo ("2h"). Registrado como `[declarado]`, direto no ledger —
   não passa pela inbox.
-- **Recebe:** a linha da ação: `✓ ACT-0012 · Ler a política de dados · vence
+- **Recebe:** a linha da ação: `✓ TASK-0012 · Ler a política de dados · vence
   15/10 · PROJ-1`. E a tarefa já está no painel.
 - **Prazo sugerido:** se você não disse prazo, o agente **sugere** um pelo
   contexto (prazo do entregável/projeto, acordos com pessoas, agenda e carga)
   e diz o porquê. Enquanto for sugestão, a data aparece **em rosa** na TUI e no
   painel (e com "(sugerido)" nos Markdown). Você decide: digita outra data
-  (`/todo prazo ACT-0012` repete a sugestão; na TUI, tecla `t`) e a cor volta ao
-  normal, ou aceita como está (`brain action update ACT-0012 --confirm-due --by owner`,
+  (`/todo prazo TASK-0012` repete a sugestão; na TUI, tecla `t`) e a cor volta ao
+  normal, ou aceita como está (`brain action update TASK-0012 --confirm-due --by owner`,
   ou salve o formulário de prazo da TUI com a mesma data). Sem base nenhuma, ele
   não sugere ("não consta") e a ação fica sem prazo.
 - **Pegadinha:** tarefa sem prazo fica sem `due` — e o planejador de foco
@@ -420,7 +420,7 @@ em outros agentes, o texto é entendido do mesmo jeito.)
 
 #### `/done` — fechar tarefa
 - **Quando:** "fechei/terminei X".
-- **Digita:** `/done ACT-0014 enviei o draft, Heitor-demo confirmou`
+- **Digita:** `/done TASK-0014 enviei o draft, Heitor-demo confirmou`
 - **Por dentro:** ID exato fecha direto. Se você escrever texto em vez do
   ID, ele casa: achou uma única → confirma em 1 linha; várias → lista para
   você escolher; ação de terceiro ou muito antiga → sempre confirma antes.
@@ -670,8 +670,8 @@ próxima renderização — automática no noturno ou via `/brief`):
 
 | Você edita… | O que acontece |
 |---|---|
-| Checkbox em `FRESH/todo.md` (`- [x] **ACT-0012**…`) | fecha (ou reabre) a ação — vira declaração sua `[declarado]` |
-| `status:` no frontmatter de `FRESH/records/actions/ACT-0012.md` | o mesmo, pelo vocabulário: `a fazer` · `fazendo` · `aguardando` · `feita` · `descartada` |
+| Checkbox em `FRESH/todo.md` (`- [x] **TASK-0012**…`) | fecha (ou reabre) a ação — vira declaração sua `[declarado]` |
+| `status:` no frontmatter de `FRESH/records/actions/TASK-0012.md` | o mesmo, pelo vocabulário: `a fazer` · `fazendo` · `aguardando` · `feita` · `descartada` |
 | `status:` no frontmatter de `FRESH/records/opportunities/OPP-0003.md` | muda o status da oportunidade (`ideia` · `triagem` · `priorizada` · `piloto` · `validando` · `entregue` · `em-espera` · `descartada`); `em-andamento` só vem de `brain opportunity promote`; valor inválido vira aviso e não grava |
 | Checkbox de entregável em `PLANNING/goals.md` | atualiza o estado factual (com data) |
 | Qualquer outra coisa em `FRESH/` | **descartada** no próximo render — FRESH é retrato |
@@ -710,7 +710,7 @@ checkbox**, e `FRESH/` é só leitura prática.
 | Sintoma | Causa provável | Saída |
 |---|---|---|
 | "o noturno não rodou" | Mac desligado/cron antigo (`./brain schedule status` mostra se é launchd); "Not logged in" no `nightly-agent.log` = ainda está no cron | `./brain nightly` manual de manhã — é o ritual recomendado mesmo |
-| Ação nunca entra no plano de foco | sem `due` ou sem esforço estimado | `./brain action update ACT-#### --due … --effort 90m` e gere outro plano |
+| Ação nunca entra no plano de foco | sem `due` ou sem esforço estimado | `./brain action update TASK-#### --due … --effort 90m` e gere outro plano |
 | Pessoa "não consta" ao citar alguém | ficha nova | `/person <nome>` → ele oferece cadastrar com aliases |
 | Duas fichas da mesma pessoa | criadas antes dos aliases | `./brain person alias` evita a segunda ficha; se ela já existe, `./brain person merge DUP --into ID` |
 | `/ask` responde "não consta" para algo que existia | filtro muito estreito na busca | tente termo do título; se memória ligada, `./brain memory sync` |
@@ -727,7 +727,7 @@ edita `events.jsonl` à mão — com backup, uma linha.
 
 ## 12. Glossário
 
-- **IDs declarativos** — `ACT-0146` (ação), `DEC-` (decisão), `WIN-` (entrega), `PROP-` (proposta), `MSG-` (mensagem), `PUB-`
+- **IDs declarativos** — `TASK-0146` (ação), `DEC-` (decisão), `WIN-` (entrega), `PROP-` (proposta), `MSG-` (mensagem), `PUB-`
   (publicação), `FOCUS-` (plano de foco), `PROC-`/`OPP-` (portfólio), `GOAL-1`/`PROJ-3`/`PROJ-3.2` (plano). Os nomes antigos
   (`A-0146`, `G1`, `P3`…) ainda valem na entrada; `./brain migrate ids` converte uma instância antiga de uma vez (seção 9).
 - **Vault** — a pasta onde mora a sua vida profissional no sistema.

@@ -3,7 +3,7 @@
 FRESH é regenerado inteiro a cada render — então, ANTES de sobrescrever, olhamos
 o que o dono mudou desde o último render:
   · checkbox de ação em FRESH/todo.md            → fechar / reabrir
-  · `status:` de FRESH/records/actions/ACT-*.md     → ficha da ação (qualquer editor)
+  · `status:` de FRESH/records/actions/TASK-*.md     → ficha da ação (qualquer editor)
   · `status:` de FRESH/records/opportunities/OPP-*.md → status da oportunidade (valor inválido: aviso, não grava)
   · checkbox de entregável em PLANNING/goals.md   → estado factual do entregável
 Só essas mudanças são colhidas; qualquer outra edição em FRESH é descartada.
@@ -16,7 +16,7 @@ from pathlib import Path
 from . import ids, util
 
 STATE_FILE = ".render-state.json"
-TODO_LINE = re.compile(r"^\s*-\s+\[( |x|X)\]\s+.*?\b(ACT-\d{4,}|" + ids.LEGACY_ACTION_SRC + r")\b")
+TODO_LINE = re.compile(r"^\s*-\s+\[( |x|X)\]\s+.*?\b(TASK-\d{4,}|" + ids.LEGACY_ACTION_SRC + r")\b")
 FRONT_STATUS = re.compile(r"^status:\s*\"?([^\"\n]+?)\"?\s*$", re.M)
 
 KANBAN_TO_EVENT = {
@@ -73,7 +73,7 @@ def collect(brain, notices: list[dict] | None = None) -> list[dict]:
     touched: set[str] = set()
 
     rec_dir = fresh / "records" / "actions"
-    for path in sorted(rec_dir.glob("ACT-*.md")) if rec_dir.exists() else []:
+    for path in sorted(rec_dir.glob("TASK-*.md")) if rec_dir.exists() else []:
         aid = path.stem
         a = st.actions.get(aid)
         prev = last.get("records", {}).get(aid)

@@ -1,4 +1,4 @@
-"""`brain migrate ids` — reescreve o histórico com os prefixos declarativos (A-0146 → ACT-0146, G1 → GOAL-1, P3.2 → PROJ-3.2).
+"""`brain migrate ids` — reescreve o histórico com os prefixos declarativos (A-0146 → TASK-0146, G1 → GOAL-1, P3.2 → PROJ-3.2).
 
 Exceção histórica e única à regra "o ledger só cresce": a instância inteira passa para os nomes novos de uma vez, com
 backup antes. Depois dela o código só emite os nomes novos (ids.py); os antigos seguem aceitos na entrada.
