@@ -118,9 +118,10 @@ class Proposal:
     summary: str
     target: str = ""
     evidence: str = ""
-    status: str = "aberta"           # aberta | aceita | rejeitada
+    status: str = "aberta"           # aberta | aceita | rejeitada | obsoleta
     date: date | None = None
-    quote: str = ""
+    quote: str = ""                  # fala do dono; em `obsoleta`, o motivo que o sistema registrou
+    seq: int = 0                     # seq do proposal.opened (eventos do dono depois dele podem torná-la obsoleta)
 
 
 @dataclass
@@ -483,11 +484,14 @@ def apply(st: State, ev: dict) -> None:
 
     elif t == "proposal.opened":
         st.proposals[eid] = Proposal(eid, data["kind"], data["summary"], data.get("target", ""),
-                                     data.get("evidence", ""), date=when)
+                                     data.get("evidence", ""), date=when, seq=ev.get("seq", 0))
     elif t in ("proposal.accepted", "proposal.rejected"):
         p = st.proposals[eid]
         p.status = "aceita" if t.endswith("accepted") else "rejeitada"
         p.quote = data["quote"]
+    elif t == "proposal.superseded":
+        p = st.proposals[eid]
+        p.status, p.quote = "obsoleta", data["reason"]
 
     elif t == "progress.declared":
         st.progress.setdefault(eid, []).append({"pct": data["pct"], "note": data.get("note", ""),

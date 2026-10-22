@@ -11,7 +11,7 @@ import json
 import os
 from pathlib import Path
 
-from . import config, planning, schema, util
+from . import config, planning, proposals, schema, util
 from . import state as state_mod
 
 try:
@@ -139,7 +139,18 @@ class Brain:
             return util.relpath(path, self.inst.vault)
         return p[len("vault/"):] if p.startswith("vault/") else p
 
-    def record(self, items: list[dict]) -> list[dict]:
+    def _append_one(self, item: dict, working: state_mod.State, plan: planning.Plan, new: list[dict]) -> None:
+        ev = self._normalize(item, working)
+        schema.validate(ev, working, plan)
+        ev["seq"] = working.max_seq() + 1
+        ev["ts"] = util.iso_now()
+        ordered = {k: ev[k] for k in FIELD_ORDER
+                   if k == "data" or ev.get(k) not in (None, "")}
+        state_mod.apply(working, ordered)
+        new.append(ordered)
+
+    def record(self, items: list[dict], sweep: bool = True) -> list[dict]:
+        """Grava o lote; com `sweep`, fecha junto as propostas que o lote tornou obsoletas."""
         if not items:
             return []
         with self._lock():
@@ -147,22 +158,38 @@ class Brain:
             plan = planning.load(self.inst.planning_file)
             new: list[dict] = []
             for item in items:
-                ev = self._normalize(item, working)
-                schema.validate(ev, working, plan)
-                ev["seq"] = working.max_seq() + 1
-                ev["ts"] = util.iso_now()
-                ordered = {k: ev[k] for k in FIELD_ORDER
-                           if k == "data" or ev.get(k) not in (None, "")}
-                state_mod.apply(working, ordered)
-                new.append(ordered)
+                self._append_one(item, working, plan, new)
+            if sweep:
+                self._sweep_proposals(working, plan, new)
+            self._flush(new)
+        self._state = working
+        self._plan = plan
+        return new
+
+    def sweep_proposals(self) -> list[dict]:
+        """Fecha (`proposal.superseded`) as propostas abertas que o dono já resolveu por fora do painel."""
+        with self._lock():
+            working = state_mod.build(self.read_events())
+            plan = planning.load(self.inst.planning_file)
+            new: list[dict] = []
+            self._sweep_proposals(working, plan, new)
+            self._flush(new)
+        self._state = working
+        self._plan = plan
+        return new
+
+    def _sweep_proposals(self, working: state_mod.State, plan: planning.Plan, new: list[dict]) -> None:
+        for pid, reason in proposals.conflicts(working):
+            self._append_one({"type": "proposal.superseded", "id": pid, "by": "system",
+                              "data": {"reason": reason}}, working, plan, new)
+
+    def _flush(self, new: list[dict]) -> None:
+        if new:
             with open(self.ledger_path, "a", encoding="utf-8") as fh:
                 for ev in new:
                     fh.write(json.dumps(ev, ensure_ascii=False, separators=(",", ":")) + "\n")
                 fh.flush()
                 os.fsync(fh.fileno())
-        self._state = working
-        self._plan = plan
-        return new
 
     def record_one(self, item: dict) -> dict:
         return self.record([item])[0]

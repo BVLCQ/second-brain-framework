@@ -51,6 +51,7 @@ TYPES: dict[str, dict] = {
     "proposal.opened": {"entity": "proposal", "new": True, "prefix": ids.prefix("proposal"), "req": ["kind", "summary"]},
     "proposal.accepted": {"entity": "proposal", "req": ["quote"]},
     "proposal.rejected": {"entity": "proposal", "req": ["quote"]},
+    "proposal.superseded": {"entity": "proposal", "req": ["reason"]},
     "progress.declared": {"entity": "plannode", "req": ["pct"]},
     "plan.changed": {"entity": None, "req": ["diff", "reason", "approval"]},
     "message.drafted": {"entity": "message", "new": True, "prefix": ids.prefix("message"), "req": ["to", "text"]},
@@ -224,7 +225,7 @@ def validate(ev: dict, state, plan) -> None:
                   f"link: {data['link']!r} não existe (PROC-… ou OPP-…)")
     if t == "proposal.opened":
         _need(data["kind"] in PROPOSAL_KINDS, f"kind de proposta inválido: {data['kind']!r}")
-    if t in {"proposal.accepted", "proposal.rejected"}:
+    if t in {"proposal.accepted", "proposal.rejected", "proposal.superseded"}:
         _need(state.proposals[eid].status == "aberta", f"proposta {eid} não está aberta")
     if t == "ids.migrated":
         _need(ev.get("by") == "system" and isinstance(data["map"], dict), "ids.migrated: só o sistema grava, com o mapa")
