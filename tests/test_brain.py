@@ -1143,6 +1143,77 @@ class SchemaCoverageTests(unittest.TestCase):
                 b.record_one({"type": "action.exploded", "by": "owner", "data": {}})
 
 
+class ProposalSweepTests(unittest.TestCase):
+    @staticmethod
+    def _setup(b: Brain) -> None:
+        for title in ("Um", "Dois", "Tres"):
+            b.record_one({"type": "action.opened", "by": "owner",
+                          "data": {"title": title, "owner": "eu", "due": "2026-10-12"}})
+        for kind, tgt in (("fechar-acao", "A-0001"), ("atualizar-acao", "A-0002"), ("fechar-acao", "A-0003")):
+            b.record_one({"type": "proposal.opened", "by": "agent", "prov": "observado", "source": "chat",
+                          "data": {"kind": kind, "summary": f"{kind} {tgt}", "target": tgt}})
+
+    def test_closing_target_supersedes_in_same_batch(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            self._setup(b)
+            evs = b.record([{"type": "action.closed", "id": "A-0001", "by": "owner", "data": {"how": "feito"}}])
+            self.assertEqual([e["type"] for e in evs], ["action.closed", "proposal.superseded"])
+            self.assertEqual(evs[1]["by"], "system")
+            self.assertEqual(b.state.proposals["R-0001"].status, "obsoleta")
+            self.assertIn("A-0001", b.state.proposals["R-0001"].quote)
+            self.assertEqual(b.state.proposals["R-0002"].status, "aberta")
+            self.assertEqual(b.validate_all(), [])
+
+    def test_owner_touch_after_proposal_supersedes(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            self._setup(b)
+            b.record_one({"type": "action.updated", "id": "A-0002", "by": "owner", "data": {"due": "2026-10-19"}})
+            self.assertEqual(b.state.proposals["R-0002"].status, "obsoleta")
+            self.assertEqual(b.state.proposals["R-0003"].status, "aberta")
+
+    def test_agent_touch_does_not_supersede(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            self._setup(b)
+            b.record_one({"type": "action.updated", "id": "A-0002", "by": "agent", "prov": "observado",
+                          "source": "chat", "data": {"priority": "alta"}})
+            self.assertEqual(b.state.proposals["R-0002"].status, "aberta")
+
+    def test_touch_before_proposal_does_not_supersede(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            b.record_one({"type": "action.opened", "by": "owner", "data": {"title": "Um", "owner": "eu"}})
+            b.record_one({"type": "action.updated", "id": "A-0001", "by": "owner", "data": {"status": "fazendo"}})
+            b.record_one({"type": "proposal.opened", "by": "agent", "prov": "observado", "source": "chat",
+                          "data": {"kind": "atualizar-acao", "summary": "x", "target": "A-0001"}})
+            self.assertEqual(b.state.proposals["R-0001"].status, "aberta")
+
+    def test_sweep_catches_up_old_ledger_and_is_idempotent(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            self._setup(b)
+            b.record([{"type": "action.closed", "id": "A-0003", "by": "owner", "data": {"how": "feito"}}],
+                     sweep=False)
+            self.assertEqual(b.state.proposals["R-0003"].status, "aberta")
+            self.assertEqual([e["id"] for e in b.sweep_proposals()], ["R-0003"])
+            self.assertEqual(b.sweep_proposals(), [])
+            self.assertEqual(b.validate_all(), [])
+
+    def test_nightly_may_supersede(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            self._setup(b)
+            b.record([{"type": "action.closed", "id": "A-0001", "by": "owner", "data": {"how": "feito"}}],
+                     sweep=False)
+            os.environ["BRAIN_NIGHTLY"] = "1"
+            try:
+                self.assertEqual(len(b.sweep_proposals()), 1)
+            finally:
+                os.environ.pop("BRAIN_NIGHTLY", None)
+
+
 class PdfTest(unittest.TestCase):
     @staticmethod
     def _pdf(path: Path, text: str) -> None:

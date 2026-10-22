@@ -44,6 +44,7 @@ def _cleanup(fresh: Path, keep: set[Path]) -> list[str]:
 
 def render_all(brain, do_harvest: bool = True) -> dict:
     notices: list[dict] = []
+    brain.sweep_proposals()        # propostas que o dono já resolveu por fora do painel
     harvested = harvest_mod.run(brain, notices) if do_harvest else []
     m = model.build(brain)
     m["health"] = doctor.checks(brain)

@@ -601,6 +601,12 @@ Aceitar **registra a sua resposta**. Não fecha a ação nem muda o goal. O
 agente, depois do "ok", executa o que foi aceito (um `/done`, um diff de
 goal). Rejeitada não volta sem fato novo.
 
+**Obsoleta:** se você resolver por fora do painel — fechar ou descartar a ação
+(`/done`, checkbox, ficha), ou mexer nela depois da proposta (prazo, status) —
+a proposta de `fechar-acao`/`atualizar-acao` sobre ela vira `obsoleta` sozinha
+(`proposal.superseded`, by system, com o motivo). Acontece a cada escrita no
+ledger, no `render` e no `proposal list`; também vale no noturno.
+
 ### Lote
 
 `./brain add arquivo.json` (ou stdin) grava vários eventos de uma vez: ou

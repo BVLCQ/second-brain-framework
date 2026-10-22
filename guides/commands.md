@@ -690,6 +690,7 @@ Tipos aceitos e os campos obrigatórios em `data`:
 |---|---|---|---|---|
 | `person.added` | `name` | | `proposal.opened` | `kind`, `summary` |
 | `person.updated` | — | | `proposal.accepted` / `.rejected` | `quote` |
+| | | | `proposal.superseded` (sistema) | `reason` |
 | `action.opened` | `title`, `owner` | | `progress.declared` | `pct` |
 | `action.updated` | — | | `plan.changed` | `diff`, `reason`, `approval` |
 | `action.closed` | `how` | | `deliverable.updated` | `status` |
