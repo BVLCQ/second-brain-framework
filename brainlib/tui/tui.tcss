@@ -12,6 +12,9 @@ ListPanel.-on { border: round $primary-lighten-2; border-title-color: $text; }
 #detailwrap.-small { height: 8; }
 .-zoom #left { display: none; }
 #bar { height: 1; dock: bottom; background: $panel; }
+#facebar { height: 1; dock: top; background: $panel; }
+#faces { width: 1fr; height: 1; }
+#facehint { width: auto; height: 1; }
 #hints { width: 1fr; height: 1; }
 #globals { width: auto; height: 1; }
 

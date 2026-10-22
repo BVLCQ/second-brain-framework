@@ -294,8 +294,10 @@ class BrainApp(PortfolioKeys, App):
                 with Detail(id="detailwrap"):
                     yield Static("", id="detail")
                 yield Log(id="log", markup=False, wrap=True, max_lines=500, auto_scroll=True)
-        with Horizontal(id="bar"):
+        with Horizontal(id="facebar"):
             yield Static("", id="faces")
+            yield Static("", id="facehint")
+        with Horizontal(id="bar"):
             yield Static("", id="hints")
             yield Static("", id="globals")
 
@@ -508,7 +510,7 @@ class BrainApp(PortfolioKeys, App):
         return " · ".join(bits)
 
     def refresh_faces(self) -> None:
-        """Faixa de faces no rodapé: `Execução · [Portfólio]`, a atual em negrito e entre colchetes; clicar troca."""
+        """Faixa de faces na linha de cima: `Execução · [Portfólio]`, a atual em negrito e entre colchetes; clicar troca."""
         t = Text(no_wrap=True)
         t.append(" ")
         for i, (name, _) in enumerate(FACES):
@@ -519,10 +521,11 @@ class BrainApp(PortfolioKeys, App):
                 t.append(f"[{name}]", Style.parse("bold") + click)
             else:
                 t.append(name, Style.parse("dim") + click)
-        t.append("  ")
-        w = self.query_one("#faces", Static)
-        w.update(t)
-        w.styles.width = t.cell_len
+        self.query_one("#faces", Static).update(t)
+        hint = Text(no_wrap=True)
+        hint.append("tab ", "bold cyan")
+        hint.append("⇄ face ", "dim")
+        self.query_one("#facehint", Static).update(hint)
 
     def refresh_hints(self) -> None:
         def hint(t: Text, key: str, label: str, color: str, mark: str = "") -> None:
