@@ -5,6 +5,20 @@ description: "Arquiva vault/RAW/inbox/ no mês correto e processa cada item: ext
 
 # /dump — a esteira de processamento
 
+## Passo 0 — aplique o que o dono já respondeu (fila de reserva)
+
+Antes de qualquer item da inbox: `./brain ask list --answered`. Cada pergunta respondida (`ASK-####`) é uma instrução do
+dono, e a ordem da fila vale: aplique a resposta (`person alias`/`person add` para identidade, `action open`, reclassificar o
+item, o que o `kind` e o `context` indicarem) e registre `./brain ask applied ASK-#### --how "o que você fez" --prov observado --source chat`.
+Resposta que você não sabe aplicar: deixe respondida e diga no recibo. Só então siga para a inbox.
+
+## Dúvida que precisa do dono → `ask add`, não só o relatório
+
+Identidade ambígua, pessoa sem ficha, classificação duvidosa, conflito entre fontes, qualquer coisa que o dono precisa decidir:
+`./brain ask add "pergunta curta e respondível" --option "A" --option "B" --context TASK-0004,marina-demo --kind identidade|classificacao|confirmacao|outro --run <id da rodada, se o prompt trouxer> --prov observado --source <artefato/RAW>`.
+Texto e contexto iguais aos de uma pergunta aberta devolvem o ID dela (não duplica). Siga com o que não depende da resposta e
+termine o recibo com "N perguntas abertas: ASK-0004…". Nunca decida no lugar do dono o que é dele.
+
 Siga o pipeline da constituição (AGENTS.md, seção "O pipeline"), sem pular passo.
 Toda entidade (ação, decisão, pessoa, artefato) entra pelo `./brain` — nunca edite `events.jsonl`.
 
@@ -65,18 +79,20 @@ Para cada item da inbox (ignore `.keep.md`):
   --prov observado --source RAW/<ano>/<mês>/<tipo>/<arquivo>
 ```
 
-4. Extrações em lote (preferível quando houver várias):
+4. Extrações em lote (preferível quando houver várias). Escreva o lote com a ferramenta **Write** num arquivo
+   (`vault/RAW/inbox/.tmp/lote.json` ou o scratch do agente) e rode `./brain add --file <caminho>` — heredoc (`<<'JSON'`) e pipe
+   não passam no allowlist `Bash(./brain:*)` e a rodada fica negada. Conteúdo do arquivo:
 
 ```
-./brain add <<'JSON'
 [
   {"type":"decision.made","prov":"observado","source":"PROCESSED/…/x.md",
    "data":{"title":"…","decided_by":["marina-demo"],"project":"PROJ-1","rationale":"…"}},
   {"type":"action.opened","prov":"observado","source":"PROCESSED/…/x.md",
    "data":{"title":"…","owner":"eu","due":"AAAA-MM-DD","effort_min":90,"project":"PROJ-1"}}
 ]
-JSON
 ```
+
+`./brain add --file vault/RAW/inbox/.tmp/lote.json` (apague o arquivo depois).
 
 Prazo de ação: o que o documento/conversa **diz** ("até sexta") vai em `due` normal, `[doc]`/`[observado]`. Ação nova
 sem prazo dito: sugira um pelo contexto (`"due_suggested":true,"due_reason":"…"` em `data`; método em `commands/todo/SKILL.md`,

@@ -124,6 +124,7 @@ validado (`seq`, `ts`, `type`, `id`, `date`, `actor`, `by`, `prov`, `source`,
 | `FOCUS-####` | plano de foco | `./brain` |
 | `PROC-####` | processo (portfólio) | `./brain` |
 | `OPP-####` | oportunidade/iniciativa (portfólio) | `./brain` |
+| `ASK-####` | pergunta do agente ao dono | `./brain` |
 | slug (`operacoes`) | área (`area.added`, com nome e aliases) | o dono, via `brain area add` |
 | `GOAL-#` / `PROJ-#` / `PROJ-#.#` | goal / projeto / entregável | o dono, em `PLANNING/goals.md` |
 
@@ -314,6 +315,18 @@ Não existem mais scripts `jira.py` / `gmail.py` / `slack.py`. OAuth do Google
 neste repo pede só as duas portas de escrita: `calendar.events.owned` +
 `drive.file` (`scripts/google_auth.py`, `guides/google-oauth.md`).
 
+## Perguntas do agente (`ASK-####`)
+
+Dúvida que bloqueia o agente ou que é do dono decidir **não fica só no log nem no relatório**: vira pergunta no ledger
+(`./brain ask add "…" [--option …] --context TASK-…,PROJ-…,pessoa --kind identidade|classificacao|permissao|confirmacao|outro
+--run <rodada> --source …`). Texto e contexto iguais aos de uma pergunta aberta devolvem o ID existente. **Só o agente pergunta;
+só o dono responde** (`brain ask answer`, pela TUI) e nunca no noturno, que pode perguntar mas não responder. Estados:
+aberta → respondida → aplicada (ou descartada). **Passo 0 do `/dump` e do `/update`:** `./brain ask list --answered`, aplicar cada
+resposta (alias, ação, reclassificação) e gravar `./brain ask applied ASK-#### --how "…"` — é a fila de reserva quando a TUI não
+consegue retomar o agente na hora. Permissão negada ao agente também vira ASK (`kind=permissao`); liberar grava a regra em
+`[tui].agent_allow` (`brain agent allow`), **exceto** ferramenta MCP de escrita no mundo exterior (enviar, postar, criar, mover…),
+que nunca é liberada por aí: passa pelas portas (`/outbox`, `/publish`).
+
 ## Limites de julgamento (o que ESCALAR pro dono)
 
 - Ambiguidade séria de identidade (duas pessoas plausíveis pro mesmo alias).
@@ -321,7 +334,7 @@ neste repo pede só as duas portas de escrita: `calendar.events.owned` +
 - Fonte MCP retornando erro ou vazio por 2+ pulls seguidos (`brain doctor`).
 - Qualquer situação onde seguir a regra produz resultado claramente errado.
 
-Nestes casos: pare, explique o dilema ao dono em ≤5 linhas, proponha 2 caminhos.
+Nestes casos: pare, explique o dilema ao dono em ≤5 linhas, proponha 2 caminhos. Sem dono na conversa (rodada ⚡ da TUI, noturno), o dilema vira `ASK-####` com as 2 opções.
 
 ## Comandos (o que o dono digita → skill a carregar)
 

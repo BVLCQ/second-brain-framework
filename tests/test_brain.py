@@ -2253,6 +2253,28 @@ class AskTests(unittest.TestCase):
             self.assertIn("ASK-0001", run("ask", "list", "--all").stdout)
             self.assertEqual(run("ask", "answer", "ASK-9999", "x").returncode, 3)
 
+    def test_skills_ask_through_the_cli_and_batch_goes_through_a_file(self):
+        for name in ("dump", "update"):
+            text = (ROOT / "commands" / name / "SKILL.md").read_text(encoding="utf-8")
+            self.assertIn("ask list --answered", text, name)
+            self.assertIn("ask add", text, name)
+            self.assertIn("ask applied", text, name)
+        for f in (ROOT / "commands").glob("*/SKILL.md"):                      # nada de heredoc/pipe para o ./brain
+            text = f.read_text(encoding="utf-8")
+            self.assertNotIn("./brain add <<", text, f.name)
+            self.assertNotIn("| ./brain", text, f.name)
+        self.assertIn("Perguntas do agente", (ROOT / "AGENTS.md").read_text(encoding="utf-8"))
+        with tempfile.TemporaryDirectory() as td:
+            _brain(Path(td))
+            batch = Path(td) / "lote.json"
+            batch.write_text(json.dumps([{"type": "action.opened", "by": "owner", "data": {"title": "Pelo arquivo", "owner": "eu"}}]), encoding="utf-8")
+            run = lambda *a: subprocess.run([sys.executable, str(ROOT / "brain"), *a], capture_output=True, text=True,   # noqa: E731
+                                            env={**os.environ, "BRAIN_HOME": td})
+            r = run("add", "--file", str(batch))
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertIn("TASK-0001", r.stdout)
+            self.assertEqual(run("add", str(batch)).returncode, 0)                    # a forma posicional continua valendo
+
 
 if __name__ == "__main__":
     unittest.main()

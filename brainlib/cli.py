@@ -482,7 +482,8 @@ def cmd_progress(args, b: Brain) -> None:
 
 
 def cmd_add(args, b: Brain) -> None:
-    raw = Path(args.file).read_text(encoding="utf-8") if args.file and args.file != "-" else sys.stdin.read()
+    src = args.file_opt or args.file
+    raw = Path(src).read_text(encoding="utf-8") if src and src != "-" else sys.stdin.read()
     items = json.loads(raw)
     if isinstance(items, dict):
         items = [items]
@@ -869,6 +870,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("add", help="lote de eventos JSON (arquivo ou stdin) — usado pelo /dump")
     p.add_argument("file", nargs="?", default="-")
+    p.add_argument("--file", dest="file_opt", help="o lote num arquivo (escreva com a ferramenta Write: heredoc e pipe não passam no allowlist `Bash(./brain:*)`)")
     p.add_argument("--json", action="store_true")
     p.set_defaults(fn=cmd_add)
 
