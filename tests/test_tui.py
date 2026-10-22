@@ -1640,11 +1640,12 @@ class CoverageTest(unittest.TestCase):
     READ_ONLY_VIEWS = {   # a leitura já está num painel (modelo em processo), sem precisar chamar a CLI
         "person list", "action show", "action list", "decision list", "plan show", "focus show", "outbox show",
         "outbox list", "proposal list", "publish list", "doctor", "search", "status", "artifact", "watch list", "watch since", "watch folders",
-        "note list", "raw where", "area list", "process show", "process list", "opportunity show", "opportunity list"}
+        "note list", "raw where", "ask list", "area list", "process show", "process list", "opportunity show", "opportunity list"}
     AGENT_ONLY = {        # quem escreve é o agente (extração, snapshot, envio), conforme a Constituição
         "init", "add", "snapshot", "proposal add", "outbox sent", "outbox failed", "publish done",
         "pdf text", "pdf render", "video transcribe", "video frames", "person merge",
-        "raw archive", "raw sort"}
+        "raw archive", "raw sort", "ask add", "ask applied"}
+    PENDING = {"ask answer", "ask drop"}        # ganham tecla no passo 4 de agent-questions; este conjunto some lá
     NOT_IN_TUI = {"demo", "tui", "migrate ids"}      # migração única, feita no terminal com o dono (backup + dry-run)
     DYNAMIC = {"memory recall", "memory reflect"}      # o formulário "Memória: perguntar" monta o subcomando
 
@@ -1659,7 +1660,7 @@ class CoverageTest(unittest.TestCase):
             for sc in (inner[0].choices if inner else [None]):
                 label = f"{name} {sc}" if sc else name
                 pat = re.compile(r'\[\s*"%s"\s*,\s*"%s"' % (name, sc)) if sc else re.compile(r'\[\s*"%s"\s*[,\]]' % name)
-                if pat.search(src) or label in self.READ_ONLY_VIEWS | self.AGENT_ONLY | self.NOT_IN_TUI | self.DYNAMIC:
+                if pat.search(src) or label in self.READ_ONLY_VIEWS | self.AGENT_ONLY | self.NOT_IN_TUI | self.DYNAMIC | self.PENDING:
                     continue
                 uncovered.append(label)
         self.assertEqual(uncovered, [], "subcomandos sem lugar no TUI (e sem justificativa em CoverageTest)")

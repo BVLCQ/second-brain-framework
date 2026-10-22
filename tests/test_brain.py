@@ -2165,5 +2165,94 @@ class MigrateIdsTests(unittest.TestCase):
             self.assertEqual({k: v for k, v in after.items() if "FRESH" not in k}, {k: v for k, v in before.items() if "FRESH" not in k})
 
 
+class AskTests(unittest.TestCase):
+    """Passo 1 de agent-questions: entidade ASK-#### (perguntar, responder, aplicar, descartar) e suas regras."""
+
+    def _ask(self, b, text="Qual Marina? A Marina-demo ou a Mari-demo?", **kw):
+        data = {"text": text, "options": ["marina-demo", "mari-demo"], "context": ["TASK-0001"], "kind": "identidade", "run": "run-1"}
+        data.update(kw)
+        return b.record_one({"type": "question.asked", "by": "agent", "prov": "observado", "source": "chat", "data": data})
+
+    def test_lifecycle_and_states(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            b.record_one({"type": "action.opened", "by": "owner", "data": {"title": "x", "owner": "eu"}})
+            q = self._ask(b)
+            self.assertEqual(q["id"], "ASK-0001")
+            st = b.state.questions["ASK-0001"]
+            self.assertEqual((st.status, st.kind, st.run, st.context), ("aberta", "identidade", "run-1", ["TASK-0001"]))
+            b.record_one({"type": "question.answered", "id": "ASK-0001", "by": "owner", "data": {"answer": "marina-demo"}})
+            st = b.state.questions["ASK-0001"]
+            self.assertEqual((st.status, st.answer, st.free), ("respondida", "marina-demo", False))
+            b.record_one({"type": "question.applied", "id": "ASK-0001", "by": "agent", "prov": "observado", "source": "chat",
+                          "data": {"how": "person alias"}})
+            self.assertEqual(b.state.questions["ASK-0001"].status, "aplicada")
+            q2 = self._ask(b, "Outra dúvida?", options=[], context=[])
+            b.record_one({"type": "question.dropped", "id": q2["id"], "by": "owner", "data": {"reason": "não importa mais"}})
+            self.assertEqual(b.state.questions[q2["id"]].status, "descartada")
+            self.assertEqual(b.state.next_id("ASK"), "ASK-0003")
+            self.assertEqual(b.validate_all(), [])
+
+    def test_rules(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            with self.assertRaises(util.BrainError):                           # dono não pergunta
+                b.record_one({"type": "question.asked", "by": "owner", "data": {"text": "?"}})
+            with self.assertRaises(util.BrainError):                           # agente sem fonte
+                b.record_one({"type": "question.asked", "by": "agent", "prov": "observado", "data": {"text": "?"}})
+            with self.assertRaises(util.BrainError):                           # kind inválido
+                self._ask(b, kind="qualquer")
+            qid = self._ask(b)["id"]
+            with self.assertRaises(util.BrainError):                           # agente não responde
+                b.record_one({"type": "question.answered", "id": qid, "by": "agent", "prov": "observado", "source": "chat",
+                              "data": {"answer": "marina-demo"}})
+            with self.assertRaises(util.BrainError):                           # fora das opções sem free
+                b.record_one({"type": "question.answered", "id": qid, "by": "owner", "data": {"answer": "ninguém"}})
+            with self.assertRaises(util.BrainError):                           # aplicar antes de responder
+                b.record_one({"type": "question.applied", "id": qid, "by": "agent", "prov": "observado", "source": "chat", "data": {"how": "x"}})
+            b.record_one({"type": "question.answered", "id": qid, "by": "owner", "data": {"answer": "uma terceira pessoa", "free": True}})
+            self.assertTrue(b.state.questions[qid].free)
+            with self.assertRaises(util.BrainError):                           # já respondida
+                b.record_one({"type": "question.answered", "id": qid, "by": "owner", "data": {"answer": "marina-demo"}})
+
+    def test_duplicate_open_question_returns_the_existing_one(self):
+        from brainlib import ask
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            ev, qid, created = ask.add(b, "Qual Marina?", ["a", "b"], ["TASK-0001"], "identidade", "r1", source="chat")
+            self.assertTrue(created)
+            ev2, qid2, created2 = ask.add(b, "  qual   MARINA? ", ["a", "b"], ["TASK-0001"], "identidade", "r2", source="chat")
+            self.assertEqual((qid2, created2, ev2), (qid, False, None))
+            self.assertEqual(len(b.state.questions), 1)
+            _, other, made = ask.add(b, "Qual Marina?", [], ["TASK-0002"], source="chat")        # contexto diferente é outra pergunta
+            self.assertTrue(made)
+            with self.assertRaises(util.BrainError):                                              # `brain add` direto também barra
+                b.record_one({"type": "question.asked", "by": "agent", "prov": "observado", "source": "chat",
+                              "data": {"text": "qual marina?", "context": ["TASK-0001"]}})
+            b.record_one({"type": "question.dropped", "id": qid, "by": "owner", "data": {"reason": "x"}})
+            self.assertTrue(ask.add(b, "Qual Marina?", [], ["TASK-0001"], source="chat")[2])      # fechada: pode perguntar de novo
+
+    def test_cli_and_nightly(self):
+        with tempfile.TemporaryDirectory() as td:
+            _brain(Path(td))
+            run = lambda *a, env=None: subprocess.run([sys.executable, str(ROOT / "brain"), *a], capture_output=True, text=True,   # noqa: E731
+                                                      env={**os.environ, "BRAIN_HOME": td, **(env or {})})
+            r = run("ask", "add", "Quem é a Mari?", "--option", "marina-demo", "--option", "outra", "--context", "A-0001,marina-demo",
+                    "--kind", "identidade", "--run", "run-9", "--prov", "observado", "--source", "chat")
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertIn("ASK-0001", r.stdout)
+            self.assertIn("= já aberta", run("ask", "add", "quem é a mari?", "--option", "marina-demo", "--option", "outra",
+                                             "--context", "TASK-0001,marina-demo", "--prov", "observado", "--source", "chat").stdout)
+            self.assertEqual(run("ask", "answer", "ASK-0001", "marina-demo", env={"BRAIN_NIGHTLY": "1"}).returncode, 4)   # noturno não responde
+            self.assertEqual(run("ask", "answer", "ASK-0001", "nenhuma das duas").returncode, 0)                           # texto livre vira free
+            listed = json.loads(run("ask", "list", "--answered", "--json").stdout)
+            self.assertEqual([(q["id"], q["answer"], q["free"]) for q in listed], [("ASK-0001", "nenhuma das duas", True)])
+            self.assertEqual(run("ask", "list", "--open").stdout.strip(), "(nenhuma)")
+            self.assertEqual(run("ask", "applied", "ASK-0001", "--how", "alias criado", "--prov", "observado", "--source", "chat").returncode, 0)
+            self.assertEqual(run("ask", "list").stdout.strip(), "(nenhuma)")
+            self.assertIn("ASK-0001", run("ask", "list", "--all").stdout)
+            self.assertEqual(run("ask", "answer", "ASK-9999", "x").returncode, 3)
+
+
 if __name__ == "__main__":
     unittest.main()

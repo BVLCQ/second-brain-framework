@@ -18,6 +18,7 @@ ACTION_STATUS = {"aberta", "fazendo", "aguardando"}
 PRIORITIES = {"alta", "normal", "baixa"}
 DELIVERABLE_STATUS = {"nao-iniciado", "em-andamento", "feito", "cancelado"}
 ARTIFACT_KINDS = {"reuniao", "documento", "nota", "conector"}
+QUESTION_KINDS = {"identidade", "classificacao", "permissao", "confirmacao", "outro"}
 PROPOSAL_KINDS = {"fechar-acao", "atualizar-acao", "mudar-plano", "reestimar", "outro"}
 RECURRENCE = {"diaria", "semanal", "quinzenal", "mensal", "trimestral", "sob-demanda", "por-evento"}
 RECURRENCE_NEEDS_COUNT = {"sob-demanda", "por-evento"}     # exigem per_month (execuções/mês)
@@ -71,6 +72,10 @@ TYPES: dict[str, dict] = {
     "connector.pulled": {"entity": "connector", "req": ["changed"]},
     "connector.failed": {"entity": "connector", "req": ["error"]},
     "run.completed": {"entity": "run", "req": ["ok"]},
+    "question.asked": {"entity": "question", "new": True, "prefix": ids.prefix("question"), "req": ["text"]},
+    "question.answered": {"entity": "question", "req": ["answer"]},
+    "question.applied": {"entity": "question", "req": ["how"]},
+    "question.dropped": {"entity": "question", "req": ["reason"]},
     "ids.migrated": {"entity": None, "req": ["map", "backup_sha"]},     # `brain migrate ids`: o mapa antigo → novo
     "area.added": {"entity": "area", "new": True, "req": ["name"]},
     "area.updated": {"entity": "area", "req": []},
@@ -90,9 +95,9 @@ TYPES: dict[str, dict] = {
 
 # campos de `data` que guardam IDs (um, ou uma lista); valores que não são ID (URL, texto) passam intactos
 REF_FIELDS = ("project", "deliverable", "goal", "ref", "link", "target", "blocked_by", "unblocks", "supersedes", "by",
-              "process", "projects")
+              "process", "projects", "context")
 ID_ENTITIES = {"action", "decision", "delivery", "proposal", "message", "share", "focus", "process", "opportunity",
-               "plannode", "deliverable", "doclink"}
+               "question", "plannode", "deliverable", "doclink"}
 
 
 def normalize_event(ev: dict) -> dict:
@@ -149,7 +154,7 @@ def validate(ev: dict, state, plan) -> None:
     ent = spec["entity"]
     eid = ev.get("id")
     if not spec.get("new") and ent in {"person", "action", "decision", "proposal", "message",
-                                       "share", "focus", "area", "process", "opportunity"}:
+                                       "share", "focus", "area", "process", "opportunity", "question"}:
         _need(eid in state.collection(ent), f"{t}: {ent} {eid!r} não existe")
 
     if t == "person.added":
@@ -232,8 +237,42 @@ def validate(ev: dict, state, plan) -> None:
     if t == "progress.declared":
         _plan_node(plan, eid or "", "progress")
         _need(isinstance(data["pct"], int) and 0 <= data["pct"] <= 100, "pct deve ser inteiro 0–100")
+    if ent == "question":
+        _validate_question(t, ev, data, state)
     if ent in {"area", "process", "opportunity", "doclink"}:
         _validate_portfolio(t, ev, data, state, plan)
+
+
+def question_key(text: str, context) -> tuple:
+    """Chave de dedupe de uma pergunta: texto normalizado + contexto (sem ordem)."""
+    return (" ".join(util.fold(text).split()), tuple(sorted(str(c) for c in (context or []))))
+
+
+def _validate_question(t: str, ev: dict, data: dict, state) -> None:
+    by, eid = ev.get("by"), ev.get("id")
+    if t == "question.asked":
+        _need(by in {"agent", "system"}, "question.asked: só o agente pergunta (by=agent)")
+        _need(by != "agent" or ev.get("source"), "question.asked por agente exige --source")
+        if data.get("kind"):
+            _need(data["kind"] in QUESTION_KINDS, f"kind de pergunta inválido: {data['kind']!r} — {sorted(QUESTION_KINDS)}")
+        opts = data.get("options", [])
+        _need(isinstance(opts, list) and all(isinstance(o, str) and o.strip() for o in opts), "options deve ser lista de textos")
+        _need(isinstance(data.get("context", []), list), "context deve ser lista de referências")
+        key = question_key(data["text"], data.get("context"))
+        dup = next((q.id for q in state.questions.values() if q.status == "aberta" and q.key == key), None)
+        _need(dup is None, f"pergunta igual já aberta: {dup}")
+        return
+    q = state.questions[eid]
+    if t == "question.answered":
+        _need(by == "owner", "question.answered: só o dono responde (by=owner)")
+        _need(q.status == "aberta", f"{eid} está '{q.status}' — só pergunta aberta recebe resposta")
+        _need(not q.options or data["answer"] in q.options or data.get("free"),
+              f"{eid}: a resposta não é uma das opções ({', '.join(q.options)}) — marque free para texto livre")
+    elif t == "question.applied":
+        _need(by in {"agent", "system"}, "question.applied: quem registra o efeito é o agente")
+        _need(q.status == "respondida", f"{eid} está '{q.status}' — só pergunta respondida pode ser aplicada")
+    elif t == "question.dropped":
+        _need(q.status in {"aberta", "respondida"}, f"{eid} já está '{q.status}'")
 
 
 def _int15(data: dict, field: str) -> None:

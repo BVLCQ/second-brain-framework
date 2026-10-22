@@ -16,13 +16,13 @@ import re
 PREFIXES: dict[str, tuple[str, int]] = {
     "action": ("TASK", 4), "decision": ("DEC", 4), "delivery": ("WIN", 4), "proposal": ("PROP", 4),
     "message": ("MSG", 4), "share": ("PUB", 4), "focus": ("FOCUS", 4),
-    "process": ("PROC", 4), "opportunity": ("OPP", 4),
+    "process": ("PROC", 4), "opportunity": ("OPP", 4), "question": ("ASK", 4),
     "goal": ("GOAL", 0), "project": ("PROJ", 0),
 }
 # prefixo antigo (letra) → prefixo novo, para as entidades de ID longo (`A-0146`)
 LEGACY_LONG = {"A": "TASK", "D": "DEC", "E": "WIN", "R": "PROP", "M": "MSG", "S": "PUB", "F": "FOCUS"}
 LONG_PREFIXES = [PREFIXES[e][0] for e in ("action", "decision", "delivery", "proposal", "message", "share", "focus",
-                                          "process", "opportunity")]
+                                          "process", "opportunity", "question")]
 
 _LONG = "|".join(LONG_PREFIXES)
 _OLD = "".join(LEGACY_LONG)
