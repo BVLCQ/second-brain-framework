@@ -55,8 +55,8 @@ class DatesTest(unittest.TestCase):
 
 class BridgeTest(unittest.TestCase):
     def test_display_quotes_arguments(self):
-        self.assertEqual(bridge.display(["action", "close", "A-0001", "--how", "enviei o draft"]),
-                         "brain action close A-0001 --how 'enviei o draft'")
+        self.assertEqual(bridge.display(["action", "close", "ACT-0001", "--how", "enviei o draft"]),
+                         "brain action close ACT-0001 --how 'enviei o draft'")
 
     def test_agent_argv_uses_custom_command_and_prompt(self):
         cfg = config.DEFAULTS | {"runner": {**config.DEFAULTS["runner"], "command": "meu-agente --p {prompt}"}}
@@ -123,9 +123,9 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
         fake.write_text(
             "import os, re, subprocess, sys\n"
             "prompt = sys.argv[1]\nprint('agente de mentira recebeu:', prompt.split('. ', 1)[-1][:60])\n"
-            "m = re.search(r'M-\\d{4}', prompt)\n"
+            "m = re.search(r'MSG-\\d{4}', prompt)\n"
             "if m:\n    subprocess.run([sys.executable, os.environ['FAKE_BRAIN'], 'outbox', 'sent', m.group(0), '--link', 'https://example.com/p/1'], check=True)\n"
-            "m = re.search(r'S-\\d{4}', prompt)\n"
+            "m = re.search(r'PUB-\\d{4}', prompt)\n"
             "if m:\n    subprocess.run([sys.executable, os.environ['FAKE_BRAIN'], 'publish', 'done', m.group(0), '--link', 'https://example.com/canvas/1'], check=True)\n",
             encoding="utf-8")
         os.environ["FAKE_BRAIN"] = str(ROOT / "brain")
@@ -242,7 +242,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
                "semice": opp("Revisar templates", "growth"),
                "arquivo": opp("Ideia antiga", "operacoes", (1, 1, 1), "descartada"),
                "prior": opp("Revisão de SLAs", "operacoes", (3, 3, 3), "priorizada")}
-        b.record_one({"type": "opportunity.promoted", "id": ids["rapido"], "by": "owner", "data": {"project": "P1", "goal": "G1"}})
+        b.record_one({"type": "opportunity.promoted", "id": ids["rapido"], "by": "owner", "data": {"project": "PROJ-1", "goal": "GOAL-1"}})
         b.record_one({"type": "opportunity.status", "id": ids["rapido"], "by": "owner", "data": {"status": "em-andamento", "reason": "promovida"}})
         return ids
 
@@ -307,7 +307,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual((app.face, app.p, app.tab[3], app.cur().id), (1, 3, 2, ids["rapido"]))
             app.jump(ids["p2"])
             self.assertEqual((app.face, app.p, app.cur().id), (1, 2, ids["p2"]))
-            app.jump("P1")                                           # plano é da Execução
+            app.jump("PROJ-1")                                           # plano é da Execução
             self.assertEqual((app.face, app.p), (0, 3))
 
     async def test_portfolio_keys_build_the_right_commands(self):
@@ -489,7 +489,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             await self.settle(app, pilot)
             st = self.state(app)
             o = st.opportunities[ids["aposta"]]
-            self.assertEqual((o.status, o.goal), ("em-andamento", "G1"))
+            self.assertEqual((o.status, o.goal), ("em-andamento", "GOAL-1"))
             self.assertIn(f"### {o.project} — Plataforma de dados", self.inst.planning_file.read_text(encoding="utf-8"))
             self.assertEqual((app.face, app.cur().id), (1, ids["aposta"]))
             self.assertEqual(app.tab[3], 2)                                        # a aba segue o status novo
@@ -712,7 +712,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
         app = self.app()
         async with app.run_test(size=(140, 44)) as pilot:
             await pilot.pause(0.4)
-            app.exec([["action", "close", "A-9999", "--how", "x", "--by", "owner"]])
+            app.exec([["action", "close", "ACT-9999", "--how", "x", "--by", "owner"]])
             await self.settle(app, pilot)
             log = self.log_text(app)
             self.assertIn("ERRO", log)
@@ -787,18 +787,18 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
         app = self.app()
         async with app.run_test(size=(140, 44)) as pilot:
             await pilot.pause(0.4)
-            app.jump("P1.3")
-            before = app.store.by_project["P1"]["progress"]["pct"]
+            app.jump("PROJ-1.3")
+            before = app.store.by_project["PROJ-1"]["progress"]["pct"]
             await pilot.press("space")
             await pilot.pause(0.2)
             await pilot.press("enter")
             await self.settle(app, pilot)
-            self.assertGreater(app.store.by_project["P1"]["progress"]["pct"], before)
-            self.assertIn("$ brain plan deliverable P1.3 --status feito", self.log_text(app))
+            self.assertGreater(app.store.by_project["PROJ-1"]["progress"]["pct"], before)
+            self.assertIn("$ brain plan deliverable PROJ-1.3 --status feito", self.log_text(app))
 
     async def test_plan_gate_logs_only_with_typed_approval_and_restores_on_cancel(self):
         editor = Path(self.tmp.name) / "editor.py"
-        editor.write_text("import sys\nopen(sys.argv[1], 'a').write('\\n## G9 — Meta nova\\n- status: ativo\\n- horizonte: 2027-01-01\\n- por quê: teste\\n')\n", encoding="utf-8")
+        editor.write_text("import sys\nopen(sys.argv[1], 'a').write('\\n## GOAL-9 — Meta nova\\n- status: ativo\\n- horizonte: 2027-01-01\\n- por quê: teste\\n')\n", encoding="utf-8")
         os.environ["EDITOR"] = f"{sys.executable} {editor}"
         self.addCleanup(os.environ.pop, "EDITOR", None)
         goals = self.inst.planning_file
@@ -809,15 +809,15 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             await pilot.press("3", "E")
             await pilot.pause(0.5)
             self.assertEqual(type(app.screen).__name__, "FormModal")
-            self.assertIn("G9", goals.read_text(encoding="utf-8"))
+            self.assertIn("GOAL-9", goals.read_text(encoding="utf-8"))
             await pilot.press("escape")                               # cancelar desfaz a edição
             await pilot.pause(0.2)
             self.assertEqual(goals.read_text(encoding="utf-8"), original)
             await pilot.press("E")
             await pilot.pause(0.5)
-            await pilot.press(*"G9", "space", *"nasce", "tab", *"nova", "space", *"meta", "tab", "tab", *"ok", "enter")
+            await pilot.press(*"GOAL-9", "space", *"nasce", "tab", *"nova", "space", *"meta", "tab", "tab", *"ok", "enter")
             await self.settle(app, pilot)
-            self.assertIn("G9", goals.read_text(encoding="utf-8"))
+            self.assertIn("GOAL-9", goals.read_text(encoding="utf-8"))
             changes = self.state(app).plan_changes
             self.assertEqual(changes[-1]["approval"], "ok")
 
@@ -997,13 +997,13 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             await self.typ(pilot, "Alinhar com Caio-demo")
             for _ in range(7):
                 await pilot.press("tab")
-            await self.typ(pilot, "P1.3")
+            await self.typ(pilot, "PROJ-1.3")
             await pilot.press("tab")
             await self.typ(pilot, "caio-demo")
             await pilot.press("enter")
             await self.settle_new_action(app, pilot)
             a = next(x for x in self.state(app).actions.values() if x.title == "Alinhar com Caio-demo")
-            self.assertEqual(a.deliverable, "P1.3")
+            self.assertEqual(a.deliverable, "PROJ-1.3")
             self.assertIn("caio-demo", a.people)
 
     async def test_status_due_drop_reopen_and_chase(self):
@@ -1106,13 +1106,13 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
         app = self.app()
         async with app.run_test(size=(140, 44)) as pilot:
             await pilot.pause(0.4)
-            app.jump("G1")
+            app.jump("GOAL-1")
             await pilot.press("P")
             await pilot.pause(0.3)
             await self.typ(pilot, "60")
             await pilot.press("enter")
             await self.settle(app, pilot)
-            self.assertEqual(app.store.by_goal["G1"]["declared"]["pct"], 60)
+            self.assertEqual(app.store.by_goal["GOAL-1"]["declared"]["pct"], 60)
             await pilot.press("4", "]", "]", "s")
             await pilot.pause(0.3)
             await pilot.press("enter")
@@ -1310,7 +1310,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             await pilot.press("3", "N")
             await pilot.pause(0.3)
             app.screen.query_one("#f_text").text = "ideia solta"
-            app.screen.query_one("#f_link").value = "A-9999"
+            app.screen.query_one("#f_link").value = "ACT-9999"
             await pilot.press("ctrl+s")
             await pilot.pause(0.2)
             self.assertEqual(type(app.screen).__name__, "FormModal")            # vínculo inexistente barra
@@ -1324,14 +1324,14 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
         from brainlib import notes
         from brainlib.core import Brain
         b = Brain(self.inst)
-        for link in ("G1", "P1", "P1.1"):
+        for link in ("GOAL-1", "PROJ-1", "PROJ-1.1"):
             notes.create(b, f"nota de {link}", link)
         app = self.app()
         async with app.run_test(size=(140, 44)) as pilot:
             await pilot.pause(0.4)
             await pilot.press("3")
             for it in app.items(3):
-                if it.id in ("G1", "P1", "P1.1"):
+                if it.id in ("GOAL-1", "PROJ-1", "PROJ-1.1"):
                     app.set_sel(3, [i.id for i in app.items(3)].index(it.id))
                     app.redraw()
                     self.assertIn(f"▌ nota de {it.id}", self.text_of(app.query_one("#detail")))
@@ -1340,12 +1340,12 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
         from brainlib import notes
         from brainlib.core import Brain
         b = Brain(self.inst)
-        notes.create(b, "primeira", "P1")
+        notes.create(b, "primeira", "PROJ-1")
         app = self.app()
         async with app.run_test(size=(140, 44)) as pilot:
             await pilot.pause(0.4)
             await pilot.press("3")
-            app.set_sel(3, [i.id for i in app.items(3)].index("P1"))
+            app.set_sel(3, [i.id for i in app.items(3)].index("PROJ-1"))
             app.redraw()
             # 1) editar a existente: o texto novo entra no fim e o arquivo é reescrito
             await pilot.press("N")
@@ -1362,7 +1362,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             await pilot.press("ctrl+s")
             await self.settle(app, pilot)
             files = sorted(p.name for p in self.inst.inbox.glob("*-note*.md"))
-            self.assertEqual(files, ["P1-2026-10-09-note.md"])
+            self.assertEqual(files, ["PROJ-1-2026-10-09-note.md"])
             body = (self.inst.inbox / files[0]).read_text(encoding="utf-8")
             self.assertIn("primeira, revisada", body)
             self.assertIn("editada: 2026-10-09 10:00", body)
@@ -1376,7 +1376,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             await pilot.press("n")
             await self.settle(app, pilot)
             self.assertEqual(sorted(p.name for p in self.inst.inbox.glob("*-note*.md")),
-                             ["P1-2026-10-09-note-2.md", "P1-2026-10-09-note.md"])
+                             ["PROJ-1-2026-10-09-note-2.md", "PROJ-1-2026-10-09-note.md"])
             # 3) esc volta ao formulário com o que foi digitado
             await pilot.press("N")
             await pilot.pause(0.3)
@@ -1392,7 +1392,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
         from brainlib import notes
         from brainlib.core import Brain
         b = Brain(self.inst)
-        src = notes.create(b, "já arquivada", "P1")
+        src = notes.create(b, "já arquivada", "PROJ-1")
         dest = self.inst.vault / "RAW" / "2026" / "10"
         dest.mkdir(parents=True, exist_ok=True)
         src.rename(dest / src.name)
@@ -1402,10 +1402,10 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             await pilot.press("3", "N")
             await pilot.pause(0.3)
             app.screen.query_one("#f_text").text = "nova"
-            app.screen.query_one("#f_link").value = "P1"
+            app.screen.query_one("#f_link").value = "PROJ-1"
             await pilot.press("ctrl+s")
             await self.settle(app, pilot)                      # sem pergunta: RAW é imutável
-        self.assertTrue((self.inst.inbox / "P1-2026-10-09-note-2.md").exists())
+        self.assertTrue((self.inst.inbox / "PROJ-1-2026-10-09-note-2.md").exists())
 
     async def test_note_text_can_be_edited_in_the_external_editor(self):
         editor = Path(self.tmp.name) / "fake_editor.py"
@@ -1435,19 +1435,19 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
         async with app.run_test(size=(140, 44)) as pilot:
             await pilot.pause(0.4)
             # entregável: sem gate
-            self._select3(app, "P1.1")
+            self._select3(app, "PROJ-1.1")
             self.assertIn("e", {k.k for k in app.ctx_keys()})
             await pilot.press("e")
             await pilot.pause(0.3)
-            self.assertIn("Editar P1.1", self.text_of(app.screen.query_one("#mt")))
+            self.assertIn("Editar PROJ-1.1", self.text_of(app.screen.query_one("#mt")))
             await self.fill(pilot, title="Entregável editado", due="2026-12-20", weight="3")
             await pilot.press("ctrl+s")
             await self.settle(app, pilot)
-            d = app.store.brain.plan.deliverables["P1.1"]
+            d = app.store.brain.plan.deliverables["PROJ-1.1"]
             self.assertEqual((d.title, d.due, d.weight), ("Entregável editado", date(2026, 12, 20), 3))
-            self.assertIn("$ brain plan edit P1.1", self.log_text(app))
+            self.assertIn("$ brain plan edit PROJ-1.1", self.log_text(app))
             # projeto: gate (sem aprovação não passa)
-            self._select3(app, "P1")
+            self._select3(app, "PROJ-1")
             await pilot.press("e")
             await pilot.pause(0.3)
             await self.fill(pilot, title="Projeto editado")
@@ -1457,15 +1457,15 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             await self.fill(pilot, quote="ok")
             await pilot.press("ctrl+s")
             await self.settle(app, pilot)
-            self.assertEqual(app.store.brain.plan.projects["P1"].title, "Projeto editado")
+            self.assertEqual(app.store.brain.plan.projects["PROJ-1"].title, "Projeto editado")
             # goal: gate
-            self._select3(app, "G1")
+            self._select3(app, "GOAL-1")
             await pilot.press("e")
             await pilot.pause(0.3)
             await self.fill(pilot, title="Goal editado", horizon="2027-05-01", quote="ok")
             await pilot.press("ctrl+s")
             await self.settle(app, pilot)
-            g = app.store.brain.plan.goals["G1"]
+            g = app.store.brain.plan.goals["GOAL-1"]
             self.assertEqual((g.title, g.horizon), ("Goal editado", "2027-05-01"))
             self.assertEqual(sum(1 for e in app.store.brain.read_events() if e["type"] == "plan.changed"), 2)
 
@@ -1474,15 +1474,15 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
         async with app.run_test(size=(140, 44)) as pilot:
             await pilot.pause(0.4)
             label = lambda: next(k.label for k in app.ctx_keys() if k.k == "n")  # noqa: E731
-            self._select3(app, "G1")
+            self._select3(app, "GOAL-1")
             self.assertEqual(label(), "novo projeto")
-            self._select3(app, "P1")
+            self._select3(app, "PROJ-1")
             self.assertEqual(label(), "novo entregável")
-            self._select3(app, "P1.1")
+            self._select3(app, "PROJ-1.1")
             self.assertEqual(label(), "nova ação")
             self.assertIn("G", {k.k for k in app.ctx_keys()})
             # goal → projeto (gate: exige a aprovação digitada)
-            self._select3(app, "G1")
+            self._select3(app, "GOAL-1")
             await pilot.press("n")
             await pilot.pause(0.3)
             self.assertIn("Novo projeto", self.text_of(app.screen.query_one("#mt")))
@@ -1495,10 +1495,10 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             await self.settle(app, pilot)
             plan = app.store.brain.plan
             pid = next(p.id for p in plan.projects.values() if p.title == "Projeto criado na TUI")
-            self.assertEqual(plan.projects[pid].goal_id, "G1")
+            self.assertEqual(plan.projects[pid].goal_id, "GOAL-1")
             self.assertEqual((app.p, app.cur().id), (3, pid))                  # a seleção vai para o novo projeto
             self.assertIn("plan.changed", [e["type"] for e in app.store.brain.read_events()])
-            self.assertIn("$ brain plan add-project G1", self.log_text(app))
+            self.assertIn("$ brain plan add-project GOAL-1", self.log_text(app))
             # projeto → entregável (sem gate)
             await pilot.press("n")
             await pilot.pause(0.3)
@@ -1587,8 +1587,8 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             a = next(a for a in st.m["actions"] if a["deliverable"])
             self.assertEqual(shown(3, 0, a["id"]), {a["deliverable"], a["project"] or st.by_deliv[a["deliverable"]][0]["id"],
                                                        st.by_project[st.by_deliv[a["deliverable"]][0]["id"]]["goal"]})
-            # P1 não pega P10: filtro por id é exato; texto livre continua sendo substring
-            self.assertNotIn("P10", shown(3, 0, "P1"))
+            # PROJ-1 não pega PROJ-10: filtro por id é exato; texto livre continua sendo substring
+            self.assertNotIn("PROJ-10", shown(3, 0, "PROJ-1"))
             app.filt = None
 
     async def test_deliverable_by_number_inside_the_project(self):
@@ -1606,7 +1606,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             await pilot.press("e")
             await pilot.pause(0.3)
             f = app.screen.query_one("#f_deliv")
-            self.assertEqual(f.value, a["deliverable"].split(".")[1])         # P1.2 aparece só como 2
+            self.assertEqual(f.value, a["deliverable"].split(".")[1])         # PROJ-1.2 aparece só como 2
             await self.fill(pilot, deliv="99")
             await pilot.press("ctrl+s")
             await pilot.pause(0.2)

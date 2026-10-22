@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import re
 
-from . import util
+from . import ids, util
 from .util import BrainError, parse_date
 
 PROV = {"doc", "observado", "declarado", "sem-fonte", "sistema"}
@@ -27,11 +27,10 @@ OPP_REASON_STATUS = {"em-espera", "descartada"}            # laterais: exigem mo
 OPP_KINDS = {"melhoria-de-processo", "novo-processo", "estruturante"}
 DOC_KINDS = {"playbook", "one-pager", "planilha", "artefato", "apresentacao", "outro"}
 
-ACTION_ID = re.compile(r"^A-\d{4,}$")
+ACTION_ID, PLAN_NODE = ids.ACTION_ID, ids.PLAN_NODE
 PROC_ID = re.compile(r"^PROC-\d{4,}$")
 OPP_ID = re.compile(r"^OPP-\d{4,}$")
 AREA_ID = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
-PLAN_NODE = re.compile(r"^(G\d+|P\d+|P\d+\.\d+)$")
 
 # entity: a qual coleção o id pertence · new: o evento cria a entidade ·
 # prefix: o CLI atribui o próximo ID sequencial · req: campos obrigatórios em data
@@ -39,32 +38,32 @@ TYPES: dict[str, dict] = {
     "person.added": {"entity": "person", "new": True, "req": ["name"]},
     "person.updated": {"entity": "person", "req": []},
     "person.merged": {"entity": "person", "req": ["into"]},
-    "action.opened": {"entity": "action", "new": True, "prefix": "A", "req": ["title", "owner"]},
+    "action.opened": {"entity": "action", "new": True, "prefix": ids.prefix("action"), "req": ["title", "owner"]},
     "action.updated": {"entity": "action", "req": []},
     "action.closed": {"entity": "action", "req": ["how"]},
     "action.dropped": {"entity": "action", "req": ["reason"]},
     "action.reopened": {"entity": "action", "req": ["reason"]},
-    "decision.made": {"entity": "decision", "new": True, "prefix": "D", "req": ["title", "decided_by"]},
+    "decision.made": {"entity": "decision", "new": True, "prefix": ids.prefix("decision"), "req": ["title", "decided_by"]},
     "decision.superseded": {"entity": "decision", "req": ["reason"]},
-    "delivery.recorded": {"entity": "delivery", "new": True, "prefix": "E", "req": ["title"]},
+    "delivery.recorded": {"entity": "delivery", "new": True, "prefix": ids.prefix("delivery"), "req": ["title"]},
     "deliverable.updated": {"entity": "deliverable", "req": ["status"]},
     "artifact.added": {"entity": "artifact", "new": True, "req": ["kind", "title"]},
-    "proposal.opened": {"entity": "proposal", "new": True, "prefix": "R", "req": ["kind", "summary"]},
+    "proposal.opened": {"entity": "proposal", "new": True, "prefix": ids.prefix("proposal"), "req": ["kind", "summary"]},
     "proposal.accepted": {"entity": "proposal", "req": ["quote"]},
     "proposal.rejected": {"entity": "proposal", "req": ["quote"]},
     "progress.declared": {"entity": "plannode", "req": ["pct"]},
     "plan.changed": {"entity": None, "req": ["diff", "reason", "approval"]},
-    "message.drafted": {"entity": "message", "new": True, "prefix": "M", "req": ["to", "text"]},
+    "message.drafted": {"entity": "message", "new": True, "prefix": ids.prefix("message"), "req": ["to", "text"]},
     "message.approved": {"entity": "message", "req": ["quote", "text_sha"]},
     "message.sent": {"entity": "message", "req": ["text_sha"]},
     "message.failed": {"entity": "message", "req": ["error"]},
     "message.cancelled": {"entity": "message", "req": []},
-    "share.requested": {"entity": "share", "new": True, "prefix": "S",
+    "share.requested": {"entity": "share", "new": True, "prefix": ids.prefix("share"),
                         "req": ["report", "destination", "content_sha"]},
     "share.approved": {"entity": "share", "req": ["quote", "content_sha"]},
     "share.published": {"entity": "share", "req": []},
     "share.cancelled": {"entity": "share", "req": []},
-    "focus.planned": {"entity": "focus", "new": True, "prefix": "F", "req": ["plan_file", "sha", "blocks"]},
+    "focus.planned": {"entity": "focus", "new": True, "prefix": ids.prefix("focus"), "req": ["plan_file", "sha", "blocks"]},
     "focus.approved": {"entity": "focus", "req": ["quote", "sha"]},
     "focus.applied": {"entity": "focus", "req": ["mode", "created"]},
     "focus.removed": {"entity": "focus", "req": ["removed"]},
@@ -73,10 +72,10 @@ TYPES: dict[str, dict] = {
     "run.completed": {"entity": "run", "req": ["ok"]},
     "area.added": {"entity": "area", "new": True, "req": ["name"]},
     "area.updated": {"entity": "area", "req": []},
-    "process.added": {"entity": "process", "new": True, "prefix": "PROC", "req": ["title", "area"]},
+    "process.added": {"entity": "process", "new": True, "prefix": ids.prefix("process"), "req": ["title", "area"]},
     "process.updated": {"entity": "process", "req": []},
     "process.retired": {"entity": "process", "req": ["reason"]},
-    "opportunity.added": {"entity": "opportunity", "new": True, "prefix": "OPP", "req": ["title", "area"]},
+    "opportunity.added": {"entity": "opportunity", "new": True, "prefix": ids.prefix("opportunity"), "req": ["title", "area"]},
     "opportunity.updated": {"entity": "opportunity", "req": []},
     "opportunity.status": {"entity": "opportunity", "req": ["status"]},
     "opportunity.scored": {"entity": "opportunity", "req": ["impact", "confidence", "ease"]},
@@ -85,6 +84,28 @@ TYPES: dict[str, dict] = {
     "doc.linked": {"entity": "doclink", "req": ["target", "kind", "ref"]},
     "doc.unlinked": {"entity": "doclink", "req": ["target", "ref"]},
 }
+
+
+# campos de `data` que guardam IDs (um, ou uma lista); valores que não são ID (URL, texto) passam intactos
+REF_FIELDS = ("project", "deliverable", "goal", "ref", "link", "target", "blocked_by", "unblocks", "supersedes", "by",
+              "process", "projects")
+ID_ENTITIES = {"action", "decision", "delivery", "proposal", "message", "share", "focus", "process", "opportunity",
+               "plannode", "deliverable", "doclink"}
+
+
+def normalize_event(ev: dict) -> dict:
+    """Nomes antigos (`A-0146`, `G1`, `P3.2`…) → novos, no `id` e nos campos que referenciam IDs. Edita `ev` no lugar.
+
+    É a ponte de entrada: `brain add`, a CLI e a leitura de um ledger ainda não migrado passam por aqui."""
+    spec = TYPES.get(ev.get("type"))
+    if spec is not None and spec["entity"] in ID_ENTITIES and ev.get("id"):
+        ev["id"] = ids.normalize(ev["id"])
+    data = ev.get("data")
+    if isinstance(data, dict):
+        for f in REF_FIELDS:
+            if f in data:
+                data[f] = ids.normalize(data[f])
+    return ev
 
 
 def _need(cond: bool, msg: str) -> None:

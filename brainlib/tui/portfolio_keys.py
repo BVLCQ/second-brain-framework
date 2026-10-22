@@ -115,7 +115,7 @@ class PortfolioKeys:
         return "" if v in self.store.by_proc else f"{v} não existe (use PROC-####)."
 
     def _goal_check(self, v: str) -> str:
-        return "" if v in self.store.by_goal else f"{v} não existe no PLANNING (use G#)."
+        return "" if v in self.store.by_goal else f"{v} não existe no PLANNING (use GOAL-#)."
 
     def _choice(self, v: str) -> str:
         return "" if v == NONE else v
@@ -215,7 +215,7 @@ class PortfolioKeys:
             Field("gain", "ganho esperado", value=d.get("gain") or "", ph="texto livre"),
             Field("hours", "horas/mês poupadas", value=f"{d['hours_saved']:g}" if d.get("hours_saved") else "", ph="declarado por você (opcional)",
                   check=self._num_check),
-            Field("goal", "goal", value=d.get("goal") or "", ph="G# (opcional)", check=self._goal_check),
+            Field("goal", "goal", value=d.get("goal") or "", ph="GOAL-# (opcional)", check=self._goal_check),
             Field("people", "pessoas", ph="ids ou aliases, vírgula (opcional)", check=self._people_check)]
 
     def _opp_args(self, v: dict, old: dict | None) -> list[str]:

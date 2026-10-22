@@ -13,11 +13,11 @@ Nada vai para o calendário sem aprovação explícita do lote.
 4. Com a resposta literal:
 
 ```
-./brain focus approve F-#### --quote "<literal>"
-./brain focus apply F-####
+./brain focus approve FOCUS-#### --quote "<literal>"
+./brain focus apply FOCUS-####
 ```
 
-Modo `ics` (padrão): arquivo em `FRESH/focus/F-####.ics` — o dono importa. Modo `google`: a porta cria eventos `focusTime` marcados; eventos sem marca **nunca** são tocados.
+Modo `ics` (padrão): arquivo em `FRESH/focus/FOCUS-####.ics` — o dono importa. Modo `google`: a porta cria eventos `focusTime` marcados; eventos sem marca **nunca** são tocados.
 5. Ações fechadas: `./brain focus sync` remove blocos futuros (autorizado pelo lote). No noturno isto roda sozinho.
 
 Não espalhe blocos no calendário um a um. Não use outro calendário que não o `focus.calendar`. Não aplique plano `proposto`.

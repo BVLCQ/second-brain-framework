@@ -367,7 +367,7 @@ def add_parsers(sub) -> None:
         x.add_argument("--gain", help="ganho esperado (texto)")
         x.add_argument("--hours-saved", type=float, help="horas/mês poupadas (declaradas)")
         x.add_argument("--person", action="append", help="pessoas envolvidas (ids/aliases)")
-        x.add_argument("--goal", help="G# ao qual a ideia se liga")
+        x.add_argument("--goal", help="GOAL-# ao qual a ideia se liga")
         _fact_opts(x)
 
     p = sub.add_parser("opportunity", help="oportunidades/iniciativas OPP-####")

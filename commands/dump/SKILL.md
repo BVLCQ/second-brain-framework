@@ -24,11 +24,11 @@ Toda entidade (ação, decisão, pessoa, artefato) entra pelo `./brain` — nunc
 - esforço (`90m`, `2h`) se alguém falou tempo
 - **não feche** ação só porque o texto "parece" resolver — abra `brain proposal add --kind fechar-acao` com a evidência
 
-**Notas do dono (`<A-####|G#|P#|P#.n|note>-AAAA-MM-DD-note.md`)** — criadas pelo TUI (`N`) ou por
+**Notas do dono (`<ACT-####|GOAL-#|PROJ-#|PROJ-#.#|note>-AAAA-MM-DD-note.md`)** — criadas pelo TUI (`N`) ou por
 `./brain note add`. O frontmatter traz `vinculo:` e `criada:`. Trate como **nota** sem reclassificar: arquive
 no RAW (`notes/`) **sem renomear** (o TUI as acha pelo nome, no detalhe do vínculo) e registre o artefato com
-`--projects` = o projeto do vínculo (`P#`/`P#.n` → `P#`; `A-####` → o projeto da ação; goal → deixe vazio e cite
-o `G#` no resumo). Extraia ações/decisões só do que a nota afirmar; o vínculo já é a ligação.
+`--projects` = o projeto do vínculo (`PROJ-#`/`PROJ-#.#` → `PROJ-#`; `ACT-####` → o projeto da ação; goal → deixe vazio e cite
+o `GOAL-#` no resumo). Extraia ações/decisões só do que a nota afirmar; o vínculo já é a ligação.
 
 **Portfólio (processos e oportunidades)** — ao extrair dores, ineficiências ou sugestões de melhoria de um item:
 - **Oportunidade:** `./brain opportunity add "<título>" --area <slug> --problem "…" --suggestion "…" --by agent --prov observado --source <artefato>`. O CLI checa duplicata sozinho (código 2, nada gravado): se for a mesma ideia, `./brain opportunity evidence OPP-#### --source <artefato>` (mais uma fonte reforça, não duplica); se for nova, repita com `--force`. O agente **só cria em `ideia`** — nunca mova status, nunca grave ICE como firme (sugestão é `/opportunity triage`) e nunca promova.
@@ -61,7 +61,7 @@ Para cada item da inbox (ignore `.keep.md`):
 
 ```
 ./brain artifact PROCESSED/<ano>/<mês>/<slug>.md --kind reuniao|documento|nota|conector \
-  --title "…" --raw RAW/<ano>/<mês>/<tipo>/<arquivo> --people a,b --projects P1 --summary "…" \
+  --title "…" --raw RAW/<ano>/<mês>/<tipo>/<arquivo> --people a,b --projects PROJ-1 --summary "…" \
   --prov observado --source RAW/<ano>/<mês>/<tipo>/<arquivo>
 ```
 
@@ -71,9 +71,9 @@ Para cada item da inbox (ignore `.keep.md`):
 ./brain add <<'JSON'
 [
   {"type":"decision.made","prov":"observado","source":"PROCESSED/…/x.md",
-   "data":{"title":"…","decided_by":["marina-demo"],"project":"P1","rationale":"…"}},
+   "data":{"title":"…","decided_by":["marina-demo"],"project":"PROJ-1","rationale":"…"}},
   {"type":"action.opened","prov":"observado","source":"PROCESSED/…/x.md",
-   "data":{"title":"…","owner":"eu","due":"AAAA-MM-DD","effort_min":90,"project":"P1"}}
+   "data":{"title":"…","owner":"eu","due":"AAAA-MM-DD","effort_min":90,"project":"PROJ-1"}}
 ]
 JSON
 ```

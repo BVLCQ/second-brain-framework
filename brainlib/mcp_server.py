@@ -10,7 +10,7 @@ import sys
 from datetime import date, timedelta
 from pathlib import Path
 
-from . import __version__, model, people, rawsort, search, util
+from . import __version__, ids, model, people, rawsort, search, util
 from .core import Brain
 
 PROTOCOLS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"]
@@ -30,13 +30,13 @@ TOOLS = [
      _schema({})),
     ("brain_search", "Busca sem LLM em ações, decisões, pessoas, projetos, entregas e artefatos.",
      _schema({"query": S, "limit": I}, ["query"])),
-    ("brain_project", "Página de um projeto (P#): entregáveis, decisões (quem/quando/fonte), ações, linha do tempo, pessoas.",
+    ("brain_project", "Página de um projeto (PROJ-#): entregáveis, decisões (quem/quando/fonte), ações, linha do tempo, pessoas.",
      _schema({"id": S}, ["id"])),
     ("brain_person", "Pessoa por nome/alias/e-mail: papel, última interação, o que deve/devem, decisões que tomou.",
      _schema({"name": S}, ["name"])),
     ("brain_decisions", "Decisões, filtráveis por projeto, pessoa e data mínima (AAAA-MM-DD).",
      _schema({"project": S, "person": S, "since": S})),
-    ("brain_actions", "Ações (A-####). list: mine|waiting|watching. Por padrão só abertas.",
+    ("brain_actions", "Ações (ACT-####). list: mine|waiting|watching. Por padrão só abertas.",
      _schema({"list": S, "project": S, "owner": S, "include_closed": {"type": "boolean"}})),
     ("brain_timeline", "Linha do tempo: o que aconteceu (dias para trás) e prazos (dias à frente).",
      _schema({"days_back": I, "days_ahead": I})),
@@ -163,6 +163,7 @@ def _read(brain, args) -> dict:
 
 
 def call_tool(name: str, args: dict) -> object:
+    args = {k: (ids.normalize(v) if k in ("id", "project") else v) for k, v in args.items()}   # nomes antigos valem
     brain = Brain()
     if name == "brain_read":
         return _read(brain, args)

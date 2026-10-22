@@ -1,16 +1,19 @@
 """PLANNING/goals.md — a árvore curada (goal → projeto → entregável), em Markdown estrito.
 
-    ## G1 — Nome do goal
+    ## GOAL-1 — Nome do goal
     - status: ativo
     - horizonte: 2027-06-30
     - por quê: o que isto destrava
 
-    ### P1 — Nome do projeto
+    ### PROJ-1 — Nome do projeto
     - status: ativo
     - dono: marina-demo
-    - [ ] P1.1 Entregável · prazo: 2026-10-30 · peso: 2
-    - [x] P1.2 Entregável · prazo: 2026-11-15 · feito: 2026-11-10
-    - [-] P1.3 Entregável cancelado
+    - [ ] PROJ-1.1 Entregável · prazo: 2026-10-30 · peso: 2
+    - [x] PROJ-1.2 Entregável · prazo: 2026-11-15 · feito: 2026-11-10
+    - [-] PROJ-1.3 Entregável cancelado
+
+Na leitura, `G1` / `P1` / `P1.1` (nomes antigos) valem como sinônimo de `GOAL-1` / `PROJ-1` / `PROJ-1.1`; o parser
+devolve sempre o nome novo, e o arquivo só passa ao formato novo quando o cérebro reescreve a linha (ou em `migrate ids`).
 
 Progresso de projeto/goal = peso dos entregáveis feitos / peso dos não cancelados.
 O agente só muda a ESTRUTURA com aprovação (gate); o estado factual (checkbox,
@@ -23,11 +26,12 @@ from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 
-from . import util
+from . import ids, util
 
-GOAL_RE = re.compile(r"^##\s+(G\d+)\s*[—–-]\s*(.+?)\s*$")
-PROJ_RE = re.compile(r"^###\s+(P\d+)\s*[—–-]\s*(.+?)\s*$")
-DELIV_RE = re.compile(r"^(\s*-\s+\[)( |x|X|-)(\]\s+)(P\d+\.\d+)\s+(.+?)\s*$")
+# o parser lê os dois formatos (GOAL-1 e o antigo G1…); ids.normalize devolve sempre o novo
+GOAL_RE = re.compile(rf"^##\s+(GOAL-\d+|{ids.LEGACY_GOAL_SRC})\s*[—–-]\s*(.+?)\s*$")
+PROJ_RE = re.compile(rf"^###\s+(PROJ-\d+|{ids.LEGACY_PROJ_SRC})\s*[—–-]\s*(.+?)\s*$")
+DELIV_RE = re.compile(rf"^(\s*-\s+\[)( |x|X|-)(\]\s+)(PROJ-\d+\.\d+|{ids.LEGACY_DELIV_SRC})\s+(.+?)\s*$")
 META_RE = re.compile(r"^\s*-\s+([^\[\]:]{2,24}):\s*(.+?)\s*$")
 H2_RE = re.compile(r"^##\s+")
 
@@ -95,11 +99,13 @@ class Plan:
     warnings: list[str] = field(default_factory=list)
 
     def has(self, node: str) -> bool:
+        node = ids.normalize(node)
         return node in self.goals or node in self.projects or node in self.deliverables
 
     def goal_of(self, node: str | None) -> str | None:
         if not node:
             return None
+        node = ids.normalize(node)
         if node in self.goals:
             return node
         if node in self.projects:
@@ -111,6 +117,7 @@ class Plan:
     def project_of(self, node: str | None) -> str | None:
         if not node:
             return None
+        node = ids.normalize(node)
         if node in self.projects:
             return node
         if node in self.deliverables:
@@ -118,12 +125,14 @@ class Plan:
         return None
 
     def title(self, node: str) -> str:
+        node = ids.normalize(node)
         for coll in (self.goals, self.projects, self.deliverables):
             if node in coll:
                 return coll[node].title
         return node
 
     def deliverables_of(self, node: str) -> list[Deliverable]:
+        node = ids.normalize(node)
         if node in self.projects:
             return list(self.projects[node].deliverables)
         if node in self.goals:
@@ -191,7 +200,7 @@ def parse(text: str) -> Plan:
     for i, ln in enumerate(_strip_comments(text.splitlines()), start=1):
         m = GOAL_RE.match(ln)
         if m:
-            gid, title = m.groups()
+            gid, title = ids.normalize(m.group(1)), m.group(2)
             if gid in plan.goals:
                 plan.warnings.append(f"linha {i}: {gid} duplicado")
             goal = Goal(gid, title)
@@ -203,7 +212,7 @@ def parse(text: str) -> Plan:
             continue
         m = PROJ_RE.match(ln)
         if m:
-            pid, title = m.groups()
+            pid, title = ids.normalize(m.group(1)), m.group(2)
             if goal is None:
                 plan.warnings.append(f"linha {i}: projeto {pid} fora de um goal — ignorado")
                 proj = None
@@ -216,7 +225,7 @@ def parse(text: str) -> Plan:
             continue
         m = DELIV_RE.match(ln)
         if m:
-            box, did, rest = m.group(2), m.group(4), m.group(5)
+            box, did, rest = m.group(2), ids.normalize(m.group(4)), m.group(5)
             if proj is None:
                 plan.warnings.append(f"linha {i}: entregável {did} fora de um projeto — ignorado")
                 continue
@@ -280,6 +289,7 @@ def _deliv_line(head: str, box: str, mid: str, did: str, title: str, seg: dict) 
 
 def set_deliverable(path: Path, did: str, status: str, when: date | None) -> bool:
     """Atualiza o checkbox (estado factual) de um entregável. Retorna True se mudou."""
+    did = ids.normalize(did)
     lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
     plan = parse("".join(lines))
     d = plan.deliverables.get(did)
@@ -311,20 +321,21 @@ def set_deliverable(path: Path, did: str, status: str, when: date | None) -> boo
 
 
 # ── criar nós (goal, projeto, entregável) ────────────────────────────────────
-def _next(prefix: str, ids) -> int:
-    nums = [int(m.group(1)) for i in ids if (m := re.fullmatch(prefix + r"(\d+)", i))]
+def _next(prefix: str, keys) -> int:
+    nums = [int(m.group(1)) for i in keys if (m := re.fullmatch(prefix + r"(\d+)", i))]
     return max(nums, default=0) + 1
 
 
 def next_goal_id(plan: Plan) -> str:
-    return f"G{_next('G', plan.goals)}"
+    return ids.make("goal", _next("GOAL-", plan.goals))
 
 
 def next_project_id(plan: Plan) -> str:
-    return f"P{_next('P', plan.projects)}"
+    return ids.make("project", _next("PROJ-", plan.projects))
 
 
 def next_deliverable_id(plan: Plan, project_id: str) -> str:
+    project_id = ids.normalize(project_id)
     return f"{project_id}.{_next(re.escape(project_id) + r'[.]', plan.deliverables)}"
 
 
@@ -359,7 +370,7 @@ def _insert(path: Path, new_id: str, anchor: str | None, block: list[str], stop:
             at -= 1
     else:
         clean = _strip_comments(lines)
-        start = next((i for i, ln in enumerate(clean) if (m := rx.match(ln)) and m.group(1) == anchor), None)
+        start = next((i for i, ln in enumerate(clean) if (m := rx.match(ln)) and ids.normalize(m.group(1)) == anchor), None)
         if start is None:
             raise util.BrainError(f"{anchor} não encontrado em {path.name}", code=3)
         at = _section_end(lines, start, stop)
@@ -383,6 +394,7 @@ def add_goal(path: Path, title: str, horizon: str = "", why: str = "") -> str:
 
 
 def add_project(path: Path, goal_id: str, title: str, owner: str = "", why: str = "") -> str:
+    goal_id = ids.normalize(goal_id)
     plan = load(path)
     if goal_id not in plan.goals:
         raise util.BrainError(f"goal {goal_id} não existe em {path.name}", code=3)
@@ -397,6 +409,7 @@ def add_project(path: Path, goal_id: str, title: str, owner: str = "", why: str 
 
 
 def add_deliverable(path: Path, project_id: str, title: str, due: str = "", weight: int = 1) -> str:
+    project_id = ids.normalize(project_id)
     plan = load(path)
     if project_id not in plan.projects:
         raise util.BrainError(f"projeto {project_id} não existe em {path.name}", code=3)
@@ -418,6 +431,7 @@ _META_LABEL = {"status": "status", "horizonte": "horizonte", "por que": "por qu�
 
 
 def node_kind(plan: Plan, node: str) -> str | None:
+    node = ids.normalize(node)
     return "goal" if node in plan.goals else "project" if node in plan.projects else \
         "deliverable" if node in plan.deliverables else None
 
@@ -451,6 +465,7 @@ def edit_node(path: Path, node: str, **fields) -> list[tuple[str, str, str]]:
 
     Campos: goal → title, status, horizon, why · projeto → title, status, owner · entregável → title, due, weight.
     Devolve [(campo, antes, depois)] só do que mudou; arquivo intacto se o resultado não passar pelo parser."""
+    node = ids.normalize(node)
     text = path.read_text(encoding="utf-8")
     lines = text.splitlines()
     plan = parse(text)
@@ -500,7 +515,7 @@ def edit_node(path: Path, node: str, **fields) -> list[tuple[str, str, str]]:
         node_obj = plan.goals[node] if kind == "goal" else plan.projects[node]
         clean = _strip_comments(lines)
         rx = GOAL_RE if kind == "goal" else PROJ_RE
-        start = next(i for i, c in enumerate(clean) if (m := rx.match(c)) and m.group(1) == node)
+        start = next(i for i, c in enumerate(clean) if (m := rx.match(c)) and ids.normalize(m.group(1)) == node)
         meta = {"status": ("status", node_obj.meta.get("status", "ativo")),
                 "horizon": ("horizonte", node_obj.meta.get("horizonte", "")),
                 "why": ("por que", node_obj.meta.get("por que") or node_obj.meta.get("porque") or ""),

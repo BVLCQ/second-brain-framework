@@ -7,13 +7,15 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date
 
-from . import util
+from . import ids, schema, util
 
 # Execuções por mês de cada recorrência (sob-demanda/por-evento usam `per_month` do processo).
 RUNS_PER_MONTH = {"diaria": 21, "semanal": 4.33, "quinzenal": 2.17, "mensal": 1, "trimestral": 1 / 3}
 # Prefixo do ID → nome da coleção em State (o ID é PREFIXO-####, de qualquer tamanho de prefixo).
-PREFIX_COLL = {"A": "actions", "D": "decisions", "E": "deliveries", "R": "proposals", "M": "messages",
-               "S": "shares", "F": "focus_plans", "PROC": "processes", "OPP": "opportunities"}
+PREFIX_COLL = {ids.prefix("action"): "actions", ids.prefix("decision"): "decisions", ids.prefix("delivery"): "deliveries",
+               ids.prefix("proposal"): "proposals", ids.prefix("message"): "messages", ids.prefix("share"): "shares",
+               ids.prefix("focus"): "focus_plans", ids.prefix("process"): "processes",
+               ids.prefix("opportunity"): "opportunities"}
 LIST_LABEL = {"mine": "minhas", "waiting": "aguardando", "watching": "observando"}
 _new_list = list  # Action tem um campo chamado `list`, que sombreia o builtin no corpo da classe
 
@@ -378,6 +380,7 @@ def _merge_person(st: State, old_id: str, into: str) -> None:
 
 
 def apply(st: State, ev: dict) -> None:
+    schema.normalize_event(ev)                 # ledger ainda com nomes antigos continua legível (sem reescrever o arquivo)
     t, eid, data = ev["type"], ev.get("id"), ev.get("data", {})
     when = _d(ev.get("date")) or _d(ev.get("ts"))
     st.events.append(ev)

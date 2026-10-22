@@ -1,6 +1,6 @@
 """Notas avulsas: o dono escreve, o arquivo cai na inbox (a porta única) e o /dump arquiva depois.
 
-Nome: `<VÍNCULO>-AAAA-MM-DD-note.md` (`A-0146-…`, `G1-…`, `P2-…`, `P2.1-…`); sem vínculo, `note-…`.
+Nome: `<VÍNCULO>-AAAA-MM-DD-note.md` (`ACT-0146-…`, `GOAL-1-…`, `PROJ-2-…`, `PROJ-2.1-…`; os nomes antigos `A-0146-…`, `G1-…`, `P2-…` ainda são lidos); sem vínculo, `note-…`.
 Mesmo dia e mesmo alvo ganham sufixo: `…-note-2.md`. O arquivo carrega um frontmatter com o vínculo e a
 hora (AAAA-MM-DD HH:mm), então o TUI mostra a nota no detalhe do alvo sem depender do /dump — na inbox
 ou, depois de arquivada, em `RAW/<ano>/<mês>/` (conteúdo imutável: o cérebro só lê).
@@ -15,11 +15,13 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from . import util
+from . import ids, util
 
-LINK_RE = re.compile(r"^(A-\d{4,}|G\d+|P\d+(?:\.\d+)?)$")
-NAME_RE = re.compile(r"^(?P<link>A-\d{4,}|G\d+|P\d+(?:\.\d+)?|note)-(?P<day>\d{4}-\d{2}-\d{2})-note(?:-(?P<n>\d+))?\.md$")
-KINDS = {"A": "ação", "G": "goal", "P": "projeto"}
+LINK_RE = ids.LINK_ID
+# o nome aceita também os prefixos antigos (nota ainda não migrada): o vínculo é sempre devolvido no formato novo
+NAME_RE = re.compile(rf"^(?P<link>{ids.LINK_SRC}|{ids.LEGACY_LINK_SRC}|note)"
+                     r"-(?P<day>\d{4}-\d{2}-\d{2})-note(?:-(?P<n>\d+))?\.md$")
+KINDS = {"ACT": "ação", "GOAL": "goal", "PROJ": "projeto"}
 MAX_CHARS = 200_000
 
 
@@ -46,18 +48,19 @@ def kind_of(link: str) -> str:
     """'ação' | 'goal' | 'projeto' | 'entregável' | '' (avulsa)."""
     if not link:
         return ""
-    if link[0] == "P" and "." in link:
+    link = ids.normalize(link)
+    if link.startswith("PROJ-") and "." in link:
         return "entregável"
-    return KINDS.get(link[0], "")
+    return KINDS.get(link.split("-")[0], "")
 
 
 def normalize_link(value: str) -> str:
-    """'a-146' → 'A-0146'; 'p2.1' → 'P2.1'. Vazio continua vazio; formato inválido devolve o texto em maiúsculas."""
+    """'a-146' → 'ACT-0146'; 'p2.1' → 'PROJ-2.1'; 'g1' → 'GOAL-1'. Vazio continua vazio; formato inválido devolve o texto em maiúsculas."""
     v = (value or "").strip().upper()
-    m = re.fullmatch(r"A-?(\d{1,})", v)
+    m = re.fullmatch(r"(?:A|ACT)-?(\d{1,})", v)
     if m:
-        return f"A-{int(m.group(1)):04d}"
-    return v
+        return f"ACT-{int(m.group(1)):04d}"
+    return ids.normalize(v)
 
 
 def check_link(brain, link: str) -> str:
@@ -65,8 +68,8 @@ def check_link(brain, link: str) -> str:
     if not link:
         return ""
     if not LINK_RE.match(link):
-        return f"vínculo inválido: {link!r} (use A-####, G#, P# ou P#.n)"
-    if link.startswith("A-"):
+        return f"vínculo inválido: {link!r} (use ACT-####, GOAL-#, PROJ-# ou PROJ-#.#)"
+    if link.startswith("ACT-"):
         return "" if link in brain.state.actions else f"{link}: ação não encontrada"
     return "" if brain.plan.has(link) else f"{link}: não existe em PLANNING/goals.md"
 
@@ -164,7 +167,7 @@ def _parse(path: Path, vault: Path) -> Note | None:
                 if sep:
                     meta[k.strip()] = v.strip()
             body = raw[end + 4:].lstrip("\n")
-    link = (meta.get("vinculo") or ("" if m["link"] == "note" else m["link"])).upper()
+    link = ids.normalize((meta.get("vinculo") or ("" if m["link"] == "note" else m["link"])).upper())
     if link and not LINK_RE.match(link):
         link = ""
     created = meta.get("criada") or ""

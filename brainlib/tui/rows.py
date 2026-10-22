@@ -1,7 +1,7 @@
 """Linhas das listas e conteúdo do painel de detalhe — tudo Rich `Text`, sem markup.
 
 Cores são nomes ANSI (red, yellow, green, cyan, magenta, dim) para acompanhar o tema do terminal.
-Links no detalhe usam `meta={"@click": "app.jump('A-0021')"}`: clicar leva ao item.
+Links no detalhe usam `meta={"@click": "app.jump('ACT-0021')"}`: clicar leva ao item.
 """
 from __future__ import annotations
 
@@ -543,7 +543,7 @@ def d_plan(store, it) -> Doc:
         doc.blank().p(("Marcar estado é um fato, não um gate: space ou s. Criar, renomear ou fechar goal e projeto é gate: E.", DIM))
     hint = {"g": "n cria um projeto neste goal · G cria um goal (gate)", "p": "n cria um entregável neste projeto · G cria um goal (gate)",
             "d": "n cria uma ação ligada a este entregável · G cria um goal (gate)"}[k]
-    hint += " · / com um id (A-####, P#, P#.n…) mostra tudo que está associado"
+    hint += " · / com um id (ACT-####, PROJ-#, PROJ-#.#…) mostra tudo que está associado"
     doc.blank().p((hint, DIM))
     notes_section(doc, store, d["id"])
     return doc
@@ -559,7 +559,7 @@ def d_prop(store, it) -> Doc:
     doc = Doc().h(f"{r.id} · {r.kind}", (f" · {r.status}" if r.status != "aberta" else "", DIM)).blank().p(r.summary)
     doc.kv([("alvo", link(r.target, r.target) if r.target else Text("—", DIM)), ("evidência", Text(r.evidence or "—"))])
     doc.sec("Se você aceitar").cmd(f"brain proposal accept {r.id} --quote \"…\"")
-    doc.p(("  depois: " + EFFECT.get(r.kind, EFFECT["outro"]).format(t=r.target or "A-####"), DIM))
+    doc.p(("  depois: " + EFFECT.get(r.kind, EFFECT["outro"]).format(t=r.target or "ACT-####"), DIM))
     doc.blank().p(("O cérebro não fecha nem altera nada sozinho. Rejeitada, a proposta só volta com evidência nova.", DIM))
     return doc
 
@@ -755,7 +755,7 @@ def d_opp(store, it) -> Doc:
     notes_section(doc, store, o["id"])
     doc.sec("Equivalente na CLI").cmd(f"brain opportunity show {o['id']}")
     if not o["project"]:
-        doc.cmd(f'brain opportunity promote {o["id"]} --goal G# --approval "ok"')
+        doc.cmd(f'brain opportunity promote {o["id"]} --goal GOAL-# --approval "ok"')
     return doc
 
 

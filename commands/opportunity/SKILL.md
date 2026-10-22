@@ -36,8 +36,8 @@ Percorre as oportunidades em `ideia` (`./brain opportunity list --status ideia`)
 ## Promover (gate estrutural)
 
 Promover cria um projeto num goal: é mudança estrutural.
-1. `./brain opportunity promote OPP-#### --goal G#` (sem `--approval`) imprime o diff proposto do `goals.md` e sai com código 4.
-2. Mostre o diff ao dono. Só com resposta literal ("ok", "aprovo"): `./brain opportunity promote OPP-#### --goal G# --approval "ok"` — cria o projeto, grava `plan.changed` + `opportunity.promoted` + status `em-andamento` e a linha em `PLANNING/log.md`.
+1. `./brain opportunity promote OPP-#### --goal GOAL-#` (sem `--approval`) imprime o diff proposto do `goals.md` e sai com código 4.
+2. Mostre o diff ao dono. Só com resposta literal ("ok", "aprovo"): `./brain opportunity promote OPP-#### --goal GOAL-# --approval "ok"` — cria o projeto, grava `plan.changed` + `opportunity.promoted` + status `em-andamento` e a linha em `PLANNING/log.md`.
 3. Proibido no noturno. Silêncio não é aprovação.
 
 ## Duplicata

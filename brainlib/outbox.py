@@ -1,9 +1,9 @@
 """Porta das mensagens — o cérebro escreve, o dono aprova o texto EXATO, só então sai.
 
 Fluxo (cada passo é um evento no ledger):
-  draft    → M-#### rascunho (destinatário precisa estar em [outbound].allow)
+  draft    → MSG-#### rascunho (destinatário precisa estar em [outbound].allow)
   approve  → resposta literal do dono + hash do texto travado
-  (o agente envia pelo MCP do Slack exatamente `brain outbox show M-####`)
+  (o agente envia pelo MCP do Slack exatamente `brain outbox show MSG-####`)
   sent     → só se aprovado e com o mesmo hash; registra link
 Mudou o texto? Cancela e faz rascunho novo — aprovação nunca é herdada.
 """

@@ -9,7 +9,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any
 
-from .. import config, doctor, model, notes as notes_mod, util, watch
+from .. import config, doctor, ids, model, notes as notes_mod, util, watch
 from ..core import Brain
 
 PANELS_EXEC = {
@@ -110,7 +110,7 @@ SYS_OPS = [
             "Não cria evento: bloco de foco é a aba Aprovar › Foco"],
      "desc": "Snapshot da agenda: combustível do planejador de foco."},
     {"id": "sys:ai-recap", "name": "Recap de goal, projeto ou período (/recap)", "agent": "/recap",
-     "arg": ("alvo", "G1 · P2 · 2025-01-01:2025-03-31", True),
+     "arg": ("alvo", "GOAL-1 · PROJ-2 · 2025-01-01:2025-03-31", True),
      "do": ["Gera o documento datado em vault/reports/ (brain share)", "Escreve só fatos do ledger, cada um com fonte",
             "Publicar é outra porta, com seu gate"],
      "desc": "Documento datado e compartilhável com histórico e impacto de um goal, projeto ou período."},
@@ -213,7 +213,7 @@ class Store:
 
     # ── apoio ──────────────────────────────────────────────────────────────
     # ── associações: o que está ligado a quê ──────────────────────────────
-    ID_RE = re.compile(r"^(?:[ADERMS]-\d{4,}|G\d+|P\d+(?:\.\d+)?)$")
+    ID_RE = ids.ANY_ID
 
     def _build_graph(self, m: dict) -> None:
         adj: dict[str, set[str]] = defaultdict(set)
@@ -249,7 +249,7 @@ class Store:
         self.plan_nodes = set(self.by_goal) | set(self.by_project) | set(self.by_deliv)
 
     def tree_up(self, node: str) -> set[str]:
-        """Ancestrais na árvore do plano: P1.2 → P1, G1."""
+        """Ancestrais na árvore do plano: PROJ-1.2 → PROJ-1, GOAL-1."""
         out: set[str] = set()
         if node in self.by_deliv:
             node = self.by_deliv[node][0]["id"]
@@ -267,9 +267,9 @@ class Store:
         return set()
 
     def node_for(self, text: str) -> str | None:
-        """O texto do filtro é exatamente um id (A-####, D-####, G#, P#, P#.n…)? Devolve o id no formato do ledger."""
-        t = notes_mod.normalize_link((text or "").strip())
-        t = t.upper()
+        """O texto do filtro é exatamente um id (ACT-####, DEC-####, GOAL-#, PROJ-#, PROJ-#.#…; os nomes antigos também)?
+        Devolve o id no formato do ledger."""
+        t = ids.normalize((text or "").strip().upper())
         if not self.ID_RE.match(t):
             return None
         return t if t in self.plan_nodes | self.all_ids else None
@@ -284,7 +284,7 @@ class Store:
                 res |= self.adj[x]
             if node in self.by_deliv:                               # decisões são do projeto
                 proj = self.by_deliv[node][0]["id"]
-                res |= {x for x in self.adj[proj] if x.startswith("D-")}
+                res |= {x for x in self.adj[proj] if x.startswith("DEC-")}
         else:
             res = {node} | self.adj[node]
             for x in list(res):
@@ -307,7 +307,7 @@ class Store:
         return sorted((d for d in self.m["decisions"] if d["project"] in pids), key=lambda d: d["date"] or "", reverse=True)
 
     def notes_of(self, link: str) -> list[notes_mod.Note]:
-        """Notas vinculadas a A-####/G#/P#/P#.n, da mais nova para a mais antiga."""
+        """Notas vinculadas a ACT-####/GOAL-#/PROJ-#/PROJ-#.#, da mais nova para a mais antiga."""
         return self.notes_by_link.get(link, [])
 
     def person_name(self, pid: str) -> str:
@@ -533,13 +533,14 @@ class Store:
         return (0, *loc) if loc else None
 
     def _locate_exec(self, node: str) -> tuple[int, int] | None:
-        if node.startswith("A-"):
+        node = ids.normalize(node)
+        if node.startswith("ACT-"):
             a = self.by_action.get(node)
             return (2, ["mine", "waiting", "watching"].index(a["list"])) if a else None
-        if node[:1] in "GP" and node[1:2].isdigit():
+        if ids.PLAN_NODE.match(node):
             return (3, 0)
-        for prefix, loc in (("R-", (4, 0)), ("M-", (4, 1)), ("d:", (4, 2)), ("S-", (4, 3)),
-                            ("D-", (5, 0)), ("E-", (5, 1))):
+        for prefix, loc in (("PROP-", (4, 0)), ("MSG-", (4, 1)), ("d:", (4, 2)), ("PUB-", (4, 3)),
+                            ("DEC-", (5, 0)), ("WIN-", (5, 1))):
             if node.startswith(prefix):
                 return loc
         if node in self.by_person:

@@ -108,6 +108,7 @@ class Brain:
         ev["date"] = (util.parse_date(ev.get("date")) or util.today()).isoformat()
         data = {k: v for k, v in (ev.get("data") or {}).items() if v not in (None, "")}
         ev["data"] = data
+        schema.normalize_event(ev)              # entrada com nome antigo (A-0146, G1, P3.2) é gravada no formato novo
 
         if spec.get("prefix"):
             ev["id"] = working.next_id(spec["prefix"])
@@ -173,6 +174,7 @@ class Brain:
         working = state_mod.State()
         last_seq = 0
         for ev in self.read_events():
+            schema.normalize_event(ev)
             seq = ev.get("seq", 0)
             if seq <= last_seq:
                 problems.append(f"seq {seq}: fora de ordem (anterior {last_seq})")

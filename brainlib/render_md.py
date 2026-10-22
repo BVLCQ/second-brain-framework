@@ -122,7 +122,7 @@ class Pages:
             out.append("_Nada com data nos próximos 7 dias._")
         for it in m["agenda"]:
             warn = f"⚠ atrasado {it['overdue_days']}d · " if it["overdue_days"] else ""
-            ref = self.act(f, it["id"]) if it["id"].startswith("A-") else it["id"]
+            ref = self.act(f, it["id"]) if it["id"].startswith("ACT-") else it["id"]
             out.append(f"- {util.fmt_date(it['date'], True)} · {it['kind']} · {warn}{ref} {it['title']}"
                        + (f" · {self.proj(f, it['project'])}" if it.get("project") else ""))
         out += ["", "## Precisa de você", ""]
@@ -334,8 +334,8 @@ class Pages:
             out += ["## Linha do tempo", ""]
             for it in p["timeline"][:40]:
                 who = f" ({it['who']})" if it.get("who") else ""
-                ref = self.act(f, it["id"]) + " " if it["id"].startswith("A-") else \
-                    (self.dec(f, it["id"]) + " " if it["id"].startswith("D-") else
+                ref = self.act(f, it["id"]) + " " if it["id"].startswith("ACT-") else \
+                    (self.dec(f, it["id"]) + " " if it["id"].startswith("DEC-") else
                      ("" if "/" in it["id"] else it["id"] + " "))
                 out.append(f"- {util.fmt_date(it['date'])} · {it['kind']} · {ref}{it['title']}{who}")
             if not p["timeline"]:

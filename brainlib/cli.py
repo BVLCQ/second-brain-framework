@@ -10,7 +10,7 @@ import os
 import sys
 from pathlib import Path
 
-from . import __version__, config, people, planning, util
+from . import __version__, config, ids, people, planning, util
 from .core import Brain
 
 
@@ -676,7 +676,7 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--json", action="store_true")
     p.set_defaults(fn=cmd_person)
 
-    p = sub.add_parser("action", help="ações A-####")
+    p = sub.add_parser("action", help="ações ACT-####")
     acs = p.add_subparsers(dest="acmd", required=True)
     x = acs.add_parser("open")
     x.add_argument("title")
@@ -742,7 +742,7 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--json", action="store_true")
     p.set_defaults(fn=cmd_action)
 
-    p = sub.add_parser("decision", help="decisões D-####")
+    p = sub.add_parser("decision", help="decisões DEC-####")
     ds = p.add_subparsers(dest="dcmd", required=True)
     x = ds.add_parser("add")
     x.add_argument("title")
@@ -762,9 +762,9 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--json", action="store_true")
     p.set_defaults(fn=cmd_decision)
 
-    p = sub.add_parser("delivery", help="entregas E-#### (conquistas)")
+    p = sub.add_parser("delivery", help="entregas WIN-#### (conquistas)")
     p.add_argument("title")
-    p.add_argument("--ref", help="A-#### / P# / P#.n / G#")
+    p.add_argument("--ref", help="ACT-#### / PROJ-# / PROJ-#.# / GOAL-#")
     p.add_argument("--result")
     p.add_argument("--evidence")
     p.add_argument("--impact")
@@ -783,7 +783,7 @@ def build_parser() -> argparse.ArgumentParser:
     _fact_opts(p)
     p.set_defaults(fn=cmd_artifact)
 
-    p = sub.add_parser("proposal", help="propostas R-#### (o dono aceita/rejeita)")
+    p = sub.add_parser("proposal", help="propostas PROP-#### (o dono aceita/rejeita)")
     rs = p.add_subparsers(dest="rcmd", required=True)
     x = rs.add_parser("add")
     x.add_argument("--kind", required=True,
@@ -826,7 +826,7 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("title")
     x.add_argument("--owner", help="id ou alias da pessoa dona")
     x = pls.add_parser("edit", help="edita goal/projeto (GATE: exige --approval) ou entregável (sem gate)")
-    x.add_argument("id", help="G# · P# · P#.n")
+    x.add_argument("id", help="GOAL-# · PROJ-# · PROJ-#.#")
     x.add_argument("--title")
     x.add_argument("--status", help="goal/projeto: ativo · congelado · fechado")
     x.add_argument("--horizon", help="goal: AAAA-MM-DD (vazio remove)")
@@ -850,7 +850,7 @@ def build_parser() -> argparse.ArgumentParser:
     from . import cli_portfolio
     cli_portfolio.add_parsers(sub)
 
-    p = sub.add_parser("progress", help="progresso DECLARADO pelo dono (G#/P#)")
+    p = sub.add_parser("progress", help="progresso DECLARADO pelo dono (GOAL-#/PROJ-#)")
     p.add_argument("node")
     p.add_argument("pct", type=int)
     p.add_argument("--note")
@@ -904,7 +904,7 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--json", action="store_true")
     p.set_defaults(fn=cmd_focus)
 
-    p = sub.add_parser("outbox", help="mensagens M-#### (Slack) — rascunho → aprovação → envio")
+    p = sub.add_parser("outbox", help="mensagens MSG-#### (Slack) — rascunho → aprovação → envio")
     os_ = p.add_subparsers(dest="ocmd", required=True)
     x = os_.add_parser("draft")
     x.add_argument("--to", required=True, help="id de pessoa ou #canal (precisa estar na allowlist)")
@@ -931,7 +931,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("share", help="exporta página compartilhável (HTML/MD) em vault/reports/share/")
     p.add_argument("kind", choices=["project", "goal", "status", "period", "portfolio", "opportunity"])
-    p.add_argument("target", nargs="?", help="P#/G# · AAAA-MM-DD:AAAA-MM-DD · OPP-#### (opportunity)")
+    p.add_argument("target", nargs="?", help="PROJ-#/GOAL-# · AAAA-MM-DD:AAAA-MM-DD · OPP-#### (opportunity)")
     p.add_argument("--area", help="portfolio: só uma área (id, nome ou alias)")
     p.add_argument("--format", choices=["html", "md"], default="html")
     p.add_argument("--json", action="store_true")
@@ -999,10 +999,10 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--out", help="pasta de saída (padrão: temporária)")
     p.set_defaults(fn=cmd_video)
 
-    p = sub.add_parser("note", help="notas avulsas na inbox, com vínculo opcional a A-####/G#/P#/P#.n")
+    p = sub.add_parser("note", help="notas avulsas na inbox, com vínculo opcional a ACT-####/GOAL-#/PROJ-#/PROJ-#.#")
     ns = p.add_subparsers(dest="ncmd", required=True)
     x = ns.add_parser("add", help="cria AAAA…-note.md na inbox (o /dump arquiva)")
-    x.add_argument("--link", help="A-#### · G# · P# · P#.n (opcional)")
+    x.add_argument("--link", help="ACT-#### · GOAL-# · PROJ-# · PROJ-#.# (opcional; os nomes antigos A-/G#/P# valem)")
     x.add_argument("--text", help="texto da nota (padrão: stdin)")
     x.add_argument("--json", action="store_true")
     x = ns.add_parser("edit", help="reescreve o texto de uma nota que ainda está na inbox")
@@ -1138,8 +1138,25 @@ def cmd_demo(args, b) -> None:
     demo.cli(args)
 
 
+# argumentos da CLI que guardam IDs: nomes antigos (A-0146, G1, P3.2…) são aceitos e traduzidos aqui, na entrada
+_ID_ARGS = ("id", "goal", "project", "deliverable", "ref", "link", "target", "node", "process", "by_decision")
+_ID_CSV_ARGS = ("blocked_by", "unblocks", "projects")
+
+
+def normalize_ids(args: argparse.Namespace) -> argparse.Namespace:
+    if getattr(args, "cmd", "") in ("person", "area"):          # `id` aqui é slug de pessoa/área, não ID de entidade
+        return args
+    for name in _ID_ARGS:
+        if isinstance(getattr(args, name, None), str):
+            setattr(args, name, ids.normalize(getattr(args, name)))
+    for name in _ID_CSV_ARGS:
+        if isinstance(getattr(args, name, None), str):
+            setattr(args, name, ids.normalize_csv(getattr(args, name)))
+    return args
+
+
 def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    args = normalize_ids(build_parser().parse_args(argv))
     try:
         b = None if getattr(args, "no_brain", False) else Brain()
         args.fn(args, b)

@@ -15,7 +15,7 @@ sys.path.insert(0, str(ROOT))
 
 os.environ.setdefault("BRAIN_NOW", "2026-10-09T10:00:00-03:00")
 
-from brainlib import config, doctor, portfolio as portfolio_mod, notes as notes_mod, focus, harvest, mcp_server, memory, outbox, planning, people, rawsort, render, schema, share, snapshot, upstream, util
+from brainlib import config, doctor, ids, portfolio as portfolio_mod, notes as notes_mod, focus, harvest, mcp_server, memory, outbox, planning, people, rawsort, render, schema, share, snapshot, upstream, util
 from brainlib.core import Brain
 from brainlib.gcal import GoogleCalendar
 from brainlib import demo as demo_mod
@@ -34,10 +34,10 @@ def _inst(tmp: Path) -> config.Instance:
         '[outbound]\nallow = ["marina-demo", "#time"]\n\n'
         '[publish]\ndestinations = ["slack:#time"]\n', encoding="utf-8")
     (tmp / "vault" / "PLANNING" / "goals.md").write_text(
-        "# PLANNING\n\n## G1 — Meta\n- status: ativo\n- horizonte: 2026-12-31\n"
-        "- por quê: teste\n\n### P1 — Projeto\n- status: ativo\n- dono: eu\n"
-        "- [ ] P1.1 Um entregável · prazo: 2026-10-20 · peso: 2\n"
-        "- [ ] P1.2 Outro · prazo: 2026-11-01\n", encoding="utf-8")
+        "# PLANNING\n\n## GOAL-1 — Meta\n- status: ativo\n- horizonte: 2026-12-31\n"
+        "- por quê: teste\n\n### PROJ-1 — Projeto\n- status: ativo\n- dono: eu\n"
+        "- [ ] PROJ-1.1 Um entregável · prazo: 2026-10-20 · peso: 2\n"
+        "- [ ] PROJ-1.2 Outro · prazo: 2026-11-01\n", encoding="utf-8")
     return config.load(tmp)
 
 
@@ -87,7 +87,7 @@ class PlanningTests(unittest.TestCase):
         self.assertFalse(plan.warnings)
 
     def test_skips_fenced_example(self):
-        plan = planning.parse("# x\n\n```\n## G9 — Exemplo\n- [ ] P9.1 Foo · prazo: AAAA-MM-DD\n```\n")
+        plan = planning.parse("# x\n\n```\n## GOAL-9 — Exemplo\n- [ ] PROJ-9.1 Foo · prazo: AAAA-MM-DD\n```\n")
         self.assertEqual(plan.goals, {})
         self.assertFalse(plan.warnings)
 
@@ -95,18 +95,18 @@ class PlanningTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             inst = _inst(Path(td))
             plan = planning.load(inst.planning_file)
-            self.assertEqual(list(plan.goals), ["G1"])
-            self.assertEqual(list(plan.projects), ["P1"])
-            self.assertEqual(plan.deliverables["P1.1"].weight, 2)
+            self.assertEqual(list(plan.goals), ["GOAL-1"])
+            self.assertEqual(list(plan.projects), ["PROJ-1"])
+            self.assertEqual(plan.deliverables["PROJ-1.1"].weight, 2)
             self.assertFalse(plan.warnings)
-            planning.set_deliverable(inst.planning_file, "P1.1", "feito", date(2026, 10, 8))
+            planning.set_deliverable(inst.planning_file, "PROJ-1.1", "feito", date(2026, 10, 8))
             plan = planning.load(inst.planning_file)
-            self.assertEqual(plan.deliverables["P1.1"].status, "feito")
+            self.assertEqual(plan.deliverables["PROJ-1.1"].status, "feito")
             # peso 2 de 3
-            self.assertEqual(plan.progress("P1")["pct"], 67)
-            self.assertEqual(plan.progress("P1")["done"], 1)
-            self.assertEqual(plan.progress("P1")["weight_done"], 2)
-            self.assertIn("peso 2/3", planning.format_progress(plan.progress("P1")))
+            self.assertEqual(plan.progress("PROJ-1")["pct"], 67)
+            self.assertEqual(plan.progress("PROJ-1")["done"], 1)
+            self.assertEqual(plan.progress("PROJ-1")["weight_done"], 2)
+            self.assertIn("peso 2/3", planning.format_progress(plan.progress("PROJ-1")))
 
 
 class LedgerTests(unittest.TestCase):
@@ -115,17 +115,17 @@ class LedgerTests(unittest.TestCase):
             b = _brain(Path(td))
             a1 = b.record_one({"type": "action.opened", "by": "owner",
                                "data": {"title": "Revisar", "owner": "marina-demo", "list": "waiting"}})
-            self.assertEqual(a1["id"], "A-0001")
+            self.assertEqual(a1["id"], "ACT-0001")
             a2 = b.record_one({"type": "action.opened", "by": "owner",
                                "data": {"title": "Publicar", "owner": "eu", "due": "2026-10-12",
-                                        "effort_min": 60, "project": "P1", "blocked_by": ["A-0001"]}})
-            self.assertEqual(a2["id"], "A-0002")
-            self.assertEqual(b.state.blocked(b.state.actions["A-0002"]), ["A-0001"])
-            b.record_one({"type": "action.closed", "id": "A-0001", "by": "owner",
+                                        "effort_min": 60, "project": "PROJ-1", "blocked_by": ["ACT-0001"]}})
+            self.assertEqual(a2["id"], "ACT-0002")
+            self.assertEqual(b.state.blocked(b.state.actions["ACT-0002"]), ["ACT-0001"])
+            b.record_one({"type": "action.closed", "id": "ACT-0001", "by": "owner",
                           "data": {"how": "revisou"}})
             # cascade is CLI-level; ledger just closes
-            self.assertFalse(b.state.actions["A-0001"].open)
-            self.assertEqual(b.state.blocked(b.state.actions["A-0002"]), [])
+            self.assertFalse(b.state.actions["ACT-0001"].open)
+            self.assertEqual(b.state.blocked(b.state.actions["ACT-0002"]), [])
             self.assertEqual(b.validate_all(), [])
 
     def test_suggested_due_lifecycle(self):
@@ -133,10 +133,10 @@ class LedgerTests(unittest.TestCase):
             b = _brain(Path(td))
             a = b.record_one({"type": "action.opened", "by": "agent", "prov": "observado", "source": "chat",
                               "data": {"title": "Sugerida", "owner": "eu", "due": "2026-10-16",
-                                       "due_suggested": True, "due_reason": "entregável P1.1 vence 20/10"}})["id"]
+                                       "due_suggested": True, "due_reason": "entregável PROJ-1.1 vence 20/10"}})["id"]
             st = b.state.actions[a]
             self.assertTrue(st.due_suggested)
-            self.assertEqual(st.due_reason, "entregável P1.1 vence 20/10")
+            self.assertEqual(st.due_reason, "entregável PROJ-1.1 vence 20/10")
             # só o agente sugere; sugestão exige data
             with self.assertRaises(util.BrainError):
                 b.record_one({"type": "action.updated", "id": a, "by": "owner",
@@ -168,9 +168,9 @@ class LedgerTests(unittest.TestCase):
             b = _brain(Path(td))
             d1 = b.record_one({"type": "decision.made", "by": "agent", "prov": "observado",
                                "source": "chat",
-                               "data": {"title": "Congelar", "decided_by": ["marina-demo"], "project": "P1"}})
+                               "data": {"title": "Congelar", "decided_by": ["marina-demo"], "project": "PROJ-1"}})
             b.record_one({"type": "decision.made", "by": "agent", "prov": "doc", "source": "chat",
-                          "data": {"title": "Portar", "decided_by": ["marina-demo"], "project": "P1",
+                          "data": {"title": "Portar", "decided_by": ["marina-demo"], "project": "PROJ-1",
                                    "supersedes": d1["id"]}})
             self.assertEqual(b.state.decisions[d1["id"]].status, "substituida")
 
@@ -275,18 +275,18 @@ class FocusTests(unittest.TestCase):
             plan = focus.build_plan(b, busy, days=5)
             self.assertTrue(plan["blocks"])
             first = plan["blocks"][0]
-            self.assertEqual(first["action"], "A-0001")
+            self.assertEqual(first["action"], "ACT-0001")
             # não começa dentro do busy (11-12 + buffer tratado em parse_busy; aqui busy já cortado)
             start = util.parse_dt(first["start"])
             self.assertFalse(datetime(2026, 10, 9, 11, 0, tzinfo=util.tz()) <= start <
                              datetime(2026, 10, 9, 12, 0, tzinfo=util.tz()))
 
     def test_ics_roundtrip_shape(self):
-        ics = focus.to_ics("F-0001", [{"action": "A-0001", "start": "2026-10-09T14:00:00-03:00",
+        ics = focus.to_ics("FOCUS-0001", [{"action": "ACT-0001", "start": "2026-10-09T14:00:00-03:00",
                                        "end": "2026-10-09T15:00:00-03:00", "minutes": 60}],
-                           {"A-0001": "Ler"}, "Foco")
+                           {"ACT-0001": "Ler"}, "Foco")
         self.assertIn("BEGIN:VEVENT", ics)
-        self.assertIn("SUMMARY:Foco · A-0001 · Ler", ics)
+        self.assertIn("SUMMARY:Foco · ACT-0001 · Ler", ics)
 
     def test_apply_requires_approval(self):
         with tempfile.TemporaryDirectory() as td:
@@ -373,19 +373,19 @@ class NoteTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             b = _brain(Path(td))
             b.record_one({"type": "action.opened", "by": "owner", "data": {"title": "x", "owner": "eu"}})
-            names = [notes_mod.create(b, "t", link).name for link in ("a-1", "G1", "P1", "P1.2", "", "P1")]
-            self.assertEqual(names, ["A-0001-2026-10-09-note.md", "G1-2026-10-09-note.md", "P1-2026-10-09-note.md",
-                                     "P1.2-2026-10-09-note.md", "note-2026-10-09-note.md", "P1-2026-10-09-note-2.md"])
+            names = [notes_mod.create(b, "t", link).name for link in ("a-1", "GOAL-1", "PROJ-1", "PROJ-1.2", "", "PROJ-1")]
+            self.assertEqual(names, ["ACT-0001-2026-10-09-note.md", "GOAL-1-2026-10-09-note.md", "PROJ-1-2026-10-09-note.md",
+                                     "PROJ-1.2-2026-10-09-note.md", "note-2026-10-09-note.md", "PROJ-1-2026-10-09-note-2.md"])
             got = {n.path.split("/")[-1]: n for n in notes_mod.scan(b.inst)}
-            n = got["A-0001-2026-10-09-note.md"]
-            self.assertEqual((n.link, n.kind, n.created, n.text, n.archived), ("A-0001", "ação", "2026-10-09 10:00", "t", False))
+            n = got["ACT-0001-2026-10-09-note.md"]
+            self.assertEqual((n.link, n.kind, n.created, n.text, n.archived), ("ACT-0001", "ação", "2026-10-09 10:00", "t", False))
             self.assertEqual(got["note-2026-10-09-note.md"].link, "")
-            self.assertEqual(got["P1.2-2026-10-09-note.md"].kind, "entregável")
+            self.assertEqual(got["PROJ-1.2-2026-10-09-note.md"].kind, "entregável")
 
     def test_rejects_unknown_link_empty_text_and_nightly(self):
         with tempfile.TemporaryDirectory() as td:
             b = _brain(Path(td))
-            for text, link in (("x", "A-0009"), ("x", "P9"), ("x", "../x"), ("  \n", "")):
+            for text, link in (("x", "ACT-0009"), ("x", "PROJ-9"), ("x", "../x"), ("  \n", "")):
                 with self.assertRaises(util.BrainError):
                     notes_mod.create(b, text, link)
             os.environ["BRAIN_NIGHTLY"] = "1"
@@ -400,37 +400,37 @@ class NoteTests(unittest.TestCase):
         from brainlib import search
         with tempfile.TemporaryDirectory() as td:
             b = _brain(Path(td))
-            src = notes_mod.create(b, "decidimos usar parquet no pipeline", "P1")
+            src = notes_mod.create(b, "decidimos usar parquet no pipeline", "PROJ-1")
             dest = b.inst.vault / "RAW" / "2026" / "10"
             dest.mkdir(parents=True)
             src.rename(dest / src.name)                       # o que o /dump faz: mover sem renomear
             (n,) = notes_mod.scan(b.inst)
             self.assertTrue(n.archived)
-            self.assertEqual((n.link, n.created), ("P1", "2026-10-09 10:00"))
+            self.assertEqual((n.link, n.created), ("PROJ-1", "2026-10-09 10:00"))
             hits = search.search(b, "parquet")
-            self.assertEqual([(h["kind"], h["id"]) for h in hits], [("nota", "P1")])
+            self.assertEqual([(h["kind"], h["id"]) for h in hits], [("nota", "PROJ-1")])
 
     def test_search_falls_back_to_any_term_when_all_terms_miss(self):
         from brainlib import search
         with tempfile.TemporaryDirectory() as td:
             b = _brain(Path(td))
-            notes_mod.create(b, "decidimos usar parquet no pipeline", "P1")
+            notes_mod.create(b, "decidimos usar parquet no pipeline", "PROJ-1")
             exact = search.search(b, "parquet pipeline")
             self.assertTrue(exact and all("match" not in h for h in exact))
             hits = search.search(b, "parquet zzzinexistente")
-            self.assertEqual([(h["kind"], h["id"], h["match"]) for h in hits], [("nota", "P1", "parcial")])
+            self.assertEqual([(h["kind"], h["id"], h["match"]) for h in hits], [("nota", "PROJ-1", "parcial")])
             self.assertEqual(search.search(b, "zzzinexistente qqqinexistente"), [])
             self.assertEqual(search.search(b, "zzzinexistente"), [])
 
     def test_edit_only_while_in_inbox(self):
         with tempfile.TemporaryDirectory() as td:
             b = _brain(Path(td))
-            path = notes_mod.create(b, "antes", "P1")
-            self.assertEqual(notes_mod.editable_today(b.inst, "P1").path, b.inst.rel(path))
+            path = notes_mod.create(b, "antes", "PROJ-1")
+            self.assertEqual(notes_mod.editable_today(b.inst, "PROJ-1").path, b.inst.rel(path))
             self.assertIsNone(notes_mod.editable_today(b.inst, ""))
             notes_mod.update(b, b.inst.rel(path), "depois\n\ncom mais")
             (n,) = notes_mod.scan(b.inst)
-            self.assertEqual((n.text, n.created, n.edited, n.link), ("depois\n\ncom mais", "2026-10-09 10:00", "2026-10-09 10:00", "P1"))
+            self.assertEqual((n.text, n.created, n.edited, n.link), ("depois\n\ncom mais", "2026-10-09 10:00", "2026-10-09 10:00", "PROJ-1"))
             with self.assertRaises(util.BrainError):
                 notes_mod.update(b, "PLANNING/goals.md", "x")           # só nota da inbox
             with self.assertRaises(util.BrainError):
@@ -438,7 +438,7 @@ class NoteTests(unittest.TestCase):
             dest = b.inst.vault / "RAW" / "2026" / "10"
             dest.mkdir(parents=True)
             path.rename(dest / path.name)
-            self.assertIsNone(notes_mod.editable_today(b.inst, "P1"))   # RAW é imutável
+            self.assertIsNone(notes_mod.editable_today(b.inst, "PROJ-1"))   # RAW é imutável
             with self.assertRaises(util.BrainError):
                 notes_mod.update(b, f"RAW/2026/10/{path.name}", "x")
 
@@ -447,11 +447,11 @@ class NoteTests(unittest.TestCase):
             b = _brain(Path(td))
             env = {**os.environ, "BRAIN_HOME": td}
             run = lambda *a: subprocess.run([sys.executable, str(ROOT / "brain"), *a], capture_output=True, text=True, env=env)  # noqa: E731
-            r = run("note", "add", "--link", "P1", "--text", "oi")
+            r = run("note", "add", "--link", "PROJ-1", "--text", "oi")
             self.assertEqual(r.returncode, 0, r.stderr)
-            self.assertIn("P1-2026-10-09-note.md", r.stdout)
-            self.assertIn("P1-2026-10-09-note.md", run("note", "list", "--link", "p1").stdout)
-            self.assertEqual(run("note", "add", "--link", "G9", "--text", "x").returncode, 3)
+            self.assertIn("PROJ-1-2026-10-09-note.md", r.stdout)
+            self.assertIn("PROJ-1-2026-10-09-note.md", run("note", "list", "--link", "p1").stdout)
+            self.assertEqual(run("note", "add", "--link", "GOAL-9", "--text", "x").returncode, 3)
 
 
 class RawSortTests(unittest.TestCase):
@@ -470,7 +470,7 @@ class RawSortTests(unittest.TestCase):
         "audio.m4a": "videos",
         "pagina.html": "artifacts",
         "print.png": "images",
-        "P1-2026-10-09-note.md": "notes",
+        "PROJ-1-2026-10-09-note.md": "notes",
         "note-2026-10-09-note-2.md": "notes",
         "dados.parquet": "misc",
         ".DS_Store": "misc",
@@ -531,7 +531,7 @@ class RawSortTests(unittest.TestCase):
     def test_notes_and_calendar_snapshots_are_found_in_type_folders(self):
         with tempfile.TemporaryDirectory() as td:
             b = _brain(Path(td))
-            src = notes_mod.create(b, "nota arquivada por tipo", "P1")
+            src = notes_mod.create(b, "nota arquivada por tipo", "PROJ-1")
             rawsort.archive(b.inst)
             (n,) = notes_mod.scan(b.inst)
             self.assertTrue(n.archived)
@@ -551,25 +551,25 @@ class PlanAddTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             b = _brain(Path(td))
             goals = b.inst.planning_file
-            self.assertEqual(self._run(td, "plan", "add-project", "G1", "Sem ok").returncode, 4)   # gate sem aprovação
+            self.assertEqual(self._run(td, "plan", "add-project", "GOAL-1", "Sem ok").returncode, 4)   # gate sem aprovação
             self.assertNotIn("Sem ok", goals.read_text(encoding="utf-8"))
-            r = self._run(td, "plan", "add-project", "G1", "Segundo", "--approval", "ok")
+            r = self._run(td, "plan", "add-project", "GOAL-1", "Segundo", "--approval", "ok")
             self.assertEqual(r.returncode, 0, r.stderr)
             r = self._run(td, "plan", "add-goal", "Outro goal", "--horizon", "2027-01-01", "--approval", "ok")
             self.assertEqual(r.returncode, 0, r.stderr)
-            self.assertEqual(self._run(td, "plan", "add-deliverable", "P2", "Algo", "--due", "2026-12-01", "--weight", "2").returncode, 0)
-            self.assertEqual(self._run(td, "plan", "add-deliverable", "P1", "Terceiro").returncode, 0)
-            self.assertEqual(self._run(td, "plan", "add-deliverable", "P1", "x · y").returncode, 3)
-            self.assertEqual(self._run(td, "plan", "add-project", "G9", "x", "--approval", "ok").returncode, 3)
+            self.assertEqual(self._run(td, "plan", "add-deliverable", "PROJ-2", "Algo", "--due", "2026-12-01", "--weight", "2").returncode, 0)
+            self.assertEqual(self._run(td, "plan", "add-deliverable", "PROJ-1", "Terceiro").returncode, 0)
+            self.assertEqual(self._run(td, "plan", "add-deliverable", "PROJ-1", "x · y").returncode, 3)
+            self.assertEqual(self._run(td, "plan", "add-project", "GOAL-9", "x", "--approval", "ok").returncode, 3)
             plan = planning.load(goals)
             self.assertEqual(plan.warnings, [])
-            self.assertEqual((plan.projects["P2"].goal_id, plan.deliverables["P2.1"].weight), ("G1", 2))
-            self.assertEqual(plan.deliverables["P1.3"].project_id, "P1")             # entra no fim do P1, antes do P2
-            self.assertEqual(plan.goals["G2"].title, "Outro goal")
-            self.assertEqual(list(plan.projects), ["P1", "P2"])
+            self.assertEqual((plan.projects["PROJ-2"].goal_id, plan.deliverables["PROJ-2.1"].weight), ("GOAL-1", 2))
+            self.assertEqual(plan.deliverables["PROJ-1.3"].project_id, "PROJ-1")             # entra no fim do PROJ-1, antes do PROJ-2
+            self.assertEqual(plan.goals["GOAL-2"].title, "Outro goal")
+            self.assertEqual(list(plan.projects), ["PROJ-1", "PROJ-2"])
             self.assertEqual(Brain(b.inst).validate_all(), [])
             log = b.inst.planning_log.read_text(encoding="utf-8")
-            self.assertIn('P2 projeto criado sob G1', log)
+            self.assertIn('PROJ-2 projeto criado sob GOAL-1', log)
             self.assertIn('aprovado: "ok"', log)
             self.assertEqual(sum(1 for e in Brain(b.inst).read_events() if e["type"] == "plan.changed"), 2)
 
@@ -578,37 +578,37 @@ class PlanAddTests(unittest.TestCase):
             b = _brain(Path(td))
             goals = b.inst.planning_file
             before = goals.read_text(encoding="utf-8")
-            self.assertEqual(self._run(td, "plan", "edit", "G1", "--title", "Sem ok").returncode, 4)   # gate sem aprovação
+            self.assertEqual(self._run(td, "plan", "edit", "GOAL-1", "--title", "Sem ok").returncode, 4)   # gate sem aprovação
             self.assertEqual(goals.read_text(encoding="utf-8"), before)
-            self.assertEqual(self._run(td, "plan", "edit", "G9", "--title", "x", "--approval", "ok").returncode, 3)
-            self.assertEqual(self._run(td, "plan", "edit", "G1").returncode, 3)                           # nada para mudar
-            self.assertEqual(self._run(td, "plan", "edit", "G1", "--due", "2026-12-01", "--approval", "ok").returncode, 3)  # campo de outro tipo
-            r = self._run(td, "plan", "edit", "G1", "--title", "Goal renomeado", "--horizon", "2027-03-01",
+            self.assertEqual(self._run(td, "plan", "edit", "GOAL-9", "--title", "x", "--approval", "ok").returncode, 3)
+            self.assertEqual(self._run(td, "plan", "edit", "GOAL-1").returncode, 3)                           # nada para mudar
+            self.assertEqual(self._run(td, "plan", "edit", "GOAL-1", "--due", "2026-12-01", "--approval", "ok").returncode, 3)  # campo de outro tipo
+            r = self._run(td, "plan", "edit", "GOAL-1", "--title", "Goal renomeado", "--horizon", "2027-03-01",
                           "--status", "congelado", "--reason", "pausa", "--approval", "ok")
             self.assertEqual(r.returncode, 0, r.stderr)
-            r = self._run(td, "plan", "edit", "P1", "--title", "Projeto renomeado", "--approval", "ok")
+            r = self._run(td, "plan", "edit", "PROJ-1", "--title", "Projeto renomeado", "--approval", "ok")
             self.assertEqual(r.returncode, 0, r.stderr)
-            r = self._run(td, "plan", "edit", "P1.1", "--title", "Entregável novo", "--due", "2026-12-15", "--weight", "3")   # sem gate
+            r = self._run(td, "plan", "edit", "PROJ-1.1", "--title", "Entregável novo", "--due", "2026-12-15", "--weight", "3")   # sem gate
             self.assertEqual(r.returncode, 0, r.stderr)
-            self.assertEqual(self._run(td, "plan", "edit", "P1.1", "--title", "a · b").returncode, 3)
+            self.assertEqual(self._run(td, "plan", "edit", "PROJ-1.1", "--title", "a · b").returncode, 3)
             plan = planning.load(goals)
             self.assertEqual(plan.warnings, [])
-            self.assertEqual((plan.goals["G1"].title, plan.goals["G1"].horizon, plan.goals["G1"].status),
+            self.assertEqual((plan.goals["GOAL-1"].title, plan.goals["GOAL-1"].horizon, plan.goals["GOAL-1"].status),
                              ("Goal renomeado", "2027-03-01", "congelado"))
-            d = plan.deliverables["P1.1"]
-            self.assertEqual((plan.projects["P1"].title, d.title, d.due, d.weight),
+            d = plan.deliverables["PROJ-1.1"]
+            self.assertEqual((plan.projects["PROJ-1"].title, d.title, d.due, d.weight),
                              ("Projeto renomeado", "Entregável novo", date(2026, 12, 15), 3))
             self.assertEqual(Brain(b.inst).validate_all(), [])
             self.assertEqual(sum(1 for e in Brain(b.inst).read_events() if e["type"] == "plan.changed"), 2)
             log = b.inst.planning_log.read_text(encoding="utf-8")
-            self.assertIn("G1 editado", log)
-            self.assertIn("P1.1 entregável editado", log)
+            self.assertIn("GOAL-1 editado", log)
+            self.assertIn("PROJ-1.1 entregável editado", log)
 
     def test_edit_nightly_refuses(self):
         with tempfile.TemporaryDirectory() as td:
             _brain(Path(td))
             env = {**os.environ, "BRAIN_HOME": td, "BRAIN_NIGHTLY": "1"}
-            r = subprocess.run([sys.executable, str(ROOT / "brain"), "plan", "edit", "P1.1", "--title", "x"],
+            r = subprocess.run([sys.executable, str(ROOT / "brain"), "plan", "edit", "PROJ-1.1", "--title", "x"],
                                capture_output=True, text=True, env=env)
             self.assertEqual(r.returncode, 4)
 
@@ -633,7 +633,7 @@ class GcalTests(unittest.TestCase):
 
         cal = GoogleCalendar(_inst(Path(tempfile.mkdtemp())), http=http, token="t")
         with self.assertRaises(util.BrainError):
-            cal.delete_guarded("evt1", "A-0001")
+            cal.delete_guarded("evt1", "ACT-0001")
         self.assertFalse(any(c[0] == "DELETE" for c in calls))
 
     def test_insert_falls_back_without_focustime(self):
@@ -671,10 +671,10 @@ class ShareMcpRenderTests(unittest.TestCase):
             b = _brain(Path(td))
             b.record_one({"type": "action.opened", "by": "owner",
                           "data": {"title": "Enviar draft", "owner": "eu", "due": "2026-10-11",
-                                   "effort_min": 45, "project": "P1"}})
+                                   "effort_min": 45, "project": "PROJ-1"}})
             b.record_one({"type": "decision.made", "by": "agent", "prov": "observado", "source": "chat",
                           "data": {"title": "Draft sai sem pipeline", "decided_by": ["marina-demo"],
-                                   "project": "P1"}})
+                                   "project": "PROJ-1"}})
             report = render.render_all(b, do_harvest=False)
             self.assertGreater(report["total"], 8)
             self.assertTrue(Path(report["dashboard"]).is_file())
@@ -682,7 +682,7 @@ class ShareMcpRenderTests(unittest.TestCase):
             self.assertNotIn("__DATA__", html)
             self.assertIn("Enviar draft", html)
 
-            path = share.export(b, "project", "P1", "md")
+            path = share.export(b, "project", "PROJ-1", "md")
             text = path.read_text(encoding="utf-8")
             self.assertIn("Draft sai sem pipeline", text)
             self.assertIn("Marina-demo", text)
@@ -697,7 +697,7 @@ class ShareMcpRenderTests(unittest.TestCase):
             try:
                 ov = mcp_server.call_tool("brain_overview", {})
                 self.assertEqual(ov["today"], "2026-10-09")
-                self.assertTrue(any(g["id"] == "G1" for g in ov["goals"]))
+                self.assertTrue(any(g["id"] == "GOAL-1" for g in ov["goals"]))
             finally:
                 os.environ.pop("BRAIN_HOME", None)
 
@@ -727,13 +727,13 @@ class DemoTests(unittest.TestCase):
             self.assertFalse((target / "vault" / "FRESH" / "bases").exists())
             st = b.state
             self.assertEqual((len(st.areas), len(st.processes), len(st.opportunities)), (3, 3, 6))
-            self.assertEqual(st.opportunities["OPP-0003"].status, "em-andamento")        # uma promovida, ligada a P3/G2
-            self.assertEqual((st.opportunities["OPP-0003"].project, st.opportunities["OPP-0003"].goal), ("P3", "G2"))
+            self.assertEqual(st.opportunities["OPP-0003"].status, "em-andamento")        # uma promovida, ligada a PROJ-3/GOAL-2
+            self.assertEqual((st.opportunities["OPP-0003"].project, st.opportunities["OPP-0003"].goal), ("PROJ-3", "GOAL-2"))
             self.assertTrue(st.opportunities["OPP-0002"].ice_suggested)
             self.assertEqual(st.processes["PROC-0001"].hours_month, 21 * 3 * 2)
             self.assertTrue((target / "vault" / "FRESH" / "opportunities.md").exists())
             self.assertIn("Portfólio", dash)
-            self.assertTrue((target / "vault" / "FRESH" / "projects" / "P1.md").exists())
+            self.assertTrue((target / "vault" / "FRESH" / "projects" / "PROJ-1.md").exists())
 
 
 
@@ -1306,7 +1306,7 @@ class PortfolioStateTests(unittest.TestCase):
             self.assertEqual(self._proc(b)["id"], "PROC-0001")
             self.assertEqual(self._proc(b, title="Outro")["id"], "PROC-0002")
             self.assertEqual(self._opp(b)["id"], "OPP-0001")
-            self.assertEqual(b.state.next_id("A"), "A-0001")           # os antigos seguem iguais
+            self.assertEqual(b.state.next_id("ACT"), "ACT-0001")
             self.assertEqual(b.validate_all(), [])
 
     def test_process_hours_and_validation(self):
@@ -1385,15 +1385,15 @@ class PortfolioStateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             b = self._b(td)
             oid = self._opp(b)["id"]
-            for goal, proj in (("G9", "P1"), ("G1", "P9")):
+            for goal, proj in (("GOAL-9", "PROJ-1"), ("GOAL-1", "PROJ-9")):
                 with self.assertRaises(util.BrainError):
                     b.record_one({"type": "opportunity.promoted", "id": oid, "by": "owner",
                                   "data": {"goal": goal, "project": proj}})
             b.record_one({"type": "opportunity.promoted", "id": oid, "by": "owner",
-                          "data": {"goal": "G1", "project": "P1"}})
+                          "data": {"goal": "GOAL-1", "project": "PROJ-1"}})
             b.record_one({"type": "opportunity.status", "id": oid, "by": "owner", "data": {"status": "em-andamento"}})
             o = b.state.opportunities[oid]
-            self.assertEqual((o.project, o.goal, o.status), ("P1", "G1", "em-andamento"))
+            self.assertEqual((o.project, o.goal, o.status), ("PROJ-1", "GOAL-1", "em-andamento"))
             self.assertEqual(b.validate_all(), [])
 
     def test_docs_evidence_and_person_merge(self):
@@ -1511,26 +1511,26 @@ class PortfolioCliTests(unittest.TestCase):
                      "--problem", "time novo demora a render", "--by", "owner")
             goals = Path(td) / "vault" / "PLANNING" / "goals.md"
             before = goals.read_text(encoding="utf-8")
-            r = self._run(td, "opportunity", "promote", "OPP-0001", "--goal", "G1")
+            r = self._run(td, "opportunity", "promote", "OPP-0001", "--goal", "GOAL-1")
             self.assertEqual(r.returncode, 4)
-            self.assertIn("### P2 — Playbook de onboarding", r.stdout)
+            self.assertIn("### PROJ-2 — Playbook de onboarding", r.stdout)
             self.assertIn("- por quê: time novo demora a render", r.stdout)
             self.assertEqual(goals.read_text(encoding="utf-8"), before)           # nada gravado sem "ok"
-            self.assertEqual(self._run(td, "opportunity", "promote", "OPP-0001", "--goal", "G9",
+            self.assertEqual(self._run(td, "opportunity", "promote", "OPP-0001", "--goal", "GOAL-9",
                                        "--approval", "ok").returncode, 3)
-            self._ok(td, "opportunity", "promote", "OPP-0001", "--goal", "G1", "--approval", "ok")
-            self.assertIn("### P2 — Playbook de onboarding", goals.read_text(encoding="utf-8"))
+            self._ok(td, "opportunity", "promote", "OPP-0001", "--goal", "GOAL-1", "--approval", "ok")
+            self.assertIn("### PROJ-2 — Playbook de onboarding", goals.read_text(encoding="utf-8"))
             o = json.loads(self._ok(td, "opportunity", "show", "OPP-0001", "--json"))
-            self.assertEqual((o["status"], o["project"], o["goal"]), ("em-andamento", "P2", "G1"))
+            self.assertEqual((o["status"], o["project"], o["goal"]), ("em-andamento", "PROJ-2", "GOAL-1"))
             self.assertIn("promoção de OPP-0001", (Path(td) / "vault" / "PLANNING" / "log.md").read_text(encoding="utf-8"))
-            self.assertEqual(self._run(td, "opportunity", "promote", "OPP-0001", "--goal", "G1",
+            self.assertEqual(self._run(td, "opportunity", "promote", "OPP-0001", "--goal", "GOAL-1",
                                        "--approval", "ok").returncode, 4)          # já promovida
             types = [e["type"] for e in Brain(config.load(Path(td))).read_events()][-3:]
             self.assertEqual(types, ["plan.changed", "opportunity.promoted", "opportunity.status"])
             self.assertIn("✓", self._ok(td, "validate"))
             nightly = {**os.environ, "BRAIN_HOME": td, "BRAIN_NIGHTLY": "1"}
             r = subprocess.run([sys.executable, str(ROOT / "brain"), "opportunity", "promote", "OPP-0001",
-                                "--goal", "G1", "--approval", "ok"], capture_output=True, text=True, env=nightly)
+                                "--goal", "GOAL-1", "--approval", "ok"], capture_output=True, text=True, env=nightly)
             self.assertEqual(r.returncode, 4)
 
 
@@ -1561,7 +1561,7 @@ class PortfolioModelTests(unittest.TestCase):
         ids = {
             "rapido": opp("Ganho rápido", "operacoes", "priorizada", (5, 4, 4), process=p1, hours_saved=8),
             "aposta": opp("Aposta grande", "operacoes", "triagem", (5, 3, 1)),
-            "depois": opp("Preencher depois", "growth", None, (2, 5, 5), goal="G1"),
+            "depois": opp("Preencher depois", "growth", None, (2, 5, 5), goal="GOAL-1"),
             "evitar": opp("Evitar", "growth", "descartada", (1, 1, 1)),
             "semice": opp("Sem ICE", "growth"),
         }
@@ -1791,6 +1791,126 @@ class PortfolioOutputsTests(unittest.TestCase):
         self.assertIn("## 13. Face Portfólio", (ROOT / "guides" / "user-guide.md").read_text(encoding="utf-8"))
         self.assertIn("opportunity add", (ROOT / "commands" / "dump" / "SKILL.md").read_text(encoding="utf-8"))
         self.assertIn("share portfolio", (ROOT / "commands" / "share" / "SKILL.md").read_text(encoding="utf-8"))
+
+
+class IdsTests(unittest.TestCase):
+    """Passo 1 da migração de IDs: prefixos declarativos; os nomes antigos continuam valendo na entrada."""
+
+    def test_normalize_translates_legacy_and_keeps_new(self):
+        n = ids.normalize
+        self.assertEqual([n(x) for x in ("A-0146", "a-146", "D-12", "E-0003", "R-7", "M-2", "S-1", "F-1")],
+                         ["ACT-0146", "ACT-0146", "DEC-0012", "WIN-0003", "PROP-0007", "MSG-0002", "PUB-0001", "FOCUS-0001"])
+        self.assertEqual([n(x) for x in ("G1", "g01", "P3", "p3.2", "P10.12")],
+                         ["GOAL-1", "GOAL-1", "PROJ-3", "PROJ-3.2", "PROJ-10.12"])
+        for new in ("ACT-0146", "DEC-0012", "WIN-0003", "PROP-0007", "MSG-0002", "PUB-0001", "FOCUS-0001", "PROC-0003",
+                    "OPP-0004", "GOAL-1", "PROJ-3", "PROJ-3.2"):
+            self.assertEqual(n(new), new)
+        # o que não é ID fica como veio (URL, texto, slug de área ou pessoa, lista com mistura)
+        for other in ("https://example.com/P3", "marina-demo", "operacoes", "Reunião P3 de ontem", "", "A-1B"):
+            self.assertEqual(n(other), other)
+        self.assertEqual(n(["A-1", "G2", "texto"]), ["ACT-0001", "GOAL-2", "texto"])
+        self.assertEqual(ids.normalize_csv("A-1, P2.1 ,x"), "ACT-0001,PROJ-2.1,x")
+        self.assertEqual((ids.entity_of("A-0001"), ids.entity_of("PROJ-3.2"), ids.entity_of("GOAL-1"), ids.entity_of("x")),
+                         ("action", "deliverable", "goal", None))
+        self.assertEqual((ids.make("action", 147), ids.make("goal", 4), ids.make("project", 12)), ("ACT-0147", "GOAL-4", "PROJ-12"))
+
+    def test_legacy_input_is_stored_in_the_new_format_and_sequence_continues(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            ev = b.record_one({"type": "action.opened", "by": "owner", "data": {
+                "title": "Ligada ao plano", "owner": "eu", "project": "P1", "deliverable": "P1.1"}})
+            self.assertEqual((ev["id"], ev["data"]["project"], ev["data"]["deliverable"]), ("ACT-0001", "PROJ-1", "PROJ-1.1"))
+            b.record_one({"type": "action.opened", "by": "owner", "data": {
+                "title": "Bloqueada", "owner": "eu", "blocked_by": ["A-0001"]}})
+            self.assertEqual(b.state.actions["ACT-0002"].blocked_by, ["ACT-0001"])
+            b.record_one({"type": "action.updated", "id": "A-0002", "by": "owner", "data": {"note": "x"}})   # id antigo na entrada
+            b.record_one({"type": "delivery.recorded", "by": "owner", "data": {"title": "Entrega", "ref": "P1.2"}})
+            self.assertEqual(b.state.deliveries["WIN-0001"].ref, "PROJ-1.2")
+            self.assertEqual(b.state.next_id("ACT"), "ACT-0003")
+            lines = b.ledger_path.read_text(encoding="utf-8")
+            self.assertNotIn('"A-0', lines)
+            self.assertNotIn('"P1', lines)
+            self.assertEqual(b.validate_all(), [])
+
+    def test_ledger_still_in_old_names_is_readable_and_continues_in_the_new_ones(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            old = [{"seq": 100 + i, "ts": "2026-10-01T10:00:00-03:00", "type": t, "id": i_, "date": "2026-10-01", "by": "owner",
+                    "prov": "declarado", "source": "chat", "data": d} for i, (t, i_, d) in enumerate([
+                ("action.opened", "A-0146", {"title": "Antiga", "owner": "eu", "project": "P1"}),
+                ("action.opened", "A-0147", {"title": "Outra", "owner": "eu", "blocked_by": ["A-0146"]}),
+                ("progress.declared", "G1", {"pct": 40}),
+                ("delivery.recorded", "E-0003", {"title": "Entregue", "ref": "A-0146"})])]
+            base = b.state.max_seq()
+            for i, e in enumerate(old):
+                e["seq"] = base + 1 + i
+            with open(b.ledger_path, "a", encoding="utf-8") as fh:
+                for e in old:
+                    fh.write(json.dumps(e) + "\n")
+            b2 = Brain(b.inst)
+            self.assertEqual(sorted(b2.state.actions), ["ACT-0146", "ACT-0147"])
+            self.assertEqual(b2.state.actions["ACT-0147"].blocked_by, ["ACT-0146"])
+            self.assertEqual(b2.state.deliveries["WIN-0003"].ref, "ACT-0146")
+            self.assertIn("GOAL-1", b2.state.progress)
+            self.assertEqual(b2.validate_all(), [])
+            self.assertEqual(b2.record_one({"type": "action.opened", "by": "owner", "data": {"title": "Nova", "owner": "eu"}})["id"], "ACT-0148")
+
+    def test_goals_md_reads_both_formats_and_writes_the_new_one(self):
+        legacy = ("# PLANNING\n\n## G1 — Meta\n- status: ativo\n\n### P1 — Projeto\n- status: ativo\n"
+                  "- [ ] P1.1 Um · prazo: 2026-10-20 · peso: 2\n- [x] P1.2 Dois · feito: 2026-10-01\n")
+        new = legacy.replace("G1", "GOAL-1").replace("P1", "PROJ-1")
+        a, b_ = planning.parse(legacy), planning.parse(new)
+        for plan in (a, b_):
+            self.assertEqual(list(plan.goals), ["GOAL-1"])
+            self.assertEqual(list(plan.projects), ["PROJ-1"])
+            self.assertEqual(list(plan.deliverables), ["PROJ-1.1", "PROJ-1.2"])
+            self.assertEqual(plan.progress("P1")["pct"], 33)                # consulta pelo nome antigo também funciona
+            self.assertTrue(plan.has("G1") and plan.has("P1.2"))
+            self.assertEqual(plan.warnings, [])
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "goals.md"
+            path.write_text(legacy, encoding="utf-8")
+            self.assertEqual(planning.add_project(path, "G1", "Novo"), "PROJ-2")      # sequência e formato novos
+            self.assertEqual(planning.add_goal(path, "Outro"), "GOAL-2")
+            self.assertEqual(planning.add_deliverable(path, "P2", "Entregável novo"), "PROJ-2.1")
+            self.assertTrue(planning.set_deliverable(path, "P1.1", "feito", date(2026, 10, 9)))
+            text = path.read_text(encoding="utf-8")
+            self.assertIn("### PROJ-2 — Novo", text)
+            self.assertIn("- [x] PROJ-1.1 Um", text)                          # a linha tocada passou ao formato novo
+            self.assertIn("## G1 — Meta", text)                               # o resto do arquivo só muda quando o cérebro reescreve
+            changes = planning.edit_node(path, "G1", title="Meta nova")
+            self.assertEqual(changes[0][0], "título")
+            self.assertEqual(planning.parse(path.read_text(encoding="utf-8")).warnings, [])
+
+    def test_cli_accepts_old_names_and_prints_new_ones(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            run = lambda *a: subprocess.run([sys.executable, str(ROOT / "brain"), *a], capture_output=True, text=True,   # noqa: E731
+                                            env={**os.environ, "BRAIN_HOME": td})
+            r = run("action", "open", "Pelo CLI", "--project", "P1", "--deliverable", "P1.2", "--by", "owner")
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertIn("ACT-0001", r.stdout)
+            self.assertIn("PROJ-1", r.stdout)
+            r = run("action", "update", "A-0001", "--note", "x", "--by", "owner")
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertEqual(run("action", "show", "A-1", "--json").returncode, 0)
+            r = run("plan", "deliverable", "P1.1", "--status", "feito", "--by", "owner")
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertEqual(run("progress", "G1", "50").returncode, 0)
+            self.assertIn("GOAL-1", run("plan", "show").stdout)
+            r = run("note", "add", "--link", "a-1", "--text", "nota de teste")
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertTrue(any(p.name.startswith("ACT-0001-") for p in (Path(td) / "vault" / "RAW" / "inbox").glob("*")))
+            self.assertIn("✓", run("validate").stdout)
+
+    def test_old_note_names_are_still_read_and_linked_to_the_new_id(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            inbox = b.inst.inbox
+            (inbox / "A-0001-2026-10-09-note.md").write_text("---\ntipo: nota\nvinculo: A-0001\ncriada: 2026-10-09 10:00\n---\ncorpo", encoding="utf-8")
+            (inbox / "P1-2026-10-09-note.md").write_text("sem frontmatter", encoding="utf-8")
+            got = {n.link for n in notes_mod.scan(b.inst)}
+            self.assertEqual(got, {"ACT-0001", "PROJ-1"})
 
 
 if __name__ == "__main__":
