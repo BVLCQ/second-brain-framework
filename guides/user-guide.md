@@ -98,16 +98,16 @@ Os prefixos que você vai ver o dia inteiro:
 
 | Prefixo | Entidade | Exemplo |
 |---|---|---|
-| `A-####` | ação (tarefa) | `A-0014` |
-| `D-####` | decisão | `D-0005` |
-| `E-####` | entrega (conquista com resultado) | `E-0002` |
-| `R-####` | proposta (o agente sugere, você decide) | `R-0001` |
-| `M-####` | mensagem rascunhada no outbox | `M-0001` |
-| `S-####` | publicação | `S-0001` |
-| `F-####` | plano de foco | `F-0001` |
-| `G#` / `P#` / `P#.n` | goal / projeto / entregável | `G1`, `P1`, `P1.2` |
+| `ACT-####` | ação (tarefa) | `ACT-0014` |
+| `DEC-####` | decisão | `DEC-0005` |
+| `WIN-####` | entrega (conquista com resultado) | `WIN-0002` |
+| `PROP-####` | proposta (o agente sugere, você decide) | `PROP-0001` |
+| `MSG-####` | mensagem rascunhada no outbox | `MSG-0001` |
+| `PUB-####` | publicação | `PUB-0001` |
+| `FOCUS-####` | plano de foco | `FOCUS-0001` |
+| `GOAL-#` / `PROJ-#` / `PROJ-#.#` | goal / projeto / entregável | `GOAL-1`, `PROJ-1`, `PROJ-1.2` |
 
-O `#` é para você não precisar decorar: cite "A-0014" e pronto.
+O `#` é para você não precisar decorar: cite "ACT-0014" e pronto.
 
 ### 2.3 Proveniência: de onde veio cada fato
 
@@ -198,7 +198,7 @@ material. Peça `/dump` — o pipeline completo, explicado de leigo:
 3. **Extrai** para um artefato em `PROCESSED/2026/10/`: do que trata, decisões
    (com quem decidiu e a base), ações por dono, prazos, menções a pessoas.
    Cada extração leva proveniência.
-4. **Registra no livro-razão** cada ação (`A-####`), decisão (`D-####`),
+4. **Registra no livro-razão** cada ação (`ACT-####`), decisão (`DEC-####`),
    pessoa nova. Pessoas já conhecidas são resolvidas por alias — nunca uma
    segunda ficha.
 5. Roda `./brain render` e o **painel nasce**: `vault/FRESH/dashboard/index.html`,
@@ -256,7 +256,7 @@ autorize com a conta certa. Feito isso, `/gmail` funciona: o agente busca as
 threads (padrão: hoje; filtro seu vira query, ex. `/gmail da Marina-demo`),
 snapshota e processa. O digest destaca o que **cobra você** e o que
 **parece fechar** alguma ação — e atenção: isso último vira uma *proposta*
-(`R-####`) com a evidência, nunca um fechamento automático.
+(`PROP-####`) com a evidência, nunca um fechamento automático.
 
 **Google Calendar.** Adicione o conector MCP do Calendar. `/calendar` grava
 o snapshot `gcal-primary.json` na inbox — ele NÃO extrai ações daí; a agenda
@@ -322,13 +322,13 @@ jogar coisa na inbox.
   `./brain nightly` — ou simplesmente digite `/brief`, que renderiza antes.
 - `/brief` → hoje, atrasadas, próximos 3 dias, o que me devem, goal em
   risco, o que espera você. ≤15 linhas.
-- Se houver proposta (`R-####`) esperando: decida — "aceita R-0001" ou
-  "rejeita R-0001" com uma linha de por quê.
+- Se houver proposta (`PROP-####`) esperando: decida — "aceita PROP-0001" ou
+  "rejeita PROP-0001" com uma linha de por quê.
 
 **Durante o dia (zero esforço — só captura)**
 
 - Precisa lembrar de algo? `/todo falar com o Heitor-demo sobre o draft até sexta`.
-- Terminou algo? `/done A-0014 enviado, ele confirmou`.
+- Terminou algo? `/done ACT-0014 enviado, ele confirmou`.
 - Meeting gravada/transcrita? Arraste o arquivo para `vault/RAW/inbox/`.
 - Doc importante, print, nota solta? Mesma coisa: inbox. Sem organizar,
   sem renomear bonito — organizar é trabalho do agente, não seu.
@@ -354,9 +354,9 @@ manhã. O sistema não pune atraso de captura; ele pune só a não-captura.
 2. `/focus` → o plano de blocos da semana (explicado na seção 7). Confira a
    tabela, diga "ok", e os blocos nascem no calendário como *Focus time*
    (ou baixam um `.ics` para importar).
-3. Preparando 1:1? `/share status` (ou `/share project P1`) gera um HTML
+3. Preparando 1:1? `/share status` (ou `/share project PROJ-1`) gera um HTML
    limpo para enviar ao gestor; `/person marina-demo` é o seu lado da mesa.
-4. Fechando mês/ciclo? `/recap G1` monta o dossiê datado com histórico e
+4. Fechando mês/ciclo? `/recap GOAL-1` monta o dossiê datado com histórico e
    impacto — cada afirmação com fonte.
 
 ---
@@ -404,14 +404,14 @@ em outros agentes, o texto é entendido do mesmo jeito.)
   desconhecida → oferece cadastrar); projeto casado se for óbvio; esforço se
   você falou tempo ("2h"). Registrado como `[declarado]`, direto no ledger —
   não passa pela inbox.
-- **Recebe:** a linha da ação: `✓ A-0012 · Ler a política de dados · vence
-  15/10 · P1`. E a tarefa já está no painel.
+- **Recebe:** a linha da ação: `✓ ACT-0012 · Ler a política de dados · vence
+  15/10 · PROJ-1`. E a tarefa já está no painel.
 - **Prazo sugerido:** se você não disse prazo, o agente **sugere** um pelo
   contexto (prazo do entregável/projeto, acordos com pessoas, agenda e carga)
   e diz o porquê. Enquanto for sugestão, a data aparece **em rosa** na TUI e no
   painel (e com "(sugerido)" nos Markdown). Você decide: digita outra data
-  (`/todo prazo A-0012` repete a sugestão; na TUI, tecla `t`) e a cor volta ao
-  normal, ou aceita como está (`brain action update A-0012 --confirm-due --by owner`,
+  (`/todo prazo ACT-0012` repete a sugestão; na TUI, tecla `t`) e a cor volta ao
+  normal, ou aceita como está (`brain action update ACT-0012 --confirm-due --by owner`,
   ou salve o formulário de prazo da TUI com a mesma data). Sem base nenhuma, ele
   não sugere ("não consta") e a ação fica sem prazo.
 - **Pegadinha:** tarefa sem prazo fica sem `due` — e o planejador de foco
@@ -420,16 +420,16 @@ em outros agentes, o texto é entendido do mesmo jeito.)
 
 #### `/done` — fechar tarefa
 - **Quando:** "fechei/terminei X".
-- **Digita:** `/done A-0014 enviei o draft, Heitor-demo confirmou`
+- **Digita:** `/done ACT-0014 enviei o draft, Heitor-demo confirmou`
 - **Por dentro:** ID exato fecha direto. Se você escrever texto em vez do
   ID, ele casa: achou uma única → confirma em 1 linha; várias → lista para
   você escolher; ação de terceiro ou muito antiga → sempre confirma antes.
   Se o fechamento tem resultado observável ligado a projeto, entregável ou desbloqueio, nasce automaticamente
-  uma **entrega `E-####`** (isso alimenta suas conquistas). Ações que
+  uma **entrega `WIN-####`** (isso alimenta suas conquistas). Ações que
   esperavam por essa recebem nota de "destravada" — não fecham sozinhas.
 - **Recebe:** id, como fechou, se virou entrega, o que desbloqueou.
 - **Pegadinha:** "operacional" não é entrega. Responder um e-mail não gera
-  `E-####`; entregar o manual de rotinas v1 gera. Não force — o sistema já julga.
+  `WIN-####`; entregar o manual de rotinas v1 gera. Não force — o sistema já julga.
 
 ### Entrada de informação
 
@@ -491,7 +491,7 @@ em outros agentes, o texto é entendido do mesmo jeito.)
   é com `person add`, com aliases (evita ficha duplicada).
 
 #### `/project` — status de um projeto
-- **Digita:** `/project P1` (ou pelo título)
+- **Digita:** `/project PROJ-1` (ou pelo título)
 - **Recebe:** progresso calculado + declarado, saúde e o motivo, entregáveis,
   decisões ativas, minhas vs. waiting, próximo marco, evidência recente.
 - **Pegadinha:** mudar a árvore do projeto não é aqui — é `/goal`.
@@ -508,7 +508,7 @@ em outros agentes, o texto é entendido do mesmo jeito.)
 - **Quando:** ver a árvore; mudar estrutura (criar/fechar/renomear goal ou
   projeto); ou marcar entregável.
 - **Ver:** `/goal` → árvore com progresso calculado e o declarado, lado a
-  lado. Você pode declarar seu percentual de feeling (`brain progress G1 45`)
+  lado. Você pode declarar seu percentual de feeling (`brain progress GOAL-1 45`)
   — ele aparece AO LADO do calculado, nunca o substitui.
 - **Marcar entregável feito:** é fato, não gate — com evidência: o agente
   atualiza o checkbox em `goals.md` e loga.
@@ -552,8 +552,8 @@ em outros agentes, o texto é entendido do mesmo jeito.)
   trancado por padrão.
 
 #### `/share` — export para um colega
-- **Quando:** "me dá um status do P1 pra mandar pra Marina-demo".
-- **Digita:** `/share project P1` (também: `/share goal G1`,
+- **Quando:** "me dá um status do PROJ-1 pra mandar pra Marina-demo".
+- **Digita:** `/share project PROJ-1` (também: `/share goal GOAL-1`,
   `/share status`, `/share period 2026-09-01:2026-09-30`) — HTML ou MD.
 - **Recebe:** um arquivo **autocontido** em `vault/reports/share/`, sem
   jargão interno, sem lista "observando", sem rascunhos. Revise e mande.
@@ -562,7 +562,7 @@ em outros agentes, o texto é entendido do mesmo jeito.)
 
 #### `/recap` — história e impacto
 - **Quando:** retrospectiva, review de trimestre, "o que fizemos de X?".
-- **Digita:** `/recap G1` (ou projeto, ou período)
+- **Digita:** `/recap GOAL-1` (ou projeto, ou período)
 - **Recebe:** dossiê datado com o histórico e o impacto, cada afirmação com
   fonte; narrativa extra só com fatos do ledger. Nunca reescreve recap
   antigo — gera outro.
@@ -570,7 +570,7 @@ em outros agentes, o texto é entendido do mesmo jeito.)
 #### `/publish` — postar no espaço do time
 - **Quando:** o report precisa ir para um canal/canvas/pasta do time.
 - **Por dentro:** destino precisa estar em `[publish].destinations`; cada
-  publicação tem pedido (`S-####`), conteúdo mostrado, "ok" seu, e o
+  publicação tem pedido (`PUB-####`), conteúdo mostrado, "ok" seu, e o
   arquivo sai com hash travado — mudou depois de aprovado, refaz o pedido.
 
 #### `/backup` — o zip do vault
@@ -670,11 +670,16 @@ próxima renderização — automática no noturno ou via `/brief`):
 
 | Você edita… | O que acontece |
 |---|---|
-| Checkbox em `FRESH/todo.md` (`- [x] **A-0012**…`) | fecha (ou reabre) a ação — vira declaração sua `[declarado]` |
-| `status:` no frontmatter de `FRESH/records/actions/A-0012.md` | o mesmo, pelo vocabulário: `a fazer` · `fazendo` · `aguardando` · `feita` · `descartada` |
+| Checkbox em `FRESH/todo.md` (`- [x] **ACT-0012**…`) | fecha (ou reabre) a ação — vira declaração sua `[declarado]` |
+| `status:` no frontmatter de `FRESH/records/actions/ACT-0012.md` | o mesmo, pelo vocabulário: `a fazer` · `fazendo` · `aguardando` · `feita` · `descartada` |
 | `status:` no frontmatter de `FRESH/records/opportunities/OPP-0003.md` | muda o status da oportunidade (`ideia` · `triagem` · `priorizada` · `piloto` · `validando` · `entregue` · `em-espera` · `descartada`); `em-andamento` só vem de `brain opportunity promote`; valor inválido vira aviso e não grava |
 | Checkbox de entregável em `PLANNING/goals.md` | atualiza o estado factual (com data) |
 | Qualquer outra coisa em `FRESH/` | **descartada** no próximo render — FRESH é retrato |
+
+**Instância com os nomes antigos?** `./brain migrate ids` (dry-run: só escreve o relatório em `vault/reports/migration/`) mostra
+o que mudaria — arquivos e substituições por zona, o diff do `goals.md` e as ocorrências ambíguas de `G#`/`P#` em documentos
+externos. Com o seu "ok", `./brain migrate ids --apply` faz backup zip, reescreve ledger e arquivos (exceção histórica à regra
+append-only) e regenera o FRESH. Nunca roda no noturno; só uma vez por instância.
 
 Regra geral: **estrutura vive no chat** (com gate), **fato vivo no chat ou
 checkbox**, e `FRESH/` é só leitura prática.
@@ -694,7 +699,7 @@ checkbox**, e `FRESH/` é só leitura prática.
   fora do backup).
 - **Nunca** decide por você no noturno: sem dono presente, o ledger recusa
   aprovações, envios, publicações e foco no Google. O que o noturno achar
-  dúbio vira proposta (`R-####`) de manhã.
+  dúbio vira proposta (`PROP-####`) de manhã.
 - **Nunca** inventa memória: "não consta" é resposta de primeira classe.
 - O **vault não sai da máquina** salvo pelas portas share/publish/backup.
 
@@ -705,7 +710,7 @@ checkbox**, e `FRESH/` é só leitura prática.
 | Sintoma | Causa provável | Saída |
 |---|---|---|
 | "o noturno não rodou" | Mac desligado/cron antigo (`./brain schedule status` mostra se é launchd); "Not logged in" no `nightly-agent.log` = ainda está no cron | `./brain nightly` manual de manhã — é o ritual recomendado mesmo |
-| Ação nunca entra no plano de foco | sem `due` ou sem esforço estimado | `./brain action update A-#### --due … --effort 90m` e gere outro plano |
+| Ação nunca entra no plano de foco | sem `due` ou sem esforço estimado | `./brain action update ACT-#### --due … --effort 90m` e gere outro plano |
 | Pessoa "não consta" ao citar alguém | ficha nova | `/person <nome>` → ele oferece cadastrar com aliases |
 | Duas fichas da mesma pessoa | criadas antes dos aliases | `./brain person alias` evita a segunda ficha; se ela já existe, `./brain person merge DUP --into ID` |
 | `/ask` responde "não consta" para algo que existia | filtro muito estreito na busca | tente termo do título; se memória ligada, `./brain memory sync` |
@@ -722,6 +727,9 @@ edita `events.jsonl` à mão — com backup, uma linha.
 
 ## 12. Glossário
 
+- **IDs declarativos** — `ACT-0146` (ação), `DEC-` (decisão), `WIN-` (entrega), `PROP-` (proposta), `MSG-` (mensagem), `PUB-`
+  (publicação), `FOCUS-` (plano de foco), `PROC-`/`OPP-` (portfólio), `GOAL-1`/`PROJ-3`/`PROJ-3.2` (plano). Os nomes antigos
+  (`A-0146`, `G1`, `P3`…) ainda valem na entrada; `./brain migrate ids` converte uma instância antiga de uma vez (seção 9).
 - **Vault** — a pasta onde mora a sua vida profissional no sistema.
 - **Ledger (livro-razão)** — `events.jsonl`, a verdade dos fatos, um evento
   por linha, append-only.
@@ -736,8 +744,8 @@ edita `events.jsonl` à mão — com backup, uma linha.
 - **Portas** — as 4 únicas escritas no mundo: foco (Calendar), mensagem
   (Slack), publicação (canvas/Drive), backup (Drive).
 - **mine / waiting / watching** — as três listas: eu devo, me devem, é contexto.
-- **Proposta (`R-####`)** — sugestão do agente esperando seu veredito.
-- **Entrega (`E-####`)** — trabalho concluído com resultado observável.
+- **Proposta (`PROP-####`)** — sugestão do agente esperando seu veredito.
+- **Entrega (`WIN-####`)** — trabalho concluído com resultado observável.
 - **Noturno** — rotina das 05:00: render → `/update` → memória → backup
   (domingo), com o dono ausente e as portas trancadas.
 - **EDF** — Earliest Deadline First, a regra do planejador de foco: prazo
@@ -759,7 +767,7 @@ triageia, pontua e move. `ICE` = impacto × confiança × facilidade (1–5 cada
 Status vai e volta livremente: `ideia → triagem → priorizada → em-andamento → piloto → validando → entregue`, mais
 `em-espera` e `descartada` (pedem motivo). `em-andamento` só vem de **promover**.
 
-**Promover** (`p` no TUI · `./brain opportunity promote OPP-#### --goal G#`): cria um projeto no goal — mudança
+**Promover** (`p` no TUI · `./brain opportunity promote OPP-#### --goal GOAL-#`): cria um projeto no goal — mudança
 estrutural, então mostra o diff do `goals.md` e só segue com o seu "ok" literal. A oportunidade vira `em-andamento`
 e fica ligada ao projeto (o progresso dele aparece na ficha).
 

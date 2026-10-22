@@ -13,7 +13,7 @@ Stdio, JSON-RPC. Nenhuma ferramenta escreve. Cada chamada relê o ledger.
 |---|---|
 | `brain_overview` | goals, saúde, agenda 7d, o que aguarda você |
 | `brain_search` | busca sem LLM |
-| `brain_project` | página de um `P#` |
+| `brain_project` | página de um `PROJ-#` |
 | `brain_person` | por nome/alias/e-mail |
 | `brain_decisions` | filtro por projeto/pessoa/data |
 | `brain_actions` | `mine` / `waiting` / `watching` |

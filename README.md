@@ -86,7 +86,7 @@ Noturno (render → agente `/update` → memória → backup semanal):
 |---|---|
 | Ver o dia | `/brief` · `./brain render --open` |
 | Criar tarefa | `/todo preciso ler X até quarta` |
-| Fechar tarefa | `/done A-0014 enviei o draft` |
+| Fechar tarefa | `/done ACT-0014 enviei o draft` |
 | Processar a inbox | `/dump` |
 | Puxar fontes agora | `/update` ou `/gmail` `/slack` `/drive` `/calendar` |
 | Agendar foco | `/focus` (proposta → "ok" → apply) |

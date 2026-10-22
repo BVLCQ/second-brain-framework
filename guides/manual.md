@@ -16,9 +16,9 @@ arquivos que você pode abrir sem ele, e responde quatro perguntas:
 | Pergunta | Onde a resposta mora |
 |---|---|
 | Para onde estou indo? | `PLANNING/goals.md` — goal → projeto → entregável |
-| Quem decidiu o quê, quando, com base em quê? | decisões `D-####` no livro-razão |
+| Quem decidiu o quê, quando, com base em quê? | decisões `DEC-####` no livro-razão |
 | O que eu devo, o que me devem, o que é só contexto? | ações em três listas |
-| O que foi entregue de verdade? | entregas `E-####` e entregáveis marcados feitos |
+| O que foi entregue de verdade? | entregas `WIN-####` e entregáveis marcados feitos |
 
 Há duas peças:
 
@@ -125,14 +125,14 @@ IDs, sempre com zeros à esquerda, nunca reusados:
 
 | ID | Coisa |
 |---|---|
-| `A-0001` | ação |
-| `D-0001` | decisão |
-| `E-0001` | entrega (conquista) |
-| `R-0001` | proposta para você aceitar ou rejeitar |
-| `M-0001` | mensagem (rascunho → envio) |
-| `S-0001` | publicação |
-| `F-0001` | plano de foco |
-| `G1` `P1` `P1.1` | goal, projeto, entregável — você numera, no `goals.md` |
+| `ACT-0001` | ação |
+| `DEC-0001` | decisão |
+| `WIN-0001` | entrega (conquista) |
+| `PROP-0001` | proposta para você aceitar ou rejeitar |
+| `MSG-0001` | mensagem (rascunho → envio) |
+| `PUB-0001` | publicação |
+| `FOCUS-0001` | plano de foco |
+| `GOAL-1` `PROJ-1` `PROJ-1.1` | goal, projeto, entregável — você numera, no `goals.md` |
 
 Quem numera `A-`…`F-` é o `./brain`. Se o agente inventar um número, está errado.
 
@@ -164,8 +164,8 @@ Uma ação de outra pessoa não cai em "minhas" só porque você se importa.
 
 ### Bloqueio
 
-`blocked_by: A-0002` — esta ação não anda enquanto a outra estiver aberta.
-`unblocks: A-0009` — fechar esta destrava a outra (o motor anota; não fecha
+`blocked_by: ACT-0002` — esta ação não anda enquanto a outra estiver aberta.
+`unblocks: ACT-0009` — fechar esta destrava a outra (o motor anota; não fecha
 a outra por você). Atraso se calcula na leitura: não existe uma varredura
 que "marque vencida".
 
@@ -224,7 +224,7 @@ Abas:
 Busca no topo: duas letras já filtram ações, decisões, projetos, pessoas,
 entregas e artefatos. "Não consta" é uma resposta da busca.
 
-Clicar num `A-####` ou `D-####` abre a ficha: histórico, bloqueio, fonte,
+Clicar num `ACT-####` ou `DEC-####` abre a ficha: histórico, bloqueio, fonte,
 proveniência. O painel não edita nada. Fechar ação é no chat, no checkbox
 do Markdown — e só entra no livro-razão no próximo
 `./brain render`.
@@ -243,7 +243,7 @@ conta.
 O texto mostra a contagem e, quando o peso muda o percentual, o peso também:
 `14% · 1/5 entregáveis · peso 1/7`. 1/5 não é 20% se um deles pesa mais.
 
-Ao lado, se você declarou um feeling (`./brain progress G1 45 --note "…"`),
+Ao lado, se você declarou um feeling (`./brain progress GOAL-1 45 --note "…"`),
 aparece "declarado 45%". Os dois números convivem. O declarado não substitui
 a conta.
 
@@ -276,7 +276,7 @@ Cada uma tem no topo `generated-at` e `fontes`.
 | `FRESH/home.md` | o dia |
 | `FRESH/todo.md` | marque `[x]` para fechar; desmarque para reabrir |
 | `FRESH/goals.md` | árvore só leitura (edite a estrutura em `PLANNING/`) |
-| `FRESH/projects/P1.md` | ficha do projeto |
+| `FRESH/projects/PROJ-1.md` | ficha do projeto |
 | `FRESH/decisions.md` | lista |
 | `FRESH/wins.md` | conquistas |
 | `FRESH/people/<id>.md` | ficha da pessoa |
@@ -285,8 +285,8 @@ Cada uma tem no topo `generated-at` e `fontes`.
 | `FRESH/focus.md` | plano da semana |
 | `FRESH/outbox.md` | mensagens |
 | `FRESH/health.md` | saúde |
-| `FRESH/records/actions/A-0001.md` | uma nota por ação |
-| `FRESH/records/decisions/D-0001.md` | uma nota por decisão |
+| `FRESH/records/actions/ACT-0001.md` | uma nota por ação |
+| `FRESH/records/decisions/DEC-0001.md` | uma nota por decisão |
 | `FRESH/notes/` | brief e semana, escritos pelo agente |
 
 Na ficha de ação, editar o `status:` do frontmatter vale declaração sua no
@@ -296,7 +296,7 @@ status que você grava.
 
 Ficha já **descartada** marcada como "feita" não faz nada: descarte não vira
 feito. Reabra antes (`/done` não; use o chat pedindo para reabrir, ou
-`./brain action reopen A-#### --reason "…"`).
+`./brain action reopen ACT-#### --reason "…"`).
 
 Depois de editar `todo.md` ou uma ficha, rode `./brain render` (ou peça
 `/brief`). Sem isso, o painel e o livro-razão ainda mostram o estado antigo.
@@ -330,7 +330,7 @@ hoje do sistema, acha a pessoa se você citou alguém, liga ao projeto se for
 óbvio, e grava:
 
 ```bash
-./brain action open "Ler a política" --due 2026-10-15 --effort 45m --project P1 --by owner
+./brain action open "Ler a política" --due 2026-10-15 --effort 45m --project PROJ-1 --by owner
 ```
 
 Sem prazo, a ação existe e o foco **não** a agenda. O agente avisa.
@@ -342,18 +342,18 @@ Lista padrão: sua. Se a ação é de outra pessoa para você, ela nasce
 
 ### `/done` — fechar
 
-`/done A-0014 enviei o draft pro Heitor-demo`.
+`/done ACT-0014 enviei o draft pro Heitor-demo`.
 
 ID exato fecha direto. Texto sem ID: um match só, o agente confirma em uma
 linha; vários matches, ele lista; ação de terceiro ou muito antiga, ele
 sempre confirma.
 
 ```bash
-./brain action close A-0014 --how "enviei o draft" --outcome "Heitor-demo confirmou" --by owner
+./brain action close ACT-0014 --how "enviei o draft" --outcome "Heitor-demo confirmou" --by owner
 ```
 
 Se houver resultado observável **e** projeto, entregável ou `unblocks`, nasce
-uma entrega `E-####` sozinha. Sem resultado e sem projeto, fecha como
+uma entrega `WIN-####` sozinha. Sem resultado e sem projeto, fecha como
 operacional — não inventa conquista. `--delivery` força a entrega.
 
 Ações que estavam `blocked_by` desta recebem uma nota de desbloqueio. Elas
@@ -377,7 +377,7 @@ agente:
    Pessoa nova: `./brain person add` com aliases.
 7. Grava ações, decisões e o artefato via `./brain` (ou `./brain add` com um
    JSON). Não fecha ação só porque o texto "parece" resolver — abre uma
-   proposta `R-####`.
+   proposta `PROP-####`.
 8. Roda `./brain render` se nasceu fato novo.
 9. Te devolve um recibo de ~5 linhas por item e `inbox: N restantes`.
 
@@ -423,7 +423,7 @@ O app não completa com conhecimento de mundo.
 que ela tomou (quem/quando/fonte), última interação. Nome ambíguo: o agente
 lista e para. Não inventa "como ela gosta de ouvir".
 
-`/project P1` — progresso, saúde e o motivo, entregáveis, decisões, suas
+`/project PROJ-1` — progresso, saúde e o motivo, entregáveis, decisões, suas
 ações vs. as que você espera, próximo marco, artefatos recentes. Mudar a
 árvore é `/goal`, não aqui.
 
@@ -434,7 +434,7 @@ Ver: `./brain plan show` ou `FRESH/goals.md`.
 Marcar entregável (fato, com evidência):
 
 ```bash
-./brain plan deliverable P1.2 --status feito --evidence "subiu em produção" \
+./brain plan deliverable PROJ-1.2 --status feito --evidence "subiu em produção" \
   --by agent --prov observado --source PROCESSED/2026/10/ata.md
 ```
 
@@ -444,14 +444,14 @@ data de hoje (ou `--date`) na linha do `goals.md` e no log.
 Declarar um feeling, sem mexer na árvore:
 
 ```bash
-./brain progress G1 45 --note "cardápio andou; reforma não"
+./brain progress GOAL-1 45 --note "cardápio andou; reforma não"
 ```
 
 Mudar a estrutura: o agente mostra o diff, espera "ok", aplica no
 `goals.md` e registra:
 
 ```bash
-./brain plan log --diff "P5 nasce sob G2" --reason "…" --evidence "…" --approval "ok"
+./brain plan log --diff "PROJ-5 nasce sob GOAL-2" --reason "…" --evidence "…" --approval "ok"
 ```
 
 No noturno a árvore não muda. Vira proposta.
@@ -475,23 +475,23 @@ Ver capítulo 12.
 ignorada ou vira aviso no `./brain doctor` / `./brain validate`.
 
 ```markdown
-## G1 — Título do goal
+## GOAL-1 — Título do goal
 - status: ativo
 - horizonte: 2026-12-31
 - por quê: o que isto destrava
 
-### P1 — Título do projeto
+### PROJ-1 — Título do projeto
 - status: ativo
 - dono: seu-id
-- [ ] P1.1 Nome do entregável · prazo: 2026-10-30 · peso: 2
-- [x] P1.2 Já feito · prazo: 2026-10-01 · feito: 2026-09-28
-- [ ] P1.3 Em curso · prazo: 2026-11-15 · estado: em-andamento
-- [-] P1.4 Cancelado
+- [ ] PROJ-1.1 Nome do entregável · prazo: 2026-10-30 · peso: 2
+- [x] PROJ-1.2 Já feito · prazo: 2026-10-01 · feito: 2026-09-28
+- [ ] PROJ-1.3 Em curso · prazo: 2026-11-15 · estado: em-andamento
+- [-] PROJ-1.4 Cancelado
 ```
 
 - Cabeçalho de goal: `## G<número> — título` (travessão, en-dash ou hífen).
 - Projeto: `### P<número> — título`, sempre debaixo de um goal.
-- Entregável: `- [ ] P1.1 título · prazo: AAAA-MM-DD · peso: 2`.
+- Entregável: `- [ ] PROJ-1.1 título · prazo: AAAA-MM-DD · peso: 2`.
 - Caixas: `[ ]` não iniciado, `[x]` feito, `[-]` cancelado.
 - `estado: em-andamento` marca trabalho em curso sem marcar feito.
 - `?` no prazo = sem prazo.
@@ -535,16 +535,16 @@ doctor. Isso é para você decidir, não para o app fundir sozinho.
 
 ```bash
 ./brain action open "Publicar o manual" --due 2026-10-20 --effort 2h \
-  --project P1 --deliverable P1.1 --blocked-by A-0002 --people heitor-demo \
+  --project PROJ-1 --deliverable PROJ-1.1 --blocked-by ACT-0002 --people heitor-demo \
   --priority alta --by owner
 
-./brain action update A-0003 --status fazendo --note "comecei a revisão"
-./brain action update A-0003 --clear-due
+./brain action update ACT-0003 --status fazendo --note "comecei a revisão"
+./brain action update ACT-0003 --clear-due
 ./brain action list --list waiting
-./brain action list --project P1 --all
-./brain action show A-0003
-./brain action drop A-0008 --reason "não faz mais sentido" --by owner
-./brain action reopen A-0008 --reason "voltou a fazer" --by owner
+./brain action list --project PROJ-1 --all
+./brain action show ACT-0003
+./brain action drop ACT-0008 --reason "não faz mais sentido" --by owner
+./brain action reopen ACT-0008 --reason "voltou a fazer" --by owner
 ```
 
 Estados que você grava: `aberta`, `fazendo`, `aguardando`. `bloqueada`,
@@ -557,14 +557,14 @@ Estados que você grava: `aberta`, `fazendo`, `aguardando`. `bloqueada`,
 
 ```bash
 ./brain decision add "Manual sai como draft" --decided-by marina-demo \
-  --project P1 --rationale "meio manual em produção" \
+  --project PROJ-1 --rationale "meio manual em produção" \
   --prov observado --source PROCESSED/2026/10/ata.md
 
-./brain decision list --project P1
-./brain decision supersede D-0001 --by-decision D-0004 --reason "a decisão nova substitui"
+./brain decision list --project PROJ-1
+./brain decision supersede DEC-0001 --by-decision DEC-0004 --reason "a decisão nova substitui"
 ```
 
-Ou, no `decision add`, `--supersedes D-0001`. A antiga fica `substituida` e
+Ou, no `decision add`, `--supersedes DEC-0001`. A antiga fica `substituida` e
 riscada. Não se apaga. `decided_by` é obrigatório e tem de ser gente já
 cadastrada.
 
@@ -573,11 +573,11 @@ cadastrada.
 Quando a conquista não nasceu de um `/done`:
 
 ```bash
-./brain delivery "Draft do manual" --ref A-0001 \
+./brain delivery "Draft do manual" --ref ACT-0001 \
   --result "em revisão com o Heitor-demo" --evidence "e-mail" --by owner
 ```
 
-`--ref` pode ser `A-####`, `P1`, `P1.1` ou `G1`. Sem resultado declarado, a
+`--ref` pode ser `ACT-####`, `PROJ-1`, `PROJ-1.1` ou `GOAL-1`. Sem resultado declarado, a
 ficha diz "resultado não declarado" — o app não inventa impacto.
 
 ### Proposta
@@ -586,13 +586,13 @@ O agente acha que uma ação pode fechar, ou que o plano deveria mudar, e não
 faz isso sozinho:
 
 ```bash
-./brain proposal add --kind fechar-acao --target A-0006 \
+./brain proposal add --kind fechar-acao --target ACT-0006 \
   --summary "O report já traz a fechamento de setembro" \
   --evidence PROCESSED/2026/10/status.md \
   --prov observado --source PROCESSED/2026/10/status.md
 
-./brain proposal accept R-0001 --quote "ok, pode fechar"
-./brain proposal reject R-0001 --quote "não, ainda quero validar o número"
+./brain proposal accept PROP-0001 --quote "ok, pode fechar"
+./brain proposal reject PROP-0001 --quote "não, ainda quero validar o número"
 ```
 
 Kinds: `fechar-acao`, `atualizar-acao`, `mudar-plano`, `reestimar`, `outro`.
@@ -628,15 +628,15 @@ Uma vez por semana (ou quando você pede `/focus`):
 6. O agente grava a sua frase literal e aplica:
 
 ```bash
-./brain focus approve F-0001 --quote "ok"
-./brain focus apply F-0001
+./brain focus approve FOCUS-0001 --quote "ok"
+./brain focus apply FOCUS-0001
 ```
 
 Dois modos (`[focus] mode` no `brain.toml`):
 
 | Modo | O que acontece |
 |---|---|
-| `ics` (padrão) | gera `FRESH/focus/F-0001.ics`. Você importa no Google Calendar. O app não apaga evento antigo sozinho |
+| `ics` (padrão) | gera `FRESH/focus/FOCUS-0001.ics`. Você importa no Google Calendar. O app não apaga evento antigo sozinho |
 | `google` | cria eventos no calendário primário. Tenta *Focus time* (recusa convite novo, não perturbe). Conta sem Workspace cai para evento comum, opaco, com a mesma marca |
 
 A marca é `extendedProperties.private.brain_focus=1` mais o id da ação.
@@ -687,22 +687,22 @@ pelo Slack.
 2. Rascunho:
 
 ```bash
-./brain outbox draft --to caio-demo --text "Oi Caio-demo, …" --ref A-0005 \
+./brain outbox draft --to caio-demo --text "Oi Caio-demo, …" --ref ACT-0005 \
   --why "cobrar o MVP"
 ```
 
 3. Você lê o texto inteiro no chat. "enviar 1" (ou "ok, manda") aprova
    **aquela** redação.
-4. `./brain outbox approve M-0001 --quote "enviar 1"`
-5. O agente envia pelo Slack exatamente o que `./brain outbox show M-0001`
+4. `./brain outbox approve MSG-0001 --quote "enviar 1"`
+5. O agente envia pelo Slack exatamente o que `./brain outbox show MSG-0001`
    imprime.
-6. `./brain outbox sent M-0001 --link https://…` — o permalink fica no
+6. `./brain outbox sent MSG-0001 --link https://…` — o permalink fica no
    livro-razão. Falhou: `outbox failed`. Desistiu: `outbox cancel`.
 
 Mudou uma vírgula depois do "enviar 1"? Cancela e faz outro rascunho.
 Aprovação não herda. Teto: `[outbound].daily_max` (padrão 10 por dia).
 
-O corpo da mensagem não leva `A-####`. Isso é jargão interno.
+O corpo da mensagem não leva `ACT-####`. Isso é jargão interno.
 
 Não existe porta de e-mail. Cobrar por e-mail é você quem escreve. O
 `/gmail` só lê.
@@ -713,8 +713,8 @@ Arquivo novo em `vault/reports/share/`, HTML ou Markdown, autocontido,
 datado. Não se atualiza. Gerar de novo cria outro arquivo.
 
 ```bash
-./brain share project P1
-./brain share goal G1 --format md
+./brain share project PROJ-1
+./brain share goal GOAL-1 --format md
 ./brain share status
 ./brain share period 2026-09-01:2026-09-30
 ```
@@ -735,9 +735,9 @@ Destino precisa estar em `[publish].destinations` (`slack:#canal` ou
 
 ```bash
 ./brain publish request reports/share/2026-10-09-project-p1.html --to "slack:#time"
-./brain publish approve S-0001 --quote "publica"
+./brain publish approve PUB-0001 --quote "publica"
 # o agente posta aquele arquivo
-./brain publish done S-0001 --link https://…
+./brain publish done PUB-0001 --link https://…
 ```
 
 O arquivo é travado por hash. Se mudar depois do pedido, a aprovação não
@@ -758,7 +758,7 @@ Dois bancos:
 | `brain-raw` | arquivos do RAW (texto e PDF/Office até o tamanho máximo), fora da inbox | pedaços, sem interpretar |
 | `brain-mem` | artefatos do PROCESSED, uma página por ação/decisão/entrega/pessoa, PLANNING e PROFILE | fatos duráveis |
 
-Cada lembrança aponta para um caminho (`PROCESSED/…` ou `ledger/A-0001`).
+Cada lembrança aponta para um caminho (`PROCESSED/…` ou `ledger/ACT-0001`).
 
 Desligado por padrão (`engine = "none"`). Para ligar: suba o servidor
 ([Hindsight](https://github.com/vectorize-io/hindsight); o modelo de
@@ -775,7 +775,7 @@ url = "http://localhost:8888"
 ./brain memory sync          # --dry-run lista; --limit 50 corta
 ./brain memory status
 ./brain memory recall "quem decidiu congelar o agente?"
-./brain memory reflect "como está o projeto P1?" --bank mem
+./brain memory reflect "como está o projeto PROJ-1?" --bank mem
 ./brain memory rebuild       # apaga os bancos e reconstrói
 ```
 
@@ -983,7 +983,7 @@ validação recusada · `5` livro-razão corrompido (JSON inválido no meio).
 | `artifact` | registra texto do PROCESSED (trava de idempotência do dump) |
 | `proposal add\|accept\|reject\|list` | propostas |
 | `plan show\|deliverable\|log` | árvore, checkbox, gate |
-| `progress G1 45` | percentual declarado |
+| `progress GOAL-1 45` | percentual declarado |
 | `add` | lote JSON |
 | `validate` | relê o livro-razão inteiro, o PLANNING e aliases |
 | `status` | contagens |

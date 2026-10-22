@@ -15,8 +15,8 @@ genéricas como `Operações`, `Growth`).
 - **Oportunidade e iniciativa são a mesma entidade** (`OPP-####`) em estágios.
   `tipo`: `melhoria-de-processo` · `novo-processo` · `estruturante`.
 - **Prefixos longos para entidades novas**: `PROC-####` (processo), `OPP-####`
-  (oportunidade). As entidades antigas (`A`, `D`, `E`, `R`, `M`, `S`, `F`, `G#`,
-  `P#`) **não mudam** neste plano (ver passo 12, opcional).
+  (oportunidade). As entidades antigas (`A`, `D`, `E`, `R`, `M`, `S`, `F`, `GOAL-#`,
+  `PROJ-#`) **não mudam** neste plano (ver passo 12, opcional).
 - **Áreas** são entidade do ledger (`area.added`), com id slug, nome e aliases —
   o dono cadastra quantas quiser (`brain area add`). Não ficam em config.
 - **Processo**: área, título, responsável (1 pessoa), executores (lista de
@@ -36,7 +36,7 @@ genéricas como `Operações`, `Growth`).
 - **O agente cria oportunidade sozinho** (`by agent`, `prov observado`,
   `--source` obrigatório), sempre com status `ideia`. Daí em diante só o dono move.
 - **Promover** = criar projeto num goal (gate estrutural): diff → "ok" do dono →
-  `plan add-project --approval` + evento `opportunity.promoted` ligando OPP↔P#.
+  `plan add-project --approval` + evento `opportunity.promoted` ligando OPP↔PROJ-#.
 - **Playbooks** moram no Drive. Vínculo processo↔doc via watch: o `/update` só
   re-lê o doc quando o `modifiedTime` mudou (mecanismo `--item/--rev` do
   `brain snapshot`, que já existe).
@@ -107,12 +107,12 @@ Arquivo: `brainlib/cli.py` (siga o padrão de `action`/`decision`).
   `process show` · `process list [--area] [--gaps]`.
 - `brain opportunity add "título" --area … [--process PROC-####] [--kind …]
   [--problem …] [--suggestion …] [--gain "…"] [--hours-saved N] [--person … (repetível)]
-  [--goal G#] [--by …] [--source …]`. Antes de gravar, roda o **detector de
+  [--goal GOAL-#] [--by …] [--source …]`. Antes de gravar, roda o **detector de
   duplicatas** (passo 4) e avisa; `--force` grava mesmo assim.
   · `opportunity update` · `opportunity status OPP-#### <status> [--reason]` ·
   `opportunity score OPP-#### --impact N --confidence N --ease N [--suggest --reason "…"]` ·
   `opportunity evidence OPP-#### --source <artefato>` ·
-  `opportunity promote OPP-#### --goal G# [--title …] [--approval "…"]` ·
+  `opportunity promote OPP-#### --goal GOAL-# [--title …] [--approval "…"]` ·
   `opportunity show` · `opportunity list [--status] [--area] [--sort score]`.
 - `brain doc link PROC-####|OPP-#### --kind … --ref <url|id|caminho> [--title …] [--watch]`
   · `doc unlink`. Com `--kind playbook --watch` e `ref` do Drive, também cria a fonte no
@@ -274,8 +274,8 @@ promovida) com dados genéricos. `config/watch.toml.example`: exemplo comentado 
 
 ## Passo 12 — (opcional, decidir depois) prefixos longos para os IDs antigos
 
-O ledger é append-only: `A-0146` não pode ser reescrito. Caminho possível sem quebrar
-nada: aceitar aliases na **entrada** (`ACT-0146` ≡ `A-0146`, `DEC-`≡`D-`, …) e,
+O ledger é append-only: `ACT-0146` não pode ser reescrito. Caminho possível sem quebrar
+nada: aceitar aliases na **entrada** (`ACT-0146` ≡ `ACT-0146`, `DEC-`≡`D-`, …) e,
 opcionalmente, um modo de exibição. Fica fora deste plano até o dono decidir.
 
 > A seção "Pós-implementação" do plano original é local da instância do dono (cadastros e dados reais) e não vai para o repo público.

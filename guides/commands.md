@@ -33,6 +33,7 @@ comandos, use o cockpit de terminal (`brain tui`); o guia interativo está em [`
 20. [Serviços desta máquina](#20-serviços-desta-máquina-fora-do-cli)
 21. [Receitas rápidas](#21-receitas-rápidas)
 22. [Portfólio](#22-portfólio--area--process--opportunity--doc) — `area` · `process` · `opportunity` · `doc`
+23. [Migração](#23-migração--migrate-ids) — `migrate ids`
 
 ---
 
@@ -66,17 +67,17 @@ brain --version              # brain 2.0.0
 
 | Prefixo | Entidade | Exemplo |
 |---|---|---|
-| `A-####` | ação (tarefa) | `A-0014` |
-| `D-####` | decisão | `D-0005` |
-| `E-####` | entrega (conquista com resultado) | `E-0002` |
-| `R-####` | proposta (o agente sugere, você decide) | `R-0001` |
-| `M-####` | mensagem no outbox | `M-0001` |
-| `S-####` | pedido de publicação | `S-0001` |
-| `F-####` | plano de foco | `F-0001` |
+| `ACT-####` | ação (tarefa) | `ACT-0014` |
+| `DEC-####` | decisão | `DEC-0005` |
+| `WIN-####` | entrega (conquista com resultado) | `WIN-0002` |
+| `PROP-####` | proposta (o agente sugere, você decide) | `PROP-0001` |
+| `MSG-####` | mensagem no outbox | `MSG-0001` |
+| `PUB-####` | pedido de publicação | `PUB-0001` |
+| `FOCUS-####` | plano de foco | `FOCUS-0001` |
 | `PROC-####` | processo (portfólio) | `PROC-0003` |
 | `OPP-####` | oportunidade / iniciativa (portfólio) | `OPP-0007` |
 | slug | área do portfólio (`area.added`) | `operacoes` |
-| `G#` / `P#` / `P#.n` | goal / projeto / entregável (em `PLANNING/goals.md`) | `G1`, `P1`, `P1.2` |
+| `GOAL-#` / `PROJ-#` / `PROJ-#.#` | goal / projeto / entregável (em `PLANNING/goals.md`) | `GOAL-1`, `PROJ-1`, `PROJ-1.2` |
 
 Pessoas usam um id curto (`marina-demo`) e aliases (`Marina-demo`, `M.-demo`). Em qualquer opção que
 pede pessoa, vale o id ou o alias.
@@ -272,7 +273,7 @@ brain tui             # abre; usa a .venv-tui sozinho
 Sem o extra, `brain tui` sai com código 3 e a instrução. A aba **Fontes** do painel 1 gerencia o `watch.toml` (`n` adiciona, `e` edita, `x` remove, `w` inclui um pull avulso) e mostra o
 último pull e as falhas de cada fonte. `u` (`/update`) atualiza tudo e `c` (`/connect`) puxa uma fonte: rodam o agente de `[runner]`,
 que precisa de permissão para as ferramentas MCP de leitura (`[runner].allow`, ou `[runner].command`). Teclas: `?` ajuda do contexto · `:` paleta de
-comandos · `g` busca · `/` filtro (com um id exato, `A-####`, `G#`, `P#`, `P#.n`, `D-####`…, mostra tudo que está associado a ele: o plano acima e abaixo, ações, decisões, entregas, pessoas; texto livre continua sendo busca no texto) · `N` nova nota (veja `brain note`) · `1`–`6` painéis (só pelos números; `6` é o log: `j` `k` rolam, `c` limpa) · `[` `]` ou `←` `→` abas · `⏎` ou duplo clique amplia o detalhe · `ctrl+t` troca o tema · `q` sai. O mouse também funciona: clique nas abas, nas linhas e nas dicas da barra, e a roda rola a lista. O TUI relê o vault sozinho quando ele muda fora dele (agente, outro terminal). O mapa
+comandos · `g` busca · `/` filtro (com um id exato, `ACT-####`, `GOAL-#`, `PROJ-#`, `PROJ-#.#`, `DEC-####`…, mostra tudo que está associado a ele: o plano acima e abaixo, ações, decisões, entregas, pessoas; texto livre continua sendo busca no texto) · `N` nova nota (veja `brain note`) · `1`–`6` painéis (só pelos números; `6` é o log: `j` `k` rolam, `c` limpa) · `[` `]` ou `←` `→` abas · `⏎` ou duplo clique amplia o detalhe · `ctrl+t` troca o tema · `q` sai. O mouse também funciona: clique nas abas, nas linhas e nas dicas da barra, e a roda rola a lista. O TUI relê o vault sozinho quando ele muda fora dele (agente, outro terminal). O mapa
 completo por contexto, a legenda e uma versão para experimentar com dados fictícios estão em
 [`tui-mockup.html`](tui-mockup.html). Fora do TUI ficam só o que é do agente (`init`, `snapshot`, `add`,
 `proposal add`; `outbox sent` e `publish done` ele registra ao enviar e publicar) e `demo`; o teste
@@ -312,15 +313,15 @@ sempre na mesma pasta.
 Com a memória (Hindsight) ligada, rode `./brain memory rebuild` depois de um `sort`: os ids dos documentos são os caminhos, e o `sync` não remove os antigos.
 
 ### `brain note add` · `brain note edit` · `brain note list`
-Notas avulsas do dono. `add` grava `<VÍNCULO>-AAAA-MM-DD-note.md` na **inbox** (a porta única): `A-0146-…`, `G1-…`,
-`P2-…`, `P2.1-…`; sem vínculo, `note-…`; no mesmo dia e alvo vem o sufixo `-note-2.md`. O arquivo abre com um
+Notas avulsas do dono. `add` grava `<VÍNCULO>-AAAA-MM-DD-note.md` na **inbox** (a porta única): `ACT-0146-…`, `GOAL-1-…`,
+`PROJ-2-…`, `PROJ-2.1-…`; sem vínculo, `note-…`; no mesmo dia e alvo vem o sufixo `-note-2.md`. O arquivo abre com um
 frontmatter (`vinculo:`, `criada: AAAA-MM-DD HH:mm`) e depois o texto. O `/dump` arquiva em `RAW/<ano>/<mês>/notes/` sem
 renomear, então o TUI acha a nota (inbox ou RAW) e a mostra no detalhe do vínculo, abaixo do histórico, com data e hora.
 No TUI, `N` abre o formulário (caixa grande, vínculo opcional já preenchido com o item selecionado); `ctrl+o` abre o texto no seu `$VISUAL`/`$EDITOR` como Markdown e traz o resultado de volta. Se já existe nota **de hoje** para o mesmo vínculo e ela ainda está na inbox, o TUI pergunta: editar a existente (`brain note edit`, o texto novo entra no fim) ou criar outra (`…-note-2.md`). Nota já arquivada no RAW é imutável: só cria outra.
 
 | Opção | Uso |
 |---|---|
-| `--link ID` | `A-####`, `G#`, `P#` ou `P#.n` (opcional; precisa existir). Em `list`, filtra |
+| `--link ID` | `ACT-####`, `GOAL-#`, `PROJ-#` ou `PROJ-#.#` (opcional; precisa existir). Em `list`, filtra |
 | `--text TEXTO` | conteúdo da nota (padrão: stdin) |
 | `--json` | saída em JSON |
 
@@ -388,10 +389,10 @@ brain person list --json
 | `--list mine\|waiting\|watching` | lista (padrão: `mine` se é sua, `waiting` se é de outro) |
 | `--due AAAA-MM-DD` | prazo. **Sem prazo, o foco ignora a ação** |
 | `--effort 90m\|2h\|1h30\|1d` | esforço estimado (usado pelo foco) |
-| `--project P#` | projeto do PLANNING |
-| `--deliverable P#.n` | entregável ligado |
-| `--blocked-by A-####` | esta ação espera aquela |
-| `--unblocks A-####` | esta ação destrava aquela |
+| `--project PROJ-#` | projeto do PLANNING |
+| `--deliverable PROJ-#.#` | entregável ligado |
+| `--blocked-by ACT-####` | esta ação espera aquela |
+| `--unblocks ACT-####` | esta ação destrava aquela |
 | `--people PESSOAS` | envolvidos (ids/aliases, vírgula) |
 | `--priority alta\|normal\|baixa` | |
 | `--link URL` | link externo |
@@ -399,7 +400,7 @@ brain person list --json
 | + opções de registro | `--by --prov --source --date --actor --json` |
 
 ```bash
-brain action open "Ler a política de dados v3" --by owner --due 2026-10-20 --effort 1h --project P1
+brain action open "Ler a política de dados v3" --by owner --due 2026-10-20 --effort 1h --project PROJ-1
 brain action open "Enviar orçamento da reforma" --by owner --owner marina-demo --due 2026-10-20   # → waiting
 brain action open "Acompanhar o regulamento de exaustão da prefeitura" --by owner --owner sonia-demo --list watching
 ```
@@ -416,49 +417,49 @@ Muda qualquer campo da ação.
 | + opções de registro | |
 
 ```bash
-brain action update A-0012 --status fazendo --by owner
-brain action update A-0012 --due 2026-10-25 --note "Marina-demo pediu mais 5 dias" --by owner
-brain action update A-0012 --clear-due --by owner
+brain action update ACT-0012 --status fazendo --by owner
+brain action update ACT-0012 --due 2026-10-25 --note "Marina-demo pediu mais 5 dias" --by owner
+brain action update ACT-0012 --clear-due --by owner
 ```
 
 ### `brain action close ID`
 | Opção | Uso |
 |---|---|
 | `--how TEXTO` | como foi fechada |
-| `--outcome TEXTO` | resultado observável. **Vira entrega `E-####`** se houver projeto |
+| `--outcome TEXTO` | resultado observável. **Vira entrega `WIN-####`** se houver projeto |
 | `--delivery` | força o registro como entrega |
 | `--delivery-title TÍTULO` | título da entrega gerada |
 | `--evidence TEXTO/LINK` | prova |
 | + opções de registro | |
 
 ```bash
-brain action close A-0012 --how "enviei o draft, Heitor-demo confirmou" --by owner
-brain action close A-0014 --how "publicado" --outcome "Manual de rotinas v1 no ar" --evidence https://… --by owner
+brain action close ACT-0012 --how "enviei o draft, Heitor-demo confirmou" --by owner
+brain action close ACT-0014 --how "publicado" --outcome "Manual de rotinas v1 no ar" --evidence https://… --by owner
 ```
 Ações que esperavam por esta recebem nota de "destravada"; elas não fecham sozinhas.
 
 ### `brain action drop ID --reason MOTIVO`
 Descarta (não foi feita e não será). `--reason` é obrigatório.
 ```bash
-brain action drop A-0009 --reason "projeto cancelado" --by owner
+brain action drop ACT-0009 --reason "projeto cancelado" --by owner
 ```
 
 ### `brain action reopen ID --reason MOTIVO`
 ```bash
-brain action reopen A-0012 --reason "faltou a parte do México" --by owner
+brain action reopen ACT-0012 --reason "faltou a parte do México" --by owner
 ```
 
 ### `brain action show ID`
 Ficha completa com histórico.
 ```bash
-brain action show A-0012
+brain action show ACT-0012
 ```
 
 ### `brain action list`
 | Opção | Uso |
 |---|---|
 | `--list mine\|waiting\|watching` | filtra por lista |
-| `--project P#` | filtra por projeto |
+| `--project PROJ-#` | filtra por projeto |
 | `--owner PESSOA` | filtra por dono |
 | `--all` | inclui fechadas e descartadas |
 | `--json` | |
@@ -466,7 +467,7 @@ brain action show A-0012
 ```bash
 brain action list                    # abertas
 brain action list --list waiting     # o que me devem
-brain action list --project P1 --all
+brain action list --project PROJ-1 --all
 ```
 
 ---
@@ -477,27 +478,27 @@ brain action list --project P1 --all
 | Opção | Uso |
 |---|---|
 | `--decided-by PESSOAS` | **obrigatório**: quem decidiu (ids/aliases) |
-| `--project P#` | |
+| `--project PROJ-#` | |
 | `--context TEXTO` | situação em que foi decidida |
 | `--rationale TEXTO` | por quê |
-| `--supersedes D-####` | substitui uma decisão anterior |
+| `--supersedes DEC-####` | substitui uma decisão anterior |
 | + opções de registro | |
 
 ```bash
 brain decision add "Congelar a compra do forno até o orçamento" --decided-by marina-demo \
-  --rationale "qualidade dos dados abaixo do SLA" --project P1 --by owner --date 2026-10-10
+  --rationale "qualidade dos dados abaixo do SLA" --project PROJ-1 --by owner --date 2026-10-10
 ```
 
 ### `brain decision supersede ID --reason MOTIVO`
-Marca uma decisão como superada. `--by-decision D-####` aponta a decisão nova.
+Marca uma decisão como superada. `--by-decision DEC-####` aponta a decisão nova.
 ```bash
-brain decision supersede D-0002 --by-decision D-0006 --reason "mudou o padrão" --by owner
+brain decision supersede DEC-0002 --by-decision DEC-0006 --reason "mudou o padrão" --by owner
 ```
 
 ### `brain decision list`
 ```bash
 brain decision list
-brain decision list --project P1
+brain decision list --project PROJ-1
 ```
 
 ---
@@ -509,14 +510,14 @@ Entrega avulsa (conquista com resultado), sem precisar fechar uma ação.
 
 | Opção | Uso |
 |---|---|
-| `--ref A-####\|P#\|P#.n\|G#` | a que se liga |
+| `--ref ACT-####\|PROJ-#\|PROJ-#.#\|GOAL-#` | a que se liga |
 | `--result TEXTO` | o resultado |
 | `--evidence TEXTO/LINK` | prova |
 | `--impact TEXTO` | impacto (alimenta recaps e reviews) |
 | + opções de registro | |
 
 ```bash
-brain delivery "Cardápio do novo ponto fechado" --ref P2 --result "equipe usando a ficha técnica todo dia" \
+brain delivery "Cardápio do novo ponto fechado" --ref PROJ-2 --result "equipe usando a ficha técnica todo dia" \
   --impact "reduziu 3h/semana de conferência" --by owner
 ```
 
@@ -534,13 +535,13 @@ do `/dump`: a mesma fonte não é processada duas vezes. Normalmente quem chama 
 | `--title TÍTULO` | **obrigatório** |
 | `--raw CAMINHO` | arquivo bruto de origem no RAW |
 | `--people PESSOAS` | envolvidos |
-| `--projects P#,P#` | projetos |
+| `--projects PROJ-#,PROJ-#` | projetos |
 | `--summary TEXTO` | resumo curto |
 | + opções de registro | |
 
 ```bash
 brain artifact PROCESSED/2026/10/vistoria-imovel.md --kind reuniao --title "Vistoria dados" \
-  --raw RAW/2026/10/vistoria-imovel.md --people marina-demo,heitor-demo --projects P1 --by agent --prov observado \
+  --raw RAW/2026/10/vistoria-imovel.md --people marina-demo,heitor-demo --projects PROJ-1 --by agent --prov observado \
   --source RAW/2026/10/vistoria-imovel.md
 ```
 
@@ -555,20 +556,20 @@ O agente sugere; só você aceita ou rejeita. O noturno nunca aprova nada: ele c
 |---|---|
 | `--kind fechar-acao\|atualizar-acao\|mudar-plano\|reestimar\|outro` | **obrigatório** |
 | `--summary TEXTO` | **obrigatório** |
-| `--target ID` | alvo (ex.: `A-0012`, `P1`) |
+| `--target ID` | alvo (ex.: `ACT-0012`, `PROJ-1`) |
 | `--evidence TEXTO` | por que sugerir agora |
 | + opções de registro | |
 
 ```bash
-brain proposal add --kind fechar-acao --target A-0012 --summary "Heitor-demo confirmou no Slack" \
+brain proposal add --kind fechar-acao --target ACT-0012 --summary "Heitor-demo confirmou no Slack" \
   --evidence "slack #dados 14/10" --by agent --prov observado --source RAW/2026/10/slack-dados.md
 ```
 
 ### `brain proposal accept ID --quote "RESPOSTA"` / `brain proposal reject ID --quote "RESPOSTA"`
 `--quote` é obrigatório: a sua resposta **literal** fica registrada.
 ```bash
-brain proposal accept R-0001 --quote "ok, pode fechar"
-brain proposal reject R-0002 --quote "não, ainda falta o México"
+brain proposal accept PROP-0001 --quote "ok, pode fechar"
+brain proposal reject PROP-0002 --quote "não, ainda falta o México"
 ```
 Rejeitada não volta sem evidência nova.
 
@@ -589,7 +590,7 @@ brain plan show
 brain plan show --json
 ```
 
-### `brain plan deliverable P#.n --status STATUS`
+### `brain plan deliverable PROJ-#.# --status STATUS`
 Marca o estado de um entregável. É fato, não gate. Atualiza o checkbox em `goals.md` e grava no log.
 
 | Opção | Uso |
@@ -599,7 +600,7 @@ Marca o estado de um entregável. É fato, não gate. Atualiza o checkbox em `go
 | + opções de registro | |
 
 ```bash
-brain plan deliverable P1.2 --status feito --evidence "subiu em produção" --by owner
+brain plan deliverable PROJ-1.2 --status feito --evidence "subiu em produção" --by owner
 ```
 
 ### `brain plan log --diff DIFF --reason MOTIVO --approval "RESPOSTA"`
@@ -615,18 +616,18 @@ O **único gate estrutural**: registra uma mudança **já aprovada** de goal/pro
 | `--evidence TEXTO` | base da mudança |
 
 ```bash
-brain plan log --diff "P5 nasce sob G2" --reason "nova frente de retenção MX" --approval "ok"
+brain plan log --diff "PROJ-5 nasce sob GOAL-2" --reason "nova frente de retenção MX" --approval "ok"
 ```
 
 ### `brain plan add-goal` · `add-project` · `add-deliverable`
-Criam nós em `PLANNING/goals.md` com o próximo id livre (`G#`, `P#`, `P#.n`; nunca reaproveitam número) e o texto no formato do
+Criam nós em `PLANNING/goals.md` com o próximo id livre (`GOAL-#`, `PROJ-#`, `PROJ-#.#`; nunca reaproveitam número) e o texto no formato do
 parser, no fim da seção certa. Se o arquivo não ficar válido, nada é gravado.
 
 | Comando | Gate | Efeito |
 |---|---|---|
 | `plan add-goal TÍTULO [--horizon DATA] [--why TEXTO]` | **sim** | goal novo no fim do arquivo |
-| `plan add-project G# TÍTULO [--owner PESSOA]` | **sim** | projeto no fim do goal |
-| `plan add-deliverable P# TÍTULO [--due DATA] [--weight N]` | não | entregável no fim do projeto (título sem `·`) |
+| `plan add-project GOAL-# TÍTULO [--owner PESSOA]` | **sim** | projeto no fim do goal |
+| `plan add-deliverable PROJ-# TÍTULO [--due DATA] [--weight N]` | não | entregável no fim do projeto (título sem `·`) |
 
 Goal e projeto são mudança estrutural: exigem `--approval "ok"` (resposta literal do dono) e gravam `plan.changed` no ledger e uma
 linha em `PLANNING/log.md`; `--reason` e `--evidence` são opcionais. Entregável não é goal nem projeto: entra com uma linha no log, sem gate.
@@ -639,23 +640,23 @@ remove o campo opcional. Se o arquivo não ficar válido, nada é gravado.
 
 | Nó | Campos | Gate |
 |---|---|---|
-| `G#` | `--title` · `--status ativo\|congelado\|fechado` · `--horizon DATA` · `--why TEXTO` | **sim** |
-| `P#` | `--title` · `--status` · `--owner PESSOA` | **sim** |
-| `P#.n` | `--title` (sem `·`) · `--due DATA` · `--weight N` | não |
+| `GOAL-#` | `--title` · `--status ativo\|congelado\|fechado` · `--horizon DATA` · `--why TEXTO` | **sim** |
+| `PROJ-#` | `--title` · `--status` · `--owner PESSOA` | **sim** |
+| `PROJ-#.#` | `--title` (sem `·`) · `--due DATA` · `--weight N` | não |
 
 Goal e projeto exigem `--approval "ok"` e gravam `plan.changed` (com o antes → depois) no ledger e em `PLANNING/log.md`; `--reason` e
 `--evidence` são opcionais. Entregável entra só com uma linha no log. O estado do entregável (feito, em andamento) continua em
 `plan deliverable`. Código `4` sem `--approval` ou com `BRAIN_NIGHTLY=1`; `3` para nó inexistente, campo que não é do tipo ou valor inválido.
 ```bash
-brain plan edit P1 --title "Padronização de métricas" --approval "ok"
-brain plan edit P1.3 --due 2026-12-15 --weight 2
+brain plan edit PROJ-1 --title "Padronização de métricas" --approval "ok"
+brain plan edit PROJ-1.3 --due 2026-12-15 --weight 2
 ```
 No TUI, no painel 3, `e` abre o formulário do item selecionado (goal e projeto pedem a aprovação digitada).
 
 ### `brain progress NÓ PCT`
 Seu percentual "de feeling" para um goal/projeto. Aparece **ao lado** do calculado, nunca o substitui.
 ```bash
-brain progress G1 45 --note "cardápio andou; reforma não"
+brain progress GOAL-1 45 --note "cardápio andou; reforma não"
 ```
 
 ---
@@ -680,7 +681,7 @@ Cada evento: `type`, `by`, `prov`, `source`, `date` (opcional), `actor` (opciona
 ]
 ```
 ```bash
-brain add lote.json          # ✓ decision.made D-0006 · ✓ action.opened A-0011
+brain add lote.json          # ✓ decision.made DEC-0006 · ✓ action.opened ACT-0011
 cat lote.json | brain add
 ```
 
@@ -752,19 +753,19 @@ brain focus plan --days 5
 ```
 Mostra a tabela, o que não cabe, o que está sem esforço e o comando de aprovação.
 
-### `brain focus approve F-#### --quote "RESPOSTA"`
+### `brain focus approve FOCUS-#### --quote "RESPOSTA"`
 ```bash
-brain focus approve F-0001 --quote "ok"
+brain focus approve FOCUS-0001 --quote "ok"
 ```
 
-### `brain focus apply F-####`
+### `brain focus apply FOCUS-####`
 | Opção | Uso |
 |---|---|
-| `--mode ics\|google` | `ics` gera `FRESH/focus/F-####.ics` para importar; `google` cria os eventos (exige OAuth). Padrão: `[focus] mode` |
+| `--mode ics\|google` | `ics` gera `FRESH/focus/FOCUS-####.ics` para importar; `google` cria os eventos (exige OAuth). Padrão: `[focus] mode` |
 
 ```bash
-brain focus apply F-0001
-brain focus apply F-0001 --mode google
+brain focus apply FOCUS-0001
+brain focus apply FOCUS-0001 --mode google
 ```
 
 ### `brain focus sync`
@@ -774,10 +775,10 @@ brain focus sync --dry-run    # mostra o que sairia
 brain focus sync
 ```
 
-### `brain focus show [F-####]`
+### `brain focus show [FOCUS-####]`
 ```bash
 brain focus show            # plano vigente
-brain focus show F-0001
+brain focus show FOCUS-0001
 ```
 
 > Para mudar um horário, não arraste o evento no calendário: mude o prazo ou o esforço da ação e gere outro plano.
@@ -792,7 +793,7 @@ diário em `daily_max`.
 
 | Subcomando | Uso |
 |---|---|
-| `draft --to DEST --text TEXTO` | cria rascunho `M-####`. Opções: `--ref ID`, `--why TEXTO`, `--channel` (padrão `slack`) |
+| `draft --to DEST --text TEXTO` | cria rascunho `MSG-####`. Opções: `--ref ID`, `--why TEXTO`, `--channel` (padrão `slack`) |
 | `show ID` | mostra o rascunho inteiro |
 | `approve ID --quote "RESPOSTA"` | aprova com sua resposta literal (ex.: `enviar 1`) |
 | `sent ID [--link URL]` | registra que foi enviado (permalink) |
@@ -801,10 +802,10 @@ diário em `daily_max`.
 | `list [--all]` | pendentes (ou todas) |
 
 ```bash
-brain outbox draft --to caio-demo --text "Oi Caio-demo, como está o orçamento da reforma?" --ref A-0005 --why "prazo venceu"
-brain outbox show M-0001
-brain outbox approve M-0001 --quote "enviar 1"
-brain outbox sent M-0001 --link https://seu-workspace.slack.com/archives/…
+brain outbox draft --to caio-demo --text "Oi Caio-demo, como está o orçamento da reforma?" --ref ACT-0005 --why "prazo venceu"
+brain outbox show MSG-0001
+brain outbox approve MSG-0001 --quote "enviar 1"
+brain outbox sent MSG-0001 --link https://seu-workspace.slack.com/archives/…
 brain outbox list --all
 ```
 Quer editar depois de aprovado? `cancel` e um novo `draft`: a aprovação não é herdada.
@@ -818,8 +819,8 @@ Gera um export **autocontido** em `vault/reports/share/`, sem jargão interno, p
 
 | Forma | Exemplo |
 |---|---|
-| `project P#` | `brain share project P1` |
-| `goal G#` | `brain share goal G1` |
+| `project PROJ-#` | `brain share project PROJ-1` |
+| `goal GOAL-#` | `brain share goal GOAL-1` |
 | `status` | `brain share status` |
 | `period AAAA-MM-DD:AAAA-MM-DD` | `brain share period 2026-09-01:2026-09-30` |
 | `portfolio [--area ÁREA]` | `brain share portfolio --area Growth` — roadmap priorizado (ranking, matriz, status) |
@@ -827,7 +828,7 @@ Gera um export **autocontido** em `vault/reports/share/`, sem jargão interno, p
 | `--format html\|md` | padrão `html` |
 
 ```bash
-brain share project P1 --format md
+brain share project PROJ-1 --format md
 ```
 
 ### `brain publish`
@@ -835,7 +836,7 @@ Porta de publicação no espaço do time. Destino precisa estar em `[publish].de
 
 | Subcomando | Uso |
 |---|---|
-| `request REPORT --to DESTINO` | pede publicação (`S-####`). Destino: `slack:#canal` ou `drive:<pasta>` |
+| `request REPORT --to DESTINO` | pede publicação (`PUB-####`). Destino: `slack:#canal` ou `drive:<pasta>` |
 | `approve ID --quote "RESPOSTA"` | aprova com sua resposta literal |
 | `done ID [--link URL]` | registra que foi publicado |
 | `cancel ID` | cancela |
@@ -843,8 +844,8 @@ Porta de publicação no espaço do time. Destino precisa estar em `[publish].de
 
 ```bash
 brain publish request reports/share/2026-10-14-project-p1.md --to "slack:#seu-canal"
-brain publish approve S-0001 --quote "ok, publica"
-brain publish done S-0001 --link https://…
+brain publish approve PUB-0001 --quote "ok, publica"
+brain publish done PUB-0001 --link https://…
 ```
 O conteúdo é travado por hash: se o arquivo mudar depois da aprovação, refaça o pedido.
 
@@ -902,12 +903,12 @@ brain memory sync
 brain memory sync --dry-run
 brain memory recall "o que foi decidido sobre o forno?"
 brain memory recall "política de dados" --bank raw
-brain memory recall "prazos" --tags proj:P1,pessoa:marina-demo
+brain memory recall "prazos" --tags proj:PROJ-1,pessoa:marina-demo
 brain memory reflect "como está o projeto de churn?"
 brain memory rebuild
 ```
 Tags disponíveis: `tipo:<reuniao|documento|…|pessoa|planejamento|perfil|raw>`,
-`proj:P#`, `pessoa:<id>`, `ext:<pdf|md|…>`.
+`proj:PROJ-#`, `pessoa:<id>`, `ext:<pdf|md|…>`.
 
 ### `brain mcp`
 Servidor MCP **somente leitura** (stdio) para outras IAs consultarem o cérebro sem poder escrever.
@@ -958,14 +959,14 @@ lê, julga e mostra; o `brain` valida e grava.
 | `/brief` | o dia em uma tela | `render`, lê `FRESH/home.md` + `todo.md` |
 | `/week` | cockpit semanal | `render`, `proposal` |
 | `/todo <texto>` | criar ação falando | `action open --by owner` |
-| `/done A-#### <como>` | fechar ação | `action close` |
+| `/done ACT-#### <como>` | fechar ação | `action close` |
 | `/dump` | processar a inbox | `artifact`, `add`, `render`, `memory sync` |
 | `/update` | puxar todas as fontes do `watch.toml` | `snapshot`, `/dump` |
 | `/connect <fonte>` | uma fonte, agora | `snapshot`, `/dump` |
 | `/gmail` · `/slack` · `/calendar` · `/drive` | atalhos por fonte | `snapshot` |
 | `/ask <pergunta>` | pergunta livre com fonte | `search`, `memory recall` |
 | `/person <nome>` | dossiê de alguém | `person resolve`, `action list`, `decision list` |
-| `/project P#` | status de projeto | `plan show`, `action list` |
+| `/project PROJ-#` | status de projeto | `plan show`, `action list` |
 | `/goal` | árvore e gate estrutural | `plan show`, `plan deliverable`, `plan log`, `progress` |
 | `/map` · `/timeline` | visão de cima | `render` |
 | `/focus` | blocos de foco | `focus plan/approve/apply` |
@@ -1014,7 +1015,7 @@ brain doctor --online && brain render --open
 
 # Criar e fechar uma tarefa sem agente
 brain action open "Revisar proposta de pricing MX" --by owner --due 2026-10-17 --effort 2h
-brain action close A-0015 --how "revisado e enviado à Lucía" --by owner
+brain action close ACT-0015 --how "revisado e enviado à Lucía" --by owner
 
 # O que me devem
 brain action list --list waiting
@@ -1027,7 +1028,7 @@ brain search "lançamento"
 brain memory recall "o que a Marina-demo decidiu sobre o forno?"
 
 # Planejar foco da semana
-brain focus plan && brain focus approve F-0001 --quote "ok" && brain focus apply F-0001
+brain focus plan && brain focus approve FOCUS-0001 --quote "ok" && brain focus apply FOCUS-0001
 
 # Status para mandar ao gestor
 brain share status --format md
@@ -1057,12 +1058,12 @@ Mapa de processos (`PROC-####`) e oportunidades/iniciativas (`OPP-####`) por ár
 ### `brain opportunity`
 | Subcomando | Uso |
 |---|---|
-| `add "título" --area ÁREA` | `[--process PROC-####] [--kind melhoria-de-processo\|novo-processo\|estruturante] [--problem] [--suggestion] [--gain] [--hours-saved N] [--person …] [--goal G#]`. Antes de gravar roda o **detector de duplicatas** (código 2, nada gravado; `--force` grava). Agente: só status `ideia`, `--source` obrigatório |
+| `add "título" --area ÁREA` | `[--process PROC-####] [--kind melhoria-de-processo\|novo-processo\|estruturante] [--problem] [--suggestion] [--gain] [--hours-saved N] [--person …] [--goal GOAL-#]`. Antes de gravar roda o **detector de duplicatas** (código 2, nada gravado; `--force` grava). Agente: só status `ideia`, `--source` obrigatório |
 | `update OPP-####` | mesmos campos |
 | `status OPP-#### STATUS [--reason]` | `ideia · triagem · priorizada · em-andamento · piloto · validando · entregue · em-espera · descartada`; vai e volta livremente; `em-espera`/`descartada` exigem `--reason`; `em-andamento` só com projeto (use `promote`); agente só grava `ideia` |
 | `score OPP-#### --impact I --confidence C --ease F` | ICE 1–5 cada (score 1–125, calculado pelo CLI). `--suggest --reason "…"` (agente) grava só uma sugestão; o dono confirma ou muda |
 | `evidence OPP-#### --source ARTEFATO` | mais uma fonte que reforça a oportunidade |
-| `promote OPP-#### --goal G# [--title] [--approval "ok"]` | **gate**: sem `--approval` imprime o diff proposto do `goals.md` e sai com código 4; com ele cria o projeto, liga OPP ↔ P# e põe `em-andamento` (mesmo lote do ledger + linha em `PLANNING/log.md`). Proibido no noturno |
+| `promote OPP-#### --goal GOAL-# [--title] [--approval "ok"]` | **gate**: sem `--approval` imprime o diff proposto do `goals.md` e sai com código 4; com ele cria o projeto, liga OPP ↔ PROJ-# e põe `em-andamento` (mesmo lote do ledger + linha em `PLANNING/log.md`). Proibido no noturno |
 | `show OPP-####` · `list [--status] [--area] [--sort score]` | leitura |
 
 ### `brain doc`
@@ -1070,3 +1071,22 @@ Mapa de processos (`PROC-####`) e oportunidades/iniciativas (`OPP-####`) por ár
 `doc unlink <alvo> --ref …`. `--kind playbook --watch` com um doc do Drive cria a fonte `drive-doc` no `watch.toml`
 (`playbook-proc-0001`): o `/update` só relê o doc quando o `modifiedTime` muda. Um artefato do `/dump` ligado ao processo
 (`brain artifact … --link PROC-####`) mostra "playbook lido em …".
+
+---
+
+## 23. Migração — `migrate ids`
+
+`brain migrate ids [--apply] [--include-external]` — leva uma instância dos nomes antigos (`A-0146`, `D-`, `E-`, `R-`, `M-`, `S-`, `F-`,
+`G1`, `P3`, `P3.2`) para os declarativos (`ACT-0146`, `DEC-`, `WIN-`, `PROP-`, `MSG-`, `PUB-`, `FOCUS-`, `GOAL-1`, `PROJ-3`, `PROJ-3.2`).
+É a **exceção histórica** à regra de que o ledger só cresce: reescreve o ledger uma vez (mantém `seq` e `ts`, recalcula `text_sha`,
+`content_sha` e o `sha` do plano de foco, grava `ids.migrated` no fim) e também as notas, `PROCESSED/`, `PLANNING/`, `reports/`,
+`PROFILE/`, `config/watch.toml` e os nomes de arquivo que carregam um ID.
+
+| Passo | O que acontece |
+|---|---|
+| sem `--apply` (dry-run) | não muda nada: escreve `vault/reports/migration/ids-<data>.md` com arquivos e substituições por zona, o diff do `goals.md` e cada ocorrência ambígua em RAW externo (±40 caracteres) |
+| `--apply` | recusa no noturno e se já migrada; backup zip de `vault/` + `watch.toml` **fora** do vault, conferido; valida o ledger novo antes de trocar; renomeia; marcador `PROCESSED/_ledger/MIGRATED-ids`; apaga e regenera `FRESH/` |
+| `--include-external` | migra também `G#`/`P#` em RAW externo (reuniões, Slack, conectores): lá "P1" costuma ser outra coisa. IDs longos (`A-0146`) sempre migram |
+
+Só IDs que **existem** entram no mapa. `logs/` não é migrado. Com o Hindsight ligado, rode `brain memory rebuild` depois. Em instância
+já nos nomes novos, o comando diz "nada a migrar". Peça ao agente para mostrar o relatório do dry-run antes do `--apply`.

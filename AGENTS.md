@@ -54,7 +54,7 @@ template de arquivo JÁ existente do dono mudou upstream, proponha o diff.
 | `vault/RAW/inbox/` | porta única | receber itens do dono e snapshots de MCP | processar nada in-place |
 | `vault/RAW/<ano>/<mês>/<tipo>/` | conteúdo imutável | **mover** itens da inbox pra cá, na pasta do tipo (`./brain raw archive`; sem editar; colisão → sufixo `-2`) | editar, renomear, apagar, reclassificar por conta própria |
 | `vault/PROCESSED/<ano>/<mês>/` | append-only | criar artefatos de extração | reescrever ou apagar artefato já escrito |
-| `vault/PROCESSED/_ledger/events.jsonl` | append-only, só via `./brain` | gravar eventos (`brain action`, `brain add`, …) | editar linha, numerar ID na mão, apendar JSON cru |
+| `vault/PROCESSED/_ledger/events.jsonl` | append-only, só via `./brain` (**única exceção histórica:** `brain migrate ids`, uma vez, com backup) | gravar eventos (`brain action`, `brain add`, …) | editar linha, numerar ID na mão, apendar JSON cru |
 | `vault/FRESH/` | 100% derivado | `./brain render` (reescreve tudo) | guardar informação que não deriva de PROFILE+PLANNING+ledger |
 | `vault/reports/` | point-in-time | criar export datado (`brain share`) | reescrever um report já gerado |
 | `vault/PROFILE/` | curado | propor edições (diff) e aplicar **após aprovação explícita** | aplicar sem aprovação |
@@ -115,17 +115,25 @@ validado (`seq`, `ts`, `type`, `id`, `date`, `actor`, `by`, `prov`, `source`,
 
 | Prefixo | Entidade | Quem numera |
 |---|---|---|
-| `A-####` | ação | `./brain` |
-| `D-####` | decisão | `./brain` |
-| `E-####` | entrega | `./brain` |
-| `R-####` | proposta (o dono aceita/rejeita) | `./brain` |
-| `M-####` | mensagem (outbox) | `./brain` |
-| `S-####` | publicação | `./brain` |
-| `F-####` | plano de foco | `./brain` |
+| `ACT-####` | ação | `./brain` |
+| `DEC-####` | decisão | `./brain` |
+| `WIN-####` | entrega | `./brain` |
+| `PROP-####` | proposta (o dono aceita/rejeita) | `./brain` |
+| `MSG-####` | mensagem (outbox) | `./brain` |
+| `PUB-####` | publicação | `./brain` |
+| `FOCUS-####` | plano de foco | `./brain` |
 | `PROC-####` | processo (portfólio) | `./brain` |
 | `OPP-####` | oportunidade/iniciativa (portfólio) | `./brain` |
 | slug (`operacoes`) | área (`area.added`, com nome e aliases) | o dono, via `brain area add` |
-| `G#` / `P#` / `P#.n` | goal / projeto / entregável | o dono, em `PLANNING/goals.md` |
+| `GOAL-#` / `PROJ-#` / `PROJ-#.#` | goal / projeto / entregável | o dono, em `PLANNING/goals.md` |
+
+Prefixos declarativos: o nome diz o que é (`ACT-0146`, `DEC-`, `WIN-`, `PROP-`, `MSG-`, `PUB-`, `FOCUS-`; `GOAL-1`,
+`PROJ-3`, `PROJ-3.2` sem zeros, porque nascem do `goals.md` que o dono edita). O código só **emite** os nomes novos;
+os antigos (`A-0146`, `D-`, `E-`, `R-`, `M-`, `S-`, `F-`, `G1`, `P3`, `P3.2`) seguem **aceitos na entrada** (CLI, `brain add`,
+parser do `goals.md`, TUI, MCP) como sinônimo, traduzidos na hora, sem reescrever nada. A numeração continua de onde estava.
+`brain migrate ids` reescreve uma instância antiga de uma vez (ledger, PLANNING, notas, PROCESSED, reports, nomes de arquivo):
+dry-run primeiro, `--apply` só com o "ok" do dono, nunca no noturno, backup zip antes, `ids.migrated` no ledger. Em RAW externo
+só os IDs longos mudam; `G#`/`P#` ali (onde "P1" costuma ser prioridade do Jira) só com `--include-external`.
 
 `date` = quando aconteceu no mundo; `ts` = quando foi registrado. Proveniência
 em todo fato: `[doc]` · `[observado]` · `[declarado]` · `[sem-fonte]`.
@@ -164,7 +172,7 @@ vai e volta livremente entre eles. Tipos: `melhoria-de-processo` · `novo-proces
 - **Horas/mês de um processo** = execuções/mês × duração × nº de executores — também do CLI.
   Ganho de oportunidade em horas é **declarado** pelo dono; o cérebro não estima.
 - **Promover** uma oportunidade = criar projeto num goal: é mudança estrutural, logo **gate**
-  (`brain opportunity promote OPP-#### --goal G# --approval "ok"`; sem `--approval` só mostra o
+  (`brain opportunity promote OPP-#### --goal GOAL-# --approval "ok"`; sem `--approval` só mostra o
   diff). Proibido no noturno. `em-andamento` só nasce da promoção.
 - Playbooks moram no Drive; a ligação (`brain doc link … --kind playbook --watch`) cria uma fonte
   `drive-doc` no watch e o `/update` só relê quando o `modifiedTime` muda.
@@ -175,21 +183,21 @@ vai e volta livremente entre eles. Tipos: `melhoria-de-processo` · `novo-proces
 `vault/PLANNING/goals.md` é Markdown **estrito** (parser em `brainlib/planning.py`):
 
 ```
-## G1 — Título
+## GOAL-1 — Título
 - status: ativo
 - horizonte: AAAA-MM-DD
 - por quê: o que isto destrava
 
-### P1 — Título
+### PROJ-1 — Título
 - status: ativo
 - dono: <id da pessoa>
-- [ ] P1.1 Entregável · prazo: AAAA-MM-DD · peso: 2
-- [x] P1.2 Outro · prazo: AAAA-MM-DD · feito: AAAA-MM-DD
-- [-] P1.3 Cancelado
+- [ ] PROJ-1.1 Entregável · prazo: AAAA-MM-DD · peso: 2
+- [x] PROJ-1.2 Outro · prazo: AAAA-MM-DD · feito: AAAA-MM-DD
+- [-] PROJ-1.3 Cancelado
 ```
 
 Progresso de projeto/goal = peso dos entregáveis feitos ÷ peso dos não
-cancelados. O dono pode **declarar** um percentual (`brain progress G1 45`) —
+cancelados. O dono pode **declarar** um percentual (`brain progress GOAL-1 45`) —
 aparece ao lado, não substitui o cálculo. Mudar a árvore (criar/renomear/fechar
 goal ou projeto) exige aprovação explícita + `brain plan log --diff … --approval "ok"`.
 Estado factual do entregável (checkbox, data) o agente atualiza com evidência
@@ -232,7 +240,7 @@ Antes de sobrescrever, **colhe** edições do dono:
 Qualquer outra edição em FRESH é descartada. Narrativas do agente
 (`/brief`, `/week`) vão em `FRESH/notes/` e o painel as exibe como estão.
 
-Views: `home.md`, `todo.md`, `goals.md`, `projects/P#.md`, `decisions.md`,
+Views: `home.md`, `todo.md`, `goals.md`, `projects/PROJ-#.md`, `decisions.md`,
 `wins.md`, `people/<id>.md`, `timeline.md`, `map.md`, `focus.md`, `outbox.md`,
 `processes.md`, `opportunities.md`, `health.md`, `records/` (ações, decisões, processos,
 oportunidades), `dashboard/index.html`.
