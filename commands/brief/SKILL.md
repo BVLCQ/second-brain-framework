@@ -13,6 +13,6 @@ description: "O dia do dono em uma tela: hoje, ações atrasadas, próximos 3 di
    - **Próximos 3 dias**
    - **Me devem** — `waiting` atrasada ou que vence cedo (não cobra `watching`)
    - **Goal em foco** — o mais em risco / o que o dono declarou
-   - **Aguardando você** — propostas, plano de foco, rascunhos
+   - **Aguardando você** — propostas, plano de foco, rascunhos e **perguntas abertas** (`ASK-####`: cite as 3 mais antigas, de `home.md`)
 4. No chat: o mesmo em ≤15 linhas, escaneável. Aponte o painel (`FRESH/dashboard/index.html`).
 5. Se o doctor tiver `error`, uma linha no topo.

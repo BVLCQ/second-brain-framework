@@ -681,6 +681,16 @@ o que mudaria — arquivos e substituições por zona, o diff do `goals.md` e as
 externos. Com o seu "ok", `./brain migrate ids --apply` faz backup zip, reescreve ledger e arquivos (exceção histórica à regra
 append-only) e regenera o FRESH. Nunca roda no noturno; só uma vez por instância.
 
+**O agente precisa de você? Ele pergunta.** Dúvida que bloqueia uma rodada ⚡ (identidade ambígua, pessoa sem ficha, classificação,
+permissão negada) vira uma pergunta `ASK-####` no ledger, não uma linha que rola no log. No TUI (`./brain tui`), painel 4, aba
+**Perguntas** (a primeira, com o contador): `enter` responde (uma das opções ou "outra resposta…" em texto livre), `x` descarta com
+motivo, `R` retoma o agente na mesma sessão com as respostas (`claude -p --resume`). Ao responder a última pergunta de uma rodada, a TUI
+oferece retomar na hora; se não der (sessão expirada, outro agente), as respostas ficam na fila e o **passo 0** do próximo `/dump` ou
+`/update` as aplica. Quando uma rodada deixa algo para você, o log mostra "⚠ o agente deixou … · r resposta livre": `r` continua a
+conversa com um texto seu (sem sessão, vira nota para o próximo `/update`). Permissão negada vira uma pergunta com o comando exato;
+"liberar sempre" grava a regra (`brain agent allow`, em `[tui].agent_allow`, ou em `[runner].allow` para MCP de leitura). Ferramenta de
+**escrita** no mundo exterior (enviar, postar, criar, mover) nunca é liberada por ali: passa pelas portas (`/outbox`, `/publish`).
+
 Regra geral: **estrutura vive no chat** (com gate), **fato vivo no chat ou
 checkbox**, e `FRESH/` é só leitura prática.
 

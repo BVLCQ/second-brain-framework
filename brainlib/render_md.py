@@ -130,6 +130,11 @@ class Pages:
         for p in m["proposals"]:
             needs.append(f"- proposta **{p['id']}** ({p['kind']}): {p['summary']}"
                          + (f" — evidência: `{p['evidence']}`" if p["evidence"] else ""))
+        qs = [q for q in m["questions"] if q["status"] == "aberta"]
+        if qs:
+            needs.append(f"- Perguntas abertas: **{len(qs)}** — o agente espera você (TUI: painel 4 › Perguntas)")
+            for q in qs[:3]:                                   # as 3 mais antigas
+                needs.append(f"  - **{q['id']}** ({q['kind']}): {_clip(q['text'], 110)}")
         fo = m["focus"]
         if fo and fo["status"] == "proposto":
             needs.append(f"- plano de foco **{fo['id']}** com {len(fo['blocks'])} blocos aguardando seu "

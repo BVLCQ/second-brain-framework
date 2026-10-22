@@ -2275,6 +2275,28 @@ class AskTests(unittest.TestCase):
             self.assertIn("TASK-0001", r.stdout)
             self.assertEqual(run("add", str(batch)).returncode, 0)                    # a forma posicional continua valendo
 
+    def test_home_lists_open_questions_with_the_three_oldest(self):
+        from brainlib import ask
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            render.render_all(b, do_harvest=False)
+            self.assertNotIn("Perguntas abertas", (b.inst.fresh / "home.md").read_text(encoding="utf-8"))
+            for n in range(4):
+                ask.add(b, f"Dúvida número {n}?", [], [], "outro", "r", source="chat")
+            ask.add(b, "Já respondida?", [], [], "outro", "r", source="chat")
+            b.record_one({"type": "question.answered", "id": "ASK-0005", "by": "owner", "data": {"answer": "sim"}})
+            render.render_all(b, do_harvest=False)
+            home = (b.inst.fresh / "home.md").read_text(encoding="utf-8")
+            self.assertIn("Perguntas abertas: **4**", home)
+            self.assertIn("**ASK-0001** (outro): Dúvida número 0?", home)
+            self.assertIn("**ASK-0003**", home)
+            self.assertNotIn("ASK-0004", home)                                       # só as 3 mais antigas
+            self.assertNotIn("ASK-0005", home)                                       # respondida não cobra o dono
+            from brainlib import model
+            self.assertEqual(model.build(b)["counts"]["questions_open"], 4)
+            self.assertIn("ASK-0001", (b.inst.fresh / "dashboard" / "index.html").read_text(encoding="utf-8"))
+            self.assertIn("perguntas abertas", (ROOT / "commands" / "brief" / "SKILL.md").read_text(encoding="utf-8"))
+
 
 class AgentAllowTests(unittest.TestCase):
     """Passo 5 de agent-questions: `brain agent allow` grava a permissão validada em config/brain.toml."""

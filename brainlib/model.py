@@ -298,6 +298,9 @@ class ModelBuilder:
             "plan_changes": [{**c, "date": _iso(c["date"])} for c in st.plan_changes],
             "plan_warnings": plan.warnings,
             "portfolio": portfolio.build(st, plan, today),
+            "questions": [{"id": q.id, "text": q.text, "kind": q.kind, "status": q.status, "options": q.options,
+                           "context": q.context, "run": q.run, "answer": q.answer, "asked": _iso(q.asked)}
+                          for q in sorted(st.questions.values(), key=lambda q: q.id) if q.status in ("aberta", "respondida")],
             "counts": {
                 "mine_open": len(mine_open),
                 "mine_overdue": sum(1 for a in mine_open if a["overdue_days"]),
@@ -309,6 +312,7 @@ class ModelBuilder:
                 "decisions_30d": sum(1 for d in decisions
                                      if d["date"] and (today - date.fromisoformat(d["date"])).days <= 30),
                 "proposals_open": sum(1 for p in st.proposals.values() if p.status == "aberta"),
+                "questions_open": sum(1 for q in st.questions.values() if q.status == "aberta"),
                 "outbox_pending": sum(1 for m in st.messages.values() if m.status in ("rascunho", "aprovada")),
                 "mine_no_due": sum(1 for a in mine_open if not a["due"]),
                 "mine_no_effort": sum(1 for a in mine_open if not a["effort_min"]),
