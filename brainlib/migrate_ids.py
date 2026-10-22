@@ -100,12 +100,11 @@ def rewrite_event(ev: dict, mapping: dict[str, str]) -> tuple[dict, int]:
     """Evento com todos os IDs do mapa trocados (id, referências em `data`, textos livres, caminhos). `seq` e `ts` ficam."""
     count = [0]
     out: dict = {}
-    spec = schema.TYPES.get(ev.get("type"), {})
     for k, v in ev.items():
         if k in SKIP_KEYS:
             out[k] = v
         elif k == "id" and isinstance(v, str):
-            if spec.get("entity") in schema.ID_ENTITIES and v in mapping:
+            if v in mapping:                              # o mapa só tem IDs que existem; id de artefato (caminho) nunca colide
                 out[k] = mapping[v]
                 count[0] += 1
             else:
