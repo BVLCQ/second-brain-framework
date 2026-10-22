@@ -128,6 +128,11 @@ def row(store, it, width: int) -> Text:
         live = d.status == "aberta"
         return two(T(("◆", AMB if live else FAINT), " ", (d.id, DIM), " ", d.summary),
                    T((d.kind if live else d.status, DIM if live else FAINT)), width)
+    if k == "ask":
+        live = d.status == "aberta"
+        mark, st = ("?", VIO) if live else (("✓", GRN) if d.status in ("respondida", "aplicada") else ("✗", FAINT))
+        right = T((d.kind if live else d.status, AMB if live else DIM))
+        return two(T((mark, st), " ", (d.id, DIM), " ", d.text), right, width)
     if k == "msg":
         st = d["status"]
         return two(T(("●", MSG_STYLE.get(st, DIM)), " ", (d["id"], DIM), " → ", store.first_name(d["to"]), " · ", d["text"]),
@@ -287,7 +292,7 @@ def detail(store, it) -> Text:
     if it is None:
         return Text("Nada aqui.", DIM)
     fn = {"resumo": d_resumo, "action": d_action, "g": d_plan, "p": d_plan, "d": d_plan, "prop": d_prop,
-          "msg": d_msg, "fday": d_focus, "fwarn": d_focus, "pub": d_pub, "dec": d_dec, "del": d_del,
+          "ask": d_ask, "msg": d_msg, "fday": d_focus, "fwarn": d_focus, "pub": d_pub, "dec": d_dec, "del": d_del,
           "per": d_person, "art": d_art, "doc": d_doc, "sys": d_sys, "src": d_src, "opp": d_opp, "proc": d_proc,
           "pgrp": d_pgrp, "pvfunil": d_funil, "pvgaps": d_gaps, "mx": d_matrix, "area": d_area, "docl": d_docl}[it.kind]
     return fn(store, it).text()
@@ -562,6 +567,40 @@ def d_prop(store, it) -> Doc:
     doc.p(("  depois: " + EFFECT.get(r.kind, EFFECT["outro"]).format(t=r.target or "TASK-####"), DIM))
     doc.blank().p(("O cérebro não fecha nem altera nada sozinho. Rejeitada, a proposta só volta com evidência nova.", DIM))
     return doc
+
+
+def d_ask(store, it) -> Doc:
+    q = it.data
+    doc = Doc().h(f"{q.id} · pergunta do agente", (f" · {q.kind}", DIM), (f" · {q.status}" if q.status != "aberta" else "", DIM)).blank().p(q.text)
+    if q.options:
+        doc.sec("Opções")
+        for i, o in enumerate(q.options, 1):
+            doc.p((f"{i}  ", DIM), ("▸ " if q.answer == o else "", GRN), o)
+    doc.blank().kv([
+        ("contexto", _ctx(q.context) if q.context else Text("—", DIM)),
+        ("rodada", Text(q.run or "—")),
+        ("fonte", Text(f"{q.source or '—'} ") + prov(q.prov)),
+        ("perguntada", Text(util.fmt_date(q.asked))),
+        ("resposta", Text.assemble((q.answer, "bold"), (" (texto livre)" if q.free and q.options else "", DIM))) if q.answer else None,
+        ("aplicada", Text(q.how)) if q.how else None,
+        ("descartada", Text(q.reason)) if q.reason else None])
+    if q.status == "aberta":
+        doc.sec("O que fazer").p(("enter", "bold cyan"), " responder (escolha uma opção ou escreva outra)  ·  ", ("x", "bold cyan"), " descartar")
+        doc.p(("O agente aplica a resposta no passo 0 do próximo /dump ou /update; ", DIM), ("R", "bold cyan"), (" retoma o agente agora.", DIM))
+    elif q.status == "respondida":
+        doc.sec("Aguardando o agente").p("A resposta está na fila de reserva: o passo 0 do próximo /dump ou /update a aplica. ", ("R", "bold cyan"),
+                                          " retoma o agente agora.")
+    doc.sec("Equivalente na CLI").cmd(f'brain ask answer {q.id} "…" --by owner')
+    return doc
+
+
+def _ctx(refs: list[str]) -> Text:
+    t = Text()
+    for i, r in enumerate(refs):
+        t.append_text(link(r, r) if r.upper().startswith(("TASK-", "PROJ-", "GOAL-", "DEC-", "PROP-", "OPP-", "PROC-", "MSG-")) else Text(r))
+        if i < len(refs) - 1:
+            t.append(", ")
+    return t
 
 
 def d_msg(store, it) -> Doc:

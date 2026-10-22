@@ -34,6 +34,7 @@ from .. import util
 from . import bridge, dates, rows
 from .modals import (AgentModal, ChoiceModal, ConfirmModal, Field, FilterModal, FormModal, FormSpec, PickerModal,
                      PickItem, TextModal)
+from .ask_keys import AskKeys
 from .portfolio_keys import PortfolioKeys
 from .store import FACE_START, FACES, SYS_OPS, Item, Store
 
@@ -64,16 +65,21 @@ CMD_CATALOG = [               # paleta de comandos: nome, linha da CLI, (face, p
     ("Novo goal (gate)", 'brain plan add-goal "…" --approval "ok"', (0, 3, 0, "G")),
     ("Novo projeto / entregável / ação no item (n)", "brain plan add-project|add-deliverable · brain action open", (0, 3, 0, "n")),
     ("Exportar para colega", "brain share project PROJ-1", (0, 3, 0, "S")),
-    ("Propostas pendentes", "brain proposal list", (0, 4, 0, None)),
-    ("Aceitar proposta", 'brain proposal accept PROP-#### --quote "…"', (0, 4, 0, "a")),
-    ("Rejeitar proposta", 'brain proposal reject PROP-#### --quote "…"', (0, 4, 0, "r")),
-    ("Rascunhar mensagem", 'brain outbox draft --to … --text "…"', (0, 4, 1, "n")),
-    ("Aprovar mensagem", 'brain outbox approve MSG-#### --quote "enviar N"', (0, 4, 1, "A")),
-    ("Enviar mensagem aprovada", "agente → Slack MCP → brain outbox sent", (0, 4, 1, "S")),
-    ("Planejar foco", "brain focus plan --days 5", (0, 4, 2, "p")),
-    ("Aprovar plano de foco", 'brain focus approve FOCUS-#### --quote "ok"', (0, 4, 2, "A")),
-    ("Aplicar foco na agenda", "brain focus apply FOCUS-#### --mode ics|google", (0, 4, 2, "a")),
-    ("Pedir publicação", "brain publish request … --to slack:#canal", (0, 4, 3, "n")),
+    ("Perguntas do agente", "brain ask list --open", (0, 4, 0, None)),
+    ("Responder pergunta do agente", 'brain ask answer ASK-#### "…" --by owner', (0, 4, 0, "a")),
+    ("Descartar pergunta do agente", 'brain ask drop ASK-#### --reason "…"', (0, 4, 0, "x")),
+    ("Retomar o agente com as respostas", "agente: claude -p --resume <sessão> (respostas dos ASK)", (0, 4, 0, "R")),
+    ("Resposta livre ao agente", "agente: claude -p --resume <sessão> \"…\"", (None, None, None, "r")),
+    ("Propostas pendentes", "brain proposal list", (0, 4, 1, None)),
+    ("Aceitar proposta", 'brain proposal accept PROP-#### --quote "…"', (0, 4, 1, "a")),
+    ("Rejeitar proposta", 'brain proposal reject PROP-#### --quote "…"', (0, 4, 1, "r")),
+    ("Rascunhar mensagem", 'brain outbox draft --to … --text "…"', (0, 4, 2, "n")),
+    ("Aprovar mensagem", 'brain outbox approve MSG-#### --quote "enviar N"', (0, 4, 2, "A")),
+    ("Enviar mensagem aprovada", "agente → Slack MCP → brain outbox sent", (0, 4, 2, "S")),
+    ("Planejar foco", "brain focus plan --days 5", (0, 4, 3, "p")),
+    ("Aprovar plano de foco", 'brain focus approve FOCUS-#### --quote "ok"', (0, 4, 3, "A")),
+    ("Aplicar foco na agenda", "brain focus apply FOCUS-#### --mode ics|google", (0, 4, 3, "a")),
+    ("Pedir publicação", "brain publish request … --to slack:#canal", (0, 4, 4, "n")),
     ("Nova decisão", 'brain decision add "…" --decided-by …', (0, 5, 0, "n")),
     ("Registrar entrega", 'brain delivery "…" --ref …', (0, 5, 1, "n")),
     ("Nova pessoa", 'brain person add "…" --id …', (0, 5, 2, "n")),
@@ -94,7 +100,7 @@ CMD_CATALOG = [               # paleta de comandos: nome, linha da CLI, (face, p
     ("Agendamento: remover", "brain schedule remove", (0, 1, 3, "enter", "sys:unsched")),
     ("Editar pessoa", "brain person update ID …", (0, 5, 2, "u")),
     ("Quem é…?", 'brain person resolve "…"', (0, 5, 2, "R")),
-    ("Sincronizar o foco", "brain focus sync [--dry-run]", (0, 4, 2, "s")),
+    ("Sincronizar o foco", "brain focus sync [--dry-run]", (0, 4, 3, "s")),
     ("Primeira entrevista", "agente: /init", (0, 1, 0, "i")),
     ("Cockpit da semana", "agente: /week", (0, 1, 3, "enter", "sys:ai-week")),
     ("Ler emails", "agente: /gmail [filtro]", (0, 1, 3, "enter", "sys:ai-gmail")),
@@ -185,7 +191,7 @@ class Log(RichLog):
         self.app.goto_panel(6)
 
 
-class BrainApp(PortfolioKeys, App):
+class BrainApp(AskKeys, PortfolioKeys, App):
     CSS_PATH = "tui.tcss"
     TITLE = "brain"
     ENABLE_COMMAND_PALETTE = False
@@ -201,6 +207,7 @@ class BrainApp(PortfolioKeys, App):
         self.busy = ""
         self._quit_armed = False
         self._suggest_for: str | None = None
+        self.pending_reply = False      # a última rodada deixou perguntas/permissões: `r` vira resposta livre
         self.last_run = None            # RunInfo da última rodada do agente com sessão (a resposta livre `r` a retoma)
 
     @staticmethod
@@ -426,7 +433,13 @@ class BrainApp(PortfolioKeys, App):
         t.append(" propostas  ")
         drafts = sum(1 for x in s.m["outbox"] if x["status"] == "rascunho")
         t.append(f"{drafts}", "bold")
-        t.append(f" rascunho{'' if drafts == 1 else 's'}\n")
+        t.append(f" rascunho{'' if drafts == 1 else 's'}")
+        asks = len(s.open_asks())
+        if asks:
+            t.append("  ")
+            t.append(f"{asks}", "bold magenta")
+            t.append(f" pergunta{'' if asks == 1 else 's'} ⚡", "magenta")
+        t.append("\n")
         t.append(f" {s.inbox}", "bold magenta" if s.inbox else "bold")
         t.append(" inbox" + (" ⚡" if s.inbox else "") + "  ", "magenta" if s.inbox else "")
         t.append(f"{c['wins_30d']}", "bold")
@@ -462,12 +475,14 @@ class BrainApp(PortfolioKeys, App):
         n = 0
         if pid == 4:
             if i == 0:
-                n = c["proposals_open"]
+                n = len(self.store.open_asks())
             elif i == 1:
-                n = sum(1 for x in m["outbox"] if x["status"] in ("rascunho", "aprovada"))
+                n = c["proposals_open"]
             elif i == 2:
-                n = 1 if m["focus"] and m["focus"]["status"] == "proposto" else 0
+                n = sum(1 for x in m["outbox"] if x["status"] in ("rascunho", "aprovada"))
             elif i == 3:
+                n = 1 if m["focus"] and m["focus"]["status"] == "proposto" else 0
+            elif i == 4:
                 n = sum(1 for s in m["shares"] if s["status"] in ("solicitada", "aprovada"))
         if pid == 1 and i == 1:
             n = sum(1 for h in self.store.health if h["level"] != "ok")
@@ -540,7 +555,8 @@ class BrainApp(PortfolioKeys, App):
         for k in self.ctx_keys():
             hint(left, k.k, k.label, "magenta" if k.agent else ("yellow" if k.gate else "cyan"), "⚡ " if k.agent else "◆ " if k.gate else "")
         right = Text(no_wrap=True)
-        for k, lab in (("?", "ajuda"), (":", "comandos"), ("N", "nota"), ("/", "filtrar"), ("g", "buscar"), ("r", "render"), ("q", "sair")):
+        for k, lab in (("?", "ajuda"), (":", "comandos"), ("N", "nota"), ("/", "filtrar"), ("g", "buscar"),
+                       ("r", "resposta ao agente" if self.pending_reply else "render"), ("q", "sair")):
             hint(right, k, lab, "cyan")
         self.query_one("#hints", Static).update(left)
         g = self.query_one("#globals", Static)
@@ -633,7 +649,7 @@ class BrainApp(PortfolioKeys, App):
         elif k == "/":
             self.open_filter()
         elif k == "r":
-            self.do_render()
+            self.free_reply() if self.pending_reply else self.do_render()
         elif k == "N":
             self.f_note()
         elif k == "q":
@@ -830,10 +846,17 @@ class BrainApp(PortfolioKeys, App):
         elif p == 4:
             if t == 0:
                 if w(it and it.data.status == "aberta"):
+                    add("enter", "responder", self.f_answer)
+                    add("a", "responder", self.f_answer)
+                    add("x", "descartar", self.f_ask_drop)
+                add("R", "retomar o agente", self.resume_with_answers, agent=True)
+                add("T", "só abertas" if self.show_all else "todas", self.toggle_all)
+            elif t == 1:
+                if w(it and it.data.status == "aberta"):
                     add("a", "aceitar", self.f_accept, gate=True)
                     add("r", "rejeitar", self.f_reject)
                 add("T", "só abertas" if self.show_all else "todas", self.toggle_all)
-            elif t == 1:
+            elif t == 2:
                 add("n", "rascunhar", lambda: self.f_draft())
                 if w(it and it.data["status"] == "rascunho"):
                     add("A", "aprovar", self.f_approve_msg, gate=True)
@@ -842,7 +865,7 @@ class BrainApp(PortfolioKeys, App):
                 if w(it and it.data["status"] in ("rascunho", "aprovada")):
                     add("x", "cancelar", self.f_cancel_msg)
                 add("T", "só pendentes" if self.show_all else "todas", self.toggle_all)
-            elif t == 2:
+            elif t == 3:
                 add("p", "planejar", self.f_focus_plan)
                 f = self.store.m["focus"] if self.store else None
                 if w(f and f["status"] == "proposto"):
@@ -1520,7 +1543,7 @@ class BrainApp(PortfolioKeys, App):
             return [c]
 
         def after() -> None:
-            self.p, self.tab[4] = 4, 1
+            self.p, self.tab[4] = 4, 2
             self.set_sel(4, 0)
             self.redraw()
 
@@ -1548,7 +1571,7 @@ class BrainApp(PortfolioKeys, App):
         self.form(FormSpec("Planejar foco", [Field("days", "horizonte (dias)", value=str(self.inst.cfg["focus"]["horizon_days"]), check=chk)],
                            lambda v: [["focus", "plan", "--days", v["days"] or "7"]],
                            sub="Blocos EDF nas suas ações mine com prazo. Nada vai ao calendário ainda.",
-                           after=lambda: (self.tab.__setitem__(4, 2), self.redraw())))
+                           after=lambda: (self.tab.__setitem__(4, 3), self.redraw())))
 
     def f_focus_approve(self) -> None:
         f = self.store.m["focus"]
@@ -1698,7 +1721,8 @@ class BrainApp(PortfolioKeys, App):
             self.set_sel(1, [o["id"] for o in SYS_OPS].index(fix["sys"]))
             self.redraw()
         elif fix.get("go"):
-            self.p, self.tab[2] = fix["go"]
+            gp, gt = fix["go"]
+            self.p, self.tab[gp] = gp, gt
             self.redraw()
 
     def run_selected_sys(self) -> None:
@@ -1747,6 +1771,8 @@ class BrainApp(PortfolioKeys, App):
             self.log_line("⚡ " + prompt.splitlines()[0][:100], "magenta")
             info = bridge.RunInfo(id=run_id, resumed_from=resumed_from)
             rc = await bridge.run_agent(self.inst, argv, lambda ln: self.log_line("  " + ln, "magenta") if ln else None, info)
+            if info.denials:
+                await self.after_run(info)                # cada negação vira uma pergunta (kind=permissao)
             await asyncio.to_thread(bridge.record_run, self.inst, info, argv, prompt)
             if info.session_id:
                 self.last_run = info
@@ -1754,6 +1780,9 @@ class BrainApp(PortfolioKeys, App):
             r = await asyncio.to_thread(bridge.run_brain, self.inst, ["render"])
             self.log_line("↻ brain render · " + (r.out.splitlines()[0] if r.out else "views regeneradas"), "dim")
             await self._reload()
+            self.report_run(info)
+            if resumed_from and rc != 0:
+                self.log_line("o resume falhou (sessão expirada ou outro agente): as respostas ficam na fila, o próximo /update ou ⚡ as aplica (passo 0)", "yellow")
             self.busy = ""
             self._quit_armed = False
             self.redraw()
@@ -1973,6 +2002,8 @@ class BrainApp(PortfolioKeys, App):
                 self.search()
             elif k == "N":
                 self.f_note()
+            elif k == "r":
+                self.free_reply()
             return
         self.face = face
         self.p, self.tab[p] = p, t

@@ -16,7 +16,7 @@ PANELS_EXEC = {
     1: ("Status", ["Resumo", "Saúde", "Fontes", "Sistema"]),
     2: ("Ações", ["mine", "waiting", "watching"]),
     3: ("Plano", ["Árvore"]),
-    4: ("Aprovar", ["Propostas", "Outbox", "Foco", "Publicar"]),
+    4: ("Aprovar", ["Perguntas", "Propostas", "Outbox", "Foco", "Publicar"]),
     5: ("Registro", ["Decisões", "Entregas", "Pessoas", "Artefatos"]),
     6: ("Log de comandos", ["Log"]),
 }
@@ -245,7 +245,8 @@ class Store:
             link(x["id"], x["to"])
         self.adj = adj
         self.all_ids = ({a["id"] for a in m["actions"]} | {d["id"] for d in m["decisions"]} | {e["id"] for e in m["deliveries"]}
-                        | {r["id"] for r in m["proposals"]} | {x["id"] for x in m["outbox"]} | {x["id"] for x in m["shares"]})
+                        | {r["id"] for r in m["proposals"]} | {x["id"] for x in m["outbox"]} | {x["id"] for x in m["shares"]}
+                        | set(self.brain.state.questions))
         self.plan_nodes = set(self.by_goal) | set(self.by_project) | set(self.by_deliv)
 
     def tree_up(self, node: str) -> set[str]:
@@ -309,6 +310,14 @@ class Store:
     def notes_of(self, link: str) -> list[notes_mod.Note]:
         """Notas vinculadas a TASK-####/GOAL-#/PROJ-#/PROJ-#.#, da mais nova para a mais antiga."""
         return self.notes_by_link.get(link, [])
+
+    def open_asks(self) -> list:
+        """Perguntas abertas (esperam o dono), da mais antiga para a mais nova."""
+        return sorted((q for q in self.brain.state.questions.values() if q.status == "aberta"), key=lambda q: q.id)
+
+    def answered_asks(self) -> list:
+        """Respondidas e ainda não aplicadas: a fila de reserva do passo 0."""
+        return sorted((q for q in self.brain.state.questions.values() if q.status == "respondida"), key=lambda q: q.id)
 
     def person_name(self, pid: str) -> str:
         if pid.startswith("#"):
@@ -375,11 +384,13 @@ class Store:
         if t.startswith("fonte "):
             return {"label": "puxar agora com o agente", "agent": "connect", "key": t.split(" ", 1)[1]}
         if t == "mensagens":
-            return {"label": "ir ao outbox", "go": (4, 1)}
+            return {"label": "ir ao outbox", "go": (4, 2)}
         if t == "foco":
-            return {"label": "ir ao plano de foco", "go": (4, 2)}
+            return {"label": "ir ao plano de foco", "go": (4, 3)}
         if t == "propostas":
-            return {"label": "ir às propostas", "go": (4, 0)}
+            return {"label": "ir às propostas", "go": (4, 1)}
+        if t == "perguntas":
+            return {"label": "ir às perguntas do agente", "go": (4, 0)}
         return None
 
     # ── listas por painel ──────────────────────────────────────────────────
@@ -419,12 +430,16 @@ class Store:
                         out.append(Item(d["id"], "d", d, q=f"{d['id']} {d['title']}", extra={"project": p, "goal": g}))
         elif panel == 4:
             if tab == 0:
+                qs = [q for q in self.brain.state.questions.values() if show_all or q.status in ("aberta", "respondida")]
+                qs.sort(key=lambda q: (q.status != "aberta", q.id))          # abertas no topo; respondidas aguardando aplicação abaixo
+                out = [Item(q.id, "ask", q, q=f"{q.id} {q.kind} {q.text} {q.answer} {' '.join(q.context)}") for q in qs]
+            elif tab == 1:
                 props = [p for p in self.brain.state.proposals.values() if show_all or p.status == "aberta"]
                 out = [Item(p.id, "prop", p, q=f"{p.id} {p.kind} {p.summary}") for p in props]
-            elif tab == 1:
+            elif tab == 2:
                 rows = [x for x in m["outbox"] if show_all or x["status"] in ("rascunho", "aprovada")]
                 out = [Item(x["id"], "msg", x, q=f"{x['id']} {x['to']} {x['text']}") for x in rows]
-            elif tab == 2:
+            elif tab == 3:
                 days = self.focus_days()
                 out = [Item(f"d:{d}", "fday", {"day": d, "blocks": bl}, q=d) for d, bl in days]
                 out.append(Item("f:warn", "fwarn", m["focus"], q="não cabe sem prazo"))
@@ -516,7 +531,7 @@ class Store:
         return out
 
     def _shown(self, it: Item, rel: set[str], f: str) -> bool:
-        if it.kind in ("action", "g", "p", "d", "prop", "msg", "dec", "del", "per", "art"):
+        if it.kind in ("action", "g", "p", "d", "prop", "ask", "msg", "dec", "del", "per", "art"):
             return it.id in rel
         if it.kind == "fday":
             return any(b["action"] in rel for b in it.data["blocks"])
@@ -539,7 +554,7 @@ class Store:
             return (2, ["mine", "waiting", "watching"].index(a["list"])) if a else None
         if ids.PLAN_NODE.match(node):
             return (3, 0)
-        for prefix, loc in (("PROP-", (4, 0)), ("MSG-", (4, 1)), ("d:", (4, 2)), ("PUB-", (4, 3)),
+        for prefix, loc in (("ASK-", (4, 0)), ("PROP-", (4, 1)), ("MSG-", (4, 2)), ("d:", (4, 3)), ("PUB-", (4, 4)),
                             ("DEC-", (5, 0)), ("WIN-", (5, 1))):
             if node.startswith(prefix):
                 return loc

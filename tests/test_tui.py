@@ -570,6 +570,267 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(app.tab[3], 2)                                        # a aba segue o status novo
 
 
+    # ── perguntas do agente (agent-questions, passo 4) ────────────────────
+    def seed_asks(self):
+        from brainlib import ask
+        from brainlib.core import Brain
+        b = Brain(self.inst)
+        _, a, _ = ask.add(b, "Qual Marina? A Marina-demo ou a Mari-demo?", ["marina-demo", "mari-demo"], ["TASK-0001"], "identidade", "run-1", source="chat")
+        _, c, _ = ask.add(b, "Esta ata é reunião ou documento?", [], [], "classificacao", "run-1", source="chat")
+        return a, c
+
+    def fake_resume(self, app):
+        """O resume vira um comando de mentira que só ecoa o prompt (o claude de verdade não roda nos testes)."""
+        calls = []
+        script = Path(self.tmp.name) / "fake_resume.py"
+        script.write_text("import sys\nprint('retomado:', sys.argv[1][:200])\n", encoding="utf-8")
+
+        def fake(cfg, session_id, prompt, extra=None, run_id=None):
+            calls.append({"session": session_id, "prompt": prompt, "extra": extra, "run": run_id})
+            return [sys.executable, str(script), prompt]
+        return calls, mock.patch.object(bridge, "resume_argv", side_effect=fake)
+
+    async def test_questions_tab_lists_open_first_and_shows_the_counter(self):
+        a, c = self.seed_asks()
+        from brainlib.core import Brain
+        Brain(self.inst).record_one({"type": "question.answered", "id": c, "by": "owner", "data": {"answer": "documento"}})
+        app = self.app()
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause(0.4)
+            self.assertIn("Perguntas", app._title(4).plain)
+            self.assertIn("Perguntas 1", app._title(4).plain)                                         # contador no título da aba
+            self.assertIn("1 pergunta", self.text_of(app.query_one("#p1")))                           # painel 1 também mostra
+            await pilot.press("4")
+            self.assertEqual(app.tab[4], 0)
+            self.assertEqual([i.id for i in app.items(4)], [a, c])                                    # aberta no topo, respondida abaixo
+            self.assertEqual(app.items(4)[0].kind, "ask")
+            from brainlib.tui import rows
+            for it in app.items(4):
+                self.assertTrue(rows.row(app.store, it, 80).plain)
+                self.assertIn(it.id, rows.detail(app.store, it).plain)
+            self.assertIn("marina-demo", rows.detail(app.store, app.items(4)[0]).plain)
+            keys = {k.k for k in app.ctx_keys()}
+            self.assertEqual({"enter", "a", "x", "R", "T"}, keys)
+            app.jump(c)
+            self.assertEqual((app.p, app.tab[4], app.cur().id), (4, 0, c))
+            self.assertNotIn("a", {k.k for k in app.ctx_keys()})                                      # respondida: sem responder
+
+    async def test_answer_by_option_by_free_text_and_drop(self):
+        a, c = self.seed_asks()
+        app = self.app()
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause(0.4)
+            await pilot.press("4", "a")
+            await pilot.pause(0.4)
+            self.assertEqual(type(app.screen).__name__, "PickerModal")
+            await self.typ(pilot, "mari-demo")
+            await pilot.pause(0.4)
+            await pilot.press("enter")
+            await self.settle(app, pilot)
+            q = self.state(app).questions[a]
+            self.assertEqual((q.status, q.answer, q.free), ("respondida", "mari-demo", False))
+            self.assertEqual(app.cur().id, c)                                                          # abertas primeiro: a próxima é a outra
+            await pilot.press("enter")                                                                 # sem opções: texto livre direto
+            await pilot.pause(0.3)
+            self.assertEqual(type(app.screen).__name__, "FormModal")
+            await self.fill(pilot, answer="é uma ata de reunião")
+            await pilot.press("ctrl+s")
+            await self.settle(app, pilot)
+            q = self.state(app).questions[c]
+            self.assertEqual((q.status, q.answer), ("respondida", "é uma ata de reunião"))
+        # fora das opções: "outra resposta…" vira texto livre (free)
+        from brainlib import ask
+        from brainlib.core import Brain
+        _, d, _ = ask.add(Brain(self.inst), "Terceira dúvida?", ["sim", "não"], [], "outro", "", source="chat")
+        app = self.app()
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause(0.4)
+            await pilot.press("4", "a")
+            await pilot.pause(0.4)
+            await self.typ(pilot, "outra")
+            await pilot.pause(0.4)
+            await pilot.press("enter")
+            await pilot.pause(0.3)
+            self.assertEqual(type(app.screen).__name__, "FormModal")
+            await self.fill(pilot, answer="depende")
+            await pilot.press("ctrl+s")
+            await self.settle(app, pilot)
+            q = self.state(app).questions[d]
+            self.assertEqual((q.answer, q.free), ("depende", True))
+            await pilot.press("4")
+            self.assertEqual(self.state(app).questions[d].status, "respondida")
+
+    async def test_drop_question_needs_a_reason(self):
+        a, c = self.seed_asks()
+        app = self.app()
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause(0.4)
+            await pilot.press("4", "x")
+            await pilot.pause(0.3)
+            await pilot.press("ctrl+s")
+            await pilot.pause(0.2)
+            self.assertEqual(type(app.screen).__name__, "FormModal")                                  # sem motivo não descarta
+            await self.fill(pilot, reason="já resolvi")
+            await pilot.press("ctrl+s")
+            await self.settle(app, pilot)
+            q = self.state(app).questions[a]
+            self.assertEqual((q.status, q.reason), ("descartada", "já resolvi"))
+
+    async def test_answering_the_last_open_question_offers_to_resume_the_agent(self):
+        a, c = self.seed_asks()
+        calls, patch = self.fake_resume(None)
+        app = self.app()
+        app.last_run = bridge.RunInfo(id="run-1", session_id="sess-42")
+        with patch:
+            async with app.run_test(size=(140, 44)) as pilot:
+                await pilot.pause(0.4)
+                app.answer_question(self.state(app).questions[a], "marina-demo")
+                await self.settle(app, pilot)
+                self.assertEqual(calls, [])                                                            # ainda há uma aberta: não pergunta
+                app.answer_question(self.state(app).questions[c], "reunião")
+                for _ in range(40):
+                    await pilot.pause(0.1)
+                    if type(app.screen).__name__ == "ConfirmModal":
+                        break
+                self.assertEqual(type(app.screen).__name__, "ConfirmModal")
+                self.assertIn("Retomar o agente agora?", app.screen.title_)
+                await pilot.press("enter")
+                for _ in range(60):
+                    await pilot.pause(0.1)
+                    if calls and not app.busy and type(app.screen).__name__ != "ConfirmModal":
+                        break
+                await self.settle(app, pilot)
+                self.assertEqual(calls[0]["session"], "sess-42")
+                self.assertEqual(calls[0]["prompt"], f"O dono respondeu: {a} = marina-demo; {c} = reunião. Aplique (passo 0) e continue de onde parou.")
+                self.assertIn("retomado: O dono respondeu", self.log_text(app))
+
+    async def test_resume_without_session_leaves_answers_in_the_queue(self):
+        a, c = self.seed_asks()
+        from brainlib.core import Brain
+        Brain(self.inst).record_one({"type": "question.answered", "id": a, "by": "owner", "data": {"answer": "marina-demo"}})
+        app = self.app()
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause(0.4)
+            await pilot.press("4", "R")
+            await pilot.pause(0.2)
+            self.assertIn("sem sessão do agente para retomar", self.log_text(app))
+            self.assertIn("passo 0", self.log_text(app))
+            self.assertEqual(self.state(app).questions[a].status, "respondida")                       # nada se perde: fica para o passo 0
+            self.assertEqual([x.id for x in app.store.answered_asks()], [a])
+
+    async def test_free_reply_resumes_the_session_or_saves_a_note(self):
+        calls, patch = self.fake_resume(None)
+        app = self.app()
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause(0.4)
+            app.pending_reply = True
+            before = len(app.query_one("#log").lines)
+            await pilot.press("r")                                                                    # pendente: r é resposta livre, não render
+            await pilot.pause(0.3)
+            self.assertEqual(type(app.screen).__name__, "FormModal")
+            self.assertIn("nota", app.screen.spec.sub)                                                # sem sessão: vira nota
+            app.screen.query_one("#f_text").text = "A Marina é a sócia, não a fornecedora."
+            await pilot.pause(0.15)
+            await pilot.press("ctrl+s")
+            await self.settle(app, pilot)
+            notes = list((self.inst.inbox).glob("*note*.md"))
+            self.assertTrue(any("A Marina é a sócia" in n.read_text(encoding="utf-8") for n in notes))
+            app.last_run = bridge.RunInfo(id="run-3", session_id="sess-7")
+            with patch:
+                await pilot.press("ctrl+t")
+                await pilot.press("ctrl+t")
+                app.free_reply()
+                await pilot.pause(0.3)
+                self.assertNotIn("nota", app.screen.spec.sub)
+                app.screen.query_one("#f_text").text = "pode seguir com a Marina-demo"
+                await pilot.pause(0.15)
+                await pilot.press("ctrl+s")
+                await self.settle(app, pilot, n=150)
+            self.assertEqual((calls[0]["session"], calls[0]["prompt"]), ("sess-7", "pode seguir com a Marina-demo Aplique (passo 0) e continue de onde parou."))
+            self.assertFalse(app.pending_reply)
+        app2 = self.app()
+        async with app2.run_test(size=(140, 44)) as pilot:
+            await pilot.pause(0.4)
+            await pilot.press("r")                                                                    # sem pendência, r continua sendo render
+            await self.settle(app2, pilot)
+            self.assertIn("brain render", self.log_text(app2))
+
+    async def test_denied_permissions_become_questions_and_external_writes_are_never_freed(self):
+        from brainlib.core import Brain
+        app = self.app()
+        info = bridge.RunInfo(id="run-9", session_id="sess-9", denials=[
+            {"tool_name": "mcp__x__list_files", "tool_input": {"q": "a"}},
+            {"tool_name": "mcp__x__list_files", "tool_input": {"q": "a"}},                              # repetida: uma pergunta só
+            {"tool_name": "mcp__slack__slack_send_message", "tool_input": {"to": "caio-demo"}},
+            {"tool_name": "Bash", "tool_input": {"command": "./brain add <<'JSON'\n[]\nJSON"}}])
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause(0.4)
+            await app.after_run(info)
+            await app.reload_for_test() if hasattr(app, "reload_for_test") else await app._reload()
+            qs = {q.id: q for q in Brain(self.inst).state.questions.values() if q.run == "run-9"}
+            self.assertEqual(len(qs), 3)
+            by_ctx = {q.context[0]: q for q in qs.values()}
+            read = by_ctx["allow:mcp__x__list_files"]
+            self.assertEqual((read.kind, read.options), ("permissao", ["liberar sempre", "não liberar"]))
+            write = by_ctx["allow:mcp__slack__slack_send_message"]
+            self.assertEqual(write.options, ["entendi"])
+            self.assertIn("/outbox", write.text)
+            bash = by_ctx["allow:Bash(./brain add:*)"]
+            self.assertIn("./brain add", bash.text)
+            # liberar sempre: responde, grava a regra pelo CLI e marca aplicada
+            app.answer_question(read, "liberar sempre")
+            await self.settle(app, pilot)
+            self.assertIn("mcp__x__list_files", config.load(self.root).cfg["runner"]["allow"])        # MCP de leitura vale para o noturno também
+            self.assertEqual(self.state(app).questions[read.id].status, "aplicada")
+            app.answer_question(bash, "liberar sempre")
+            await self.settle(app, pilot)
+            self.assertIn("Bash(./brain add:*)", config.load(self.root).cfg["tui"]["agent_allow"])
+            # escrita externa: só "entendi", nada é liberado
+            before = (self.root / "config" / "brain.toml").read_text(encoding="utf-8")
+            app.answer_question(write, "entendi")
+            await self.settle(app, pilot)
+            self.assertEqual((self.root / "config" / "brain.toml").read_text(encoding="utf-8"), before)
+            self.assertEqual(self.state(app).questions[write.id].status, "aplicada")
+            # mesmo que a pergunta seja forçada a "liberar sempre", a CLI recusa a ferramenta de escrita
+            res = bridge.run_brain(self.inst, ["agent", "allow", "mcp__slack__slack_send_message"])
+            self.assertEqual(res.rc, 4)
+
+    async def test_agent_round_with_stream_json_reports_questions_and_denials(self):
+        script = Path(self.tmp.name) / "fake_stream.py"
+        script.write_text(
+            "import json, os, re, subprocess, sys\n"
+            "prompt = sys.argv[1]\nrun = re.search(r'run-\\d{8}-\\d{6}', prompt).group(0)\n"
+            "def out(o): print(json.dumps(o), flush=True)\n"
+            "out({'type': 'system', 'subtype': 'init', 'session_id': 'sess-stream'})\n"
+            "out({'type': 'assistant', 'message': {'content': [{'type': 'text', 'text': 'Processando a inbox.'}]}})\n"
+            "subprocess.run([sys.executable, os.environ['FAKE_BRAIN'], 'ask', 'add', 'Qual Marina?', '--option', 'a', '--option', 'b', '--run', run,\n"
+            "                '--prov', 'observado', '--source', 'chat'], check=True, capture_output=True)\n"
+            "out({'type': 'result', 'subtype': 'success', 'is_error': False, 'result': 'feito', 'session_id': 'sess-stream',\n"
+            "     'permission_denials': [{'tool_name': 'mcp__x__list_files', 'tool_input': {'q': 'z'}}]})\n", encoding="utf-8")
+        with open(self.root / "config" / "brain.toml", "a", encoding="utf-8") as fh:
+            fh.write("")
+        app = self.app()
+        app.inst.cfg["runner"]["command"] = f"{sys.executable} {script} {{prompt}}"
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause(0.4)
+            await pilot.press("1", "d")
+            await pilot.pause(0.3)
+            self.assertEqual(type(app.screen).__name__, "AgentModal")
+            await pilot.press("enter")
+            await self.settle(app, pilot, n=200)
+            log = " ".join(self.log_text(app).split())                                                  # o log quebra linha
+            self.assertIn("Processando a inbox.", log)                                                  # texto do assistente, sem o JSON cru
+            self.assertNotIn('"type"', log)
+            self.assertIn("⚠ o agente deixou 1 pergunta e 1 permissão negada · 2 para responder (painel 4 › Perguntas) · r resposta livre", log)
+            self.assertTrue(app.pending_reply)
+            self.assertEqual(app.last_run.session_id, "sess-stream")
+            qs = list(self.state(app).questions.values())
+            self.assertEqual(sorted(q.kind for q in qs), ["outro", "permissao"])
+            self.assertTrue(all(q.run == app.last_run.id for q in qs))
+            row = __import__("json").loads((self.inst.logs / "agent-runs.jsonl").read_text(encoding="utf-8").splitlines()[-1])
+            self.assertEqual((row["session_id"], len(row["asks"]), len(row["denials"])), ("sess-stream", 2, 1))
+            self.assertIn("Perguntas 2", app._title(4).plain)
+
     # ── faces (carrossel no Tab) ───────────────────────────────────────────
     async def test_tab_cycles_faces_and_each_face_remembers_where_it_was(self):
         app = self.app()
@@ -662,11 +923,11 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             self.assertIn("c", keys())                      # ações: fechar
             await pilot.press("3")
             self.assertIn("E", keys())                      # plano: gate
-            await pilot.press("4", "]")
+            await pilot.press("4", "]", "]")
             self.assertIn("n", keys())                      # outbox: rascunhar
             await pilot.press("1")
             self.assertEqual({"u", "c", "d", "b", "o"}, keys())   # resumo: agente e painel
-            every = {k.k for k in app.ctx_keys(every=True, panel=4, tab=1)}
+            every = {k.k for k in app.ctx_keys(every=True, panel=4, tab=2)}
             self.assertEqual({"n", "A", "S", "x", "T"}, every)
 
     async def test_click_on_hint_and_tab(self):
@@ -797,7 +1058,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
         app = self.app()
         async with app.run_test(size=(140, 44)) as pilot:
             await pilot.pause(0.4)
-            await pilot.press("4")
+            await pilot.press("4", "]")
             rid = app.cur().id
             await pilot.press("a")
             await pilot.pause(0.2)
@@ -813,7 +1074,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
         app = self.app()
         async with app.run_test(size=(140, 44)) as pilot:
             await pilot.pause(0.4)
-            await pilot.press("4", "]")
+            await pilot.press("4", "]", "]")
             mid = app.cur().id
             self.assertEqual(app.cur().data["status"], "rascunho")
             await pilot.press("A")
@@ -834,7 +1095,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
         app = self.app()
         async with app.run_test(size=(140, 44)) as pilot:
             await pilot.pause(0.4)
-            await pilot.press("4", "]", "n")
+            await pilot.press("4", "]", "]", "n")
             await pilot.pause(0.2)
             await pilot.press(*"heitor-demo", "tab", *"oi", "enter")
             await pilot.pause(0.2)
@@ -844,7 +1105,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
         app = self.app()
         async with app.run_test(size=(140, 44)) as pilot:
             await pilot.pause(0.4)
-            await pilot.press("4", "]", "]")
+            await pilot.press("4", "]", "]", "]")
             fid = app.store.m["focus"]["id"]
             await pilot.press("A")
             await pilot.pause(0.2)
@@ -1159,7 +1420,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             await pilot.pause(0.3)
             await pilot.press("enter")
             await self.settle(app, pilot)
-            await pilot.press("4", "]", "]", "]", "n")
+            await pilot.press("4", "]", "]", "]", "]", "n")
             await pilot.pause(0.3)
             await pilot.press("enter")
             await self.settle(app, pilot)
@@ -1188,7 +1449,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             await pilot.press("enter")
             await self.settle(app, pilot)
             self.assertEqual(app.store.by_goal["GOAL-1"]["declared"]["pct"], 60)
-            await pilot.press("4", "]", "]", "s")
+            await pilot.press("4", "]", "]", "]", "s")
             await pilot.pause(0.3)
             await pilot.press("enter")
             await self.settle(app, pilot)
@@ -1720,14 +1981,13 @@ class CoverageTest(unittest.TestCase):
         "init", "add", "snapshot", "proposal add", "outbox sent", "outbox failed", "publish done",
         "pdf text", "pdf render", "video transcribe", "video frames", "person merge",
         "raw archive", "raw sort", "ask add", "ask applied"}
-    PENDING = {"ask answer", "ask drop", "agent allow"}        # ganham tecla no passo 4 de agent-questions; este conjunto some lá
     NOT_IN_TUI = {"demo", "tui", "migrate ids"}      # migração única, feita no terminal com o dono (backup + dry-run)
     DYNAMIC = {"memory recall", "memory reflect"}      # o formulário "Memória: perguntar" monta o subcomando
 
     def test_every_cli_subcommand_is_accounted_for(self):
         import re
         from brainlib import cli
-        src = "".join((ROOT / "brainlib" / "tui" / f).read_text(encoding="utf-8") for f in ("app.py", "store.py", "portfolio_keys.py"))
+        src = "".join((ROOT / "brainlib" / "tui" / f).read_text(encoding="utf-8") for f in ("app.py", "store.py", "portfolio_keys.py", "ask_keys.py"))
         sub = next(a for a in cli.build_parser()._actions if a.__class__.__name__ == "_SubParsersAction")
         uncovered = []
         for name, p in sub.choices.items():
@@ -1735,7 +1995,7 @@ class CoverageTest(unittest.TestCase):
             for sc in (inner[0].choices if inner else [None]):
                 label = f"{name} {sc}" if sc else name
                 pat = re.compile(r'\[\s*"%s"\s*,\s*"%s"' % (name, sc)) if sc else re.compile(r'\[\s*"%s"\s*[,\]]' % name)
-                if pat.search(src) or label in self.READ_ONLY_VIEWS | self.AGENT_ONLY | self.NOT_IN_TUI | self.DYNAMIC | self.PENDING:
+                if pat.search(src) or label in self.READ_ONLY_VIEWS | self.AGENT_ONLY | self.NOT_IN_TUI | self.DYNAMIC:
                     continue
                 uncovered.append(label)
         self.assertEqual(uncovered, [], "subcomandos sem lugar no TUI (e sem justificativa em CoverageTest)")

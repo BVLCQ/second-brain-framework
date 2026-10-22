@@ -83,6 +83,9 @@ def checks(brain, online: bool = False) -> list[dict]:
     open_props = [p for p in st.proposals.values() if p.status == "aberta"]
     if open_props:
         out.append(_c("warn", "propostas", f"{len(open_props)} aguardando sua resposta"))
+    open_asks = [q for q in st.questions.values() if q.status == "aberta"]
+    if open_asks:
+        out.append(_c("warn", "perguntas", f"{len(open_asks)} pergunta(s) do agente aguardando você (painel 4, aba Perguntas)"))
     mine = [a for a in st.actions.values() if a.open and a.owner == brain.owner and a.list == "mine"]
     no_due = [a for a in mine if not a.due]
     if no_due:
