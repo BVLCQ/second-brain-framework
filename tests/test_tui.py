@@ -1645,7 +1645,7 @@ class CoverageTest(unittest.TestCase):
         "init", "add", "snapshot", "proposal add", "outbox sent", "outbox failed", "publish done",
         "pdf text", "pdf render", "video transcribe", "video frames", "person merge",
         "raw archive", "raw sort"}
-    NOT_IN_TUI = {"demo", "tui"}
+    NOT_IN_TUI = {"demo", "tui", "migrate ids"}      # migração única, feita no terminal com o dono (backup + dry-run)
     DYNAMIC = {"memory recall", "memory reflect"}      # o formulário "Memória: perguntar" monta o subcomando
 
     def test_every_cli_subcommand_is_accounted_for(self):

@@ -170,10 +170,14 @@ class Brain:
     # ── auditoria ──────────────────────────────────────────────────────────
     def validate_all(self) -> list[str]:
         """Revalida o ledger inteiro em ordem. Retorna problemas (vazio = saudável)."""
+        return self.validate_events(self.read_events(), self.plan)
+
+    def validate_events(self, events: list[dict], plan) -> list[str]:
+        """Revalida uma lista de eventos (o ledger, ou o que a migração vai gravar) contra um PLANNING."""
         problems: list[str] = []
         working = state_mod.State()
         last_seq = 0
-        for ev in self.read_events():
+        for ev in events:
             schema.normalize_event(ev)
             seq = ev.get("seq", 0)
             if seq <= last_seq:
@@ -185,7 +189,7 @@ class Brain:
                     coll = working.collection(schema.TYPES[ev["type"]]["entity"])
                     if ev.get("id") in coll:
                         raise util.BrainError(f"id duplicado {ev.get('id')}")
-                schema.validate(probe, working, self.plan)
+                schema.validate(probe, working, plan)
             except util.BrainError as e:
                 problems.append(f"seq {seq} ({ev.get('type')} {ev.get('id', '')}): {e}")
             except KeyError as e:

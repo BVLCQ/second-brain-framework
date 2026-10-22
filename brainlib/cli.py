@@ -617,6 +617,11 @@ def cmd_watch(args, b) -> None:
     watch.cli(args, b)
 
 
+def cmd_migrate(args, b) -> None:
+    from . import migrate_ids
+    migrate_ids.cli(args, b)
+
+
 def cmd_tui(args, b) -> None:
     from . import tui
     tui.cli(args, b)
@@ -1090,6 +1095,14 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--dir", required=True)
     p.add_argument("--open", action="store_true")
     p.set_defaults(fn=cmd_demo, no_brain=True)
+
+    p = sub.add_parser("migrate", help="migrações de formato (exceção histórica ao append-only, com backup): `migrate ids`")
+    ms = p.add_subparsers(dest="what", required=True)
+    x = ms.add_parser("ids", help="A-0146→ACT-0146, G1→GOAL-1, P3.2→PROJ-3.2 em ledger, PLANNING, notas, PROCESSED, reports e nomes de arquivo")
+    x.add_argument("--apply", action="store_true", help="aplica (sem isto é dry-run: só escreve o relatório em vault/reports/migration/)")
+    x.add_argument("--include-external", action="store_true",
+                   help="migra também G#/P# em RAW externo (reuniões, Slack…), onde 'P1' costuma ser outra coisa")
+    p.set_defaults(fn=cmd_migrate)
 
     p = sub.add_parser("watch", help="fontes do config/watch.toml (o universo observável do /update): listar, adicionar, editar, remover")
     ws = p.add_subparsers(dest="wcmd", required=True)

@@ -70,6 +70,7 @@ TYPES: dict[str, dict] = {
     "connector.pulled": {"entity": "connector", "req": ["changed"]},
     "connector.failed": {"entity": "connector", "req": ["error"]},
     "run.completed": {"entity": "run", "req": ["ok"]},
+    "ids.migrated": {"entity": None, "req": ["map", "backup_sha"]},     # `brain migrate ids`: o mapa antigo → novo
     "area.added": {"entity": "area", "new": True, "req": ["name"]},
     "area.updated": {"entity": "area", "req": []},
     "process.added": {"entity": "process", "new": True, "prefix": ids.prefix("process"), "req": ["title", "area"]},
@@ -225,6 +226,8 @@ def validate(ev: dict, state, plan) -> None:
         _need(data["kind"] in PROPOSAL_KINDS, f"kind de proposta inválido: {data['kind']!r}")
     if t in {"proposal.accepted", "proposal.rejected"}:
         _need(state.proposals[eid].status == "aberta", f"proposta {eid} não está aberta")
+    if t == "ids.migrated":
+        _need(ev.get("by") == "system" and isinstance(data["map"], dict), "ids.migrated: só o sistema grava, com o mapa")
     if t == "progress.declared":
         _plan_node(plan, eid or "", "progress")
         _need(isinstance(data["pct"], int) and 0 <= data["pct"] <= 100, "pct deve ser inteiro 0–100")

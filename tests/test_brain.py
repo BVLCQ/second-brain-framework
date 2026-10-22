@@ -2,6 +2,10 @@
 from __future__ import annotations
 
 import json
+import shutil
+import io
+import contextlib
+import argparse
 import os
 import subprocess
 import sys
@@ -1911,6 +1915,183 @@ class IdsTests(unittest.TestCase):
             (inbox / "P1-2026-10-09-note.md").write_text("sem frontmatter", encoding="utf-8")
             got = {n.link for n in notes_mod.scan(b.inst)}
             self.assertEqual(got, {"ACT-0001", "PROJ-1"})
+
+
+class MigrateIdsTests(unittest.TestCase):
+    """Passo 2: `brain migrate ids` — a instância de demo é levada de volta aos nomes antigos e migrada de novo;
+    a volta tem de reproduzir exatamente o original (ledger, hashes e arquivos)."""
+
+    INV = [(r"(?<![A-Za-z0-9_-])ACT-(\d{4})", r"A-\1"), (r"(?<![A-Za-z0-9_-])DEC-(\d{4})", r"D-\1"),
+           (r"(?<![A-Za-z0-9_-])WIN-(\d{4})", r"E-\1"), (r"(?<![A-Za-z0-9_-])PROP-(\d{4})", r"R-\1"),
+           (r"(?<![A-Za-z0-9_-])MSG-(\d{4})", r"M-\1"), (r"(?<![A-Za-z0-9_-])PUB-(\d{4})", r"S-\1"),
+           (r"(?<![A-Za-z0-9_-])FOCUS-(\d{4})", r"F-\1"), (r"(?<![A-Za-z0-9_-])PROJ-(\d+)", r"P\1"),
+           (r"(?<![A-Za-z0-9_-])GOAL-(\d+)", r"G\1")]
+
+    def legacy(self, text: str) -> str:
+        import re
+        for a, b in self.INV:
+            text = re.sub(a, b, text)
+        return text
+
+    def make(self, td, with_external=True):
+        """Instância com mensagem aprovada, publicação aprovada, plano de foco aprovado e notas, já nos NOMES ANTIGOS.
+        Devolve (inst, originais): o que a migração precisa devolver."""
+        root = Path(td) / "inst"
+        with contextlib.redirect_stdout(io.StringIO()):
+            demo_mod.cli(argparse.Namespace(dir=str(root), open=False))
+        b = Brain(config.load(root))
+        from brainlib import outbox as outbox_mod
+        m = outbox_mod.draft(b, "caio-demo", "Olha a ACT-0008 e a PROJ-1.3, por favor.", "ACT-0008", "cobrar")
+        outbox_mod.approve(b, m["id"], "enviar 1")
+        report = share.export(b, "project", "PROJ-1", "md")
+        rel = b.inst.rel(report)
+        b.record_one({"type": "share.requested", "by": "agent", "prov": "sistema", "source": "chat", "data": {
+            "report": rel, "destination": "slack:#padaria-socios", "content_sha": util.sha(report.read_bytes())}})
+        b.record_one({"type": "share.approved", "id": "PUB-0001", "by": "owner", "data": {
+            "quote": "ok", "content_sha": util.sha(report.read_bytes())}})
+        fid = next(iter(b.state.focus_plans))
+        b.record_one({"type": "focus.approved", "id": fid, "by": "owner", "data": {"quote": "ok", "sha": b.state.focus_plans[fid].sha}})
+        note = b.inst.vault / "RAW" / "2026" / "10" / "notes" / "ACT-0002-2026-10-09-note.md"
+        note.parent.mkdir(parents=True, exist_ok=True)
+        note.write_text("---\ntipo: nota\nvinculo: ACT-0002\ncriada: 2026-10-09 10:00\n---\nVer ACT-0002 e PROJ-2.2.\n", encoding="utf-8")
+        orig = {"events": Brain(b.inst).read_events(), "files": {}}
+        zones = ("PLANNING", "PROCESSED", "reports", "RAW")
+        for p in sorted((b.inst.vault).rglob("*")):
+            if p.is_file() and p.relative_to(b.inst.vault).parts[0] in zones and p.suffix in (".md", ".html", ".json") \
+                    and "_ledger" not in p.parts:
+                orig["files"][str(p.relative_to(b.inst.vault))] = p.read_text(encoding="utf-8")
+        ext = b.inst.vault / "RAW" / "2026" / "10" / "meetings" / "reuniao-externa.md"
+        if with_external:
+            ext.parent.mkdir(parents=True, exist_ok=True)
+            ext.write_text("Falamos da A-0002. O bug virou P1 no Jira (prioridade) e o G1 do trimestre.\n", encoding="utf-8")
+        # → nomes antigos: arquivos de texto, nomes de nota e o ledger (com os hashes recalculados do jeito antigo)
+        for p in sorted(b.inst.vault.rglob("*")):
+            rel = p.relative_to(b.inst.vault)
+            if p.is_file() and rel.parts[0] in zones and p.suffix in (".md", ".html", ".json") and "_ledger" not in rel.parts \
+                    and p != ext:
+                new_p = p.with_name(self.legacy(p.name))
+                p.write_text(self.legacy(p.read_text(encoding="utf-8")), encoding="utf-8")
+                if new_p != p:
+                    p.rename(new_p)
+        shutil.rmtree(b.inst.fresh)
+        b.inst.fresh.mkdir()
+        (b.inst.config_dir / "watch.toml").write_text('[[source]]\nkey = "slack-x"\nkind = "slack"\nnote = "acompanha o G1"\n', encoding="utf-8")
+        evs = [json.loads(self.legacy(json.dumps(e, ensure_ascii=False))) for e in orig["events"]]
+        texts = {e["id"]: e["data"]["text"] for e in evs if e["type"] == "message.drafted"}
+        reports = {e["id"]: e["data"]["report"] for e in evs if e["type"] == "share.requested"}
+        planned = {}
+        for e in evs:
+            d, t = e["data"], e["type"]
+            if t in ("message.approved", "message.sent"):
+                d["text_sha"] = util.sha(texts[e["id"]])
+            elif t in ("share.requested", "share.approved"):
+                d["content_sha"] = util.sha((b.inst.vault / reports[e["id"]]).read_bytes())
+            elif t == "focus.planned":
+                d["sha"] = planned[e["id"]] = util.sha(json.dumps({k: v for k, v in d.items() if k not in ("plan_file", "sha")}, sort_keys=True))
+            elif t == "focus.approved":
+                d["sha"] = planned[e["id"]]
+        b.ledger_path.write_text("".join(json.dumps(e, ensure_ascii=False, separators=(",", ":")) + "\n" for e in evs), encoding="utf-8")
+        return b.inst, orig
+
+    def run_cli(self, inst, *a, env=None):
+        return subprocess.run([sys.executable, str(ROOT / "brain"), "migrate", "ids", *a], capture_output=True, text=True,
+                              env={**os.environ, "BRAIN_HOME": str(inst.root), **(env or {})})
+
+    def tree(self, inst) -> dict:
+        return {str(p.relative_to(inst.vault)): p.read_bytes() for p in sorted(inst.vault.rglob("*")) if p.is_file()
+                and "migration" not in p.parts}
+
+    def test_dry_run_changes_nothing_but_the_report(self):
+        with tempfile.TemporaryDirectory() as td:
+            inst, orig = self.make(td)
+            before = self.tree(inst)
+            r = self.run_cli(inst)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertIn("dry-run", r.stdout)
+            self.assertIn("ocorrências ambíguas em RAW externo (G#/P#): 2", r.stdout)
+            self.assertEqual(self.tree(inst), before)
+            reports = list((inst.reports / "migration").glob("ids-*.md"))
+            self.assertEqual(len(reports), 1)
+            text = reports[0].read_text(encoding="utf-8")
+            self.assertIn("## Diff do PLANNING/goals.md", text)
+            self.assertIn("-## G1 —", text)
+            self.assertIn("+## GOAL-1 —", text)
+            self.assertIn("reuniao-externa.md", text)
+            self.assertIn("O bug virou P1 no Jira", text)                       # contexto de ±40 caracteres
+            self.assertIn("ACT-0001-2026-10-09-note.md".replace("0001", "0002"), text)   # renomeação listada
+            self.assertFalse((inst.vault / "PROCESSED" / "_ledger" / "MIGRATED-ids").exists())
+
+    def test_apply_round_trips_ledger_hashes_files_and_names(self):
+        with tempfile.TemporaryDirectory() as td:
+            inst, orig = self.make(td)
+            r = self.run_cli(inst, "--apply")
+            self.assertEqual(r.returncode, 0, r.stderr + r.stdout)
+            self.assertIn("backup:", r.stdout)
+            b = Brain(inst)
+            events = b.read_events()
+            self.assertEqual(events[:-1], orig["events"])                      # ledger idêntico ao original, hashes incluídos
+            last = events[-1]
+            self.assertEqual((last["type"], last["by"], last["seq"]), ("ids.migrated", "system", orig["events"][-1]["seq"] + 1))
+            self.assertEqual(last["data"]["map"]["A-0002"], "ACT-0002")
+            self.assertEqual(last["data"]["map"]["P1.2"], "PROJ-1.2")
+            self.assertEqual(b.validate_all(), [])
+            for rel, text in orig["files"].items():                             # texto e nomes de arquivo voltam ao original
+                self.assertEqual((inst.vault / rel).read_text(encoding="utf-8"), text, rel)
+            self.assertFalse(list(inst.vault.rglob("A-0*-note*.md")))
+            ext = (inst.vault / "RAW" / "2026" / "10" / "meetings" / "reuniao-externa.md").read_text(encoding="utf-8")
+            self.assertEqual(ext, "Falamos da ACT-0002. O bug virou P1 no Jira (prioridade) e o G1 do trimestre.\n")
+            self.assertIn('note = "acompanha o GOAL-1"', (inst.config_dir / "watch.toml").read_text(encoding="utf-8"))
+            self.assertTrue((inst.vault / "PROCESSED" / "_ledger" / "MIGRATED-ids").exists())
+            self.assertTrue((inst.fresh / "records" / "actions" / "ACT-0001.md").exists())      # FRESH regenerado
+            self.assertFalse((inst.fresh / "records" / "actions" / "A-0001.md").exists())
+            backups = list(inst.vault.parent.glob("brain-pre-ids-migration-*.zip"))
+            self.assertEqual(len(backups), 1)
+            import zipfile
+            with zipfile.ZipFile(backups[0]) as zf:
+                self.assertIsNone(zf.testzip())
+                self.assertIn("A-0001", zf.read("vault/PROCESSED/_ledger/events.jsonl").decode("utf-8"))
+            self.assertEqual(last["data"]["backup_sha"], __import__("hashlib").sha256(backups[0].read_bytes()).hexdigest())
+            # a numeração continua e a segunda execução recusa
+            top = max(int(k.split("-")[1]) for k in b.state.actions)
+            self.assertEqual(b.record_one({"type": "action.opened", "by": "owner", "data": {"title": "Nova", "owner": "voce"}})["id"],
+                             f"ACT-{top + 1:04d}")
+            again = self.run_cli(inst, "--apply")
+            self.assertEqual(again.returncode, 4)
+            self.assertIn("já foi migrada", again.stderr)
+
+    def test_include_external_migrates_plan_ids_in_raw_documents(self):
+        with tempfile.TemporaryDirectory() as td:
+            inst, _ = self.make(td)
+            r = self.run_cli(inst, "--apply", "--include-external")
+            self.assertEqual(r.returncode, 0, r.stderr + r.stdout)
+            ext = (inst.vault / "RAW" / "2026" / "10" / "meetings" / "reuniao-externa.md").read_text(encoding="utf-8")
+            self.assertEqual(ext, "Falamos da ACT-0002. O bug virou PROJ-1 no Jira (prioridade) e o GOAL-1 do trimestre.\n")
+
+    def test_refuses_nightly_and_is_a_noop_on_a_new_instance(self):
+        with tempfile.TemporaryDirectory() as td:
+            inst, _ = self.make(td)
+            r = self.run_cli(inst, "--apply", env={"BRAIN_NIGHTLY": "1"})
+            self.assertEqual(r.returncode, 4)
+            self.assertIn("noturno", r.stderr)
+            self.assertFalse((inst.vault / "PROCESSED" / "_ledger" / "MIGRATED-ids").exists())
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td) / "novo"
+            with contextlib.redirect_stdout(io.StringIO()):
+                demo_mod.cli(argparse.Namespace(dir=str(root), open=False))
+            r = self.run_cli(config.load(root))
+            self.assertIn("nada a migrar", r.stdout)
+
+    def test_rename_conflict_aborts_before_touching_anything(self):
+        with tempfile.TemporaryDirectory() as td:
+            inst, _ = self.make(td)
+            clash = inst.vault / "RAW" / "2026" / "10" / "notes" / "ACT-0002-2026-10-09-note.md"
+            clash.write_text("já existe", encoding="utf-8")
+            before = self.tree(inst)
+            r = self.run_cli(inst, "--apply")
+            self.assertEqual(r.returncode, 4)
+            self.assertIn("já existe", r.stderr)
+            after = self.tree(inst)
+            self.assertEqual({k: v for k, v in after.items() if "FRESH" not in k}, {k: v for k, v in before.items() if "FRESH" not in k})
 
 
 if __name__ == "__main__":
