@@ -41,6 +41,14 @@ TOOLS = [
     ("brain_timeline", "Linha do tempo: o que aconteceu (dias para trás) e prazos (dias à frente).",
      _schema({"days_back": I, "days_ahead": I})),
     ("brain_wins", "Conquistas por semana: entregas, entregáveis concluídos, ações fechadas.", _schema({"weeks": I})),
+    ("portfolio_overview", "Portfólio de processos e oportunidades: áreas, funil por status, matriz impacto × facilidade, "
+     "ranking por ICE (top 10) e lacunas. Números calculados pelo CLI.", _schema({})),
+    ("process", "Ficha de um processo (PROC-####): responsável, executores, recorrência, horas/mês, playbook, dores, lacunas, oportunidades ligadas.",
+     _schema({"id": S}, ["id"])),
+    ("opportunity", "Ficha de uma oportunidade (OPP-####): problema, sugestão, ICE (e se é só sugerido), status e histórico, evidências, projeto/goal.",
+     _schema({"id": S}, ["id"])),
+    ("opportunities", "Oportunidades, filtráveis por status e área (id, nome ou alias), da maior para a menor pontuação.",
+     _schema({"status": S, "area": S})),
     ("brain_read", "Lê um arquivo de texto do vault (caminho relativo ao vault: PROCESSED/…, PLANNING/…, RAW/…).",
      _schema({"path": S}, ["path"])),
 ]
@@ -104,6 +112,40 @@ def _timeline(m: dict, args) -> dict:
             "future": [x for x in m["timeline"]["future"] if x["date"] <= ahead]}
 
 
+def _portfolio_overview(m: dict, _args) -> dict:
+    pf = m["portfolio"]
+    by_id = {o["id"]: o for o in pf["opportunities"]}
+    return {"counts": pf["counts"], "areas": pf["areas"], "funnel": pf["funnel"], "matrix": pf["matrix"],
+            "ranking": [{k: by_id[i][k] for k in ("id", "title", "area", "status", "score", "ice_suggested", "quadrant")}
+                        for i in pf["ranking"][:10]],
+            "gaps": pf["gaps"]}
+
+
+def _process(m: dict, args) -> dict:
+    p = next((x for x in m["portfolio"]["processes"] if x["id"] == str(args.get("id", "")).upper()), None)
+    return p or {"erro": f"processo {args.get('id')} não consta",
+                 "processos": [x["id"] for x in m["portfolio"]["processes"]]}
+
+
+def _opportunity(m: dict, args) -> dict:
+    o = next((x for x in m["portfolio"]["opportunities"] if x["id"] == str(args.get("id", "")).upper()), None)
+    return o or {"erro": f"oportunidade {args.get('id')} não consta",
+                 "oportunidades": [x["id"] for x in m["portfolio"]["opportunities"]]}
+
+
+def _opportunities(m: dict, args) -> list:
+    out = m["portfolio"]["opportunities"]
+    if args.get("status"):
+        out = [o for o in out if o["status"] == args["status"]]
+    if args.get("area"):
+        key = util.fold(args["area"])
+        ids = {a["id"] for a in m["portfolio"]["areas"]
+               if key in {util.fold(a["id"]), util.fold(a["name"]), *(util.fold(x) for x in a["aliases"])}}
+        out = [o for o in out if o["area"] in ids]
+    out = sorted(out, key=lambda o: (-(o["score"] or 0), o["id"]))
+    return [{k: v for k, v in o.items() if k not in ("status_history", "docs", "notes")} for o in out]
+
+
 def _read(brain, args) -> dict:
     rel = str(args.get("path", "")).lstrip("/")
     rel = rel[len("vault/"):] if rel.startswith("vault/") else rel
@@ -129,6 +171,14 @@ def call_tool(name: str, args: dict) -> object:
     m = model.build(brain)
     if name == "brain_overview":
         return _overview(m, args)
+    if name == "portfolio_overview":
+        return _portfolio_overview(m, args)
+    if name == "process":
+        return _process(m, args)
+    if name == "opportunity":
+        return _opportunity(m, args)
+    if name == "opportunities":
+        return _opportunities(m, args)
     if name == "brain_project":
         return _project(m, args)
     if name == "brain_person":

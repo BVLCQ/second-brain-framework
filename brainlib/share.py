@@ -122,6 +122,81 @@ def _sections_period(m: dict, rng: str) -> tuple[str, list, list[str]]:
             [("Entregue", wins or ["nada registrado"]), ("Decisões", decs), ("Ações concluídas", closed)], sources)
 
 
+def _area_filter(m: dict, area: str | None) -> tuple[str | None, str]:
+    """Área por id, nome ou alias → (id, nome). Sem filtro: (None, 'todas as áreas')."""
+    if not area:
+        return None, ""
+    key = util.fold(area)
+    hit = next((a for a in m["portfolio"]["areas"] if key in {util.fold(a["id"]), util.fold(a["name"]),
+                                                              *(util.fold(x) for x in a["aliases"])}), None)
+    if hit is None:
+        raise util.BrainError(f"área '{area}' não cadastrada", code=3)
+    return hit["id"], hit["name"]
+
+
+def _prio(o: dict) -> str:
+    if o["score"] is None:
+        return "sem pontuação"
+    return f"prioridade {o['score']}" + (" (preliminar)" if o["ice_suggested"] else "")
+
+
+def _sections_portfolio(m: dict, area: str | None) -> tuple[str, list, list[str]]:
+    """Roadmap priorizado: ranking, matriz e status. Sem IDs no texto; ICE aparece como pontuação de prioridade."""
+    pf = m["portfolio"]
+    aid, aname = _area_filter(m, area)
+    opps = [o for o in pf["opportunities"] if not aid or o["area"] == aid]
+    by_id = {o["id"]: o for o in opps}
+    names = {a["id"]: a["name"] for a in pf["areas"]}
+    rank = [by_id[i] for i in pf["ranking"] if i in by_id]
+    intro = ["Pontuação de prioridade = impacto × confiança × facilidade, cada um de 1 a 5 (máximo 125)."
+             + (f" Recorte: {aname}." if aname else "")]
+    ranking = [f"{o['title']} — {_prio(o)} · {o['status']}" + (f" · {names.get(o['area'], o['area'])}" if not aid else "")
+               + (f" · ganho declarado: {o['hours_saved']:g} h/mês" if o["hours_saved"] else "") for o in rank]
+    matrix = []
+    for q, ids in pf["matrix"].items():
+        got = [by_id[i]["title"] for i in ids if i in by_id]
+        if got:
+            matrix.append(f"**{q}:** " + "; ".join(got))
+    live = [o for o in opps if o["status"] in ("em-andamento", "piloto", "validando")]
+    running = [f"{o['title']} — {o['status']}" + (f" · projeto {o['project_title']} ({planning.format_progress(o['project_progress'])})"
+                                                     if o["project_progress"] else "") for o in live]
+    funnel: dict[str, int] = {}
+    for o in opps:
+        funnel[o["status"]] = funnel.get(o["status"], 0) + 1
+    status = [f"{s}: {n}" for s, n in pf["funnel"].items() if funnel.get(s)] if not aid else [f"{s}: {n}" for s, n in funnel.items()]
+    sources = [f"{o['id']}: {o['source'] or 'sem fonte registrada'}" for o in rank]
+    return ("Roadmap de oportunidades" + (f" — {aname}" if aname else ""),
+            [("", intro), ("Prioridades", ranking or ["nenhuma oportunidade pontuada ainda"]), ("Matriz impacto × facilidade", matrix),
+             ("Em andamento", running), ("Por status", status)], sources)
+
+
+def _sections_opportunity(brain, m: dict, oid: str) -> tuple[str, list, list[str]]:
+    o = next((x for x in m["portfolio"]["opportunities"] if x["id"] == oid), None)
+    if o is None:
+        raise util.BrainError(f"oportunidade {oid} não existe", code=3)
+    pf = m["portfolio"]
+    area = next((a["name"] for a in pf["areas"] if a["id"] == o["area"]), o["area"])
+    proc = next((p for p in pf["processes"] if p["id"] == o["process"]), None)
+    label = model.ModelBuilder(brain).source_label
+    intro = [f"**Área:** {area} · **Tipo:** {o['kind']} · **Status:** {o['status']}"]
+    prio = [f"{_prio(o)}: impacto {o['impact']} × confiança {o['confidence']} × facilidade {o['ease']}"
+            + (" (estimativa preliminar, ainda não confirmada)" if o["ice_suggested"] else "")] if o["score"] is not None else         ["ainda sem pontuação de prioridade"]
+    gain = [o["gain"]] if o["gain"] else []
+    if o["hours_saved"]:
+        gain.append(f"Horas poupadas declaradas: {o['hours_saved']:g} por mês")
+    related = []
+    if proc:
+        related.append(f"Processo: {proc['title']}" + (f" ({proc['hours_month']:g} h/mês hoje)" if proc["hours_month"] else ""))
+    if o["project"]:
+        related.append(f"Projeto: {o['project_title']}" + (f" — {planning.format_progress(o['project_progress'])}"
+                                                           if o["project_progress"] else ""))
+    sections = [("", intro), ("Problema", [o["problem"]] if o["problem"] else ["não consta"]),
+                ("Sugestão", [o["suggestion"]] if o["suggestion"] else ["não consta"]),
+                ("Ganho esperado", gain or ["não consta"]), ("Prioridade", prio), ("Relacionado", related),
+                ("Evidências", [label(e) for e in o["evidence"]])]
+    return o["title"], sections, [f"{oid}: {label(o['source'])}"] + [f"evidência: {e}" for e in o["evidence"]]
+
+
 def _md(title: str, sections, sources, stamp: str) -> str:
     out = [f"# {title}", f"_Gerado em {stamp} · ponto no tempo (não é atualizado)_", ""]
     for name, items in sections:
@@ -159,9 +234,14 @@ def _html(title: str, sections, sources, stamp: str) -> str:
             f"<style>{css}</style><body>{''.join(body)}</body></html>\n")
 
 
-def export(brain, kind: str, target: str | None, fmt: str) -> Path:
+def export(brain, kind: str, target: str | None, fmt: str, area: str | None = None) -> Path:
     m = model.build(brain)
-    if kind == "project":
+    if kind == "portfolio":
+        title, sections, sources = _sections_portfolio(m, area)
+        target = area
+    elif kind == "opportunity":
+        title, sections, sources = _sections_opportunity(brain, m, target or "")
+    elif kind == "project":
         title, sections, sources = _sections_project(m, target or "")
     elif kind == "goal":
         title, sections, sources = _sections_goal(m, target or "")
@@ -182,7 +262,7 @@ def export(brain, kind: str, target: str | None, fmt: str) -> Path:
 
 
 def cli_export(args, brain) -> None:
-    path = export(brain, args.kind, args.target, args.format)
+    path = export(brain, args.kind, args.target, args.format, getattr(args, "area", None))
     if args.json:
         print(json.dumps({"path": str(path)}))
     else:

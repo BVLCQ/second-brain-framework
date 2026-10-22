@@ -21,6 +21,7 @@
 10. [Limites e segurança — o que ele NUNCA faz](#10-limites-e-segurança--o-que-ele-nunca-faz)
 11. [Problemas comuns e soluções](#11-problemas-comuns-e-soluções)
 12. [Glossário](#12-glossário)
+13. [Face Portfólio: processos e oportunidades](#13-face-portfólio-processos-e-oportunidades)
 
 ---
 
@@ -130,8 +131,8 @@ falha.
 livro-razão + PLANNING. Qualquer hora, `./brain render` apaga e redesenha
 tudo do zero. Você nunca precisa "manter" nada ali — e nada que você
 estragar ali tem valor perdido. As três exceções colhidas antes de
-sobrescrever (seção 9): checkbox no `todo.md`, `status:` na ficha da ação e
-checkbox de entregável em `PLANNING/goals.md`.
+sobrescrever (seção 9): checkbox no `todo.md`, `status:` na ficha da ação, `status:`
+na ficha da oportunidade e checkbox de entregável em `PLANNING/goals.md`.
 
 ### 2.5 Aprovação explícita: silêncio não é "sim"
 
@@ -613,6 +614,7 @@ Já coberto na seção 3. Gatilho: PROFILE e PLANNING vazios.
 | `./brain schedule install --time 05:00` | agendar o noturno |
 | `./brain memory sync` / `recall "…"` | índice semântico (se ligado) |
 | `./brain demo --dir /tmp/demo --open` | instancia fictícia para mostrar a alguém |
+| `./brain area add` · `process add` · `opportunity add` · `doc link` | portfólio (seção 13) |
 
 ---
 
@@ -638,6 +640,8 @@ busca global. Abas:
   ações fechadas.
 - **Pessoas** — ficha por pessoa: papel, o que cada um deve ao outro,
   decisões que tomou, menções recentes.
+- **Portfólio** — processos por área (horas/mês, responsável, playbook, lacunas),
+  oportunidades com ICE, funil de status e a matriz impacto × facilidade.
 - **Linha do tempo** — o que aconteceu e o que vem: prazos e marcos.
 - **Foco** (badge: plano proposto) — o plano da semana e seus blocos.
 - **Mensagens** (badge: rascunhos pendentes) — o outbox: rascunhos,
@@ -668,6 +672,7 @@ próxima renderização — automática no noturno ou via `/brief`):
 |---|---|
 | Checkbox em `FRESH/todo.md` (`- [x] **A-0012**…`) | fecha (ou reabre) a ação — vira declaração sua `[declarado]` |
 | `status:` no frontmatter de `FRESH/records/actions/A-0012.md` | o mesmo, pelo vocabulário: `a fazer` · `fazendo` · `aguardando` · `feita` · `descartada` |
+| `status:` no frontmatter de `FRESH/records/opportunities/OPP-0003.md` | muda o status da oportunidade (`ideia` · `triagem` · `priorizada` · `piloto` · `validando` · `entregue` · `em-espera` · `descartada`); `em-andamento` só vem de `brain opportunity promote`; valor inválido vira aviso e não grava |
 | Checkbox de entregável em `PLANNING/goals.md` | atualiza o estado factual (com data) |
 | Qualquer outra coisa em `FRESH/` | **descartada** no próximo render — FRESH é retrato |
 
@@ -738,3 +743,37 @@ edita `events.jsonl` à mão — com backup, uma linha.
 - **EDF** — Earliest Deadline First, a regra do planejador de foco: prazo
   mais próximo primeiro.
 - **Idempotente** — rodar de novo não duplica nada (dump, snapshot, sync).
+
+---
+
+## 13. Face Portfólio: processos e oportunidades
+
+O cérebro também mapeia **como o trabalho acontece** e **o que vale melhorar**. Duas entidades novas:
+**processo** (`PROC-####`: área, responsável, quem executa, recorrência, duração, playbook, dores,
+maturidade) e **oportunidade** (`OPP-####`: área, processo, tipo, problema, sugestão, ganho, ICE, status).
+**Áreas** são suas — `./brain area add operacoes --name "Operações" --alias Ops` — quantas quiser.
+
+**Fluxo.** O agente (no `/dump`) cria oportunidades em status `ideia` e processos citados nos documentos; você
+triageia, pontua e move. `ICE` = impacto × confiança × facilidade (1–5 cada → 1–125); o agente só **sugere**
+(aparece em rosa até você confirmar com `c` ou mudar com `i`). `/opportunity triage` percorre as ideias sem ICE.
+Status vai e volta livremente: `ideia → triagem → priorizada → em-andamento → piloto → validando → entregue`, mais
+`em-espera` e `descartada` (pedem motivo). `em-andamento` só vem de **promover**.
+
+**Promover** (`p` no TUI · `./brain opportunity promote OPP-#### --goal G#`): cria um projeto no goal — mudança
+estrutural, então mostra o diff do `goals.md` e só segue com o seu "ok" literal. A oportunidade vira `em-andamento`
+e fica ligada ao projeto (o progresso dele aparece na ficha).
+
+**Playbooks** moram no Drive: `./brain doc link PROC-0001 --kind playbook --ref <url> --watch` cria uma fonte
+`drive-doc` no `watch.toml`; o `/update` só relê o doc quando o `modifiedTime` muda.
+
+**No TUI** (`./brain tui`): `Tab` / `Shift+Tab` giram entre as faces **Execução** e **Portfólio** (cada uma lembra
+onde você estava; dentro de formulários o Tab continua mudando de campo). Painéis do Portfólio: **1 Visão** (funil,
+top 5 por ICE, lacunas; por área; por goal) · **2 Processos** (todos, por área, lacunas) · **3 Oportunidades**
+(triagem, priorizadas, em curso, arquivo) · **4 Matriz** (impacto × facilidade em 2×2, ranking) · **5 Registro**
+(áreas, documentos). Teclas: processos `n e l o a x`; oportunidades `n e s i c l v p x` (`O` pede o one-pager ao agente);
+áreas `n e`; documentos `enter` abre e `u` desliga.
+
+**Nos outros lugares:** `FRESH/processes.md`, `FRESH/opportunities.md` e as fichas em `FRESH/records/processes|opportunities/`
+(editar `status:` na ficha da oportunidade é colhido), a aba **Portfólio** do painel HTML, a linha "Portfólio:" no
+`home.md`, `/share portfolio` (roadmap priorizado para mandar a um colega) e as ferramentas MCP somente-leitura
+`portfolio_overview`, `process`, `opportunity` e `opportunities`.

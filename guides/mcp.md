@@ -19,6 +19,10 @@ Stdio, JSON-RPC. Nenhuma ferramenta escreve. Cada chamada relê o ledger.
 | `brain_actions` | `mine` / `waiting` / `watching` |
 | `brain_timeline` | passado + prazos |
 | `brain_wins` | conquistas por semana |
+| `portfolio_overview` | portfólio: áreas, funil, matriz, top 10 por ICE, lacunas |
+| `process` | ficha de um `PROC-####` |
+| `opportunity` | ficha de uma `OPP-####` |
+| `opportunities` | lista filtrável por status e área |
 | `brain_read` | arquivo de texto do vault (caminho relativo) |
 
 A IA cliente deve citar `source_label` / caminho e a proveniência. "Não

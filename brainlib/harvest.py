@@ -4,6 +4,7 @@ FRESH é regenerado inteiro a cada render — então, ANTES de sobrescrever, olh
 o que o dono mudou desde o último render:
   · checkbox de ação em FRESH/todo.md            → fechar / reabrir
   · `status:` de FRESH/records/actions/A-*.md     → ficha da ação (qualquer editor)
+  · `status:` de FRESH/records/opportunities/OPP-*.md → status da oportunidade (valor inválido: aviso, não grava)
   · checkbox de entregável em PLANNING/goals.md   → estado factual do entregável
 Só essas mudanças são colhidas; qualquer outra edição em FRESH é descartada.
 """
@@ -35,7 +36,36 @@ def _owner_event(t: str, aid: str, data: dict, source: str) -> dict:
     return {"type": t, "id": aid, "by": "owner", "prov": "declarado", "source": source, "data": data}
 
 
-def collect(brain) -> list[dict]:
+def _opportunity_events(brain, last: dict, notices: list[dict]) -> list[dict]:
+    from .schema import OPP_REASON_STATUS, OPP_STATUS
+    out = []
+    rec_dir = brain.inst.fresh / "records" / "opportunities"
+    for path in sorted(rec_dir.glob("OPP-*.md")) if rec_dir.exists() else []:
+        oid = path.stem
+        o = brain.state.opportunities.get(oid)
+        prev = last.get("records", {}).get(oid)
+        m = FRONT_STATUS.search(path.read_text(encoding="utf-8"))
+        if not o or not m or prev is None:
+            continue
+        now_val = util.fold(m.group(1))
+        if now_val == util.fold(prev) or now_val == o.status:
+            continue
+        src = f"FRESH/records/opportunities/{oid}.md"
+        if now_val not in OPP_STATUS:
+            notices.append({"level": "warn", "title": "ficha", "detail": f"{oid}: status '{m.group(1)}' inválido — "
+                            f"nada gravado (use {', '.join(sorted(OPP_STATUS))})"})
+        elif now_val == "em-andamento" and not o.project:
+            notices.append({"level": "warn", "title": "ficha", "detail": f"{oid}: 'em-andamento' só depois de promover "
+                            "(`brain opportunity promote`) — nada gravado"})
+        else:
+            data = {"status": now_val}
+            if now_val in OPP_REASON_STATUS:
+                data["reason"] = "alterado na ficha (status)"
+            out.append(_owner_event("opportunity.status", oid, data, src))
+    return out
+
+
+def collect(brain, notices: list[dict] | None = None) -> list[dict]:
     st = brain.state
     fresh = brain.inst.fresh
     last = load_state(fresh)
@@ -83,6 +113,8 @@ def collect(brain) -> list[dict]:
                                            "FRESH/todo.md"))
             touched.add(aid)
 
+    events += _opportunity_events(brain, last, notices if notices is not None else [])
+
     plan = brain.plan
     for did, d in plan.deliverables.items():
         hist = st.deliverable_events.get(did, [])
@@ -96,8 +128,8 @@ def collect(brain) -> list[dict]:
     return events
 
 
-def run(brain) -> list[dict]:
-    events = collect(brain)
+def run(brain, notices: list[dict] | None = None) -> list[dict]:
+    events = collect(brain, notices)
     return brain.record(events) if events else []
 
 

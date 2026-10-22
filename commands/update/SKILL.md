@@ -19,6 +19,7 @@ No noturno (`BRAIN_NIGHTLY=1`) isto é o único comando largo permitido. Sem apr
 (stdin = o conteúdo; ou `--file`). Janela sem nada novo (a leitura funcionou) → `./brain snapshot --key <key> --empty`.
 MCP vazio por erro/negação → `--fail "MCP não devolveu nada"` (isso sim é falha).
 Fonte com `folder = …`: siga o protocolo de pasta de `commands/drive/SKILL.md` — um `--item` por arquivo e por subpasta (hash próprio), `--rev` + `--check` antes de ler. Pasta sem item novo é silêncio, não falha.
+Fonte `kind = "drive-doc"` (playbook de um processo; campos `doc` = id do Drive e `link` = `PROC-…`/`OPP-…`): pegue o `modifiedTime` do doc pelo MCP do Drive (só metadados) e rode `./brain snapshot --key <key> --item <doc> --rev <modifiedTime> --check` — `inalterado` = pule, sem gastar leitura. Se mudou: exporte o doc (Markdown/texto) e grave `./brain snapshot --key <key> --item <doc> --rev <modifiedTime> --name "<título>" --prefix playbook --ext md`. No `/dump` desse snapshot, registre o artefato com `./brain artifact … --link <PROC-…>`; o processo passa a mostrar "playbook atualizado em …".
 2+ falhas seguidas da mesma key → **escalar ao dono** (`brain doctor`).
 3. `/dump` no que chegou.
 4. `./brain render`.

@@ -45,6 +45,12 @@ def search(brain, query: str, limit: int = 20) -> list[dict]:
         add("goal", g["id"], g["title"], g["why"] or "")
     for p in m["projects"]:
         add("projeto", p["id"], p["title"], " ".join(d["title"] for d in p["deliverables"]))
+    for pr in brain.state.processes.values():
+        add("processo", pr.id, pr.title, " ".join([pr.io, *pr.pains, *pr.tools, *pr.notes]),
+            pr.added.isoformat() if pr.added else None)
+    for o in brain.state.opportunities.values():
+        add("oportunidade", o.id, o.title, " ".join([o.problem, o.suggestion, o.gain, *o.notes]),
+            o.added.isoformat() if o.added else None)
     vault = brain.inst.vault
     for a in m["artifacts"]:
         path = vault / a["id"]

@@ -22,6 +22,10 @@ DELIV_GLYPH = {"feito": ("[x]", GRN), "em-andamento": ("[~]", CYN), "nao-iniciad
 PROV_STYLE = {"doc": CYN, "observado": VIO, "declarado": GRN, "sem-fonte": RED, "sistema": DIM}
 MSG_STYLE = {"rascunho": AMB, "aprovada": CYN, "enviada": GRN, "falhou": RED, "cancelada": FAINT}
 ART_ABBR = {"reuniao": "reun", "documento": "doc ", "nota": "nota", "conector": "conn"}
+OPP_GLYPH = {"ideia": ("○", DIM), "triagem": ("◔", AMB), "priorizada": ("◆", CYN), "em-andamento": ("▶", GRN),
+             "piloto": ("◐", GRN), "validando": ("◑", GRN), "entregue": ("✓", GRN), "em-espera": ("‖", FAINT),
+             "descartada": ("✗", FAINT)}
+QUAD_SHORT = {"ganho rápido": "rápido", "aposta": "aposta", "preencher depois": "depois", "evitar": "evitar"}
 
 
 def T(*parts) -> Text:
@@ -162,10 +166,41 @@ def row(store, it, width: int) -> Text:
                  T((util.fmt_date(d["last_ok"][:10]), DIM)) if d["last_ok"] else T(("nunca puxada", AMB)))
         extra = " · ".join(x for x in (d.get("kind"), d.get("window")) if x)
         return two(T((mark, st), " ", d["key"], ("  " + extra if extra else "", DIM)), right, width)
+    if k == "opp":
+        g, gs = OPP_GLYPH.get(d["status"], ("○", DIM))
+        rank = it.extra.get("rank")
+        left = T((f"{rank}. " if rank else "", DIM), (g, gs), " ", (d["id"], DIM), " ", d["title"])
+        sc = "—" if d["score"] is None else str(d["score"])
+        right = T((sc, PNK if d["ice_suggested"] else (DIM if d["score"] is None else "bold")), " ",
+                  (QUAD_SHORT.get(d["quadrant"] or "", ""), DIM))
+        return two(left, right, width)
+    if k == "proc":
+        who = f" · {d['owner_name']}" if d["owner_name"] else ""
+        left = T((d["id"], DIM), " ", d["title"], (f" · {store.by_area[d['area']]['name'] if d['area'] in store.by_area else d['area']}{who}", DIM))
+        right = T((hours_txt(d["hours_month"]), DIM), (f" ⚠ {d['gaps'][0]}" if d["gaps"] else "", AMB))
+        return two(left, right, width)
+    if k == "pgrp":
+        return two(T(("▾ ", DIM), (d["label"], "bold")), T((d["sub"], DIM)), width)
+    if k == "pvfunil":
+        parts = [f"{s_} {n}" for s_, n in d["funnel"].items() if n]
+        return T(("▤ ", DIM), "Funil · ", (" · ".join(parts) or "sem oportunidades", DIM))
+    if k == "pvgaps":
+        n = d["gaps"]["total"]
+        return T(("⚠ " if n else "✓ ", AMB if n else GRN), f"{n} lacuna{'' if n == 1 else 's'}")
+    if k == "mx":
+        return two(T((d["quadrant"], "bold")), T((f"{len(d['ids'])}", DIM)), width)
+    if k == "area":
+        return two(T((d["id"], DIM), " ", d["name"]), T((f"{d['processes']} proc · {d['opportunities']} opp", DIM)), width)
+    if k == "docl":
+        return two(T((f"[{d['kind']}]", DIM), " ", d["title"] or d["ref"]), T((d["target"], DIM)), width)
     if k == "sys":
         right = T(("⚡ ", VIO)) if d.get("agent") else T(("porta ", AMB) if d.get("door") else "", ("info" if d.get("info") else "⏎", DIM))
         return two(T(("▸", DIM), " ", d["name"]), right, width)
     return T(str(it.id))
+
+
+def hours_txt(v) -> str:
+    return "—" if v is None else f"{v:g}".replace(".", ",") + " h/mês"
 
 
 def _mins(b: dict) -> int:
@@ -213,7 +248,7 @@ class Doc:
         return self
 
     def kv(self, rows: list) -> "Doc":
-        rows = [r for r in rows if r]
+        rows = [r for r in rows if r and r[1] is not None]
         w = max((len(r[0]) for r in rows), default=0) + 2
         for label, val in rows:
             t = Text()
@@ -253,7 +288,8 @@ def detail(store, it) -> Text:
         return Text("Nada aqui.", DIM)
     fn = {"resumo": d_resumo, "action": d_action, "g": d_plan, "p": d_plan, "d": d_plan, "prop": d_prop,
           "msg": d_msg, "fday": d_focus, "fwarn": d_focus, "pub": d_pub, "dec": d_dec, "del": d_del,
-          "per": d_person, "art": d_art, "doc": d_doc, "sys": d_sys, "src": d_src}[it.kind]
+          "per": d_person, "art": d_art, "doc": d_doc, "sys": d_sys, "src": d_src, "opp": d_opp, "proc": d_proc,
+          "pgrp": d_pgrp, "pvfunil": d_funil, "pvgaps": d_gaps, "mx": d_matrix, "area": d_area, "docl": d_docl}[it.kind]
     return fn(store, it).text()
 
 
@@ -654,3 +690,232 @@ def d_art(store, it) -> Doc:
                                    ("projetos", Text(", ".join(a["projects"]) or "—")), ("resumo", Text(a["summary"] or "—")),
                                    ("fonte RAW", Text.assemble((a["raw"] or "—", DIM), " · imutável"))]).blank().p(
         ("Artefatos são append-only. Para a letra exata, abra o RAW (tecla o) no seu editor.", DIM))
+
+
+# ── face Portfólio ───────────────────────────────────────────────────────────
+def doc_link(text: str, target: str, n: int, style: str = "") -> Text:
+    st = Style(meta={"@click": f"app.open_doc('{target}', {n})"})
+    return Text(text, style=(Style.parse(style) + st) if style else st)
+
+
+def _area_name(store, a: str) -> str:
+    return store.by_area[a]["name"] if a in store.by_area else a
+
+
+def _docs_section(doc: Doc, d: dict) -> None:
+    doc.sec("Documentos")
+    if not d["docs"]:
+        doc.p(("Nenhum. l liga um documento.", DIM))
+    for n, x in enumerate(d["docs"]):
+        doc.p((f"[{x['kind']}] ", DIM), doc_link(x["title"] or x["ref"], d["id"], n, "underline"),
+              (f"  · lido em {util.fmt_date(x['read'])}" if x["read"] else "  · ligado" + (" · vigiado" if x["watch"] else ""), DIM))
+
+
+def d_opp(store, it) -> Doc:
+    o = it.data
+    g, gs = OPP_GLYPH.get(o["status"], ("○", DIM))
+    doc = Doc().h(Text(o["id"] + " · ", "bold"), (o["title"], "bold"))
+    doc.p(Text(g + " ", gs), (o["status"], gs), (f" · {o['kind']}", DIM), (f" · {_area_name(store, o['area'])}", DIM))
+    if o["score"] is None:
+        ice = T(("sem ICE", AMB), ("  (i define · o agente pode sugerir)", DIM))
+    else:
+        ice = T((f"{o['impact']} × {o['confidence']} × {o['ease']} = {o['score']}", PNK if o["ice_suggested"] else "bold"),
+                (f"  {o['quadrant']}", DIM), ("  · sugerido: c confirma, i muda" if o["ice_suggested"] else "", PNK))
+    gain = o["gain"] or "—"
+    if o["hours_saved"]:
+        gain += f" ({hours_txt(o['hours_saved'])})"
+    proj = "—"
+    if o["project"]:
+        pr = o["project_progress"]
+        proj = Text.assemble(link(o["project"], o["project"], "bold"), f" {o['project_title']} em ", link(o["goal"], o["goal"]),
+                             (f" · {bar(pr['pct'], 8)} {pct_txt(pr)}" if pr else "", DIM))
+    elif o["goal"]:
+        proj = Text.assemble(link(o["goal"], o["goal"]), f" {o['goal_title'] or ''}", ("  · p promove a projeto", DIM))
+    doc.blank().kv([
+        ("ICE", ice), ("ganho", Text(gain)),
+        ("processo", link(o["process"], o["process"]) if o["process"] else None),
+        ("projeto", proj if o["project"] or o["goal"] else None),
+        ("pessoas", Text(", ".join(o["people_names"])) if o["people"] else None),
+        ("origem", Text(f"{o['by']} · {o['source'] or 'sem fonte'} ") + prov(o["prov"]))])
+    if o["ice_suggested"] and o["ice_reason"]:
+        doc.p(("ICE sugerido porque: ", DIM), o["ice_reason"])
+    doc.sec("Problema").p(o["problem"] or ("não consta", DIM))
+    doc.sec("Sugestão").p(o["suggestion"] or ("não consta", DIM))
+    doc.sec("Histórico de status")
+    for h in o["status_history"]:
+        doc.p((util.fmt_date(h["date"]) + " ", DIM), f"{h['from']} → {h['to']}", (f" · {h['reason']}" if h["reason"] else "", DIM))
+    if not o["status_history"]:
+        doc.p((f"criada em {util.fmt_date(o['added'])} como {o['status']}", DIM))
+    doc.sec(f"Evidências ({o['evidence_count']})")
+    for e in o["evidence"]:
+        doc.p(("▌ ", CYN), e)
+    if not o["evidence"]:
+        doc.p(("Nenhuma. v adiciona uma fonte.", DIM))
+    _docs_section(doc, o)
+    notes_section(doc, store, o["id"])
+    doc.sec("Equivalente na CLI").cmd(f"brain opportunity show {o['id']}")
+    if not o["project"]:
+        doc.cmd(f'brain opportunity promote {o["id"]} --goal G# --approval "ok"')
+    return doc
+
+
+def d_proc(store, it) -> Doc:
+    p = it.data
+    doc = Doc().h(Text(p["id"] + " · ", "bold"), (p["title"], "bold"))
+    doc.p((_area_name(store, p["area"]), DIM), (f" · maturidade {p['maturity']}/5" if p["maturity"] else "", DIM))
+    rec = {"diaria": "diária", "semanal": "semanal", "quinzenal": "quinzenal", "mensal": "mensal", "trimestral": "trimestral",
+           "sob-demanda": "sob demanda", "por-evento": "por evento"}.get(p["recurrence"], "—")
+    doc.blank().kv([
+        ("responsável", Text(p["owner_name"] or "—", "" if p["owner_name"] else AMB)),
+        ("executores", Text(", ".join(p["executor_names"]) or "—")),
+        ("recorrência", Text(rec + (f" ({p['per_month']:g}/mês)" if p["per_month"] else ""))),
+        ("duração", Text(util.fmt_duration(p["duration_min"]))),
+        ("horas/mês", Text(hours_txt(p["hours_month"]), "bold")),
+        ("ferramentas", Text(", ".join(p["tools"]) or "—")),
+        ("entradas → saídas", Text(p["io"] or "—"))])
+    if p["gaps"]:
+        doc.blank().p(Text("⚠ " + "; ".join(p["gaps"]), AMB))
+    doc.sec("Dores")
+    for x in p["pains"]:
+        doc.p(("▌ ", CYN), x)
+    if not p["pains"]:
+        doc.p(("Nenhuma registrada.", DIM))
+    _docs_section(doc, p)
+    doc.sec("Oportunidades ligadas")
+    for i in p["opportunities"]:
+        o = store.by_opp[i]
+        doc.p(link(i, i, "bold"), f" {o['title']} ", (o["status"], DIM))
+    if not p["opportunities"]:
+        doc.p(("Nenhuma. a cria uma a partir deste processo.", DIM))
+    if p["notes"]:
+        doc.sec("Notas")
+        for n in p["notes"]:
+            doc.p(("▌ ", CYN), n)
+    notes_section(doc, store, p["id"])
+    return doc.sec("Equivalente na CLI").cmd(f"brain process show {p['id']}")
+
+
+def d_pgrp(store, it) -> Doc:
+    d = it.data
+    return Doc().h(d["label"]).p((d["sub"], DIM)).blank().p(("Cabeçalho de grupo: as linhas abaixo dele pertencem a ele.", DIM))
+
+
+def d_funil(store, it) -> Doc:
+    pf = it.data
+    doc = Doc().h("Funil de oportunidades").blank()
+    total = max(1, pf["counts"]["opportunities"])
+    for s_, n in pf["funnel"].items():
+        g, gs = OPP_GLYPH.get(s_, ("○", DIM))
+        doc.p(Text(g + " ", gs), (s_.ljust(13), "bold" if n else DIM), (bar(round(n * 100 / total), 20), CYN if n else DIM), f" {n}")
+    hrs = sum(o["hours_saved"] or 0 for o in pf["opportunities"] if o["status"] not in ("descartada", "entregue", "em-espera"))
+    doc.sec("Horas/mês declaradas").p(f"{hours_txt(hrs)} poupadas, somando só o que o dono declarou nas oportunidades vivas",
+                                      (" (o cérebro não estima ganho)", DIM))
+    doc.sec("Top 5 por ICE")
+    for n, i in enumerate(pf["ranking"][:5], 1):
+        o = store.by_opp[i]
+        doc.p((f"{n}. ", DIM), link(i, i, "bold"), f" {o['title']} ", (str(o["score"]), PNK if o["ice_suggested"] else "bold"))
+    if not pf["ranking"]:
+        doc.p(("Nenhuma oportunidade com ICE.", DIM))
+    return doc
+
+
+def d_gaps(store, it) -> Doc:
+    g = it.data["gaps"]
+    doc = Doc().h(f"Lacunas · {g['total']}").blank()
+    if not g["total"]:
+        return doc.p(("Nenhuma: todo processo tem playbook, responsável e recorrência, e toda oportunidade viva tem ICE.", DIM))
+    if g["areas_without_process"]:
+        doc.sec("Áreas sem processo")
+        for a in g["areas_without_process"]:
+            doc.p(("▸ ", AMB), _area_name(store, a))
+    if g["processes"]:
+        doc.sec("Processos incompletos")
+        for x in g["processes"]:
+            doc.p(link(x["id"], x["id"], "bold"), f" {store.by_proc[x['id']]['title']} ", ("⚠ " + "; ".join(x["gaps"]), AMB))
+    if g["no_ice"]:
+        doc.sec("Sem ICE")
+        for i in g["no_ice"]:
+            doc.p(link(i, i, "bold"), f" {store.by_opp[i]['title']}")
+    if g["ice_suggested"]:
+        doc.sec("ICE só sugerido (confirme com c ou mude com i)")
+        for i in g["ice_suggested"]:
+            doc.p(link(i, i, "bold"), f" {store.by_opp[i]['title']} ", (str(store.by_opp[i]["score"]), PNK))
+    if g["stale"]:
+        doc.sec("Paradas há mais de 30 dias")
+        for x in g["stale"]:
+            doc.p(link(x["id"], x["id"], "bold"), f" {store.by_opp[x['id']]['title']} ", (f"{x['days']}d", AMB))
+    return doc
+
+
+def d_matrix(store, it) -> Doc:
+    sel, mx = it.data["quadrant"], store.pf["matrix"]
+    cols = 30
+    doc = Doc().h("Matriz impacto × facilidade").p(("impacto e facilidade ≥ 3 contam como altos", DIM)).blank()
+
+    def block(q: str) -> list[Text]:
+        on = q == sel
+        head = Text(q.upper() if on else q, "bold reverse" if on else "bold")
+        ids = mx[q]
+        lines = [head]
+        for i in range(0, len(ids), 2):
+            lines.append(T(("  ".join(ids[i:i + 2]), CYN if on else "")))
+        if not ids:
+            lines.append(T(("—", DIM)))
+        return lines
+
+    def put(left: list[Text], right: list[Text], label: str) -> None:
+        for n in range(max(len(left), len(right))):
+            row = Text()
+            row.append((label if n == 0 else "").ljust(13), DIM)
+            lt = left[n] if n < len(left) else Text()
+            lt = lt.copy()
+            lt.truncate(cols, overflow="ellipsis", pad=True)
+            row.append_text(lt)
+            row.append(" │ ", DIM)
+            row.append_text(right[n] if n < len(right) else Text())
+            doc.lines.append(row)
+
+    head = Text()
+    head.append(" " * 13)
+    head.append("facilidade ≥ 3".ljust(cols), DIM)
+    head.append(" │ facilidade < 3", DIM)
+    doc.lines.append(head)
+    put(block("ganho rápido"), block("aposta"), "impacto ≥ 3")
+    doc.lines.append(Text("─" * 13 + "─" * cols + "─┼─" + "─" * 24, DIM))
+    put(block("preencher depois"), block("evitar"), "impacto < 3")
+    doc.sec("No quadrante " + sel)
+    for i in mx[sel]:
+        o = store.by_opp[i]
+        doc.p(link(i, i, "bold"), f" {o['title']} ", (f"ICE {o['score']}", PNK if o["ice_suggested"] else DIM), (f" · {o['status']}", DIM))
+    if not mx[sel]:
+        doc.p(("Nenhuma oportunidade viva com ICE aqui.", DIM))
+    return doc
+
+
+def d_area(store, it) -> Doc:
+    a = it.data
+    doc = Doc().h(Text(a["id"] + " · ", "bold"), (a["name"], "bold"))
+    doc.p((f"aliases: {', '.join(a['aliases'])}" if a["aliases"] else "sem aliases", DIM), (f" · {a['note']}" if a["note"] else "", DIM))
+    doc.sec("Processos")
+    for p in store.pf["processes"]:
+        if p["area"] == a["id"] and p["status"] == "ativo":
+            doc.p(link(p["id"], p["id"], "bold"), f" {p['title']} ", (hours_txt(p["hours_month"]), DIM))
+    if not a["processes"]:
+        doc.p(("Nenhum.", DIM))
+    doc.sec("Oportunidades")
+    for o in store.pf["opportunities"]:
+        if o["area"] == a["id"]:
+            doc.p(link(o["id"], o["id"], "bold"), f" {o['title']} ", (o["status"], DIM))
+    if not a["opportunities"]:
+        doc.p(("Nenhuma.", DIM))
+    return doc.sec("Equivalente na CLI").cmd(f"brain area update {a['id']} --alias …")
+
+
+def d_docl(store, it) -> Doc:
+    d = it.data
+    doc = Doc().h(Text(f"[{d['kind']}] ", DIM), (d["title"] or d["ref"], "bold"))
+    doc.blank().kv([("ref", Text(d["ref"])), ("ligado a", Text.assemble(link(d["target"], d["target"], "bold"), f" {d['target_title']}")),
+                    ("ligado em", Text(util.fmt_date(d["date"]))), ("vigiado", Text("sim (o /update relê quando muda)" if d["watch"] else "não")),
+                    ("última leitura", Text(util.fmt_date(d["read"])) if d["read"] else None)])
+    doc.blank().p(doc_link("⏎ abrir", d["target"], d["n"], "bold cyan"), ("  (URL no navegador; caminho do vault no editor)", DIM))
+    return doc.sec("Equivalente na CLI").cmd(f"brain doc unlink {d['target']} --ref …")

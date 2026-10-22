@@ -34,3 +34,11 @@
 # key = "jira-me"
 # kind = "jira"
 # jql = "assignee = currentUser() AND updated >= -1d"
+
+# Playbook de um processo (Portfólio): o /update só relê o doc quando o modifiedTime muda.
+# Normalmente criada por `./brain doc link PROC-0001 --kind playbook --ref <url|id> --watch`.
+# [[source]]
+# key = "playbook-proc-0001"
+# kind = "drive-doc"
+# doc = "<id do doc no Drive>"
+# link = "PROC-0001"

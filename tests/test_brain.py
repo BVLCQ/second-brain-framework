@@ -15,7 +15,7 @@ sys.path.insert(0, str(ROOT))
 
 os.environ.setdefault("BRAIN_NOW", "2026-10-09T10:00:00-03:00")
 
-from brainlib import config, doctor, notes as notes_mod, focus, harvest, mcp_server, memory, outbox, planning, people, rawsort, render, schema, share, snapshot, upstream, util
+from brainlib import config, doctor, portfolio as portfolio_mod, notes as notes_mod, focus, harvest, mcp_server, memory, outbox, planning, people, rawsort, render, schema, share, snapshot, upstream, util
 from brainlib.core import Brain
 from brainlib.gcal import GoogleCalendar
 from brainlib import demo as demo_mod
@@ -725,6 +725,14 @@ class DemoTests(unittest.TestCase):
             self.assertTrue((target / "vault" / "FRESH" / "todo.md").exists())
             self.assertTrue((target / "vault" / "FRESH" / "dashboard" / "index.html").exists())
             self.assertFalse((target / "vault" / "FRESH" / "bases").exists())
+            st = b.state
+            self.assertEqual((len(st.areas), len(st.processes), len(st.opportunities)), (3, 3, 6))
+            self.assertEqual(st.opportunities["OPP-0003"].status, "em-andamento")        # uma promovida, ligada a P3/G2
+            self.assertEqual((st.opportunities["OPP-0003"].project, st.opportunities["OPP-0003"].goal), ("P3", "G2"))
+            self.assertTrue(st.opportunities["OPP-0002"].ice_suggested)
+            self.assertEqual(st.processes["PROC-0001"].hours_month, 21 * 3 * 2)
+            self.assertTrue((target / "vault" / "FRESH" / "opportunities.md").exists())
+            self.assertIn("Portfólio", dash)
             self.assertTrue((target / "vault" / "FRESH" / "projects" / "P1.md").exists())
 
 
@@ -1266,6 +1274,523 @@ class RunnerTest(unittest.TestCase):
                 self.assertEqual(calls[-1][0], "bootstrap")
                 runner._schedule_launchd(argparse.Namespace(action="remove", time="05:00"), b)
                 self.assertFalse(plist.exists())
+
+
+class PortfolioStateTests(unittest.TestCase):
+    """Passo 1 do portfólio: áreas, processos, oportunidades, ICE e documentos no ledger."""
+
+    def _b(self, td):
+        b = _brain(Path(td))
+        b.record_one({"type": "area.added", "id": "operacoes", "by": "owner", "data": {"name": "Operações"}})
+        b.record_one({"type": "area.added", "id": "growth", "by": "owner", "data": {"name": "Growth"}})
+        return b
+
+    def _proc(self, b, **data):
+        base = {"title": "Fechamento mensal", "area": "operacoes", "owner": "eu"}
+        return b.record_one({"type": "process.added", "by": "owner", "data": {**base, **data}})
+
+    def _opp(self, b, **kw):
+        ev = {"type": "opportunity.added", "by": "owner",
+              "data": {"title": "Automatizar conciliação", "area": "operacoes", **kw.pop("data", {})}}
+        ev.update(kw)
+        return b.record_one(ev)
+
+    def test_area_and_ids(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = self._b(td)
+            self.assertEqual(list(b.state.areas), ["operacoes", "growth"])
+            with self.assertRaises(util.BrainError):                    # área duplicada
+                b.record_one({"type": "area.added", "id": "growth", "by": "owner", "data": {"name": "G"}})
+            with self.assertRaises(util.BrainError):                    # área inexistente
+                self._proc(b, area="nao-existe")
+            self.assertEqual(self._proc(b)["id"], "PROC-0001")
+            self.assertEqual(self._proc(b, title="Outro")["id"], "PROC-0002")
+            self.assertEqual(self._opp(b)["id"], "OPP-0001")
+            self.assertEqual(b.state.next_id("A"), "A-0001")           # os antigos seguem iguais
+            self.assertEqual(b.validate_all(), [])
+
+    def test_process_hours_and_validation(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = self._b(td)
+            pid = self._proc(b, executors=["eu", "marina-demo"], recurrence="semanal", duration="1h30m")["id"]
+            p = b.state.processes[pid]
+            self.assertEqual(p.duration_min, 90)
+            self.assertAlmostEqual(p.hours_month, 4.33 * 1.5 * 2, places=2)
+            sob = self._proc(b, title="Sob demanda", recurrence="sob-demanda", per_month=3, duration="45m")["id"]
+            self.assertAlmostEqual(b.state.processes[sob].hours_month, 2.25)
+            vazio = self._proc(b, title="Sem dados")["id"]
+            self.assertIsNone(b.state.processes[vazio].hours_month)
+            for bad in ({"recurrence": "anual"}, {"recurrence": "sob-demanda"}, {"maturity": 6},
+                        {"duration": "0m"}, {"owner": "ninguem"}, {"executors": ["ninguem"]}):
+                with self.assertRaises(util.BrainError, msg=str(bad)):
+                    self._proc(b, **bad)
+            with self.assertRaises(util.BrainError):                    # agente sem --source
+                b.record_one({"type": "process.added", "by": "agent", "prov": "observado",
+                              "data": {"title": "X", "area": "growth"}})
+            b.record_one({"type": "process.retired", "id": pid, "by": "owner", "data": {"reason": "acabou"}})
+            self.assertEqual(b.state.processes[pid].status, "aposentado")
+            self.assertEqual(b.validate_all(), [])
+
+    def test_opportunity_score_and_agent_rules(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = self._b(td)
+            ev = b.record_one({"type": "opportunity.added", "by": "agent", "prov": "observado", "source": "chat",
+                               "data": {"title": "Ideia do agente", "area": "growth"}})
+            oid = ev["id"]
+            self.assertEqual(b.state.opportunities[oid].status, "ideia")
+            with self.assertRaises(util.BrainError):                    # agente sem --source
+                b.record_one({"type": "opportunity.added", "by": "agent", "prov": "observado",
+                              "data": {"title": "Sem fonte", "area": "growth"}})
+            with self.assertRaises(util.BrainError):                    # agente não move status
+                b.record_one({"type": "opportunity.status", "id": oid, "by": "agent", "prov": "observado",
+                              "data": {"status": "triagem"}})
+            b.record_one({"type": "opportunity.scored", "id": oid, "by": "agent", "prov": "observado",
+                          "data": {"impact": 4, "confidence": 3, "ease": 2, "ice_suggested": True, "reason": "x"}})
+            o = b.state.opportunities[oid]
+            self.assertEqual((o.score, o.ice_suggested), (24, True))
+            with self.assertRaises(util.BrainError):                    # dono não marca ice_suggested
+                b.record_one({"type": "opportunity.scored", "id": oid, "by": "owner",
+                              "data": {"impact": 1, "confidence": 1, "ease": 1, "ice_suggested": True}})
+            with self.assertRaises(util.BrainError):
+                b.record_one({"type": "opportunity.scored", "id": oid, "by": "owner",
+                              "data": {"impact": 6, "confidence": 1, "ease": 1}})
+            b.record_one({"type": "opportunity.scored", "id": oid, "by": "owner",
+                          "data": {"impact": 5, "confidence": 5, "ease": 5}})
+            o = b.state.opportunities[oid]
+            self.assertEqual((o.score, o.ice_suggested), (125, False))   # dono limpa a sugestão
+            sem_ice = self._opp(b)["id"]
+            self.assertIsNone(b.state.opportunities[sem_ice].score)
+            self.assertEqual(b.validate_all(), [])
+
+    def test_status_rules_and_history(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = self._b(td)
+            oid = self._opp(b)["id"]
+            st = lambda s, **d: b.record_one({"type": "opportunity.status", "id": oid, "by": "owner",  # noqa: E731
+                                              "data": {"status": s, **d}})
+            st("triagem")
+            st("priorizada")
+            st("triagem")                                               # vai e volta
+            for bad in ("descartada", "em-espera", "em-andamento", "invalido"):
+                with self.assertRaises(util.BrainError, msg=bad):
+                    st(bad)                                             # laterais sem motivo; em-andamento sem projeto
+            st("descartada", reason="duplicada")
+            hist = b.state.opportunities[oid].status_history
+            self.assertEqual([(h["from"], h["to"]) for h in hist],
+                             [("ideia", "triagem"), ("triagem", "priorizada"), ("priorizada", "triagem"),
+                              ("triagem", "descartada")])
+            self.assertEqual(hist[-1]["reason"], "duplicada")
+
+    def test_promoted_links_goal_and_project(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = self._b(td)
+            oid = self._opp(b)["id"]
+            for goal, proj in (("G9", "P1"), ("G1", "P9")):
+                with self.assertRaises(util.BrainError):
+                    b.record_one({"type": "opportunity.promoted", "id": oid, "by": "owner",
+                                  "data": {"goal": goal, "project": proj}})
+            b.record_one({"type": "opportunity.promoted", "id": oid, "by": "owner",
+                          "data": {"goal": "G1", "project": "P1"}})
+            b.record_one({"type": "opportunity.status", "id": oid, "by": "owner", "data": {"status": "em-andamento"}})
+            o = b.state.opportunities[oid]
+            self.assertEqual((o.project, o.goal, o.status), ("P1", "G1", "em-andamento"))
+            self.assertEqual(b.validate_all(), [])
+
+    def test_docs_evidence_and_person_merge(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = self._b(td)
+            b.record_one({"type": "person.added", "id": "mari-dup", "by": "owner", "data": {"name": "Mari Dup"}})
+            pid = self._proc(b, owner="mari-dup", executors=["mari-dup", "marina-demo"])["id"]
+            oid = self._opp(b, data={"people": ["mari-dup"]})["id"]
+            b.record_one({"type": "doc.linked", "by": "owner", "data": {
+                "target": pid, "kind": "playbook", "ref": "https://example.com/doc", "title": "Playbook"}})
+            self.assertEqual(b.state.processes[pid].playbook.ref, "https://example.com/doc")
+            with self.assertRaises(util.BrainError):
+                b.record_one({"type": "doc.linked", "by": "owner",
+                              "data": {"target": pid, "kind": "foo", "ref": "x"}})
+            with self.assertRaises(util.BrainError):
+                b.record_one({"type": "doc.linked", "by": "owner",
+                              "data": {"target": "OPP-9999", "kind": "outro", "ref": "x"}})
+            b.record_one({"type": "doc.unlinked", "by": "owner",
+                          "data": {"target": pid, "ref": "https://example.com/doc"}})
+            self.assertEqual(b.state.processes[pid].docs, [])
+            for _ in range(2):
+                b.record_one({"type": "opportunity.evidence", "id": oid, "by": "agent", "prov": "observado",
+                              "source": "PROCESSED/x.md", "data": {"source": "PROCESSED/x.md"}})
+            o = b.state.opportunities[oid]
+            self.assertEqual((o.evidence, o.evidence_count), (["PROCESSED/x.md"], 2))
+            b.record_one({"type": "person.merged", "id": "mari-dup", "by": "owner", "data": {"into": "marina-demo"}})
+            p = b.state.processes[pid]
+            self.assertEqual((p.owner, p.executors), ("marina-demo", ["marina-demo"]))
+            self.assertEqual(b.state.opportunities[oid].people, ["marina-demo"])
+            self.assertEqual(b.validate_all(), [])
+
+
+class PortfolioCliTests(unittest.TestCase):
+    """Passo 2: `brain area|process|opportunity|doc` (sempre com BRAIN_HOME numa pasta temporária)."""
+
+    def _run(self, td, *a):
+        env = {**os.environ, "BRAIN_HOME": td}
+        return subprocess.run([sys.executable, str(ROOT / "brain"), *a], capture_output=True, text=True, env=env)
+
+    def _ok(self, td, *a):
+        r = self._run(td, *a)
+        self.assertEqual(r.returncode, 0, f"{a}: {r.stderr}")
+        return r.stdout
+
+    def _setup(self, td):
+        _brain(Path(td))
+        self._ok(td, "area", "add", "operacoes", "--name", "Operações", "--alias", "Ops", "--by", "owner")
+        self._ok(td, "area", "add", "growth", "--by", "owner")
+
+    def test_area_process_flow(self):
+        with tempfile.TemporaryDirectory() as td:
+            self._setup(td)
+            self.assertIn("Operações", self._ok(td, "area", "list"))
+            out = self._ok(td, "process", "add", "Fechamento mensal", "--area", "Ops", "--owner", "marina-demo",
+                           "--executor", "marina-demo", "--executor", "eu", "--recurrence", "semanal",
+                           "--duration", "1h30m", "--tools", "Sheets, Jira", "--pain", "retrabalho",
+                           "--maturity", "2", "--by", "owner")
+            self.assertIn("PROC-0001", out)
+            self.assertIn("12,99 h/mês", out)
+            self.assertIn("sem playbook", out)
+            self.assertEqual(self._run(td, "process", "add", "X", "--area", "nada", "--by", "owner").returncode, 3)
+            self.assertEqual(self._run(td, "process", "add", "Y", "--area", "growth", "--recurrence", "sob-demanda",
+                                       "--by", "owner").returncode, 4)           # exige --per-month
+            self._ok(td, "process", "update", "PROC-0001", "--recurrence", "sob-demanda", "--per-month", "2",
+                     "--by", "owner")
+            shown = json.loads(self._ok(td, "process", "show", "PROC-0001", "--json"))
+            self.assertEqual((shown["hours_month"], shown["tools"]), (6.0, ["Sheets", "Jira"]))
+            self.assertIn("PROC-0001", self._ok(td, "process", "list", "--gaps"))
+            self._ok(td, "doc", "link", "PROC-0001", "--kind", "playbook", "--ref", "https://example.com/pb",
+                     "--by", "owner")
+            self.assertNotIn("PROC-0001", self._ok(td, "process", "list", "--area", "operacoes", "--gaps"))
+            self._ok(td, "process", "retire", "PROC-0001", "--reason", "fim", "--by", "owner")
+            self.assertEqual(self._ok(td, "process", "list").strip(), "(nenhum processo)")
+            self.assertIn("✓", self._ok(td, "validate"))
+
+    def test_opportunity_flow_duplicates_and_agent(self):
+        with tempfile.TemporaryDirectory() as td:
+            self._setup(td)
+            self._ok(td, "opportunity", "add", "Automatizar conciliação bancária", "--area", "operacoes",
+                     "--problem", "conciliação manual consome horas da equipe", "--hours-saved", "10", "--by", "owner")
+            dup = self._run(td, "opportunity", "add", "Automatizar a conciliação bancária", "--area", "operacoes",
+                            "--problem", "conciliação manual consome horas", "--by", "owner")
+            self.assertEqual(dup.returncode, 2)
+            self.assertIn("OPP-0001", dup.stderr)
+            self._ok(td, "opportunity", "add", "Automatizar a conciliação bancária", "--area", "operacoes",
+                     "--by", "owner", "--force")
+            self.assertEqual(self._run(td, "opportunity", "add", "Do agente", "--area", "growth").returncode, 4)  # sem fonte
+            self._ok(td, "opportunity", "add", "Dashboard de metas", "--area", "growth", "--by", "agent",
+                     "--prov", "observado", "--source", "chat")
+            self.assertEqual(self._run(td, "opportunity", "status", "OPP-0003", "triagem", "--by", "agent",
+                                       "--prov", "observado").returncode, 4)
+            self._ok(td, "opportunity", "score", "OPP-0003", "--impact", "4", "--confidence", "3", "--ease", "5",
+                     "--suggest", "--reason", "parece simples", "--prov", "observado")
+            out = self._ok(td, "opportunity", "show", "OPP-0003")
+            self.assertIn("60 (sugerido)", out)
+            out = self._ok(td, "opportunity", "score", "OPP-0003", "--impact", "4", "--confidence", "3", "--ease", "5")
+            self.assertIn("=60", out)
+            self.assertNotIn("sugerido", out)
+            self.assertEqual(self._run(td, "opportunity", "status", "OPP-0003", "descartada").returncode, 4)  # sem motivo
+            self._ok(td, "opportunity", "status", "OPP-0003", "descartada", "--reason", "fora do foco")
+            self._ok(td, "opportunity", "evidence", "OPP-0001", "--source", "PROCESSED/x.md", "--prov", "observado")
+            ranked = self._ok(td, "opportunity", "list", "--sort", "score").splitlines()
+            self.assertTrue(ranked[0].startswith("OPP-0003"))
+            self.assertEqual(len(json.loads(self._ok(td, "opportunity", "list", "--status", "ideia", "--json"))), 2)
+            self._ok(td, "doc", "link", "OPP-0001", "--kind", "one-pager", "--ref", "reports/share/x.md", "--by", "owner")
+            self._ok(td, "doc", "unlink", "OPP-0001", "--ref", "reports/share/x.md", "--by", "owner")
+            self.assertEqual(self._run(td, "doc", "unlink", "OPP-0001", "--ref", "nao-existe").returncode, 4)
+            hits = json.loads(self._ok(td, "search", "conciliação", "--json"))
+            self.assertIn("OPP-0001", {h["id"] for h in hits})
+
+    def test_promote_is_a_gate(self):
+        with tempfile.TemporaryDirectory() as td:
+            self._setup(td)
+            self._ok(td, "opportunity", "add", "Playbook de onboarding", "--area", "growth",
+                     "--problem", "time novo demora a render", "--by", "owner")
+            goals = Path(td) / "vault" / "PLANNING" / "goals.md"
+            before = goals.read_text(encoding="utf-8")
+            r = self._run(td, "opportunity", "promote", "OPP-0001", "--goal", "G1")
+            self.assertEqual(r.returncode, 4)
+            self.assertIn("### P2 — Playbook de onboarding", r.stdout)
+            self.assertIn("- por quê: time novo demora a render", r.stdout)
+            self.assertEqual(goals.read_text(encoding="utf-8"), before)           # nada gravado sem "ok"
+            self.assertEqual(self._run(td, "opportunity", "promote", "OPP-0001", "--goal", "G9",
+                                       "--approval", "ok").returncode, 3)
+            self._ok(td, "opportunity", "promote", "OPP-0001", "--goal", "G1", "--approval", "ok")
+            self.assertIn("### P2 — Playbook de onboarding", goals.read_text(encoding="utf-8"))
+            o = json.loads(self._ok(td, "opportunity", "show", "OPP-0001", "--json"))
+            self.assertEqual((o["status"], o["project"], o["goal"]), ("em-andamento", "P2", "G1"))
+            self.assertIn("promoção de OPP-0001", (Path(td) / "vault" / "PLANNING" / "log.md").read_text(encoding="utf-8"))
+            self.assertEqual(self._run(td, "opportunity", "promote", "OPP-0001", "--goal", "G1",
+                                       "--approval", "ok").returncode, 4)          # já promovida
+            types = [e["type"] for e in Brain(config.load(Path(td))).read_events()][-3:]
+            self.assertEqual(types, ["plan.changed", "opportunity.promoted", "opportunity.status"])
+            self.assertIn("✓", self._ok(td, "validate"))
+            nightly = {**os.environ, "BRAIN_HOME": td, "BRAIN_NIGHTLY": "1"}
+            r = subprocess.run([sys.executable, str(ROOT / "brain"), "opportunity", "promote", "OPP-0001",
+                                "--goal", "G1", "--approval", "ok"], capture_output=True, text=True, env=nightly)
+            self.assertEqual(r.returncode, 4)
+
+
+class PortfolioModelTests(unittest.TestCase):
+    """Passo 4: funções determinísticas de `brainlib/portfolio.py` e a seção `portfolio` do model."""
+
+    def _seed(self, td):
+        b = _brain(Path(td))
+        for slug, name in (("operacoes", "Operações"), ("growth", "Growth"), ("vazia", "Área vazia")):
+            b.record_one({"type": "area.added", "id": slug, "by": "owner", "data": {"name": name}})
+        p1 = b.record_one({"type": "process.added", "by": "owner", "data": {
+            "title": "Fechamento mensal", "area": "operacoes", "owner": "eu", "recurrence": "mensal",
+            "duration": "2h"}})["id"]
+        b.record_one({"type": "doc.linked", "by": "owner", "data": {
+            "target": p1, "kind": "playbook", "ref": "https://example.com/pb"}})
+        b.record_one({"type": "process.added", "by": "owner", "data": {"title": "Sem dados", "area": "growth"}})
+
+        def opp(title, area, status=None, ice=None, **data):
+            oid = b.record_one({"type": "opportunity.added", "by": "owner", "data": {
+                "title": title, "area": area, **data}})["id"]
+            if ice:
+                b.record_one({"type": "opportunity.scored", "id": oid, "by": "owner",
+                              "data": dict(zip(("impact", "confidence", "ease"), ice))})
+            if status:
+                b.record_one({"type": "opportunity.status", "id": oid, "by": "owner",
+                              "data": {"status": status, "reason": "x"}})
+            return oid
+        ids = {
+            "rapido": opp("Ganho rápido", "operacoes", "priorizada", (5, 4, 4), process=p1, hours_saved=8),
+            "aposta": opp("Aposta grande", "operacoes", "triagem", (5, 3, 1)),
+            "depois": opp("Preencher depois", "growth", None, (2, 5, 5), goal="G1"),
+            "evitar": opp("Evitar", "growth", "descartada", (1, 1, 1)),
+            "semice": opp("Sem ICE", "growth"),
+        }
+        b.record_one({"type": "opportunity.scored", "id": ids["semice"], "by": "agent", "prov": "observado",
+                      "data": {"impact": 3, "confidence": 3, "ease": 3, "ice_suggested": True}})
+        return b, p1, ids
+
+    def test_tokens_and_duplicates(self):
+        self.assertEqual(portfolio_mod.tokens("Automatizar a conciliação, de PAGAMENTOS!"),
+                         {"automatizar", "conciliacao", "pagamentos"})
+        with tempfile.TemporaryDirectory() as td:
+            b, _, ids = self._seed(td)
+            opps = b.state.opportunities.values()
+            hits = portfolio_mod.duplicates("Ganho rápido!", "", opps)
+            self.assertEqual([(o.id, s) for o, s in hits], [(ids["rapido"], 1.0)])
+            self.assertEqual(portfolio_mod.duplicates("Totalmente diferente", "outro assunto", opps), [])
+            many = portfolio_mod.duplicates("Aposta grande Evitar Sem ICE Preencher", "", opps)
+            self.assertLessEqual(len(many), 3)
+
+    def test_quadrants_matrix_funnel_groups(self):
+        with tempfile.TemporaryDirectory() as td:
+            b, _, ids = self._seed(td)
+            o = b.state.opportunities
+            self.assertEqual([portfolio_mod.quadrant(o[ids[k]]) for k in ("rapido", "aposta", "depois", "evitar")],
+                             ["ganho rápido", "aposta", "preencher depois", "evitar"])
+            m = portfolio_mod.matrix(o.values())
+            self.assertEqual([x.id for x in m["ganho rápido"]], [ids["rapido"], ids["semice"]])  # score 80 > 27
+            self.assertEqual(m["evitar"], [])                                  # descartada sai da matriz
+            f = portfolio_mod.funnel(o.values())
+            self.assertEqual((f["priorizada"], f["triagem"], f["descartada"], f["ideia"]), (1, 1, 1, 2))
+            self.assertEqual(list(portfolio_mod.by_area(o.values())), ["operacoes", "growth"])
+            self.assertEqual([x.id for x in portfolio_mod.by_goal(o.values())[""]],
+                             [ids["rapido"], ids["aposta"], ids["evitar"], ids["semice"]])
+            self.assertEqual(portfolio_mod.gain_hours(o[ids["rapido"]]), 8)
+            self.assertIsNone(portfolio_mod.gain_hours(o[ids["aposta"]]))
+
+    def test_gaps(self):
+        with tempfile.TemporaryDirectory() as td:
+            b, p1, ids = self._seed(td)
+            g = portfolio_mod.gaps(b.state, util.today())
+            self.assertEqual(g["areas_without_process"], ["vazia"])
+            self.assertEqual(g["processes"], [{"id": "PROC-0002", "gaps": [
+                "sem playbook", "sem responsável", "sem recorrência/duração"]}])
+            self.assertEqual(g["ice_suggested"], [ids["semice"]])
+            self.assertEqual(g["no_ice"], [])
+            self.assertEqual(g["stale"], [])
+            self.assertEqual(g["total"], 3)
+            later = util.today() + timedelta(days=45)
+            stale = portfolio_mod.gaps(b.state, later)["stale"]
+            self.assertEqual({s["id"] for s in stale}, {ids[k] for k in ("rapido", "aposta", "depois", "semice")})
+            self.assertEqual(stale[0]["days"], 45)                             # descartada não fica "parada"
+
+    def test_model_section(self):
+        with tempfile.TemporaryDirectory() as td:
+            b, p1, ids = self._seed(td)
+            from brainlib import model
+            pf = model.build(b)["portfolio"]
+            self.assertEqual(pf["counts"], {"opportunities": 5, "prioritized": 1, "processes": 2, "gaps": 3})
+            self.assertEqual(pf["ranking"], [ids["rapido"], ids["depois"], ids["semice"], ids["aposta"]])
+            self.assertNotIn(ids["evitar"], pf["ranking"])
+            proc = next(p for p in pf["processes"] if p["id"] == p1)
+            self.assertEqual((proc["hours_month"], proc["opportunities"], proc["gaps"]), (2.0, [ids["rapido"]], []))
+            opp = next(o for o in pf["opportunities"] if o["id"] == ids["semice"])
+            self.assertEqual((opp["score"], opp["ice_suggested"], opp["quadrant"]), (27, True, "ganho rápido"))
+            self.assertEqual(next(o for o in pf["opportunities"] if o["id"] == ids["depois"])["goal_title"], "Meta")
+            self.assertEqual({a["id"]: a["processes"] for a in pf["areas"]},
+                             {"operacoes": 1, "growth": 1, "vazia": 0})
+            json.dumps(pf)                                                     # serializável
+
+
+class PortfolioViewsTests(unittest.TestCase):
+    """Passo 5: processes.md, opportunities.md, fichas, home, painel e a colheita de `status:` da ficha de OPP."""
+
+    def _render(self, td):
+        b, p1, ids = PortfolioModelTests._seed(None, td)
+        render.render_all(b, do_harvest=False)
+        return b, p1, ids, b.inst.fresh
+
+    def test_pages_and_records(self):
+        with tempfile.TemporaryDirectory() as td:
+            b, p1, ids, fresh = self._render(td)
+            procs = (fresh / "processes.md").read_text(encoding="utf-8")
+            self.assertIn("generated-at:", procs)
+            self.assertIn("fontes:", procs)
+            self.assertIn("## Operações · 1 processos · 2 h/mês", procs)
+            self.assertIn("⚠ sem playbook", procs)
+            opps = (fresh / "opportunities.md").read_text(encoding="utf-8")
+            self.assertIn("generated-at:", opps)
+            self.assertIn("5×4×4 = **80**", opps)
+            self.assertIn("(sugerido)", opps)                                   # ICE do agente em destaque
+            self.assertIn("ganho rápido: [OPP-0001]", opps)
+            self.assertIn("preencher depois: [OPP-0003]", opps)
+            rec = (fresh / "records" / "opportunities" / f"{ids['rapido']}.md").read_text(encoding="utf-8")
+            self.assertIn('status: "priorizada"', rec)
+            self.assertIn("## Histórico de status", rec)
+            prec = (fresh / "records" / "processes" / f"{p1}.md").read_text(encoding="utf-8")
+            self.assertIn("horas_mes: 2.0", prec)
+            self.assertIn("[playbook]", prec)
+            home = (fresh / "home.md").read_text(encoding="utf-8")
+            self.assertIn("Portfólio: **5** oportunidades · **1** priorizadas · **3** lacunas", home)
+            dash = (fresh / "dashboard" / "index.html").read_text(encoding="utf-8")
+            self.assertIn('"portfolio"', dash)
+            self.assertIn("Aposta grande", dash)
+
+    def test_no_portfolio_no_line_in_home(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            render.render_all(b, do_harvest=False)
+            self.assertNotIn("Portfólio:", (b.inst.fresh / "home.md").read_text(encoding="utf-8"))
+            self.assertTrue((b.inst.fresh / "processes.md").exists())
+
+    def test_edit_status_in_record_is_harvested(self):
+        with tempfile.TemporaryDirectory() as td:
+            b, p1, ids, fresh = self._render(td)
+            path = fresh / "records" / "opportunities" / f"{ids['aposta']}.md"
+            path.write_text(path.read_text(encoding="utf-8").replace('status: "triagem"', 'status: "priorizada"'),
+                            encoding="utf-8")
+            report = render.render_all(b)
+            self.assertIn(f"opportunity.status {ids['aposta']}", report["harvested"])
+            ev = [e for e in Brain(b.inst).read_events() if e["type"] == "opportunity.status"][-1]
+            self.assertEqual((ev["by"], ev["prov"], ev["data"]["status"]), ("owner", "declarado", "priorizada"))
+            self.assertEqual(Brain(b.inst).state.opportunities[ids["aposta"]].status, "priorizada")
+            # lateral sem motivo na ficha ganha motivo padrão; não colhe de novo no render seguinte
+            path.write_text(path.read_text(encoding="utf-8").replace('status: "priorizada"', 'status: "em-espera"'),
+                            encoding="utf-8")
+            render.render_all(b)
+            o = Brain(b.inst).state.opportunities[ids["aposta"]]
+            self.assertEqual((o.status, o.status_history[-1]["reason"]), ("em-espera", "alterado na ficha (status)"))
+            self.assertEqual(render.render_all(b)["harvested"], [])
+
+    def test_invalid_status_in_record_warns_and_does_not_write(self):
+        with tempfile.TemporaryDirectory() as td:
+            b, p1, ids, fresh = self._render(td)
+            before = len(Brain(b.inst).read_events())
+            for bad in ("quase-pronta", "em-andamento"):                        # inexistente · sem projeto vinculado
+                path = fresh / "records" / "opportunities" / f"{ids['aposta']}.md"
+                path.write_text(path.read_text(encoding="utf-8").replace('status: "triagem"', f'status: "{bad}"'),
+                                encoding="utf-8")
+                report = render.render_all(b)
+                self.assertEqual(report["harvested"], [])
+                self.assertTrue(any(w["title"] == "ficha" and ids["aposta"] in w["detail"] for w in report["warnings"]), bad)
+                self.assertIn("ficha", render.summary(report))
+                self.assertEqual(len(Brain(b.inst).read_events()), before)
+                self.assertEqual(Brain(b.inst).state.opportunities[ids["aposta"]].status, "triagem")
+                before = len(Brain(b.inst).read_events())
+
+    def test_dashboard_script_is_valid_js(self):
+        import shutil
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("node ausente")
+        with tempfile.TemporaryDirectory() as td:
+            b, p1, ids, fresh = self._render(td)
+            html = (fresh / "dashboard" / "index.html").read_text(encoding="utf-8")
+            script = html.split("<script>", 1)[1].rsplit("</script>", 1)[0]
+            js = Path(td) / "dash.js"
+            js.write_text(script, encoding="utf-8")
+            r = subprocess.run([node, "--check", str(js)], capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stderr)
+
+
+class PortfolioOutputsTests(unittest.TestCase):
+    """Passos 8–9: exports (/share portfolio, one-pager), skills e as ferramentas MCP somente-leitura."""
+
+    def test_share_portfolio_and_onepager(self):
+        with tempfile.TemporaryDirectory() as td:
+            b, p1, ids = PortfolioModelTests._seed(None, td)
+            b.record_one({"type": "opportunity.evidence", "id": ids["rapido"], "by": "owner", "data": {"source": "PROCESSED/x.md"}})
+            path = share.export(b, "portfolio", None, "md")
+            text = path.read_text(encoding="utf-8")
+            self.assertIn("# Roadmap de oportunidades", text)
+            self.assertIn("Ganho rápido — prioridade 80", text)
+            self.assertIn("**ganho rápido:**", text)
+            self.assertIn("ganho declarado: 8 h/mês", text)
+            body = text.split("**Fontes**")[0]
+            self.assertNotIn(ids["rapido"], body)                       # IDs internos só na seção de fontes
+            self.assertIn("Sem ICE — prioridade 27 (preliminar)", body)  # sugestão do agente não vira número firme
+            only = share.export(b, "portfolio", None, "md", area="Growth").read_text(encoding="utf-8")
+            self.assertIn("— Growth", only.splitlines()[0])
+            self.assertNotIn("Ganho rápido", only)                      # é da área Operações
+            with self.assertRaises(util.BrainError):
+                share.export(b, "portfolio", None, "md", area="nao-existe")
+            one = share.export(b, "opportunity", ids["rapido"], "html").read_text(encoding="utf-8")
+            self.assertIn("Ganho rápido", one)
+            self.assertIn("prioridade 80", one)
+            self.assertIn("Fechamento mensal", one)                     # processo ligado
+            self.assertIn("PROCESSED/x.md", one)
+            sug = share.export(b, "opportunity", ids["semice"], "md").read_text(encoding="utf-8")
+            self.assertIn("estimativa preliminar", sug)                 # ICE só sugerido não vira firme no documento
+            with self.assertRaises(util.BrainError):
+                share.export(b, "opportunity", "OPP-9999", "md")
+
+    def test_mcp_portfolio_tools_are_read_only_and_answer(self):
+        with tempfile.TemporaryDirectory() as td:
+            b, p1, ids = PortfolioModelTests._seed(None, td)
+            os.environ["BRAIN_HOME"] = str(b.inst.root)
+            try:
+                ov = mcp_server.call_tool("portfolio_overview", {})
+                self.assertEqual(ov["counts"]["opportunities"], 5)
+                self.assertEqual(ov["ranking"][0]["id"], ids["rapido"])
+                self.assertEqual(ov["gaps"]["areas_without_process"], ["vazia"])
+                self.assertEqual(mcp_server.call_tool("process", {"id": p1.lower()})["hours_month"], 2.0)
+                self.assertIn("erro", mcp_server.call_tool("process", {"id": "PROC-9999"}))
+                o = mcp_server.call_tool("opportunity", {"id": ids["semice"]})
+                self.assertEqual((o["score"], o["ice_suggested"]), (27, True))
+                self.assertIn("erro", mcp_server.call_tool("opportunity", {"id": "OPP-9999"}))
+                self.assertEqual([x["id"] for x in mcp_server.call_tool("opportunities", {"status": "priorizada"})], [ids["rapido"]])
+                growth = mcp_server.call_tool("opportunities", {"area": "growth"})
+                self.assertEqual([x["id"] for x in growth][0], ids["depois"])      # maior score primeiro
+                self.assertNotIn("status_history", growth[0])
+            finally:
+                os.environ.pop("BRAIN_HOME", None)
+            listed = mcp_server.handle({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})["result"]["tools"]
+            names = {t["name"] for t in listed}
+            self.assertTrue({"portfolio_overview", "process", "opportunity", "opportunities"} <= names)
+            self.assertTrue(all(t["annotations"]["readOnlyHint"] for t in listed))
+
+    def test_new_skills_and_constitution(self):
+        import re
+        for name in ("process", "opportunity"):
+            text = (ROOT / "commands" / name / "SKILL.md").read_text(encoding="utf-8")
+            self.assertTrue(re.match(rf'---\nname: {name}\ndescription: ".+"\n---\n', text), name)
+        agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+        for needle in ("`PROC-####`", "`OPP-####`", "commands/process/SKILL.md", "commands/opportunity/SKILL.md",
+                       "só cria em `ideia`", "processes.md"):
+            self.assertIn(needle, agents.replace("**O agente cria oportunidade sozinho, sempre em `ideia`**", "só cria em `ideia`"))
+        self.assertIn("## 13. Face Portfólio", (ROOT / "guides" / "user-guide.md").read_text(encoding="utf-8"))
+        self.assertIn("opportunity add", (ROOT / "commands" / "dump" / "SKILL.md").read_text(encoding="utf-8"))
+        self.assertIn("share portfolio", (ROOT / "commands" / "share" / "SKILL.md").read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

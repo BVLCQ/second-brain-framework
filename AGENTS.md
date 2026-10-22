@@ -122,6 +122,9 @@ validado (`seq`, `ts`, `type`, `id`, `date`, `actor`, `by`, `prov`, `source`,
 | `M-####` | mensagem (outbox) | `./brain` |
 | `S-####` | publicação | `./brain` |
 | `F-####` | plano de foco | `./brain` |
+| `PROC-####` | processo (portfólio) | `./brain` |
+| `OPP-####` | oportunidade/iniciativa (portfólio) | `./brain` |
+| slug (`operacoes`) | área (`area.added`, com nome e aliases) | o dono, via `brain area add` |
 | `G#` / `P#` / `P#.n` | goal / projeto / entregável | o dono, em `PLANNING/goals.md` |
 
 `date` = quando aconteceu no mundo; `ts` = quando foi registrado. Proveniência
@@ -145,6 +148,27 @@ Sem base de contexto (entregável, acordo, agenda), não se sugere — "não con
 
 Atraso e bloqueio se calculam na leitura. Campos `blocked_by` / `unblocks`
 ligam ações. Fechar uma ação anota as que ela destrava — não as fecha.
+
+## Portfólio — processos e oportunidades (`PROC-####`, `OPP-####`)
+
+O mapa do que existe e do que vale melhorar, por área. **Oportunidade e iniciativa são a mesma
+entidade** (`OPP-####`) em estágios: `ideia → triagem → priorizada → em-andamento → piloto →
+validando → entregue`, mais os laterais `em-espera` e `descartada` (ambos exigem motivo). O dono
+vai e volta livremente entre eles. Tipos: `melhoria-de-processo` · `novo-processo` · `estruturante`.
+
+- **O agente cria oportunidade sozinho, sempre em `ideia`** (`--by agent`, `--prov observado`,
+  `--source` obrigatório), e cadastra processo citado que ainda não existe. Daí em diante só o
+  dono move status. O ledger recusa agente gravando outro status, ou ICE como firme.
+- **ICE = impacto × confiança × facilidade** (1–5 cada, score 1–125): quem calcula é o `./brain`.
+  O agente só **sugere** (`--suggest --reason`); aparece em rosa até o dono confirmar ou mudar.
+- **Horas/mês de um processo** = execuções/mês × duração × nº de executores — também do CLI.
+  Ganho de oportunidade em horas é **declarado** pelo dono; o cérebro não estima.
+- **Promover** uma oportunidade = criar projeto num goal: é mudança estrutural, logo **gate**
+  (`brain opportunity promote OPP-#### --goal G# --approval "ok"`; sem `--approval` só mostra o
+  diff). Proibido no noturno. `em-andamento` só nasce da promoção.
+- Playbooks moram no Drive; a ligação (`brain doc link … --kind playbook --watch`) cria uma fonte
+  `drive-doc` no watch e o `/update` só relê quando o `modifiedTime` muda.
+- Fora do escopo: escrever em Jira/Sheets/Notion, R$, aprovação de terceiros.
 
 ## PLANNING — a árvore e o único gate estrutural
 
@@ -202,6 +226,7 @@ Antes de sobrescrever, **colhe** edições do dono:
 
 - checkbox em `FRESH/todo.md` → fecha/reabre ação
 - `status:` em `FRESH/records/actions/A-*.md` (ficha da ação, qualquer editor) → o mesmo
+- `status:` em `FRESH/records/opportunities/OPP-*.md` → status da oportunidade (valor inválido: aviso, não grava)
 - checkbox de entregável em `PLANNING/goals.md` → estado factual
 
 Qualquer outra edição em FRESH é descartada. Narrativas do agente
@@ -209,7 +234,8 @@ Qualquer outra edição em FRESH é descartada. Narrativas do agente
 
 Views: `home.md`, `todo.md`, `goals.md`, `projects/P#.md`, `decisions.md`,
 `wins.md`, `people/<id>.md`, `timeline.md`, `map.md`, `focus.md`, `outbox.md`,
-`health.md`, `records/`, `dashboard/index.html`.
+`processes.md`, `opportunities.md`, `health.md`, `records/` (ações, decisões, processos,
+oportunidades), `dashboard/index.html`.
 `/map` e `/timeline` são sob demanda só no sentido de "o dono pediu para
 olhar"; o arquivo já existe depois de qualquer render.
 
@@ -237,7 +263,9 @@ apontar, trate como pista e confirme no arquivo.
 - **TUI** — `./brain tui` (extra opcional, Textual). Cockpit de teclado: lê em processo
   e escreve **só chamando `./brain`**, com a linha exata no log. Gates e portas pedem a
   resposta literal do dono; ações do agente (⚡) rodam o runner configurado. Recusa abrir
-  com `BRAIN_NIGHTLY=1`. Guia: `guides/tui-mockup.html`.
+  com `BRAIN_NIGHTLY=1`. Guia: `guides/tui-mockup.html`. **Faces:** Tab / Shift+Tab giram
+  entre `Execução` (painéis de hoje) e `Portfólio` (Visão, Processos, Oportunidades, Matriz,
+  Registro); cada face lembra onde estava.
 
 ## Memória para IA (Hindsight)
 
@@ -301,7 +329,8 @@ Nestes casos: pare, explique o dilema ao dono em ≤5 linhas, proponha 2 caminho
 `/upgrade` → `commands/upgrade/SKILL.md` · `/todo` → `commands/todo/SKILL.md` ·
 `/done` → `commands/done/SKILL.md` · `/focus` → `commands/focus/SKILL.md` ·
 `/outbox` → `commands/outbox/SKILL.md` · `/share` → `commands/share/SKILL.md` ·
-`/publish` → `commands/publish/SKILL.md`
+`/publish` → `commands/publish/SKILL.md` · `/process` → `commands/process/SKILL.md` ·
+`/opportunity` → `commands/opportunity/SKILL.md`
 
 Ao receber um comando, leia a skill correspondente ANTES de agir. Variantes
 naturais ("meu dia", "atualiza tudo", "manda pro Caio-demo") mapeiam para a skill

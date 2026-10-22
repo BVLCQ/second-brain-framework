@@ -92,7 +92,14 @@ class Pages:
                f"> **{c['mine_open']}** minhas abertas · **{c['mine_overdue']}** atrasadas · "
                f"**{c['mine_due_7d']}** vencem em 7 dias · **{c['waiting_open']}** aguardando outros · "
                f"**{c['wins_30d']}** conquistas em 30 dias",
-               "", "## Goals", ""]
+               ]
+        pf = m["portfolio"]
+        if pf["areas"] or pf["processes"] or pf["opportunities"]:
+            pc = pf["counts"]
+            out.append(f"> Portfólio: **{pc['opportunities']}** oportunidades · **{pc['prioritized']}** priorizadas · "
+                       f"**{pc['gaps']}** lacunas — {self.link(f, 'opportunities.md', 'oportunidades')} · "
+                       f"{self.link(f, 'processes.md', 'processos')}")
+        out += ["", "## Goals", ""]
         if not m["goals"]:
             out.append("_Nenhum goal no PLANNING ainda — rode `/init` ou `/goal`._")
         for g in m["goals"]:
@@ -159,7 +166,9 @@ class Pages:
             self.link(f, "goals.md", "Goals"), self.link(f, "decisions.md", "Decisões"),
             self.link(f, "wins.md", "Conquistas"), self.link(f, "timeline.md", "Linha do tempo"),
             self.link(f, "map.md", "Mapa"), self.link(f, "focus.md", "Foco"),
-            self.link(f, "outbox.md", "Mensagens"), self.link(f, "health.md", "Saúde")])]
+            self.link(f, "outbox.md", "Mensagens"), self.link(f, "health.md", "Saúde")]
+            + ([self.link(f, "opportunities.md", "Oportunidades"), self.link(f, "processes.md", "Processos")]
+               if pf["areas"] or pf["processes"] or pf["opportunities"] else []))]
         self.put(f, "\n".join(out))
 
     def recent_wins(self, n: int) -> list[str]:

@@ -12,7 +12,7 @@ from typing import Any
 from .. import config, doctor, model, notes as notes_mod, util, watch
 from ..core import Brain
 
-PANELS = {
+PANELS_EXEC = {
     1: ("Status", ["Resumo", "Saúde", "Fontes", "Sistema"]),
     2: ("Ações", ["mine", "waiting", "watching"]),
     3: ("Plano", ["Árvore"]),
@@ -20,6 +20,23 @@ PANELS = {
     5: ("Registro", ["Decisões", "Entregas", "Pessoas", "Artefatos"]),
     6: ("Log de comandos", ["Log"]),
 }
+
+PANELS_PORT = {
+    1: ("Visão", ["Resumo", "Por área", "Por goal"]),
+    2: ("Processos", ["Todos", "Por área", "Lacunas"]),
+    3: ("Oportunidades", ["Triagem", "Priorizadas", "Em curso", "Arquivo"]),
+    4: ("Matriz", ["Matriz", "Ranking"]),
+    5: ("Registro", ["Áreas", "Documentos"]),
+    6: ("Log de comandos", ["Log"]),
+}
+
+# Face = conjunto de painéis 1–5 com abas próprias; o painel 6 (Log) é comum. Tab/Shift+Tab giram entre as faces
+# (carrossel). Uma face nova entra só declarando-se aqui (e em FACE_START: o painel em que ela abre).
+FACES = [("Execução", PANELS_EXEC), ("Portfólio", PANELS_PORT)]
+FACE_START = [2, 3]
+OPP_TABS = [("ideia", "triagem"), ("priorizada",), ("em-andamento", "piloto", "validando"),
+            ("entregue", "em-espera", "descartada")]      # status de cada aba de Oportunidades (a última recebe o resto)
+PANELS = PANELS_EXEC                 # compatibilidade: os painéis da face Execução
 
 SYS_OPS = [
     {"id": "sys:render", "name": "Regenerar views", "args": ["render"],
@@ -147,6 +164,11 @@ class Store:
         self.by_deliv = {d["id"]: (p, d) for p in m["projects"] for d in p["deliverables"]}
         self.by_person = {p["id"]: p for p in m["people"]}
         self.by_msg = {x["id"]: x for x in m["outbox"]}
+        pf = m["portfolio"]
+        self.pf = pf
+        self.by_opp = {o["id"]: o for o in pf["opportunities"]}
+        self.by_proc = {p["id"]: p for p in pf["processes"]}
+        self.by_area = {a["id"]: a for a in pf["areas"]}
         self._build_graph(m)
         self.notes = notes_mod.scan(self.inst)
         self.notes_by_link: dict[str, list[notes_mod.Note]] = {}
@@ -361,8 +383,10 @@ class Store:
         return None
 
     # ── listas por painel ──────────────────────────────────────────────────
-    def items(self, panel: int, tab: int, show_all: bool = False, filt: str = "",
+    def items(self, face: int, panel: int, tab: int, show_all: bool = False, filt: str = "",
               collapsed: set[str] | None = None) -> list[Item]:
+        if face != 0:
+            return self._items_face(face, panel, tab, show_all, filt)
         m, collapsed = self.m, (set() if filt else collapsed or set())     # filtrando, a árvore abre sozinha
         out: list[Item] = []
         if panel == 1:
@@ -425,6 +449,72 @@ class Store:
                 out = [i for i in out if f in util.fold(i.q)]
         return out
 
+    def _items_face(self, face: int, panel: int, tab: int, show_all: bool, filt: str) -> list[Item]:
+        """Listas das faces além da Execução. Hoje só o Portfólio (face 1)."""
+        if face != 1:
+            return []
+        pf, out = self.pf, []
+        opps, procs = pf["opportunities"], [p for p in pf["processes"] if p["status"] == "ativo"]
+
+        def opp_item(o: dict, **extra) -> Item:
+            return Item(o["id"], "opp", o, q=f"{o['id']} {o['title']} {o['status']} {o['area']} {o['problem']}", extra=extra)
+
+        def proc_item(p: dict) -> Item:
+            return Item(p["id"], "proc", p, q=f"{p['id']} {p['title']} {p['area']} {p['owner_name'] or ''} {' '.join(p['pains'])}")
+
+        def ranked(rows: list[dict]) -> list[dict]:
+            return sorted(rows, key=lambda o: (-(o["score"] or 0), o["id"]))
+
+        def grouped(groups: list[tuple[str, dict, list[Item]]]) -> list[Item]:
+            rows: list[Item] = []
+            for gid, data, children in groups:
+                if not filt:
+                    rows.append(Item(f"grp:{gid}", "pgrp", data, q=data["label"]))
+                rows += children
+            return rows
+
+        if panel == 1:
+            if tab == 0:
+                out = [Item("pv:funil", "pvfunil", pf, q="funil status")]
+                out += [opp_item(self.by_opp[i], rank=n) for n, i in enumerate(pf["ranking"][:5], 1)]
+                out.append(Item("pv:gaps", "pvgaps", pf, q="lacunas"))
+            elif tab == 1:
+                out = grouped([(a["id"], {"label": a["name"], "sub": f"{a['processes']} processos · {a['opportunities']} oportunidades"},
+                                [opp_item(o) for o in ranked(opps) if o["area"] == a["id"]]) for a in pf["areas"]])
+            else:
+                groups = [(g["id"], {"label": f"{g['id']} {g['title']}", "sub": f"{g['progress']['pct'] if g['progress']['pct'] is not None else '—'}%"},
+                           [opp_item(o) for o in ranked(opps) if o["goal"] == g["id"]]) for g in self.m["goals"]]
+                none = [opp_item(o) for o in ranked(opps) if not o["goal"]]
+                groups.append(("none", {"label": "sem goal ainda", "sub": f"{len(none)}"}, none))
+                out = grouped([g for g in groups if g[2] or g[0] != "none"])
+        elif panel == 2:
+            if tab == 1:
+                out = grouped([(a["id"], {"label": a["name"], "sub": f"{a['processes']} processos"},
+                                [proc_item(p) for p in procs if p["area"] == a["id"]]) for a in pf["areas"]])
+            else:
+                rows = [p for p in procs if tab == 0 or p["gaps"]]
+                out = [proc_item(p) for p in sorted(rows, key=lambda p: (p["area"], p["id"]))]
+        elif panel == 3:
+            out = [opp_item(o) for o in ranked(opps) if o["status"] in OPP_TABS[tab]]
+        elif panel == 4:
+            if tab == 0:
+                from .. import portfolio
+                out = [Item(f"mx:{q}", "mx", {"quadrant": q, "ids": pf["matrix"][q]}, q=q) for q in portfolio.QUADRANTS]
+            else:
+                out = [opp_item(self.by_opp[i], rank=n) for n, i in enumerate(pf["ranking"], 1)]
+        elif panel == 5:
+            if tab == 0:
+                out = [Item(a["id"], "area", a, q=f"{a['id']} {a['name']} {' '.join(a['aliases'])}") for a in pf["areas"]]
+            else:
+                for t in [*pf["processes"], *pf["opportunities"]]:
+                    for n, d in enumerate(t["docs"]):
+                        out.append(Item(f"{t['id']}#{n}", "docl", {**d, "target": t["id"], "target_title": t["title"], "n": n},
+                                        q=f"{t['id']} {d['kind']} {d['title']} {d['ref']}"))
+        if filt:
+            f = util.fold(filt)
+            out = [i for i in out if f in util.fold(i.q)]
+        return out
+
     def _shown(self, it: Item, rel: set[str], f: str) -> bool:
         if it.kind in ("action", "g", "p", "d", "prop", "msg", "dec", "del", "per", "art"):
             return it.id in rel
@@ -432,8 +522,17 @@ class Store:
             return any(b["action"] in rel for b in it.data["blocks"])
         return f in util.fold(it.q)
 
-    def locate(self, node: str) -> tuple[int, int] | None:
-        """Onde um id aparece: (painel, aba). Usado nos links do detalhe, na busca e na paleta."""
+    def locate(self, node: str) -> tuple[int, int, int] | None:
+        """Onde um id aparece: (face, painel, aba). Usado nos links do detalhe, na busca e na paleta."""
+        if node in self.by_opp:
+            status = self.by_opp[node]["status"]
+            return (1, 3, next(i for i, g in enumerate(OPP_TABS) if status in g))
+        if node in self.by_proc:
+            return (1, 2, 0)
+        loc = self._locate_exec(node)
+        return (0, *loc) if loc else None
+
+    def _locate_exec(self, node: str) -> tuple[int, int] | None:
         if node.startswith("A-"):
             a = self.by_action.get(node)
             return (2, ["mine", "waiting", "watching"].index(a["list"])) if a else None
