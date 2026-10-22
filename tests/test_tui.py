@@ -87,6 +87,81 @@ class BridgeTest(unittest.TestCase):
         self.assertIsNone(bridge.agent_argv(cfg, "/dump"))
 
 
+class AgentRunTest(unittest.TestCase):
+    """Passo 2 de agent-questions: rodada com sessão, saída stream-json e resume."""
+    CFG = config.DEFAULTS | {"runner": {**config.DEFAULTS["runner"], "agent": "claude", "allow": ["mcp__x__ler"]},
+                             "tui": {"agent_allow": ["mcp__x__enviar"]}}
+
+    def argv(self, **kw):
+        with mock.patch("shutil.which", return_value="/usr/bin/claude"):
+            return bridge.agent_argv(self.CFG, "/dump", **kw)
+
+    def test_claude_runs_stream_json_with_run_id_in_the_prompt(self):
+        argv = self.argv(run_id="run-20261022-100000")
+        self.assertEqual(argv[argv.index("--output-format") + 1], "stream-json")
+        self.assertIn("--verbose", argv)
+        self.assertLess(argv.index("--verbose"), argv.index("--allowedTools"))
+        self.assertIn("run-20261022-100000", argv[2])
+        self.assertIn("./brain ask add", argv[2])
+        self.assertTrue(argv[2].endswith("/dump"))
+        self.assertEqual(argv[-2:], ["mcp__x__ler", "mcp__x__enviar"])
+
+    def test_resume_argv_keeps_flags_and_adds_the_new_allow(self):
+        with mock.patch("shutil.which", return_value="/usr/bin/claude"):
+            argv = bridge.resume_argv(self.CFG, "sess-123", "O dono respondeu: ASK-0001 = marina-demo", ["Bash(./brain ask:*)"], "run-2")
+            self.assertEqual(argv[:5], ["claude", "-p", argv[2], "--resume", "sess-123"])
+            self.assertIn("O dono respondeu", argv[2])
+            self.assertIn("stream-json", argv)
+            self.assertEqual(argv[-1], "Bash(./brain ask:*)")
+            self.assertIsNone(bridge.resume_argv(self.CFG, "", "x"))                       # sem sessão
+            codex = config.DEFAULTS | {"runner": {**config.DEFAULTS["runner"], "agent": "codex"}}
+            self.assertIsNone(bridge.resume_argv(codex, "sess-123", "x"))                   # agente sem resume conhecido
+            custom = config.DEFAULTS | {"runner": {**config.DEFAULTS["runner"], "command": "meu-agente {prompt}"}}
+            self.assertIsNone(bridge.resume_argv(custom, "sess-123", "x"))
+
+    def test_stream_parser_text_session_result_and_denials(self):
+        import json
+        info = bridge.RunInfo(id="run-1")
+        p = bridge.StreamParser(info)
+        lines = [
+            {"type": "system", "subtype": "init", "session_id": "sess-9"},
+            {"type": "assistant", "message": {"content": [{"type": "text", "text": "Lendo a inbox.\nAchei 2 itens."},
+                                                           {"type": "tool_use", "name": "Bash", "input": {"command": "./brain status"}}]}},
+            {"type": "user", "message": {"content": [{"type": "tool_result", "content": "ok"}]}},
+            {"type": "result", "subtype": "success", "is_error": False, "result": "Pronto.", "session_id": "sess-9",
+             "permission_denials": [{"tool_name": "Bash", "tool_input": {"command": "./brain add <<'JSON'"}, "tool_use_id": "t1"},
+                                    {"tool_name": "mcp__x__enviar", "tool_input": {"to": "a"}}]},
+        ]
+        out = [x for ln in lines for x in p.feed(json.dumps(ln))]
+        self.assertEqual(out, ["Lendo a inbox.", "Achei 2 itens."])
+        self.assertEqual((info.session_id, info.result, info.structured), ("sess-9", "Pronto.", True))
+        self.assertEqual(info.denials, [{"tool_name": "Bash", "tool_input": {"command": "./brain add <<'JSON'"}},
+                                        {"tool_name": "mcp__x__enviar", "tool_input": {"to": "a"}}])
+        # linha que não é JSON (outros agentes) vai como texto; JSON quebrado também
+        q = bridge.StreamParser(bridge.RunInfo())
+        self.assertEqual(q.feed("texto simples"), ["texto simples"])
+        self.assertEqual(q.feed("{quebrado"), ["{quebrado"])
+        self.assertEqual(q.feed(""), [])
+        self.assertFalse(q.info.structured)
+        err = bridge.StreamParser(bridge.RunInfo())
+        self.assertEqual(err.feed(json.dumps({"type": "result", "is_error": True, "result": "sessão expirada"})), ["erro do agente: sessão expirada"])
+
+    def test_record_run_writes_argv_without_the_prompt(self):
+        import json
+        with tempfile.TemporaryDirectory() as tmp, contextlib.redirect_stdout(io.StringIO()):
+            root = Path(tmp) / "inst"
+            demo_mod.cli(argparse.Namespace(dir=str(root), open=False))
+            inst = config.load(root)
+            from brainlib import ask
+            from brainlib.core import Brain
+            ask.add(Brain(inst), "Qual Marina?", [], [], source="chat", run="run-7")
+            info = bridge.RunInfo(id="run-7", session_id="sess-1", rc=0, denials=[{"tool_name": "Bash", "tool_input": {}}])
+            bridge.record_run(inst, info, ["claude", "-p", "um prompt grande", "--resume", "sess-0"], "um prompt grande")
+            row = json.loads((inst.logs / "agent-runs.jsonl").read_text(encoding="utf-8").splitlines()[-1])
+            self.assertEqual(row["argv"], ["claude", "-p", "<prompt>", "--resume", "sess-0"])
+            self.assertEqual((row["id"], row["session_id"], row["asks"], len(row["denials"])), ("run-7", "sess-1", ["ASK-0001"], 1))
+
+
 @unittest.skipUnless(HAVE_TEXTUAL, "textual não instalado (./brain tui --setup)")
 class DetailTest(unittest.TestCase):
     def test_suggested_due_is_pink_until_owner_decides(self):
@@ -122,7 +197,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
         fake = Path(self.tmp.name) / "fake_agent.py"
         fake.write_text(
             "import os, re, subprocess, sys\n"
-            "prompt = sys.argv[1]\nprint('agente de mentira recebeu:', prompt.split('. ', 1)[-1][:60])\n"
+            "prompt = sys.argv[1]\nprint('agente de mentira recebeu:', prompt.rsplit('. ', 1)[-1][:60])\n"
             "m = re.search(r'MSG-\\d{4}', prompt)\n"
             "if m:\n    subprocess.run([sys.executable, os.environ['FAKE_BRAIN'], 'outbox', 'sent', m.group(0), '--link', 'https://example.com/p/1'], check=True)\n"
             "m = re.search(r'PUB-\\d{4}', prompt)\n"

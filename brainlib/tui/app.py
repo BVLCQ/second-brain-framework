@@ -201,6 +201,7 @@ class BrainApp(PortfolioKeys, App):
         self.busy = ""
         self._quit_armed = False
         self._suggest_for: str | None = None
+        self.last_run = None            # RunInfo da última rodada do agente com sessão (a resposta livre `r` a retoma)
 
     @staticmethod
     def _new_nav(start: int) -> dict:
@@ -1728,22 +1729,27 @@ class BrainApp(PortfolioKeys, App):
 
     # ── agente ⚡ ──────────────────────────────────────────────────────────
     def ask_agent(self, title: str, bullets: list[str], prompt: str) -> None:
-        argv = bridge.agent_argv(self.inst.cfg, prompt)
+        run_id = bridge.new_run_id()
+        argv = bridge.agent_argv(self.inst.cfg, prompt, run_id)
 
         def done(choice) -> None:
             if choice == "run":
-                self.run_worker(self._agent(argv, prompt), exclusive=False)
+                self.run_worker(self._agent(argv, prompt, run_id), exclusive=False)
             elif choice == "copy":
                 self.copy_to_clipboard(prompt)
                 self.log_line("prompt copiado: cole no chat do agente", "magenta")
         self.push_screen(AgentModal(title, bullets, prompt, argv), done)
 
-    async def _agent(self, argv: list[str], prompt: str) -> None:
+    async def _agent(self, argv: list[str], prompt: str, run_id: str = "", resumed_from: str = "") -> None:
         async with self._lock:
             self.busy = "agente…"
             self.query_one("#detailwrap").border_subtitle = self._detail_subtitle()
             self.log_line("⚡ " + prompt.splitlines()[0][:100], "magenta")
-            rc = await bridge.run_agent(self.inst, argv, lambda ln: self.log_line("  " + ln, "magenta") if ln else None)
+            info = bridge.RunInfo(id=run_id, resumed_from=resumed_from)
+            rc = await bridge.run_agent(self.inst, argv, lambda ln: self.log_line("  " + ln, "magenta") if ln else None, info)
+            await asyncio.to_thread(bridge.record_run, self.inst, info, argv, prompt)
+            if info.session_id:
+                self.last_run = info
             self.log_line("✓ agente terminou" if rc == 0 else f"✗ agente saiu com código {rc}", "green" if rc == 0 else "red")
             r = await asyncio.to_thread(bridge.run_brain, self.inst, ["render"])
             self.log_line("↻ brain render · " + (r.out.splitlines()[0] if r.out else "views regeneradas"), "dim")

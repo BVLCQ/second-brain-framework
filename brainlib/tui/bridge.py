@@ -6,15 +6,16 @@ O TUI nunca toca no ledger nem no FRESH. Agente (⚡) roda headless com o runner
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import shlex
 import subprocess
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-from .. import runner
+from .. import runner, util
 
 FRAMEWORK = Path(__file__).resolve().parents[2]      # onde mora o script `brain` (≠ BRAIN_HOME em instâncias de demo)
 
@@ -59,49 +60,153 @@ def run_brain(inst, args: list[str], timeout: int = 300) -> Result:
 
 # ── agente ⚡ ───────────────────────────────────────────────────────────────
 OWNER_PREFIX = "O dono está presente (sessão do TUI) e pediu esta tarefa. "
+STREAM_FLAGS = ["--output-format", "stream-json", "--verbose"]
 
 
-def agent_argv(cfg: dict, prompt: str) -> list[str] | None:
-    """Comando headless do agente configurado ([runner] em brain.toml), com o prompt dado."""
+def new_run_id() -> str:
+    return "run-" + util.now().strftime("%Y%m%d-%H%M%S")
+
+
+def run_prefix(run_id: str | None) -> str:
+    if not run_id:
+        return OWNER_PREFIX
+    return (OWNER_PREFIX + f"Id desta rodada: {run_id}. Dúvida que precisa do dono vira pergunta: "
+            f"`./brain ask add \"…\" --run {run_id} --source …` (não deixe só no relatório). ")
+
+
+def _claude_flags(cfg: dict) -> list[str]:
+    tui = cfg.get("tui", {})
+    flags = [x for opt, key in (("--model", "model"), ("--effort", "effort")) if tui.get(key) for x in (opt, str(tui[key]))]
+    return flags + STREAM_FLAGS
+
+
+def _agent_name(cfg: dict) -> str | None:
+    """Nome do preset que rodaria (None = nenhum agente, ou comando próprio)."""
     r = cfg["runner"]
-    extra = runner.read_allow(cfg) + [t for t in cfg.get("tui", {}).get("agent_allow", []) if t]
-    full = OWNER_PREFIX + prompt
     if r.get("command"):
-        return [part.replace("{prompt}", full) for part in shlex.split(r["command"])]
-    names = runner.AUTO_ORDER if r["agent"] == "auto" else [r["agent"]]
+        return None
     import shutil
+    names = runner.AUTO_ORDER if r["agent"] == "auto" else [r["agent"]]
     for name in names:
         if name == "none":
             return None
         preset = runner.PRESETS.get(name)
         if preset and shutil.which(preset[0]):
-            argv = [p.replace("{prompt}", full) for p in preset]
-            if name == "claude":
-                tui = cfg.get("tui", {})
-                flags = [x for opt, key in (("--model", "model"), ("--effort", "effort")) if tui.get(key)
-                         for x in (opt, str(tui[key]))]
-                argv[3:3] = flags          # antes de --allowedTools (variádico): as opções não viram nome de ferramenta
-                argv += extra
-            return argv
+            return name
     return None
 
 
-async def run_agent(inst, argv: list[str], on_line: Callable[[str], None]) -> int:
-    """Roda o agente e entrega a saída linha a linha. Devolve o código de saída."""
+def agent_argv(cfg: dict, prompt: str, run_id: str | None = None, extra_allow: list[str] | None = None) -> list[str] | None:
+    """Comando headless do agente configurado ([runner] em brain.toml), com o prompt dado. `run_id` entra no prompt."""
+    r = cfg["runner"]
+    extra = runner.read_allow(cfg) + [t for t in cfg.get("tui", {}).get("agent_allow", []) if t] + list(extra_allow or [])
+    full = run_prefix(run_id) + prompt
+    if r.get("command"):
+        return [part.replace("{prompt}", full) for part in shlex.split(r["command"])]
+    name = _agent_name(cfg)
+    if name is None:
+        return None
+    argv = [p.replace("{prompt}", full) for p in runner.PRESETS[name]]
+    if name == "claude":
+        argv[3:3] = _claude_flags(cfg)     # antes de --allowedTools (variádico): as opções não viram nome de ferramenta
+        argv += list(dict.fromkeys(extra))
+    return argv
+
+
+def resume_argv(cfg: dict, session_id: str, prompt: str, extra_allow: list[str] | None = None, run_id: str | None = None) -> list[str] | None:
+    """Retoma a MESMA sessão do agente (`claude -p --resume <id>`) com o prompt e o allowlist atualizado.
+    Agente sem resume conhecido (outros presets, comando próprio) → None: a fila de reserva (ASK respondida) assume."""
+    if not session_id or _agent_name(cfg) != "claude":
+        return None
+    argv = agent_argv(cfg, prompt, run_id, extra_allow)
+    return None if argv is None else [*argv[:3], "--resume", session_id, *argv[3:]]
+
+
+@dataclass
+class RunInfo:
+    """O que a TUI guarda de uma rodada: sessão (para retomar), resultado final e o que o agente não pôde fazer."""
+    id: str = ""
+    session_id: str = ""
+    result: str = ""
+    rc: int = 0
+    denials: list[dict] = field(default_factory=list)      # [{tool_name, tool_input}]
+    asks: list[str] = field(default_factory=list)          # ASK-#### abertos nesta rodada
+    resumed_from: str = ""
+    structured: bool = False
+
+
+class StreamParser:
+    """Lê as linhas do `claude -p --output-format stream-json`. Cada linha devolve o que vai ao log; sessão, resultado e
+    negações de permissão ficam em `info`. Linha que não é JSON passa como texto (os outros agentes continuam valendo)."""
+
+    def __init__(self, info: RunInfo):
+        self.info = info
+
+    def feed(self, raw: str) -> list[str]:
+        line = raw.strip()
+        if not line.startswith("{"):
+            return [raw] if raw.strip() else []
+        try:
+            ev = json.loads(line)
+        except json.JSONDecodeError:
+            return [raw]
+        if not isinstance(ev, dict) or "type" not in ev:
+            return [raw]
+        self.info.structured = True
+        if ev.get("session_id"):
+            self.info.session_id = ev["session_id"]
+        kind = ev.get("type")
+        if kind == "assistant":
+            out = []
+            for blk in (ev.get("message") or {}).get("content") or []:
+                if isinstance(blk, dict) and blk.get("type") == "text":
+                    out += [ln for ln in blk.get("text", "").splitlines() if ln.strip()]
+            return out
+        if kind == "result":
+            self.info.result = ev.get("result") or ""
+            self.info.denials = [{"tool_name": d.get("tool_name", ""), "tool_input": d.get("tool_input", {})}
+                                 for d in ev.get("permission_denials") or [] if isinstance(d, dict)]
+            if ev.get("is_error"):
+                return [f"erro do agente: {self.info.result or ev.get('subtype', '')}"]
+        return []
+
+
+async def run_agent(inst, argv: list[str], on_line: Callable[[str], None], info: RunInfo | None = None) -> int:
+    """Roda o agente e entrega a saída linha a linha. Devolve o código de saída; `info` (opcional) recebe a sessão, o resultado e
+    as negações quando o agente fala stream-json."""
     timeout = inst.cfg["runner"]["timeout_min"] * 60
+    info = info if info is not None else RunInfo()
+    parser = StreamParser(info)
     proc = await asyncio.create_subprocess_exec(
         *argv, cwd=str(inst.root), env=_env(inst), stdin=asyncio.subprocess.DEVNULL,
-        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT, limit=16 * 1024 * 1024)
 
     async def pump() -> None:
         assert proc.stdout is not None
         async for raw in proc.stdout:
-            on_line(raw.decode("utf-8", "replace").rstrip())
+            for ln in parser.feed(raw.decode("utf-8", "replace").rstrip()):
+                on_line(ln)
 
     try:
         await asyncio.wait_for(pump(), timeout=timeout)
-        return await proc.wait()
+        info.rc = await proc.wait()
     except asyncio.TimeoutError:
         proc.kill()
         on_line(f"tempo esgotado ({timeout // 60} min)")
-        return 124
+        info.rc = 124
+    return info.rc
+
+
+def record_run(inst, info: RunInfo, argv: list[str], prompt: str) -> None:
+    """Uma linha por rodada em vault/logs/agent-runs.jsonl: id, argv SEM o prompt, sessão, código, negações e ASKs abertos."""
+    try:
+        from ..core import Brain
+        info.asks = [q.id for q in Brain(inst).state.questions.values() if info.id and q.run == info.id]
+    except Exception:  # noqa: BLE001 — registro de rodada nunca derruba o TUI
+        pass
+    shown = ["<prompt>" if prompt and prompt in a else a for a in argv]
+    inst.logs.mkdir(parents=True, exist_ok=True)
+    row = {"id": info.id, "ts": util.iso_now(), "argv": shown, "session_id": info.session_id, "rc": info.rc,
+           "denials": info.denials, "asks": info.asks, "resumed_from": info.resumed_from or None}
+    with open(inst.logs / "agent-runs.jsonl", "a", encoding="utf-8") as fh:
+        fh.write(json.dumps(row, ensure_ascii=False) + "\n")
