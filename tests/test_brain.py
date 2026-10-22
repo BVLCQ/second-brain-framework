@@ -2276,5 +2276,66 @@ class AskTests(unittest.TestCase):
             self.assertEqual(run("add", str(batch)).returncode, 0)                    # a forma posicional continua valendo
 
 
+class AgentAllowTests(unittest.TestCase):
+    """Passo 5 de agent-questions: `brain agent allow` grava a permissão validada em config/brain.toml."""
+
+    TOML = ('# meu config\n[owner]\nid = "eu"\nname = "Dona"   # nome\n\n[runner]\nagent = "claude"\n'
+            '# leitura MCP do agente\nallow = ["mcp__x__ler"]\n\n[tui]\n# só ações ⚡\nagent_allow = [\n  "mcp__x__a",  # a\n]\nmodel = ""\n')
+
+    def setUp(self):
+        self.td = tempfile.TemporaryDirectory()
+        self.addCleanup(self.td.cleanup)
+        self.root = Path(self.td.name)
+        (self.root / "config").mkdir()
+        (self.root / "vault").mkdir()
+        (self.root / "config" / "brain.toml").write_text(self.TOML, encoding="utf-8")
+        self.inst = config.load(self.root)
+
+    def cfg(self):
+        import tomllib
+        return tomllib.loads((self.root / "config" / "brain.toml").read_text(encoding="utf-8"))
+
+    def test_valid_rules_are_written_and_comments_survive(self):
+        self.assertEqual(config.add_allow(self.inst, "Bash(./brain ask:*)"), ("Bash(./brain ask:*)", False))
+        self.assertEqual(self.cfg()["tui"]["agent_allow"], ["mcp__x__a", "Bash(./brain ask:*)"])
+        config.add_allow(self.inst, "mcp__y__list_things", "runner")
+        self.assertEqual(self.cfg()["runner"]["allow"], ["mcp__x__ler", "mcp__y__list_things"])
+        text = (self.root / "config" / "brain.toml").read_text(encoding="utf-8")
+        for kept in ("# meu config", "# nome", "# leitura MCP do agente", "# só ações ⚡", 'model = ""'):
+            self.assertIn(kept, text)
+        self.assertEqual(config.add_allow(self.inst, "Bash(./brain ask:*)"), ("Bash(./brain ask:*)", True))     # idempotente
+        self.assertEqual(self.cfg()["tui"]["agent_allow"].count("Bash(./brain ask:*)"), 1)
+
+    def test_missing_table_or_key_is_created_and_file_stays_parseable(self):
+        (self.root / "config" / "brain.toml").write_text('[owner]\nid = "eu"\n', encoding="utf-8")
+        config.add_allow(config.load(self.root), "Read")
+        self.assertEqual(self.cfg()["tui"]["agent_allow"], ["Read"])
+        (self.root / "config" / "brain.toml").write_text('[tui]\nmodel = "x"\n', encoding="utf-8")
+        config.add_allow(config.load(self.root), "Grep")
+        self.assertEqual(self.cfg()["tui"], {"model": "x", "agent_allow": ["Grep"]})
+
+    def test_external_write_and_bad_rules_are_refused_without_touching_the_file(self):
+        before = (self.root / "config" / "brain.toml").read_text(encoding="utf-8")
+        for bad in ("mcp__slack__slack_send_message", "mcp__x__create_event", "mcp__x__UpdateIssue", "mcp__x__move_card",
+                    "mcp__x__schedule_message", "mcp__x__share_file", "mcp__x__reply", "Bash(*)", "rm -rf /", "", "mcp__"):
+            with self.assertRaises(util.BrainError, msg=bad):
+                config.add_allow(self.inst, bad)
+        self.assertEqual((self.root / "config" / "brain.toml").read_text(encoding="utf-8"), before)
+        for ok in ("mcp__x__list_files", "mcp__x__read_doc", "mcp__x__search_threads", "mcp__db__databricks_run_sql", "Glob"):
+            self.assertEqual(config.check_allow_rule(ok), ok)
+        self.assertTrue(config.is_external_write("mcp__x__getAndSend"))
+
+    def test_cli_and_nightly(self):
+        run = lambda *a, env=None: subprocess.run([sys.executable, str(ROOT / "brain"), "agent", "allow", *a], capture_output=True,   # noqa: E731
+                                                  text=True, env={**os.environ, "BRAIN_HOME": str(self.root), **(env or {})})
+        r = run("Bash(./brain add:*)")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("[tui].agent_allow", r.stdout)
+        self.assertIn("= ", run("Bash(./brain add:*)").stdout)
+        self.assertEqual(run("mcp__slack__slack_send_message").returncode, 4)
+        self.assertEqual(run("Read", env={"BRAIN_NIGHTLY": "1"}).returncode, 4)
+        self.assertIn("Bash(./brain add:*)", self.cfg()["tui"]["agent_allow"])
+
+
 if __name__ == "__main__":
     unittest.main()

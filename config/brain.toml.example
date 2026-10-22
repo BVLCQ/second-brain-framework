@@ -60,6 +60,8 @@ allow = []
 [tui]
 # Ferramentas EXTRAS que o agente (claude) pode usar só nas ações ⚡ do `brain tui` — por exemplo as
 # ferramentas de ESCRITA do MCP do Slack, só para enviar uma mensagem já aprovada. Vazio = só [runner].allow.
+# `brain agent allow "<regra>" [--scope tui|runner]` grava aqui (ou em [runner].allow) uma permissão que o agente pediu e foi negada —
+# nunca de MCP de escrita no mundo exterior: isso é a porta (/outbox, /publish), com o seu gate.
 agent_allow = []
 # Modelo e esforço do claude nas ações ⚡ do TUI (o noturno não usa). Vazio = padrão do claude.
 model = ""                     # ex.: "claude-haiku-5-5"

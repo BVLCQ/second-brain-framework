@@ -627,6 +627,16 @@ def cmd_migrate(args, b) -> None:
     migrate_ids.cli(args, b)
 
 
+def cmd_agent(args, b) -> None:
+    from . import config
+    if os.environ.get("BRAIN_NIGHTLY") == "1":
+        raise util.BrainError("agent allow: proibido no noturno — liberar permissão é decisão do dono, presente", code=4)
+    rule, existed = config.add_allow(b.inst, args.rule, args.scope)
+    table = config.ALLOW_SCOPES[args.scope]
+    _out(args, {"rule": rule, "scope": args.scope, "existed": existed},
+         f"= {rule} já estava em [{table[0]}].{table[1]}" if existed else f"✓ {rule} liberada em [{table[0]}].{table[1]} (config/brain.toml)")
+
+
 def cmd_tui(args, b) -> None:
     from . import tui
     tui.cli(args, b)
@@ -1102,6 +1112,15 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--dir", required=True)
     p.add_argument("--open", action="store_true")
     p.set_defaults(fn=cmd_demo, no_brain=True)
+
+    p = sub.add_parser("agent", help="permissões do agente headless (config/brain.toml): `agent allow`")
+    asub = p.add_subparsers(dest="agcmd", required=True)
+    x = asub.add_parser("allow", help="libera uma ferramenta para o agente (valida a regra; recusa MCP de escrita no mundo exterior)")
+    x.add_argument("rule", help='Bash(./brain:*) · mcp__servidor__ferramenta_de_leitura · Read…')
+    x.add_argument("--scope", choices=["tui", "runner"], default="tui",
+                   help="tui = [tui].agent_allow (só as ações ⚡) · runner = [runner].allow (leitura MCP: noturno e TUI)")
+    x.add_argument("--json", action="store_true")
+    p.set_defaults(fn=cmd_agent)
 
     p = sub.add_parser("migrate", help="migrações de formato (exceção histórica ao append-only, com backup): `migrate ids`")
     ms = p.add_subparsers(dest="what", required=True)

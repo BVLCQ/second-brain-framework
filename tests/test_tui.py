@@ -1720,7 +1720,7 @@ class CoverageTest(unittest.TestCase):
         "init", "add", "snapshot", "proposal add", "outbox sent", "outbox failed", "publish done",
         "pdf text", "pdf render", "video transcribe", "video frames", "person merge",
         "raw archive", "raw sort", "ask add", "ask applied"}
-    PENDING = {"ask answer", "ask drop"}        # ganham tecla no passo 4 de agent-questions; este conjunto some lá
+    PENDING = {"ask answer", "ask drop", "agent allow"}        # ganham tecla no passo 4 de agent-questions; este conjunto some lá
     NOT_IN_TUI = {"demo", "tui", "migrate ids"}      # migração única, feita no terminal com o dono (backup + dry-run)
     DYNAMIC = {"memory recall", "memory reflect"}      # o formulário "Memória: perguntar" monta o subcomando
 
