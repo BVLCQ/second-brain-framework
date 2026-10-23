@@ -118,9 +118,9 @@ class Proposal:
     summary: str
     target: str = ""
     evidence: str = ""
-    status: str = "aberta"           # aberta | aceita | rejeitada | obsoleta
+    status: str = "aberta"           # aberta | aceita | rejeitada | obsoleta (superseded antigo, sem desfecho)
     date: date | None = None
-    quote: str = ""                  # fala do dono; em `obsoleta`, o motivo que o sistema registrou
+    quote: str = ""                  # fala do dono; se o sistema encerrou (superseded), o motivo que ele registrou
     seq: int = 0                     # seq do proposal.opened (eventos do dono depois dele podem torná-la obsoleta)
 
 
@@ -515,7 +515,7 @@ def apply(st: State, ev: dict) -> None:
         p.quote = data["quote"]
     elif t == "proposal.superseded":
         p = st.proposals[eid]
-        p.status, p.quote = "obsoleta", data["reason"]
+        p.status, p.quote = data.get("outcome") or "obsoleta", data["reason"]
 
     elif t == "progress.declared":
         st.progress.setdefault(eid, []).append({"pct": data["pct"], "note": data.get("note", ""),

@@ -1164,7 +1164,8 @@ class ProposalSweepTests(unittest.TestCase):
             evs = b.record([{"type": "action.closed", "id": "TASK-0001", "by": "owner", "data": {"how": "feito"}}])
             self.assertEqual([e["type"] for e in evs], ["action.closed", "proposal.superseded"])
             self.assertEqual(evs[1]["by"], "system")
-            self.assertEqual(b.state.proposals["PROP-0001"].status, "obsoleta")
+            self.assertEqual(evs[1]["data"]["outcome"], "aceita")
+            self.assertEqual(b.state.proposals["PROP-0001"].status, "aceita")
             self.assertIn("TASK-0001", b.state.proposals["PROP-0001"].quote)
             self.assertEqual(b.state.proposals["PROP-0002"].status, "aberta")
             self.assertEqual(b.validate_all(), [])
@@ -1174,8 +1175,27 @@ class ProposalSweepTests(unittest.TestCase):
             b = _brain(Path(td))
             self._setup(b)
             b.record_one({"type": "action.updated", "id": "TASK-0002", "by": "owner", "data": {"due": "2026-10-19"}})
-            self.assertEqual(b.state.proposals["PROP-0002"].status, "obsoleta")
+            self.assertEqual(b.state.proposals["PROP-0002"].status, "aceita")
             self.assertEqual(b.state.proposals["PROP-0003"].status, "aberta")
+
+    def test_outcome_follows_what_owner_did(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            self._setup(b)
+            b.record_one({"type": "action.dropped", "id": "TASK-0001", "by": "owner", "data": {"reason": "não era"}})
+            b.record_one({"type": "action.closed", "id": "TASK-0002", "by": "owner", "data": {"how": "feito"}})
+            b.record_one({"type": "action.updated", "id": "TASK-0003", "by": "owner", "data": {"due": "2026-10-30"}})
+            st = {k: b.state.proposals[k].status for k in ("PROP-0001", "PROP-0002", "PROP-0003")}
+            self.assertEqual(st, {"PROP-0001": "rejeitada", "PROP-0002": "rejeitada", "PROP-0003": "rejeitada"})
+            self.assertEqual(b.validate_all(), [])
+
+    def test_old_superseded_without_outcome_stays_obsoleta(self):
+        from brainlib import state as state_mod
+        st = state_mod.build([
+            {"seq": 1, "type": "proposal.opened", "id": "PROP-0001", "by": "agent",
+             "data": {"kind": "fechar-acao", "summary": "x", "target": "TASK-0001"}},
+            {"seq": 2, "type": "proposal.superseded", "id": "PROP-0001", "by": "system", "data": {"reason": "r"}}])
+        self.assertEqual(st.proposals["PROP-0001"].status, "obsoleta")
 
     def test_agent_touch_does_not_supersede(self):
         with tempfile.TemporaryDirectory() as td:

@@ -254,7 +254,7 @@ def _close_action(args, b: Brain) -> None:
         elif ev["type"] == "delivery.recorded":
             lines.append(f"  ↳ entrega {ev['id']} registrada")
         elif ev["type"] == "proposal.superseded":
-            lines.append(f"  ↳ proposta {ev['id']} encerrada: {ev['data']['reason']}")
+            lines.append(f"  ↳ proposta {ev['id']} {ev['data'].get('outcome', 'encerrada')}: {ev['data']['reason']}")
     if b.state.focus_plans:
         lines.append("  (blocos de foco futuros desta ação saem no próximo `brain focus sync`)")
     _out(args, recorded, "\n".join(lines))
@@ -310,7 +310,7 @@ def cmd_proposal(args, b: Brain) -> None:
         _out(args, ev, f"✓ {args.id} {'aceita' if args.rcmd == 'accept' else 'rejeitada'} ({args.quote!r})")
     elif args.rcmd == "list":
         for ev in b.sweep_proposals():
-            print(f"↳ proposta {ev['id']} encerrada: {ev['data']['reason']}", file=sys.stderr)
+            print(f"↳ proposta {ev['id']} {ev['data'].get('outcome', 'encerrada')}: {ev['data']['reason']}", file=sys.stderr)
         rows = [p.__dict__ for p in b.state.proposals.values() if args.all or p.status == "aberta"]
         _out(args, rows, "\n".join(f"{p['id']} · {p['kind']} · {p['summary']} · alvo {p['target'] or '—'}"
                                    for p in rows) or "(nenhuma aberta)")

@@ -245,6 +245,9 @@ def validate(ev: dict, state, plan) -> None:
         _need(data["kind"] in PROPOSAL_KINDS, f"kind de proposta inválido: {data['kind']!r}")
     if t in {"proposal.accepted", "proposal.rejected", "proposal.superseded"}:
         _need(state.proposals[eid].status == "aberta", f"proposta {eid} não está aberta")
+    if t == "proposal.superseded":
+        _need(ev.get("by") == "system", "proposal.superseded: só o sistema grava")
+        _need(data.get("outcome") in (None, "aceita", "rejeitada"), f"outcome inválido: {data.get('outcome')!r}")
     if t == "ids.migrated":
         _need(ev.get("by") == "system" and isinstance(data["map"], dict), "ids.migrated: só o sistema grava, com o mapa")
     if t == "progress.declared":

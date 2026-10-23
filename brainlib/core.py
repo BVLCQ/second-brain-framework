@@ -178,7 +178,7 @@ class Brain:
         return new
 
     def sweep_proposals(self) -> list[dict]:
-        """Fecha (`proposal.superseded`) as propostas abertas que o dono já resolveu por fora do painel."""
+        """Encerra (`proposal.superseded`, aceita/rejeitada) as propostas que o dono já resolveu por fora do painel."""
         with self._lock():
             working = state_mod.build(self.read_events())
             plan = planning.load(self.inst.planning_file)
@@ -190,9 +190,9 @@ class Brain:
         return new
 
     def _sweep_proposals(self, working: state_mod.State, plan: planning.Plan, new: list[dict]) -> None:
-        for pid, reason in proposals.conflicts(working):
+        for pid, reason, outcome in proposals.conflicts(working):
             self._append_one({"type": "proposal.superseded", "id": pid, "by": "system",
-                              "data": {"reason": reason}}, working, plan, new)
+                              "data": {"reason": reason, "outcome": outcome}}, working, plan, new)
 
     def _flush(self, new: list[dict]) -> None:
         """Apensa o lote num único write (O_APPEND) + fsync: o lote inteiro ou nada, sem linha partida no meio."""
