@@ -5,6 +5,7 @@ O TUI nunca toca no ledger nem no FRESH. Agente (⚡) roda headless com o runner
 """
 from __future__ import annotations
 
+import argparse
 import asyncio
 import json
 import os
@@ -33,11 +34,59 @@ class Result:
 
 
 MAX_ARG = 300
+_PARSER = None
+
+
+def _parser():
+    global _PARSER
+    if _PARSER is None:
+        from .. import cli
+        _PARSER = cli.build_parser()
+    return _PARSER
+
+
+def _subcommands(p) -> dict:
+    return next((a.choices for a in p._actions if isinstance(a, argparse._SubParsersAction)), {})
+
+
+def safe_args(args: list[str]) -> list[str]:
+    """Texto digitado que começa com '-' ("-urgente", "--no") o argparse lê como opção e o comando falha. Valor de opção
+    vira `--opt=valor`; argumento posicional com '-' vai para depois de `--`, com as opções antes. Mesmo comando, só blindado."""
+    try:
+        p = _parser()
+    except Exception:  # noqa: BLE001 — sem o parser, segue a linha como veio
+        return list(args)
+    i, head = 0, []
+    while i < len(args) and args[i] in _subcommands(p):
+        head.append(args[i])
+        p = _subcommands(p)[args[i]]
+        i += 1
+    opts: list[str] = []
+    pos: list[tuple[int, str]] = []                  # (posição em opts, valor): a ordem original se não precisar de `--`
+    while i < len(args):
+        a = args[i]
+        act = p._option_string_actions.get(a)
+        if act is None:
+            pos.append((len(opts), a))
+            i += 1
+        elif act.nargs == 0 or i + 1 == len(args):
+            opts.append(a)
+            i += 1
+        else:
+            v = args[i + 1]
+            opts += [f"{a}={v}"] if v.startswith("-") else [a, v]
+            i += 2
+    if any(v.startswith("-") and v != "-" for _, v in pos):
+        return head + opts + ["--"] + [v for _, v in pos]
+    out = list(opts)
+    for n, (at, v) in enumerate(pos):
+        out.insert(at + n, v)
+    return head + out
 
 
 def display(args: list[str]) -> str:
-    """A linha que o dono veria no terminal. Argumento enorme (texto de nota) é encurtado só na exibição."""
-    shown = [a if len(a) <= MAX_ARG else f"{a[:MAX_ARG - 30]}…(+{len(a) - MAX_ARG + 30} caracteres)" for a in args]
+    """A linha que o dono veria no terminal (a que roda, blindada). Argumento enorme (texto de nota) é encurtado só na exibição."""
+    shown = [a if len(a) <= MAX_ARG else f"{a[:MAX_ARG - 30]}…(+{len(a) - MAX_ARG + 30} caracteres)" for a in safe_args(args)]
     return "brain " + shlex.join(shown)
 
 
@@ -49,7 +98,7 @@ def _env(inst) -> dict:
 
 def run_brain(inst, args: list[str], timeout: int = 300) -> Result:
     """Chama `./brain <args>` (lista de argumentos, sem shell)."""
-    argv = [sys.executable, str(FRAMEWORK / "brain"), *args]
+    argv = [sys.executable, str(FRAMEWORK / "brain"), *safe_args(args)]
     try:
         p = subprocess.run(argv, cwd=inst.root, env=_env(inst), capture_output=True, text=True,
                            timeout=timeout, check=False, stdin=subprocess.DEVNULL)
@@ -191,9 +240,15 @@ async def run_agent(inst, argv: list[str], on_line: Callable[[str], None], info:
         await asyncio.wait_for(pump(), timeout=timeout)
         info.rc = await proc.wait()
     except asyncio.TimeoutError:
-        proc.kill()
         on_line(f"tempo esgotado ({timeout // 60} min)")
         info.rc = 124
+    finally:
+        if proc.returncode is None:       # tempo esgotado, ou o dono saiu do TUI no meio: o agente não fica rodando sozinho
+            try:
+                proc.kill()
+            except ProcessLookupError:
+                pass
+            await asyncio.shield(proc.wait())
     return info.rc
 
 

@@ -72,7 +72,7 @@ class GoogleCalendar:
     def _call(self, method: str, path: str, body: dict | None = None, query: dict | None = None) -> dict:
         if self._token is None:
             self._token = access_token(self.inst)
-        url = f"{API}/calendars/{urllib.parse.quote(self.calendar)}{path}"
+        url = f"{API}/calendars/{urllib.parse.quote(self.calendar, safe='')}{path}"
         if query:
             url += "?" + urllib.parse.urlencode(query)
         status, data = self.http(method, url, body, {"Authorization": f"Bearer {self._token}"})
@@ -116,8 +116,10 @@ class GoogleCalendar:
             return self._call("POST", "/events", body)
 
     def delete_guarded(self, event_id: str, action: str | None = None) -> bool:
+        if not event_id:
+            return False        # sem id, `GET /events/` seria a LISTAGEM do calendário — nada a apagar
         try:
-            ev = self._call("GET", f"/events/{urllib.parse.quote(event_id)}")
+            ev = self._call("GET", f"/events/{urllib.parse.quote(event_id, safe='')}")
         except util.BrainError as e:
             if "404" in str(e) or "410" in str(e):
                 return False
@@ -127,5 +129,5 @@ class GoogleCalendar:
             raise util.BrainError(f"recusado: evento {event_id} não tem a marca do cérebro — nunca é tocado", code=4)
         if ev.get("status") == "cancelled":
             return False
-        self._call("DELETE", f"/events/{urllib.parse.quote(event_id)}")
+        self._call("DELETE", f"/events/{urllib.parse.quote(event_id, safe='')}")
         return True

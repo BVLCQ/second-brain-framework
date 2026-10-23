@@ -93,6 +93,14 @@ TYPES: dict[str, dict] = {
 }
 
 
+# campos de `data` que, quando presentes, são listas (texto solto quebraria a dobra: `"ana" + []`, `list("ana")`)
+LIST_FIELDS = ("blocked_by", "unblocks", "people", "people_add", "decided_by", "projects", "aliases", "aliases_add", "clear",
+               "executors", "executors_add", "tools", "tools_add", "pains", "pains_add", "options",
+               "blocks", "created", "removed")
+# aprovações e gates: a fala é do dono — só by=owner grava (o noturno recusa owner; ver core.NIGHT_FORBIDDEN)
+OWNER_ONLY = {"proposal.accepted", "proposal.rejected", "message.approved", "share.approved", "focus.approved",
+              "plan.changed", "opportunity.promoted"}
+
 # campos de `data` que guardam IDs (um, ou uma lista); valores que não são ID (URL, texto) passam intactos
 REF_FIELDS = ("project", "deliverable", "goal", "ref", "link", "target", "blocked_by", "unblocks", "supersedes", "by",
               "process", "projects", "context")
@@ -145,9 +153,14 @@ def validate(ev: dict, state, plan) -> None:
     data = ev.setdefault("data", {})
     for f in spec["req"]:
         _need(f in data and data[f] not in (None, ""), f"{t}: campo obrigatório ausente: data.{f}")
-    _need(ev.get("by") in BY, f"{t}: by inválido ({ev.get('by')!r}) — use owner|agent|system")
-    _need(ev.get("prov") in PROV, f"{t}: prov inválida ({ev.get('prov')!r}) — use {sorted(PROV)}")
+    _need(isinstance(ev.get("by"), str) and ev["by"] in BY, f"{t}: by inválido ({ev.get('by')!r}) — use owner|agent|system")
+    _need(isinstance(ev.get("prov"), str) and ev["prov"] in PROV, f"{t}: prov inválida ({ev.get('prov')!r}) — use {sorted(PROV)}")
+    _need(ev.get("id") is None or isinstance(ev["id"], str), f"{t}: id deve ser texto ({ev.get('id')!r})")
     parse_date(ev.get("date"))
+    for f in LIST_FIELDS:
+        _need(f not in data or isinstance(data[f], list), f"{t}: data.{f} deve ser lista")
+    if t in OWNER_ONLY:
+        _need(ev.get("by") == "owner", f"{t}: aprovação/gate é do dono (by=owner), com a fala literal dele")
     if ev.get("actor"):
         _person(state, ev["actor"], "actor")
 
@@ -193,7 +206,7 @@ def validate(ev: dict, state, plan) -> None:
         for p in data.get("people", []) + data.get("people_add", []):
             _person(state, p, "people")
         if data.get("effort_min") is not None:
-            _need(isinstance(data["effort_min"], int) and data["effort_min"] > 0,
+            _need(isinstance(data["effort_min"], int) and not isinstance(data["effort_min"], bool) and data["effort_min"] > 0,
                   "effort_min deve ser inteiro positivo (minutos)")
     if t == "action.closed":
         _need(state.actions[eid].open, f"{eid} já está fechada/descartada — use action.reopened")
@@ -236,7 +249,8 @@ def validate(ev: dict, state, plan) -> None:
         _need(ev.get("by") == "system" and isinstance(data["map"], dict), "ids.migrated: só o sistema grava, com o mapa")
     if t == "progress.declared":
         _plan_node(plan, eid or "", "progress")
-        _need(isinstance(data["pct"], int) and 0 <= data["pct"] <= 100, "pct deve ser inteiro 0–100")
+        _need(isinstance(data["pct"], int) and not isinstance(data["pct"], bool) and 0 <= data["pct"] <= 100,
+              "pct deve ser inteiro 0–100")
     if ent == "question":
         _validate_question(t, ev, data, state)
     if ent in {"area", "process", "opportunity", "doclink"}:
@@ -339,26 +353,33 @@ def _validate_portfolio(t: str, ev: dict, data: dict, state, plan) -> None:
             _int15(data, f)
         if data.get("ice_suggested"):
             _need(by == "agent", f"{t}: só o agente sugere ICE (by=agent); ICE do dono é declaração, sem ice_suggested")
+        if t in {"opportunity.added", "opportunity.updated"}:
+            # projeto só nasce da promoção (gate); goal aqui é só o alvo pretendido
+            _need("project" not in data, f"{t}: project só via `brain opportunity promote` (gate do dono)")
         if t == "opportunity.added":
             _need(by != "agent" or ev.get("source"), "opportunity.added por agente exige --source")
-            _need(by != "agent" or data.get("status", "ideia") == "ideia",
+            _need(by == "owner" or data.get("status", "ideia") == "ideia",
                   "agente só cria oportunidade em status 'ideia'")
+            ice = [f for f in ("impact", "confidence", "ease") if f in data]
+            _need(not ice or len(ice) == 3, "ICE no cadastro exige impact, confidence e ease juntos")
+            _need(not ice or by == "owner" or data.get("ice_suggested"),
+                  "agente só grava ICE como sugestão (ice_suggested)")
             if data.get("status"):
                 _need(data["status"] in OPP_STATUS, f"status inválido: {data['status']!r}")
         if t == "opportunity.status":
             st = data["status"]
             _need(st in OPP_STATUS, f"status inválido: {st!r} — {sorted(OPP_STATUS)}")
-            _need(by != "agent" or st == "ideia",
+            _need(by == "owner" or st == "ideia",
                   "agente só pode gravar status 'ideia' — mover oportunidade é do dono")
             if st in OPP_REASON_STATUS:
                 _need(data.get("reason"), f"status '{st}' exige reason (motivo)")
             if st == "em-andamento":
                 _need(state.opportunities[eid].project,
                       f"{eid}: 'em-andamento' só com projeto vinculado — use `brain opportunity promote`")
-        if t == "opportunity.scored" and by == "agent":
+        if t == "opportunity.scored" and by != "owner":
             _need(data.get("ice_suggested"), "agente só grava ICE como sugestão (ice_suggested)")
         if t == "opportunity.promoted":
-            _need(by != "agent", "promover oportunidade é do dono (gate)")
+            _need(by == "owner", "promover oportunidade é do dono (gate)")
             proj = plan.projects.get(data["project"])
             _need(data["goal"] in plan.goals and proj is not None,
                   "promoted: goal/projeto não existem no PLANNING/goals.md")

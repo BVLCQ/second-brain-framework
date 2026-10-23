@@ -19,6 +19,14 @@ def _allowed(brain, to: str) -> bool:
     return to in allow
 
 
+def _require_allowed(brain, m) -> None:
+    # O rascunho pode ter entrado pelo `brain add` (sem passar pelo draft) ou o dono pode ter tirado o
+    # destinatário da lista depois: a porta confere de novo na aprovação e no envio.
+    if not _allowed(brain, m.to):
+        raise util.BrainError(f"{m.id}: '{m.to}' não está em [outbound].allow do config/brain.toml — a porta das "
+                              "mensagens só abre para destinatários que o dono listou", code=4)
+
+
 def _sent_today(brain) -> int:
     today = util.today().isoformat()
     return sum(1 for m in brain.state.messages.values() if m.status == "enviada" and m.sent and m.sent.isoformat() == today)
@@ -44,6 +52,7 @@ def approve(brain, mid: str, quote: str) -> dict:
         raise util.BrainError(f"{mid} não existe", code=3)
     if m.status != "rascunho":
         raise util.BrainError(f"{mid} está '{m.status}' — só rascunho pode ser aprovado", code=4)
+    _require_allowed(brain, m)
     return brain.record_one({"type": "message.approved", "id": mid, "by": "owner",
                              "data": {"quote": quote, "text_sha": m.text_sha}})
 
@@ -54,9 +63,13 @@ def sent(brain, mid: str, link: str | None) -> dict:
         raise util.BrainError(f"{mid} não existe", code=3)
     if m.status != "aprovada":
         raise util.BrainError(f"{mid} está '{m.status}' — envio só depois de aprovação explícita do dono", code=4)
+    if any(e["type"] in ("message.cancelled", "message.failed", "message.sent") for e in m.history):
+        # aprovação gravada depois de cancelada/falha/envio (só possível por fora do `outbox approve`) não reabre a porta
+        raise util.BrainError(f"{mid}: mensagem já cancelada/falhou/enviada — faça novo rascunho", code=4)
     approved = next(e for e in reversed(m.history) if e["type"] == "message.approved")
     if approved["data"]["text_sha"] != util.sha(m.text):
         raise util.BrainError(f"{mid}: texto difere do aprovado — cancele e faça novo rascunho", code=4)
+    _require_allowed(brain, m)
     cap = brain.inst.cfg["outbound"]["daily_max"]
     if _sent_today(brain) >= cap:
         raise util.BrainError(f"teto diário de {cap} mensagens atingido ([outbound].daily_max)", code=4)

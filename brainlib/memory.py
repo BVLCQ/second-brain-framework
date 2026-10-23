@@ -57,6 +57,8 @@ class Hindsight:
         except urllib.error.HTTPError as e:
             raise util.BrainError(f"Hindsight {method} {path} → {e.code}: "
                                   f"{e.read().decode(errors='replace')[:300]}", code=2) from e
+        except json.JSONDecodeError as e:
+            raise util.BrainError(f"Hindsight {method} {path}: resposta não é JSON ({e})", code=2) from e
         except (urllib.error.URLError, ConnectionError, TimeoutError) as e:
             raise util.BrainError(f"Hindsight fora do ar em {self.url} ({e}) — suba o servidor "
                                   f"(guides/memory.md) ou use [memory] engine = \"none\"", code=2) from e
@@ -83,9 +85,11 @@ class Hindsight:
         boundary = uuid.uuid4().hex
         ctype = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
         request = json.dumps({"files_metadata": [meta]})
+        # nome de arquivo do dono pode ter aspas/quebra de linha: cru, quebraria o cabeçalho multipart
+        fname = path.name.replace("\\", "_").replace('"', "%22").replace("\r", " ").replace("\n", " ")
         parts = [
             f"--{boundary}\r\nContent-Disposition: form-data; name=\"request\"\r\n\r\n{request}\r\n".encode(),
-            f"--{boundary}\r\nContent-Disposition: form-data; name=\"files\"; filename=\"{path.name}\"\r\n"
+            f"--{boundary}\r\nContent-Disposition: form-data; name=\"files\"; filename=\"{fname}\"\r\n"
             f"Content-Type: {ctype}\r\n\r\n".encode() + path.read_bytes() + b"\r\n",
             f"--{boundary}--\r\n".encode(),
         ]

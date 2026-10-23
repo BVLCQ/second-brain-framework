@@ -129,10 +129,12 @@ def sort_existing(inst, dry_run: bool = False) -> list[dict]:
 
 def resolve(inst, rel: str) -> Path | None:
     """O arquivo de um caminho `RAW/…` guardado no ledger, mesmo depois de ter ido para a pasta do tipo."""
+    parts = Path(rel).parts
+    if Path(rel).is_absolute() or ".." in parts:
+        return None             # caminho do ledger é relativo ao vault; `../` sairia dele
     path = inst.vault / rel
     if path.is_file():
         return path
-    parts = Path(rel).parts
     if len(parts) < 2 or parts[0] != "RAW":
         return None
     name, raw = parts[-1], inst.vault / "RAW"

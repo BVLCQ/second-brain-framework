@@ -154,8 +154,19 @@ Sônia-demo: manda o contrato da galeria que eu reviso em 48h.
 }
 
 
+DEMO_OWNER_LINE = 'name = "Você (demo)"'
+
+
 def build(target: Path) -> Path:
     target = target.resolve()
+    cfg = target / "config" / "brain.toml"
+    existing = cfg.read_text(encoding="utf-8", errors="replace") if cfg.is_file() else None
+    if (existing is not None and DEMO_OWNER_LINE not in existing) or \
+            (existing is None and any((target / "vault" / rel).exists() for rel in (
+                "PROCESSED/_ledger/events.jsonl", "PLANNING/goals.md", "PROFILE/profile.md"))):
+        # `--dir .` na raiz da instância sobrescreveria brain.toml, goals.md e profile.md do dono
+        raise util.BrainError(f"{target} já é uma instância de verdade (config/vault existentes) — "
+                              "a demo precisa de uma pasta nova ou de uma demo anterior", code=4)
     (target / "config").mkdir(parents=True, exist_ok=True)
     (target / "vault" / "PLANNING").mkdir(parents=True, exist_ok=True)
     for z in ("PROFILE", "RAW/inbox", "FRESH", "reports"):

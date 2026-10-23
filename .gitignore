@@ -12,6 +12,10 @@ config/.memory-state.json
 # ═══ Inovação local: scripts nascidos na instância (graduam p/ upstream) ═══
 scripts/local/
 
+# Cópias do vault (backup local, backup pré-migração de IDs) — conteúdo do dono
+brain-backup-*.zip
+brain-pre-ids-migration-*.zip
+
 # Sistema
 .DS_Store
 __pycache__/

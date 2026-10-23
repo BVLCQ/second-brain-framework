@@ -31,8 +31,18 @@ def swift_tool(source: str, name: str, library: bool = False) -> list[str] | Non
     src.write_text(source, encoding="utf-8")
     swiftc = shutil.which("swiftc")
     if swiftc:
-        cmd = [swiftc, "-O", *(["-parse-as-library"] if library else []), str(src), "-o", str(exe)]
-        if subprocess.run(cmd, capture_output=True, text=True, check=False).returncode == 0:
-            return [str(exe)]
+        # compila para um nome temporário e só então renomeia: compilação interrompida (Ctrl-C, timeout) não
+        # deixa um executável pela metade no cache — que `exe.exists()` aceitaria para sempre
+        tmp = exe.with_name(f"{exe.name}.{os.getpid()}.tmp")
+        cmd = [swiftc, "-O", *(["-parse-as-library"] if library else []), str(src), "-o", str(tmp)]
+        try:
+            ok = subprocess.run(cmd, capture_output=True, text=True, check=False, timeout=600).returncode == 0
+            if ok:
+                os.replace(tmp, exe)
+                return [str(exe)]
+        except subprocess.TimeoutExpired:
+            pass
+        finally:
+            tmp.unlink(missing_ok=True)
     swift = shutil.which("swift")
     return [swift, str(src)] if swift and not library else None

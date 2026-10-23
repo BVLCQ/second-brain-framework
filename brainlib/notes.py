@@ -173,8 +173,10 @@ def _parse(path: Path, vault: Path) -> Note | None:
     created = meta.get("criada") or ""
     if not re.fullmatch(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}", created):
         created = datetime.fromtimestamp(path.stat().st_mtime, util.tz()).strftime("%Y-%m-%d %H:%M")
-    return Note(util.relpath(path, vault), link, created, body.strip("\n"), "inbox" not in path.parts,
-                meta.get("editada", ""))
+    rel = util.relpath(path, vault)
+    # arquivada = fora de RAW/inbox/ (olhar só o caminho relativo: uma pasta "inbox" acima do vault não conta)
+    archived = Path(rel).parts[:2] != ("RAW", "inbox")
+    return Note(rel, link, created, body.strip("\n"), archived, meta.get("editada", ""))
 
 
 def scan(inst) -> list[Note]:

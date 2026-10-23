@@ -94,6 +94,8 @@ def main(argv):
         state = json.loads(state_path.read_text()).get("models", {})
     except Exception:
         state = {}
+    if not isinstance(state, dict):
+        state = {}
 
     models = loaded_models()
     hs = hindsight_busy()
@@ -104,7 +106,13 @@ def main(argv):
     for m in models:
         ident = m["identifier"]
         base = BASE_S["embedding" if m.get("type") == "embedding" else "llm"]
-        st = state.setdefault(ident, {"timeout_s": base, "last_busy": now})  # novo: conta como recém-usado
+        st = state.get(ident)
+        if not isinstance(st, dict):
+            st = state[ident] = {}
+        # novo (ou entrada truncada no estado): conta como recém-usado — sem isto um KeyError a cada minuto
+        # derrubava a rodada inteira e nenhum modelo voltava a ser descarregado
+        st.setdefault("timeout_s", base)
+        st.setdefault("last_busy", now)
 
         # voltou depois de descarregado por nós? ajusta o tempo dele
         if st.get("unloaded_at"):
@@ -142,14 +150,16 @@ def main(argv):
             log(f"falha ao descarregar {ident}: {r.stderr.strip()[:200]}")
 
     # esquece quem saiu por outro caminho (TTL do LM Studio, à mão); guarda quem nós descarregamos
-    state = {k: v for k, v in state.items() if k in loaded or v.get("unloaded_at")}
+    state = {k: v for k, v in state.items() if isinstance(v, dict) and (k in loaded or v.get("unloaded_at"))}
     for k, v in list(state.items()):
         if k not in loaded and now - v["unloaded_at"] > 24 * 3600:
             del state[k]
 
     if not dry:
         state_path.parent.mkdir(parents=True, exist_ok=True)
-        state_path.write_text(json.dumps({"models": state}, indent=1))
+        tmp = state_path.with_name(state_path.name + ".tmp")   # troca atômica: morte no meio não trunca o estado
+        tmp.write_text(json.dumps({"models": state}, indent=1))
+        os.replace(str(tmp), str(state_path))
     return 0
 
 

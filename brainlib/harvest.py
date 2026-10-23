@@ -97,7 +97,7 @@ def collect(brain, notices: list[dict] | None = None) -> list[dict]:
     todo = fresh / "todo.md"
     if todo.exists():
         prev_todo = last.get("todo", {})
-        for ln in todo.read_text(encoding="utf-8").splitlines():
+        for ln in todo.read_text(encoding="utf-8").split("\n"):
             m = TODO_LINE.match(ln)
             if not m:
                 continue

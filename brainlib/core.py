@@ -24,7 +24,9 @@ FACT_TYPES = {"action.opened", "action.closed", "decision.made", "delivery.recor
               "artifact.added", "deliverable.updated", "proposal.opened", "process.added",
               "opportunity.added", "opportunity.evidence", "question.asked"}
 # No noturno (BRAIN_NIGHTLY=1) não há dono presente: nenhuma aprovação, envio ou publicação.
-NIGHT_FORBIDDEN = {"question.answered", "message.approved", "message.sent", "share.approved", "share.published", "focus.approved"}
+# Gates estruturais também: mudar a árvore, aceitar/rejeitar proposta, promover oportunidade, migrar IDs.
+NIGHT_FORBIDDEN = {"question.answered", "message.approved", "message.sent", "share.approved", "share.published", "focus.approved",
+                   "plan.changed", "proposal.accepted", "proposal.rejected", "opportunity.promoted", "ids.migrated"}
 FIELD_ORDER = ["seq", "ts", "type", "id", "date", "actor", "by", "prov", "source", "data"]
 
 
@@ -40,7 +42,9 @@ class Brain:
         if not self.ledger_path.exists():
             return []
         out = []
-        for n, line in enumerate(self.ledger_path.read_text(encoding="utf-8").splitlines(), start=1):
+        # só "\n" separa eventos: `splitlines` também quebra em U+2028, \x85, \x0c… que o JSON (ensure_ascii=False)
+        # grava crus dentro das strings — um título vindo de e-mail partiria a linha e corromperia o ledger.
+        for n, line in enumerate(self.ledger_path.read_text(encoding="utf-8").split("\n"), start=1):
             if not line.strip():
                 continue
             try:
@@ -83,11 +87,15 @@ class Brain:
                     fcntl.flock(fh, fcntl.LOCK_UN)
 
     def _normalize(self, item: dict, working: state_mod.State) -> dict:
+        if not isinstance(item, dict):
+            raise util.BrainError(f"evento deve ser objeto JSON, recebido {type(item).__name__}", code=4)
         ev = {k: v for k, v in item.items() if v not in (None, "")}
         t = ev.get("type")
         spec = schema.TYPES.get(t)
         if spec is None:
             raise util.BrainError(f"tipo de evento desconhecido: {t!r}", code=4)
+        if not isinstance(ev.get("data", {}), dict):
+            raise util.BrainError(f"{t}: data deve ser objeto JSON", code=4)
         ev.setdefault("by", "agent")
         mode = (ev.get("data") or {}).get("mode")
         if os.environ.get("BRAIN_NIGHTLY") == "1" and (ev["by"] == "owner" or t in NIGHT_FORBIDDEN
@@ -132,12 +140,15 @@ class Brain:
         return ev
 
     def _vault_rel(self, p: str) -> str:
-        if not p:
+        if not p or not isinstance(p, str):
             raise util.BrainError("caminho obrigatório", code=4)
         path = Path(p)
-        if path.is_absolute():
-            return util.relpath(path, self.inst.vault)
-        return p[len("vault/"):] if p.startswith("vault/") else p
+        rel = util.relpath(path, self.inst.vault) if path.is_absolute() else (p[len("vault/"):] if p.startswith("vault/") else p)
+        # o id do artefato vira caminho de leitura (busca, MCP): nada fora do vault
+        norm = os.path.normpath(rel)
+        if os.path.isabs(norm) or norm == ".." or norm.startswith(".." + os.sep):
+            raise util.BrainError(f"caminho fora do vault: {p!r}", code=4)
+        return rel
 
     def _append_one(self, item: dict, working: state_mod.State, plan: planning.Plan, new: list[dict]) -> None:
         ev = self._normalize(item, working)
@@ -184,12 +195,24 @@ class Brain:
                               "data": {"reason": reason}}, working, plan, new)
 
     def _flush(self, new: list[dict]) -> None:
-        if new:
-            with open(self.ledger_path, "a", encoding="utf-8") as fh:
-                for ev in new:
-                    fh.write(json.dumps(ev, ensure_ascii=False, separators=(",", ":")) + "\n")
-                fh.flush()
-                os.fsync(fh.fileno())
+        """Apensa o lote num único write (O_APPEND) + fsync: o lote inteiro ou nada, sem linha partida no meio."""
+        if not new:
+            return
+        payload = "".join(json.dumps(ev, ensure_ascii=False, separators=(",", ":")) + "\n" for ev in new).encode("utf-8")
+        fd = os.open(self.ledger_path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o644)
+        try:
+            size = os.fstat(fd).st_size
+            if size:                                  # última linha sem \n (editada à mão): não colar o evento novo nela
+                with open(self.ledger_path, "rb") as rh:
+                    rh.seek(size - 1)
+                    if rh.read(1) != b"\n":
+                        payload = b"\n" + payload
+            view = memoryview(payload)
+            while view:
+                view = view[os.write(fd, view):]
+            os.fsync(fd)
+        finally:
+            os.close(fd)
 
     def record_one(self, item: dict) -> dict:
         return self.record([item])[0]

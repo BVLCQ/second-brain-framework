@@ -23,6 +23,7 @@ HEALTH_ICON = {"em-risco": "⚠", "travado": "⚠", "atencao": "·", "em-dia": "
 
 class Pages:
     def __init__(self, inst, m: dict):
+        m = _single_line(m)          # texto do ledger vem de e-mail/Slack: nunca quebra linha no Markdown
         self.inst, self.m = inst, m
         self.fresh = inst.fresh
         self.files: dict[Path, str] = {}
@@ -36,6 +37,7 @@ class Pages:
     # ── helpers ─────────────────────────────────────────────────────────────
     def link(self, frm: str, to: str, text: str) -> str:
         rel = os.path.relpath(to, os.path.dirname(frm) or ".")
+        text = re.sub(r"([\\\[\]|])", r"\\\1", _ln(text))   # `]` fecharia o link; `|` quebraria a tabela
         return f"[{text}]({rel.replace(' ', '%20')})"
 
     def proj(self, frm: str, pid: str | None, short: bool = True) -> str:
@@ -405,6 +407,7 @@ class Pages:
 
     def people_pages(self) -> None:
         idx = ["| Pessoa | Papel | Última interação | Me deve | Devo |", "|---|---|---|---|---|"]
+        arts = {a["id"]: a for a in self.m["artifacts"]}     # uma vez, não por pessoa (P × A)
         for p in self.m["people"]:
             f = f"people/{p['id']}.md"
             li = p["last_interaction"]
@@ -426,7 +429,6 @@ class Pages:
             out += ["", "## Projetos", ""]
             out += [f"- {self.proj(f, x, short=False)}" for x in p["projects"]] or ["_—_"]
             out += ["", "## Menções recentes", ""]
-            arts = {a["id"]: a for a in self.m["artifacts"]}
             out += [f"- {util.fmt_date(arts[a]['date'])} · {arts[a]['title']} (`{a}`)" for a in p["artifacts"]
                     if a in arts] or ["_—_"]
             self.put(f, "\n".join(out))
@@ -631,7 +633,7 @@ class Pages:
         out = [self.header("Saúde da instância", ["brain doctor"])]
         icon = {"ok": "✓", "warn": "⚠", "error": "✗"}
         for c in checks:
-            out.append(f"- {icon[c['level']]} **{c['title']}** — {c['detail']}")
+            out.append(f"- {icon[c['level']]} **{_ln(c['title'])}** — {_ln(c['detail'])}")
         self.put("health.md", "\n".join(out))
 
 
@@ -654,13 +656,35 @@ def _frontmatter(fm: dict) -> str:
     return "---\n" + "\n".join(f"{k}: {_yaml(v)}" for k, v in fm.items()) + "\n---\n\n"
 
 
+def _ln(s) -> str:
+    """Uma linha só: quebra de qualquer tipo (\\n, \\r, U+2028, \\x85, \\f…) vira espaço — o mesmo conjunto
+    que `str.splitlines()` (usado na colheita) reconhece. Sem isso, um título vindo de e-mail com
+    "\\n- [x] **TASK-0001**" virava checkbox marcado no todo.md e fechava outra ação no próximo render."""
+    return " ".join(str(s or "").splitlines())
+
+
+# Textos que só aparecem como parágrafo próprio no corpo das fichas (nunca no todo.md) — podem ter várias linhas.
+MULTILINE_KEYS = frozenset({"text", "problem", "suggestion", "context", "rationale", "outcome"})
+
+
+def _single_line(v, key: str = ""):
+    """Cópia do view model com todo texto livre em uma linha (exceto MULTILINE_KEYS). Só para o Markdown."""
+    if isinstance(v, str):
+        return v if key in MULTILINE_KEYS else _ln(v)
+    if isinstance(v, dict):
+        return {k: _single_line(x, k) for k, x in v.items()}
+    if isinstance(v, list):
+        return [_single_line(x, key) for x in v]
+    return v
+
+
 def _clip(s: str, n: int) -> str:
-    s = (s or "").replace("\n", " ")
+    s = _ln(s)
     return s if len(s) <= n else s[: n - 1] + "…"
 
 
 def _cell(s: str) -> str:
-    return (s or "").replace("|", "\\|").replace("\n", " ")
+    return _ln(s).replace("|", "\\|")
 
 
 def _mm(s: str, n: int = 50) -> str:

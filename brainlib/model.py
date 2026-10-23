@@ -343,23 +343,44 @@ class ModelBuilder:
         return sorted((i for i in items if i["date"]), key=lambda i: (i["date"], i["id"]), reverse=True)
 
     def _people(self, actions, decisions, artifacts) -> list[dict]:
+        # índices por pessoa numa passada só (antes: pessoas × ações/artefatos/decisões); a ordem das listas é a de origem
+        arts_of: dict[str, list[dict]] = {}
+        owes_of: dict[str, list[str]] = {}
+        i_owe_of: dict[str, list[str]] = {}
+        proj_of: dict[str, set[str]] = {}
+        decs_of: dict[str, list[str]] = {}
+        for x in artifacts:
+            for pid in dict.fromkeys(x["people"]):
+                arts_of.setdefault(pid, []).append(x)
+        for a in actions:
+            if a["open"]:
+                owes_of.setdefault(a["owner"], []).append(a["id"])
+                if a["mine"]:
+                    for pid in dict.fromkeys(a["people"]):
+                        i_owe_of.setdefault(pid, []).append(a["id"])
+            if a["project"]:
+                for pid in {a["owner"], *a["people"]}:
+                    proj_of.setdefault(pid, set()).add(a["project"])
+        for d in decisions:
+            for pid in dict.fromkeys(d["decided_by"]):
+                decs_of.setdefault(pid, []).append(d["id"])
+                if d["project"]:
+                    proj_of.setdefault(pid, set()).add(d["project"])
         out = []
         for pid, p in self.st.people.items():
-            arts = [x for x in artifacts if pid in x["people"]]
+            arts = arts_of.get(pid, [])
             meetings = [x for x in arts if x["kind"] == "reuniao"]
             last = (meetings or arts or [None])[0]
-            owes_me = [a["id"] for a in actions if a["open"] and a["owner"] == pid and pid != self.owner]
-            i_owe = [a["id"] for a in actions if a["open"] and a["mine"] and pid in a["people"]]
-            projects = sorted({a["project"] for a in actions if a["project"] and (a["owner"] == pid or pid in a["people"])}
-                              | {d["project"] for d in decisions if d["project"] and pid in d["decided_by"]}
-                              | {pr for x in arts for pr in x["projects"]})
+            owes_me = owes_of.get(pid, []) if pid != self.owner else []
+            i_owe = i_owe_of.get(pid, [])
+            projects = sorted(proj_of.get(pid, set()) | {pr for x in arts for pr in x["projects"]})
             out.append({
                 "id": pid, "name": p.name, "aliases": p.aliases, "role": p.role, "relation": p.relation,
                 "email": p.email, "is_owner": pid == self.owner,
                 "last_interaction": {"date": last["date"], "title": last["title"], "artifact": last["id"]}
                 if last else None,
                 "owes_me": owes_me, "i_owe": i_owe,
-                "decisions": [d["id"] for d in decisions if pid in d["decided_by"]],
+                "decisions": decs_of.get(pid, []),
                 "artifacts": [x["id"] for x in arts[:25]], "projects": projects,
                 "mentions": len(arts),
             })

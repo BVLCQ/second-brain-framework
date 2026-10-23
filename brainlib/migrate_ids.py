@@ -164,6 +164,7 @@ class Migration:
     ambiguous_total: int = 0
     include_external: bool = False
     hashes: dict[str, int] = field(default_factory=dict)             # quantos hashes recalculados por tipo
+    ledger_sha: str = ""                                             # sha do ledger que o plano leu (apply confere sob o lock)
 
     @property
     def zones(self) -> dict[str, dict]:
@@ -209,6 +210,7 @@ def rename_for(name: str, mapping: dict[str, str]) -> str:
 
 def plan_migration(brain, include_external: bool = False) -> Migration:
     inst = brain.inst
+    ledger_sha = _ledger_sha(brain)                  # antes de ler: evento que chegar no meio faz o apply abortar
     raw_events = brain.read_events()
     goals_old = inst.planning_file.read_text(encoding="utf-8") if inst.planning_file.exists() else ""
     mapping = build_map(raw_events, goals_old)
@@ -217,7 +219,7 @@ def plan_migration(brain, include_external: bool = False) -> Migration:
         new, n = rewrite_event(ev, mapping)
         new_events.append(new)
         ledger_subs += n
-    mig = Migration(mapping, new_events, ledger_subs, goals_old, "", include_external=include_external)
+    mig = Migration(mapping, new_events, ledger_subs, goals_old, "", include_external=include_external, ledger_sha=ledger_sha)
 
     vault = inst.vault
     changes: dict[str, FileChange] = {}
@@ -257,6 +259,10 @@ def plan_migration(brain, include_external: bool = False) -> Migration:
     mig.goals_new = gl.new if gl else goals_old
     _recompute_hashes(mig, raw_events, texts, changes, vault)
     return mig
+
+
+def _ledger_sha(brain) -> str:
+    return hashlib.sha256(brain.ledger_path.read_bytes()).hexdigest() if brain.ledger_path.exists() else ""
 
 
 def _recompute_hashes(mig: Migration, old_events: list[dict], texts: dict, changes: dict, vault: Path) -> None:
@@ -409,6 +415,10 @@ def apply(brain, mig: Migration) -> None:
     inst = brain.inst
     marker = inst.vault / MARKER_REL
     with brain._lock():
+        # o plano foi montado fora do lock: se o ledger andou desde então (noturno, outra sessão), gravar o ledger
+        # planejado apagaria os eventos novos
+        if _ledger_sha(brain) != mig.ledger_sha:
+            raise util.BrainError("o ledger mudou desde o dry-run desta execução — nada foi alterado; rode de novo", code=5)
         backup = make_backup(inst)
         print(f"backup: {backup['path']} ({backup['size']} bytes) — íntegro")
         events = _stage_and_validate(brain, mig, backup)

@@ -41,7 +41,8 @@ def now() -> datetime:
     fixed = os.environ.get("BRAIN_NOW")
     if fixed:
         dt = datetime.fromisoformat(fixed)
-        return dt if dt.tzinfo else dt.replace(tzinfo=tz())
+        # com fuso explícito (`…Z`, `+00:00`), converte: "hoje" é sempre no fuso da instância
+        return dt.astimezone(tz()) if dt.tzinfo else dt.replace(tzinfo=tz())
     return datetime.now(tz())
 
 
@@ -92,9 +93,15 @@ def atomic_write(path: Path, text: str) -> bool:
     if path.exists() and path.read_text(encoding="utf-8") == text:
         return False
     fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
-    with os.fdopen(fd, "w", encoding="utf-8") as fh:
-        fh.write(text)
-    os.replace(tmp, path)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(text)
+            fh.flush()
+            os.fsync(fh.fileno())                # goals.md/brain.toml: sem fsync, queda de energia deixa o arquivo vazio
+        os.replace(tmp, path)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)        # sem `.goals.md.xxxx` órfão no vault
+        raise
     return True
 
 

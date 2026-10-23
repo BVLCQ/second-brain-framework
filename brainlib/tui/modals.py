@@ -46,6 +46,7 @@ class FormSpec:
     gate: bool = False                               # pede aprovação digitada (borda âmbar)
     extra: Text | None = None                        # conteúdo fixo acima dos campos (ex.: diff, texto exato)
     on_cancel: Callable[[], None] | None = None
+    on_fail: Callable[[], None] | None = None        # algum comando falhou (o que o formulário preparou fica desfeito)
     after: Callable[[], None] | None = None
     render: bool = True
     show: str | None = None                          # abre a saída inteira num modal (ex.: memória)

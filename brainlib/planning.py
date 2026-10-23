@@ -154,6 +154,16 @@ class Plan:
         }
 
 
+def _lines(text: str) -> list[str]:
+    """Linhas do goals.md quebradas só no fim de linha de verdade (o `read_text` já traduz CRLF). `str.splitlines`
+    também quebra em U+2028, form feed, NEL…: reescrever o arquivo trocava esses caracteres do texto do dono por
+    quebras de linha (e desalinhava a numeração entre o parser e quem reescreve)."""
+    lines = text.split("\n")
+    if lines and lines[-1] == "":
+        lines.pop()
+    return lines
+
+
 def _parse_segments(rest: str) -> tuple[str, dict]:
     parts = [p.strip() for p in rest.split("·")]
     title = parts[0]
@@ -165,6 +175,26 @@ def _parse_segments(rest: str) -> tuple[str, dict]:
         elif p:
             seg[util.fold(p)] = "sim"
     return title, seg
+
+
+def _raw_segments(rest: str) -> tuple[str, list[list[str]]]:
+    """Como `_parse_segments`, mas guarda o texto original de cada segmento ([chave dobrada, texto]), na ordem do
+    dono: reescrever a linha só troca os segmentos que o cérebro mexe (prazo, peso, estado, feito)."""
+    parts = [p.strip() for p in rest.split("·")]
+    segs = [[util.fold(p.partition(":")[0]), p] for p in parts[1:] if p]
+    return parts[0], segs
+
+
+def _set_seg(segs: list[list[str]], key: str, value: str | None) -> None:
+    """Troca (no lugar), acrescenta (no fim) ou remove (`value` vazio) o segmento `key`."""
+    idx = [i for i, (k, _) in enumerate(segs) if k == key]
+    for i in reversed(idx[1:] if value else idx):
+        del segs[i]
+    if value:
+        if idx:
+            segs[idx[0]][1] = f"{key}: {value}"
+        else:
+            segs.append([key, f"{key}: {value}"])
 
 
 def _strip_comments(lines: list[str]) -> list[str]:
@@ -185,11 +215,12 @@ def _strip_comments(lines: list[str]) -> list[str]:
             in_fence = True
             out.append("")
             continue
-        if "<!--" in ln and "-->" not in ln.split("<!--", 1)[1]:
+        ln = re.sub(r"<!--.*?-->", "", ln)
+        if "<!--" in ln:                    # abre e não fecha nesta linha (mesmo depois de outro comentário fechado)
             in_html = True
             out.append(ln.split("<!--", 1)[0])
             continue
-        out.append(re.sub(r"<!--.*?-->", "", ln))
+        out.append(ln)
     return out
 
 
@@ -197,7 +228,10 @@ def parse(text: str) -> Plan:
     plan = Plan()
     goal: Goal | None = None
     proj: Project | None = None
-    for i, ln in enumerate(_strip_comments(text.splitlines()), start=1):
+    in_deliv = False                    # já passou de um entregável: sub-item recuado é nota dele, não metadado
+    for i, ln in enumerate(_strip_comments(_lines(text)), start=1):
+        if ln.startswith("#"):
+            in_deliv = False
         m = GOAL_RE.match(ln)
         if m:
             gid, title = ids.normalize(m.group(1)), m.group(2)
@@ -253,6 +287,9 @@ def parse(text: str) -> Plan:
                 plan.warnings.append(f"linha {i}: {did} duplicado")
             plan.deliverables[did] = d
             proj.deliverables.append(d)
+            in_deliv = True
+            continue
+        if in_deliv and ln[:1].isspace():
             continue
         m = META_RE.match(ln)
         if m:
@@ -280,43 +317,41 @@ def load(path: Path) -> Plan:
     return parse(path.read_text(encoding="utf-8"))
 
 
-def _deliv_line(head: str, box: str, mid: str, did: str, title: str, seg: dict) -> str:
-    order = ["prazo", "peso", "estado", "feito"]
-    keys = sorted(seg, key=lambda k: order.index(k) if k in order else len(order))
-    tail = "".join(f" · {k}: {seg[k]}" if seg[k] != "sim" else f" · {k}" for k in keys)
+def _deliv_line(head: str, box: str, mid: str, did: str, title: str, segs: list[list[str]]) -> str:
+    """Remonta a linha do entregável; os segmentos que o cérebro não mexeu voltam com o texto exato do dono."""
+    tail = "".join(f" · {text}" for _, text in segs)
     return f"{head}{box}{mid}{did} {title}{tail}"
 
 
 def set_deliverable(path: Path, did: str, status: str, when: date | None) -> bool:
     """Atualiza o checkbox (estado factual) de um entregável. Retorna True se mudou."""
     did = ids.normalize(did)
-    lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
-    plan = parse("".join(lines))
+    text = path.read_text(encoding="utf-8")
+    lines = _lines(text)
+    plan = parse(text)
     d = plan.deliverables.get(did)
     if d is None:
-        raise util.BrainError(f"entregável {did} não encontrado em {path.name}")
+        raise util.BrainError(f"entregável {did} não encontrado em {path.name}", code=3)
     ln = lines[d.line_no - 1]
-    eol = "\n" if ln.endswith("\n") else ""
-    m = DELIV_RE.match(ln.rstrip("\n"))
+    m = DELIV_RE.match(ln)
     if m is None:
-        raise util.BrainError(f"linha {d.line_no} de {did} não está no formato do parser — não alterei o arquivo")
+        raise util.BrainError(f"linha {d.line_no} de {did} não está no formato do parser — não alterei o arquivo", code=5)
     head, _, mid, _, rest = m.groups()
-    title, seg = _parse_segments(rest)
-    seg.pop("estado", None)
-    seg.pop("feito", None)
-    box = " "
+    title, segs = _raw_segments(rest)
+    box, estado, feito = " ", None, None
     if status == "feito":
-        box = "x"
-        seg["feito"] = (when or util.today()).isoformat()
+        box, feito = "x", (when or util.today()).isoformat()
     elif status == "cancelado":
         box = "-"
     elif status == "em-andamento":
-        seg["estado"] = "em-andamento"
-    new = _deliv_line(head, box, mid, did, title, seg) + eol
+        estado = "em-andamento"
+    _set_seg(segs, "estado", estado)
+    _set_seg(segs, "feito", feito)
+    new = _deliv_line(head, box, mid, did, title, segs)
     if new == ln:
         return False
     lines[d.line_no - 1] = new
-    util.atomic_write(path, "".join(lines))
+    util.atomic_write(path, "\n".join(lines) + "\n")
     return True
 
 
@@ -363,7 +398,7 @@ def _section_end(lines: list[str], start: int, stop_levels: tuple[str, ...]) -> 
 
 def _insert(path: Path, new_id: str, anchor: str | None, block: list[str], stop: tuple[str, ...], rx: re.Pattern | None) -> None:
     text = path.read_text(encoding="utf-8") if path.exists() else ""
-    lines = text.splitlines()
+    lines = _lines(text)
     if anchor is None:
         at = len(lines)
         while at and not lines[at - 1].strip():
@@ -436,28 +471,56 @@ def node_kind(plan: Plan, node: str) -> str | None:
         "deliverable" if node in plan.deliverables else None
 
 
+_META_ALIASES = {"por que": {"por que", "porque"}}      # o parser lê `por quê` e `porque` como a mesma chave
+
+
 def _set_meta(lines: list[str], start: int, key: str, value: str | None) -> None:
     """Troca (ou cria, ou remove quando `value` é vazio) a linha `- chave: valor` do título em `start`.
-    As linhas de metadado ficam entre o título e o próximo título (de qualquer nível)."""
+    As linhas de metadado ficam entre o título e o próximo título (de qualquer nível); sub-item recuado de um
+    entregável não é metadado (como no parser). Com a chave repetida, o parser fica com a última: é ela que muda."""
     clean = _strip_comments(lines)
     end = next((i for i in range(start + 1, len(lines)) if clean[i].startswith(("## ", "### "))), len(lines))
-    last = start
+    keys = _META_ALIASES.get(key, {key})
+    last, hits, in_deliv = start, [], False
     for i in range(start + 1, end):
+        if DELIV_RE.match(clean[i]):
+            in_deliv = True
+            continue
+        if in_deliv and clean[i][:1].isspace():
+            continue
         m = META_RE.match(clean[i])
         if m:
             last = i
-            if util.fold(m.group(1)) == key:
-                if value:
-                    lines[i] = re.sub(r":\s*.+?\s*$", f": {value}", lines[i], count=1)
-                else:
-                    del lines[i]
-                return
-    if value:
+            if util.fold(m.group(1)) in keys:
+                hits.append(i)
+    if value and hits:
+        # lambda: o valor é texto do dono, não modelo de re.sub (`\n`, `\1` viravam quebra de linha / erro)
+        lines[hits[-1]] = re.sub(r":\s*.+?\s*$", lambda _m: f": {value}", lines[hits[-1]], count=1)
+    elif value:
         lines.insert(last + 1, f"- {_META_LABEL[key]}: {value}")
+    else:
+        for i in reversed(hits):
+            del lines[i]
 
 
 def _fold_eq(a: str | None, b: str | None) -> bool:
     return (a or "") == (b or "")
+
+
+def _edit_landed(after: Plan, node: str, kind: str, changes: list[tuple[str, str, str]]) -> bool:
+    """O arquivo reescrito, relido pelo parser, diz exatamente o que a edição prometeu (senão: arquivo intacto)."""
+    for label, _old, new in changes:
+        new = "" if new == "—" else new
+        if kind == "deliverable":
+            d = after.deliverables[node]
+            got = {"título": d.title, "prazo": d.due.isoformat() if d.due else "", "peso": str(d.weight)}[label]
+        else:
+            obj = after.goals[node] if kind == "goal" else after.projects[node]
+            got = obj.title if label == "título" else obj.why if label == "por quê" else \
+                obj.meta.get({"status": "status", "horizonte": "horizonte", "dono": "dono"}[label])
+        if (got or "") != new:
+            return False
+    return True
 
 
 def edit_node(path: Path, node: str, **fields) -> list[tuple[str, str, str]]:
@@ -467,7 +530,7 @@ def edit_node(path: Path, node: str, **fields) -> list[tuple[str, str, str]]:
     Devolve [(campo, antes, depois)] só do que mudou; arquivo intacto se o resultado não passar pelo parser."""
     node = ids.normalize(node)
     text = path.read_text(encoding="utf-8")
-    lines = text.splitlines()
+    lines = _lines(text)
     plan = parse(text)
     kind = node_kind(plan, node)
     if kind is None:
@@ -487,7 +550,7 @@ def edit_node(path: Path, node: str, **fields) -> list[tuple[str, str, str]]:
         if m is None:
             raise util.BrainError(f"linha {d.line_no} de {node} não está no formato do parser — não alterei o arquivo", code=5)
         head, box, mid, _, rest = m.groups()
-        title, seg = _parse_segments(rest)
+        title, segs = _raw_segments(rest)
         if "title" in fields:
             new = _clean(fields["title"], "título", "·")
             if new != title:
@@ -497,20 +560,16 @@ def edit_node(path: Path, node: str, **fields) -> list[tuple[str, str, str]]:
             new = util.parse_date(fields["due"]).isoformat() if fields["due"] else ""
             if new != (d.due.isoformat() if d.due else ""):
                 changes.append(("prazo", d.due.isoformat() if d.due else "—", new or "—"))
-                seg.pop("prazo", None)
-                if new:
-                    seg["prazo"] = new
+                _set_seg(segs, "prazo", new)
         if "weight" in fields:
             w = int(fields["weight"])
             if w < 1:
                 raise util.BrainError("peso: use um inteiro a partir de 1", code=3)
             if w != d.weight:
                 changes.append(("peso", str(d.weight), str(w)))
-                seg.pop("peso", None)
-                if w != 1:
-                    seg["peso"] = str(w)
+                _set_seg(segs, "peso", str(w) if w != 1 else None)
         if changes:
-            lines[d.line_no - 1] = _deliv_line(head, box, mid, node, title, seg)
+            lines[d.line_no - 1] = _deliv_line(head, box, mid, node, title, segs)
     else:
         node_obj = plan.goals[node] if kind == "goal" else plan.projects[node]
         clean = _strip_comments(lines)
@@ -524,7 +583,11 @@ def edit_node(path: Path, node: str, **fields) -> list[tuple[str, str, str]]:
             new = _clean(fields["title"], "título")
             if new != node_obj.title:
                 changes.append(("título", node_obj.title, new))
-                lines[start] = re.sub(r"^(#+\s+\S+\s*[—–-]\s*).+?\s*$", lambda m: m.group(1) + new, lines[start])
+                tm = rx.match(lines[start])
+                if tm is None:
+                    raise util.BrainError(f"título de {node} não está no formato do parser — não alterei o arquivo", code=5)
+                # corta no início do título que o parser leu (`\S+` antes engolia "GOAL-1—Pré-" sem espaços)
+                lines[start] = lines[start][:tm.start(2)] + new
         edits = []
         for f, value in fields.items():
             if f == "title":
@@ -549,7 +612,7 @@ def edit_node(path: Path, node: str, **fields) -> list[tuple[str, str, str]]:
     after = parse(out)
     if len(after.warnings) > len(plan.warnings) or node_kind(after, node) != kind or \
             list(after.goals) != list(plan.goals) or list(after.projects) != list(plan.projects) or \
-            list(after.deliverables) != list(plan.deliverables):
+            list(after.deliverables) != list(plan.deliverables) or not _edit_landed(after, node, kind, changes):
         raise util.BrainError(f"não consegui editar {node} em {path.name} no formato do parser — arquivo intacto", code=5)
     util.atomic_write(path, out)
     return changes

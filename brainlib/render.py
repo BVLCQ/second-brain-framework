@@ -24,8 +24,11 @@ def _notes(fresh: Path) -> list[dict]:
 
 
 def render_html(m: dict) -> str:
+    # `<`, `>` e `&` só aparecem dentro de strings JSON: \u003c etc. é JSON válido e não deixa o texto fechar o
+    # <script> nem abrir comentário. (`<\!--` NÃO é escape JSON válido — derrubava o JSON.parse do painel inteiro.)
     data = json.dumps(m, ensure_ascii=False, default=str)
-    data = data.replace("</", "<\\/").replace("<!--", "<\\!--")
+    data = (data.replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
+            .replace("\u2028", "\\u2028").replace("\u2029", "\\u2029"))
     return ASSET.read_text(encoding="utf-8").replace("__DATA__", data, 1)
 
 

@@ -10,7 +10,7 @@ import os
 import sys
 from pathlib import Path
 
-from . import __version__, config, ids, people, planning, util
+from . import __version__, config, ids, people, planning, schema, util
 from .core import Brain
 
 
@@ -66,6 +66,8 @@ def _effort(b: Brain, v):
 def cmd_init(args, b: Brain) -> None:
     from . import upstream
     inst = b.inst
+    # o ledger grava a pessoa com id em slug: o brain.toml precisa do MESMO id, senão o dono não casa com a ficha
+    owner_id = util.slugify(args.owner_id, 32) if args.owner_id else ""
     created = upstream.seed_template(inst)
     upstream.hook(inst, "install")
     inst.config_dir.mkdir(parents=True, exist_ok=True)
@@ -75,22 +77,24 @@ def cmd_init(args, b: Brain) -> None:
         if not dst.exists() and src.exists():
             text = src.read_text(encoding="utf-8")
             if name == "brain.toml" and args.owner_id:
-                text = text.replace('id = "eu"', f'id = "{args.owner_id}"', 1)
+                # json.dumps = string TOML válida (aspas e barras escapadas): aspas no nome quebravam o brain.toml
+                text = text.replace('id = "eu"', f'id = {json.dumps(owner_id, ensure_ascii=False)}', 1)
                 if args.owner_name:
-                    text = text.replace('name = "Dono do cérebro"', f'name = "{args.owner_name}"', 1)
+                    text = text.replace('name = "Dono do cérebro"',
+                                        f'name = {json.dumps(args.owner_name, ensure_ascii=False)}', 1)
             dst.write_text(text, encoding="utf-8")
             if name == ".env":
                 dst.chmod(0o600)
             created.append(f"config/{name}")
-    if args.owner_id:
+    if owner_id:
         b.inst = config.load(inst.root)
         b.reload()
-        if args.owner_id not in b.state.people:
-            b.record_one({"type": "person.added", "id": args.owner_id, "by": "owner",
+        if owner_id not in b.state.people:
+            b.record_one({"type": "person.added", "id": owner_id, "by": "owner",
                           "data": {"name": args.owner_name or args.owner_id,
                                    "aliases": util.split_csv(args.alias), "email": args.email or "",
                                    "relation": "dono do cérebro"}})
-            created.append(f"pessoa: {args.owner_id}")
+            created.append(f"pessoa: {owner_id}")
     print("✓ instância pronta" + (":\n  " + "\n  ".join(created) if created else " (nada a criar)"))
 
 
@@ -332,11 +336,20 @@ def cmd_plan(args, b: Brain) -> None:
             print(f"⚠ {w}")
     elif args.plcmd == "deliverable":
         when = util.parse_date(args.date) or util.today()
-        changed = planning.set_deliverable(inst.planning_file, args.id, args.status,
+        path = inst.planning_file
+        before = path.read_text(encoding="utf-8") if path.exists() else None
+        changed = planning.set_deliverable(path, args.id, args.status,
                                            when if args.status == "feito" else None)
         b.reload()
-        ev = b.record_one(_common({"type": "deliverable.updated", "id": args.id,
-                                   "data": {"status": args.status, "evidence": args.evidence}}, args))
+        try:
+            ev = b.record_one(_common({"type": "deliverable.updated", "id": args.id,
+                                       "data": {"status": args.status, "evidence": args.evidence}}, args))
+        except util.BrainError:
+            # o ledger recusou (sem --prov/--source, --by owner no noturno…): o goals.md volta ao que era — senão a
+            # próxima colheita leria o checkbox como edição do dono e gravaria `by: owner` no lugar do agente
+            if changed and before is not None:
+                util.atomic_write(path, before)
+            raise
         _append_plan_log(inst, f"{util.today().isoformat()} · {args.id} estado → {args.status} · "
                                f"factual (sem mudança de estrutura) · evidência: {args.evidence or '—'}")
         _out(args, ev, f"✓ {args.id} → {args.status}" + ("" if changed else " (goals.md já estava assim)"))
@@ -345,6 +358,8 @@ def cmd_plan(args, b: Brain) -> None:
     elif args.plcmd == "edit":
         _plan_edit(args, b)
     elif args.plcmd == "log":
+        if not args.approval.strip():          # como nos outros gates: aprovação em branco não é aprovação
+            raise util.BrainError("plan log: --approval vazio — exige a resposta literal do dono", code=4)
         ev = b.record_one({"type": "plan.changed", "by": "owner", "data": {
             "diff": args.diff, "reason": args.reason, "evidence": args.evidence, "approval": args.approval}})
         _append_plan_log(inst, f"{util.today().isoformat()} · {args.diff} · {args.reason} · "
@@ -483,10 +498,29 @@ def cmd_progress(args, b: Brain) -> None:
 
 def cmd_add(args, b: Brain) -> None:
     src = args.file_opt or args.file
-    raw = Path(src).read_text(encoding="utf-8") if src and src != "-" else sys.stdin.read()
-    items = json.loads(raw)
+    try:
+        raw = Path(src).read_text(encoding="utf-8") if src and src != "-" else sys.stdin.read()
+    except (OSError, UnicodeDecodeError) as e:
+        raise util.BrainError(f"add: não consegui ler {src}: {e}", code=1) from e
+    try:
+        items = json.loads(raw)
+    except json.JSONDecodeError as e:
+        raise util.BrainError(f"add: JSON inválido ({e}) — nada gravado", code=4) from e
     if isinstance(items, dict):
         items = [items]
+    if not isinstance(items, list) or not all(isinstance(x, dict) for x in items):
+        raise util.BrainError("add: o lote é um objeto JSON ou uma lista de objetos (um por evento) — nada gravado", code=4)
+    if any(x.get("type") == "deliverable.updated" for x in items):
+        # o estado do entregável mora no goals.md: evento sem o checkbox seria desfeito na próxima colheita,
+        # gravado como edição do dono
+        raise util.BrainError("add: deliverable.updated não entra por lote — use `brain plan deliverable` "
+                              "(atualiza o goals.md e o ledger juntos); nada gravado", code=4)
+    gates = sorted({x.get("type") for x in items} & schema.OWNER_ONLY)
+    if gates:
+        # aprovação/gate tem porta própria (outbox approve, focus approve, plan log, opportunity promote…), que
+        # confere a fala literal do dono; pelo lote o agente forjaria um "by": "owner"
+        raise util.BrainError(f"add: {', '.join(gates)} não entra por lote — use o comando da porta; nada gravado",
+                              code=4)
     recorded = b.record(items)
     _out(args, recorded, "\n".join(f"✓ {e['type']} {e.get('id', '')}" for e in recorded))
 

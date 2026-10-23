@@ -555,9 +555,11 @@ class BrainApp(AskKeys, PortfolioKeys, App):
         for k in self.ctx_keys():
             hint(left, k.k, k.label, "magenta" if k.agent else ("yellow" if k.gate else "cyan"), "⚡ " if k.agent else "◆ " if k.gate else "")
         right = Text(no_wrap=True)
+        local = {k.k for k in self.ctx_keys()}
         for k, lab in (("?", "ajuda"), (":", "comandos"), ("N", "nota"), ("/", "filtrar"), ("g", "buscar"),
                        ("r", "resposta ao agente" if self.pending_reply else "render"), ("q", "sair")):
-            hint(right, k, lab, "cyan")
+            if k not in local:                     # a tecla de contexto vence: não anuncia o global que ela esconde
+                hint(right, k, lab, "cyan")
         self.query_one("#hints", Static).update(left)
         g = self.query_one("#globals", Static)
         g.update(right)
@@ -648,6 +650,8 @@ class BrainApp(AskKeys, PortfolioKeys, App):
             self.search()
         elif k == "/":
             self.open_filter()
+        elif k == "r" and any(key.k == "r" for key in self.ctx_keys()):
+            return self.press(k)                   # tecla de contexto vence o atalho global (Propostas: r rejeita)
         elif k == "r":
             self.free_reply() if self.pending_reply else self.do_render()
         elif k == "N":
@@ -903,11 +907,13 @@ class BrainApp(AskKeys, PortfolioKeys, App):
 
     # ── execução ───────────────────────────────────────────────────────────
     def exec(self, cmds: list[list[str]], render: bool = True, after: Callable[[], None] | None = None,
-             show: str | None = None) -> None:
-        """Roda comandos `brain` em sequência (para no primeiro erro). `show` abre a saída inteira num modal."""
-        self.run_worker(self._exec(cmds, render, after, show, self.face), exclusive=False)
+             show: str | None = None, on_fail: Callable[[], None] | None = None) -> None:
+        """Roda comandos `brain` em sequência (para no primeiro erro). `show` abre a saída inteira num modal;
+        `on_fail` roda se algum comando falhar (ex.: desfazer a edição do goals.md que o gate não registrou)."""
+        self.run_worker(self._exec(cmds, render, after, show, self.face, on_fail), exclusive=False)
 
-    async def _exec(self, cmds: list[list[str]], render: bool, after, show: str | None = None, face: int = 0) -> None:
+    async def _exec(self, cmds: list[list[str]], render: bool, after, show: str | None = None, face: int = 0,
+                    on_fail: Callable[[], None] | None = None) -> None:
         async with self._lock:
             ok = True
             outs: list[str] = []
@@ -928,6 +934,8 @@ class BrainApp(AskKeys, PortfolioKeys, App):
                     break
                 if not lines and res.ok:
                     self.log_line("✓ ok", "green")
+            if not ok and on_fail:
+                on_fail()
             if ok and render:
                 r = await asyncio.to_thread(bridge.run_brain, self.inst, ["render"])
                 self.log_line("↻ brain render · " + (r.out.splitlines()[0] if r.out else "views regeneradas"), "dim")
@@ -974,7 +982,7 @@ class BrainApp(AskKeys, PortfolioKeys, App):
                 return
             if spec.intercept and spec.intercept(vals):
                 return
-            self.exec(spec.build(vals), render=spec.render, after=spec.after, show=spec.show)
+            self.exec(spec.build(vals), render=spec.render, after=spec.after, show=spec.show, on_fail=spec.on_fail)
         self.push_screen(FormModal(spec), done)
 
     def toggle_zoom(self) -> None:
@@ -1478,6 +1486,10 @@ class BrainApp(AskKeys, PortfolioKeys, App):
         pre = pre or {}
 
         def restore() -> None:
+            now = path.read_text(encoding="utf-8") if path.exists() else ""
+            if now != after:                      # outro processo mexeu depois do editor: não sobrescreve às cegas
+                self.log_line("goals.md mudou de novo fora do TUI: não desfiz a edição; confira e registre com E (gate)", "red")
+                return
             util.atomic_write(path, before)
             self.log_line("mudança do PLANNING descartada: goals.md voltou ao que era", "yellow")
 
@@ -1489,7 +1501,8 @@ class BrainApp(AskKeys, PortfolioKeys, App):
              Field("quote", "sua aprovação", req=True, ph="digite a resposta literal, ex.: ok")],
             lambda v: [["plan", "log", "--diff", v["diff"] or "…", "--reason", v["reason"] or "…"] + (["--evidence", v["ev"]] if v["ev"] else []) + ["--approval", v["quote"] or "…"]],
             sub="Único gate estrutural: criar, renomear ou fechar goal e projeto exige a sua aprovação. "
-                "Cancelar desfaz a edição do goals.md.", gate=True, extra=extra, on_cancel=restore))
+                "Cancelar desfaz a edição do goals.md (e o registro que falhar também).", gate=True, extra=extra,
+            on_cancel=restore, on_fail=restore))
 
     def f_accept(self) -> None:
         r = self.cur().data

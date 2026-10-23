@@ -18,13 +18,15 @@ O estado de cada item mora em `snapshot:<chave>#<item>`; o doctor continua vendo
 """
 from __future__ import annotations
 
+import re
 import sys
 from datetime import timedelta
 from pathlib import Path
 
 from . import util
 
-HEARTBEAT_MIN = 5   # item sem novidade só registra evento se a fonte não pulsou há pouco (evita inundar o ledger)
+EXT_RE = re.compile(r"^[A-Za-z0-9]{1,10}(?:\.[A-Za-z0-9]{1,10})?$")
+HEARTBEAT_MIN = 5  # item sem novidade só registra evento se a fonte não pulsou há pouco (evita inundar o ledger)
 
 
 def _normalize(text: str) -> str:
@@ -63,6 +65,9 @@ def unchanged(brain, key: str, rev: str, item: str | None = None) -> bool:
 def take(brain, key: str, content: str, prefix: str | None = None, ext: str = "md",
          item: str | None = None, rev: str | None = None, name: str | None = None) -> dict:
     inst = brain.inst
+    if not EXT_RE.match(ext or ""):
+        # a extensão entra crua no nome do arquivo: `md/../../x` escaparia da inbox
+        raise util.BrainError(f"--ext inválida: {ext!r} (só letras e números, ex.: md, json, txt)", code=2)
     state = util.read_json(inst.state_file, {})
     slot = _slot(key, item)
     prev = state.get(slot) if isinstance(state.get(slot), dict) else {}
@@ -94,9 +99,15 @@ def take(brain, key: str, content: str, prefix: str | None = None, ext: str = "m
         parts.append(util.slugify(name or item, 24))
     base = "-".join(parts) + f"-{stamp}"
     path, n = inst.inbox / f"{base}.{ext}", 2
-    while path.exists():
-        path, n = inst.inbox / f"{base}-{n}.{ext}", n + 1
-    path.write_text(content if content.endswith("\n") else content + "\n", encoding="utf-8")
+    body = content if content.endswith("\n") else content + "\n"
+    while True:
+        try:
+            # "x": criação exclusiva — nunca segue um symlink plantado na inbox nem sobrescreve corrida paralela
+            with open(path, "x", encoding="utf-8") as fh:
+                fh.write(body)
+            break
+        except FileExistsError:
+            path, n = inst.inbox / f"{base}-{n}.{ext}", n + 1
     state[slot] = {"hash": h, "at": util.iso_now(), "path": inst.rel(path), **({"rev": rev} if rev else {})}
     util.write_json(inst.state_file, state)
     _pulled(brain, key, item, True, snapshot=inst.rel(path))

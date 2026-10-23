@@ -10,10 +10,30 @@ from __future__ import annotations
 
 import html
 import json
+import re
 from datetime import date
 from pathlib import Path
 
 from . import model, planning, util
+
+# IDs internos que podem vir embutidos em textos calculados (ex.: motivo da saúde do projeto).
+_ID = re.compile(r"\b(?:(?:TASK|DEC|WIN|PROP|MSG|PUB|FOCUS|PROC|OPP|ASK)-\d{4,}|PROJ-\d+(?:\.\d+)?|GOAL-\d+)\b")
+
+
+def _names(m: dict) -> dict[str, str]:
+    out = {g["id"]: g["title"] for g in m["goals"]}
+    for p in m["projects"]:
+        out[p["id"]] = p["title"]
+        out.update({d["id"]: d["title"] for d in p["deliverables"]})
+    out.update({a["id"]: a["title"] for a in m["actions"]})
+    out.update({d["id"]: d["title"] for d in m["decisions"]})
+    return out
+
+
+def _plain(text: str, names: dict[str, str]) -> str:
+    """Motivo de saúde sem jargão: "PROJ-1.1 venceu há 3d (Título)" → "Título venceu há 3d"; ID solto → título."""
+    text = re.sub(r"^\S+ venceu há (\d+)d \((.*)\)$", r"\2 venceu há \1d", text or "")
+    return _ID.sub(lambda mm: names.get(mm.group(0), "item"), text)
 
 
 def _sections_project(m: dict, pid: str) -> tuple[str, list, list[str]]:
@@ -25,7 +45,7 @@ def _sections_project(m: dict, pid: str) -> tuple[str, list, list[str]]:
     decs = {d["id"]: d for d in m["decisions"]}
     sources: list[str] = []
     intro = [f"**Objetivo:** {goal['title']}" + (f" — {goal['why']}" if goal["why"] else ""),
-             f"**Saúde:** {p['health']['label']} — {p['health']['reason']}",
+             f"**Saúde:** {p['health']['label']} — {_plain(p['health']['reason'], _names(m))}",
              f"**Progresso:** {planning.format_progress(p['progress'])} entregáveis"]
     deliv = []
     for d in p["deliverables"]:
@@ -73,8 +93,9 @@ def _sections_goal(m: dict, gid: str) -> tuple[str, list, list[str]]:
     projs = [x for x in m["projects"] if x["goal"] == gid]
     intro = [f"**Por quê:** {g['why'] or '—'}",
              f"**Progresso:** {planning.format_progress(g['progress'])} entregáveis · **Saúde:** {g['health_label']}"]
+    names = _names(m)
     lines = [f"{p['title']} — {planning.format_progress(p['progress'])} · "
-             f"{p['health']['label']} ({p['health']['reason']})"
+             f"{p['health']['label']} ({_plain(p['health']['reason'], names)})"
              + (f" · próximo: {p['next_due']['title']} em {util.fmt_date(p['next_due']['date'])}" if p["next_due"] else "")
              for p in projs]
     ids = {p["id"] for p in projs}
@@ -212,10 +233,8 @@ def _md(title: str, sections, sources, stamp: str) -> str:
 
 def _html(title: str, sections, sources, stamp: str) -> str:
     def inline(s: str) -> str:
-        e = html.escape(s)
-        while "**" in e:
-            e = e.replace("**", "<b>", 1).replace("**", "</b>", 1)
-        return e
+        # só pares fecham negrito: um `**` solto num título não deixa <b> aberto até o fim do item
+        return re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", html.escape(s))
     body = [f"<h1>{html.escape(title)}</h1>", f"<p class=meta>Gerado em {stamp} · ponto no tempo</p>"]
     for name, items in sections:
         if not items:
@@ -255,10 +274,13 @@ def export(brain, kind: str, target: str | None, fmt: str, area: str | None = No
     out_dir.mkdir(parents=True, exist_ok=True)
     base = f"{util.today().isoformat()}-{kind}" + (f"-{util.slugify(target)}" if target else "")
     path, n = out_dir / f"{base}.{fmt}", 2
-    while path.exists():
-        path, n = out_dir / f"{base}-{n}.{fmt}", n + 1
-    path.write_text(text, encoding="utf-8")
-    return path
+    while True:                      # criação exclusiva: report já gerado nunca é sobrescrito (nem em corrida)
+        try:
+            with path.open("x", encoding="utf-8") as fh:
+                fh.write(text)
+            return path
+        except FileExistsError:
+            path, n = out_dir / f"{base}-{n}.{fmt}", n + 1
 
 
 def cli_export(args, brain) -> None:

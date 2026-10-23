@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import tempfile
 import urllib.error
 import urllib.parse
@@ -41,9 +42,12 @@ def make_zip(brain, dest_dir: Path) -> tuple[Path, list[dict]]:
     zpath = dest_dir / f"{PREFIX}{stamp}.zip"
     skipped: list[dict] = []
     with zipfile.ZipFile(zpath, "w", zipfile.ZIP_DEFLATED) as z:
+        vault_real = inst.vault.resolve()
         for f in sorted(inst.vault.rglob("*")):
             if not f.is_file() or f.name.endswith(".lock"):
                 continue
+            if f.is_symlink() and vault_real not in f.resolve().parents:
+                continue        # link para fora do vault (~/.ssh, config/.env…) nunca vai para o Drive
             rel = f.relative_to(inst.vault.parent)
             if f.stat().st_size > limit:
                 skipped.append({"path": str(rel), "bytes": f.stat().st_size, "sha256": _sha256(f)})
@@ -85,25 +89,45 @@ def upload(zpath: Path, token: str, folder: str) -> str:
     return json.loads(body.decode() or "{}").get("id", "")
 
 
+FOLDER_RE = re.compile(r"^[A-Za-z0-9_-]{5,}$")
+NAME_RE = re.compile(rf"^{re.escape(PREFIX)}\d{{8}}-\d{{4}}(?:-\d+)?\.zip$")   # só o que make_zip gera
+
+
+def _ours(name: str) -> bool:
+    """Arquivo que esta porta criou: `brain-backup-AAAAMMDD-HHMM.zip`. `name contains` do Drive pega também
+    `meu-brain-backup-notas.docx` — nada fora deste padrão é listado como backup, nem apagado."""
+    return bool(NAME_RE.match(name or ""))
+
+
+def _folder(env_value: str) -> str:
+    folder = (env_value or "").strip()
+    if folder and not FOLDER_RE.match(folder):
+        # o ID entra na query do Drive entre aspas: aspas/espaços mudariam a busca (e o que a rotação apaga)
+        raise util.BrainError("GOOGLE_BACKUP_FOLDER_ID inválido (esperado só o ID da pasta: letras, números, - e _)",
+                              code=3)
+    return folder
+
+
 def _list(token: str, folder: str) -> list[dict]:
-    q = urllib.parse.quote(f"'{folder}' in parents and trashed = false and name contains '{PREFIX}'")
-    _, _, body = _drive(token, "GET", f"{API}/files?q={q}&pageSize=100&orderBy=createdTime desc"
-                                      f"&fields=files(id,name,createdTime,size)")
-    return json.loads(body.decode()).get("files", [])
+    q = urllib.parse.quote(f"'{_folder(folder)}' in parents and trashed = false and name contains '{PREFIX}'")
+    _, _, body = _drive(token, "GET", f"{API}/files?q={q}&pageSize=100&orderBy="
+                                      f"{urllib.parse.quote('createdTime desc')}&fields=files(id,name,createdTime,size)")
+    return [f for f in json.loads(body.decode()).get("files", []) if _ours(f.get("name", ""))]
 
 
 def run(brain, local: str | None = None) -> str:
-    keep = brain.inst.cfg["backup"]["keep"]
+    keep = max(int(brain.inst.cfg["backup"]["keep"]), 1)     # keep = 0 apagaria o backup que acabou de ser feito
     if local:
         dest = Path(local).expanduser()
         dest.mkdir(parents=True, exist_ok=True)
         zpath, skipped = make_zip(brain, dest)
-        old = sorted(dest.glob(f"{PREFIX}*.zip"), reverse=True)[keep:]
+        old = sorted((p for p in dest.glob(f"{PREFIX}*.zip") if _ours(p.name) and p.is_file() and not p.is_symlink()),
+                     reverse=True)[keep:]
         for p in old:
             p.unlink()
         return (f"{zpath} ({zpath.stat().st_size // 2**20} MB) · {len(skipped)} arquivos grandes no manifesto"
                 + (f" · {len(old)} antigos removidos" if old else ""))
-    folder = config.load_env(brain.inst).get("GOOGLE_BACKUP_FOLDER_ID", "").strip()
+    folder = _folder(config.load_env(brain.inst).get("GOOGLE_BACKUP_FOLDER_ID", ""))
     if not folder:
         raise util.BrainError("GOOGLE_BACKUP_FOLDER_ID ausente no config/.env (guides/backup.md) — "
                               "ou use `brain backup --local <pasta>`", code=3)
@@ -111,21 +135,25 @@ def run(brain, local: str | None = None) -> str:
     with tempfile.TemporaryDirectory() as tmp:
         zpath, skipped = make_zip(brain, Path(tmp))
         mb = zpath.stat().st_size // 2**20
-        upload(zpath, token, folder)
+        new_id = upload(zpath, token, folder)
+    if not new_id:
+        # sem confirmação do Drive de que o novo backup existe, nenhum antigo é apagado
+        raise util.BrainError("Drive não confirmou o upload (sem id) — nenhum backup antigo foi removido", code=2)
     files = _list(token, folder)
     for f in files[keep:]:
-        if f["name"].startswith(PREFIX):
-            _drive(token, "DELETE", f"{API}/files/{f['id']}")
+        if _ours(f.get("name", "")) and f.get("id") != new_id:
+            _drive(token, "DELETE", f"{API}/files/{urllib.parse.quote(f['id'], safe='')}")
     return f"{zpath.name} ({mb} MB) → Drive · {len(skipped)} arquivos grandes no manifesto"
 
 
 def cli(args, brain) -> None:
     if args.status:
         if args.local:
-            files = sorted(Path(args.local).expanduser().glob(f"{PREFIX}*.zip"), reverse=True)
+            files = sorted((p for p in Path(args.local).expanduser().glob(f"{PREFIX}*.zip") if _ours(p.name)),
+                           reverse=True)
             print(f"último: {files[0].name} · total {len(files)}" if files else "nenhum backup local")
             return
-        folder = config.load_env(brain.inst).get("GOOGLE_BACKUP_FOLDER_ID", "").strip()
+        folder = _folder(config.load_env(brain.inst).get("GOOGLE_BACKUP_FOLDER_ID", ""))
         if not folder:
             raise util.BrainError("GOOGLE_BACKUP_FOLDER_ID ausente no config/.env", code=3)
         files = _list(access_token(brain.inst), folder)

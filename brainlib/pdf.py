@@ -75,7 +75,7 @@ def parse_pages(spec: str | None) -> list[int]:
 def _check(path: Path) -> str:
     if not path.is_file():
         raise util.BrainError(f"arquivo não encontrado: {path}", code=3)
-    return str(path)
+    return str(path.resolve())      # absoluto: um nome como "-foo.pdf" não vira opção do pdftotext/pdftoppm
 
 
 def text(path: str | Path, pages: list[int] | None = None) -> str:
@@ -83,12 +83,22 @@ def text(path: str | Path, pages: list[int] | None = None) -> str:
     p = _check(Path(path))
     pages = pages or []
     if shutil.which("pdftotext"):
-        chunks, total = [], _pdftotext_pages(p) if not pages else 0
-        for n in pages or range(1, total + 1):
-            res = subprocess.run(["pdftotext", "-layout", "-f", str(n), "-l", str(n), p, "-"],
-                                 capture_output=True, text=True, check=False)
+        chunks = []
+        if pages:
+            for n in pages:
+                res = subprocess.run(["pdftotext", "-layout", "-f", str(n), "-l", str(n), p, "-"],
+                                     capture_output=True, text=True, check=False)
+                if res.returncode == 0:
+                    chunks.append(f"=== PÁGINA {n} ===\n{res.stdout.rstrip()}")
+        else:
+            # Uma chamada só; o pdftotext separa páginas com \f. (Antes: um processo por página e, sem
+            # `pdfinfo` no PATH, só a página 1 era lida — em silêncio.)
+            res = subprocess.run(["pdftotext", "-layout", p, "-"], capture_output=True, text=True, check=False)
             if res.returncode == 0:
-                chunks.append(f"=== PÁGINA {n} ===\n{res.stdout.rstrip()}")
+                parts = res.stdout.split("\f")
+                if len(parts) > 1 and not parts[-1].strip():
+                    parts.pop()
+                chunks = [f"=== PÁGINA {n} ===\n{t.rstrip()}" for n, t in enumerate(parts, start=1)]
         if chunks:
             return "\n".join(chunks) + "\n"
     tool = _swift_tool(SWIFT_TEXT, "pdftext")
@@ -107,12 +117,6 @@ def text(path: str | Path, pages: list[int] | None = None) -> str:
                      for n in want if 1 <= n <= len(reader.pages)) + "\n"
 
 
-def _pdftotext_pages(p: str) -> int:
-    info = subprocess.run(["pdfinfo", p], capture_output=True, text=True, check=False) if shutil.which("pdfinfo") else None
-    m = re.search(r"^Pages:\s+(\d+)", info.stdout, re.M) if info else None
-    return int(m.group(1)) if m else 1
-
-
 def render(path: str | Path, pages: list[int] | None = None, out: str | Path | None = None, dpi: int = 110) -> list[Path]:
     """PNG de cada página pedida, numa pasta temporária (ou `out`). Para PDF escaneado, onde não há texto."""
     p = _check(Path(path))
@@ -122,10 +126,20 @@ def render(path: str | Path, pages: list[int] | None = None, out: str | Path | N
     if shutil.which("pdftoppm"):
         args = ["pdftoppm", "-png", "-r", str(dpi)]
         if pages:
-            args += ["-f", str(pages[0]), "-l", str(pages[-1])]
-        res = subprocess.run([*args, p, str(dest / "pagina")], capture_output=True, text=True, check=False)
-        if res.returncode == 0:
-            return sorted(dest.glob("pagina*.png"))
+            # Página a página: `-f 1 -l 50` para "1,50" renderizava as 50. Nome igual ao do PDFKit.
+            got = []
+            for n in pages:
+                out_png = dest / f"pagina-{n:03d}"
+                res = subprocess.run([*args, "-f", str(n), "-l", str(n), "-singlefile", p, str(out_png)],
+                                     capture_output=True, text=True, check=False)
+                if res.returncode == 0 and out_png.with_suffix(".png").exists():
+                    got.append(out_png.with_suffix(".png"))
+            if got:
+                return got
+        else:
+            res = subprocess.run([*args, p, str(dest / "pagina")], capture_output=True, text=True, check=False)
+            if res.returncode == 0:
+                return sorted(dest.glob("pagina*.png"))
     tool = _swift_tool(SWIFT_RENDER, "pdfrender")
     if not tool:
         raise util.BrainError(HINT, code=3)

@@ -13,7 +13,7 @@ import shlex
 
 from rich.text import Text
 
-from .. import config
+from .. import config, util
 from . import bridge
 from .modals import ConfirmModal, Field, FormSpec, PickerModal, PickItem
 
@@ -25,7 +25,11 @@ def rule_for(denial: dict) -> str:
     """A regra de allowlist que cobriria a ferramenta negada (Bash → prefixo do comando; MCP → o próprio nome)."""
     tool, inp = denial.get("tool_name", ""), denial.get("tool_input") or {}
     if tool == "Bash":
-        words = shlex.split(str(inp.get("command", "")).splitlines()[0], posix=True) if inp.get("command") else []
+        first = str(inp.get("command") or "").splitlines()[0] if inp.get("command") else ""
+        try:
+            words = shlex.split(first, posix=True)
+        except ValueError:                         # aspas que fecham na linha seguinte (texto de várias linhas, heredoc)
+            words = first.split()
         words = [w for w in words if w != "<<" and not w.startswith("<<")]
         if not words:
             return "Bash"
@@ -39,6 +43,19 @@ def detail_of(denial: dict) -> str:
     if denial.get("tool_name") == "Bash":
         return str(inp.get("command", "")).splitlines()[0][:140] if inp.get("command") else ""
     return json.dumps(inp, ensure_ascii=False)[:140]
+
+
+def safe_rule(rule: str) -> str:
+    """A regra que o TUI pode liberar, normalizada; '' quando não pode: inválida, MCP de escrita no mundo exterior, ou MCP
+    amplo demais (servidor inteiro ou curinga, que incluiria as ferramentas de escrita). A regra vem do contexto da pergunta,
+    que o agente escreve: aqui ela é conferida de novo, antes do `brain agent allow` e do `--allowedTools` do resume."""
+    try:
+        rule = config.check_allow_rule(rule)
+    except util.BrainError:
+        return ""
+    if rule.startswith("mcp__") and (rule.count("__") < 2 or "*" in rule or config.is_external_write(rule)):
+        return ""
+    return rule
 
 
 def scope_for(rule: str) -> str:
@@ -56,8 +73,17 @@ class AskKeys:
             self._answer_text(q)
             return
 
+        rule, scope = self._allow_rule(q) if q.kind == "permissao" else ("", "")
+        where = "[runner].allow" if scope == "runner" else "[tui].agent_allow"
+
+        def label(i: int, o: str) -> Text:
+            t = Text.assemble((f"{i}  ", "dim"), (o, "bold"))
+            if q.kind == "permissao" and o == ALLOW_YES:           # o dono vê a regra exata que vai gravar, não só o texto do agente
+                t.append(f"  → {rule} em {where}" if rule else "  → nada: esta regra não é liberada por aqui", "yellow")
+            return t
+
         def source(text: str) -> list[PickItem]:
-            out = [PickItem(Text.assemble((f"{i}  ", "dim"), (o, "bold")), o) for i, o in enumerate(q.options, 1)
+            out = [PickItem(label(i, o), o) for i, o in enumerate(q.options, 1)
                    if not text or text.lower() in o.lower()]
             if not text or "outra" in text.lower():
                 out.append(PickItem(Text(OTHER, "cyan"), None))
@@ -82,7 +108,10 @@ class AskKeys:
 
     @staticmethod
     def _allow_rule(q) -> tuple[str, str]:
+        """(regra, escopo) que "liberar sempre" gravaria; regra '' quando a pergunta não libera nada (escrita externa, regra
+        inválida ou ampla demais), mesmo que a resposta digitada seja "liberar sempre"."""
         rule = next((c[len("allow:"):] for c in q.context if c.startswith("allow:")), "")
+        rule = "" if "externo" in q.context else safe_rule(rule)
         return rule, scope_for(rule)
 
     def _answer_cmds(self, q, text: str) -> list[list[str]]:

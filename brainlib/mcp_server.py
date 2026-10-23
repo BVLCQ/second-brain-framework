@@ -198,6 +198,8 @@ def call_tool(name: str, args: dict) -> object:
 
 
 def handle(msg: dict) -> dict | None:
+    if not isinstance(msg, dict):      # `5`, `[]` ou `"x"` numa linha/lote: erro JSON-RPC, não derruba o servidor
+        return {"jsonrpc": "2.0", "id": None, "error": {"code": -32600, "message": "pedido inválido"}}
     mid, method = msg.get("id"), msg.get("method")
     if mid is None:
         return None
@@ -219,7 +221,10 @@ def handle(msg: dict) -> dict | None:
             if name not in {t[0] for t in TOOLS}:
                 return {"jsonrpc": "2.0", "id": mid, "error": {"code": -32602, "message": f"ferramenta desconhecida: {name}"}}
             try:
-                data = call_tool(name, params.get("arguments") or {})
+                arguments = params.get("arguments") or {}
+                if not isinstance(arguments, dict):
+                    raise util.BrainError("arguments deve ser um objeto")
+                data = call_tool(name, arguments)
                 result = {"content": [{"type": "text", "text": json.dumps(data, ensure_ascii=False, default=str)}],
                           "isError": False}
             except util.BrainError as e:

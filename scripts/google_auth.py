@@ -16,7 +16,9 @@ Cole em config/.env: GOOGLE_REFRESH_TOKEN=<valor>. Guia: guides/google-oauth.md
 """
 from __future__ import annotations
 
+import html
 import json
+import secrets
 import shutil
 import subprocess
 import sys
@@ -37,20 +39,37 @@ PORT = 8917
 
 class _Handler(BaseHTTPRequestHandler):
     code: str | None = None
+    denied: str | None = None
+    expected_state: str = ""
 
     def do_GET(self):  # noqa: N802 — nome da stdlib
         qs = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
-        _Handler.code = (qs.get("code") or [None])[0]
+        code = (qs.get("code") or [None])[0]
         err = (qs.get("error") or [None])[0]
-        self.send_response(200)
+        # `state` confere que o código veio do redirect DESTE pedido: outra aba/processo batendo na porta
+        # (favicon, varredura, página maliciosa com ?code=…) não consome a espera nem injeta um código alheio
+        same = secrets.compare_digest((qs.get("state") or [""])[0], _Handler.expected_state)
+        ok = bool(code) and same
+        if ok:
+            _Handler.code = code
+        elif same and err:
+            _Handler.denied = err
+        self.send_response(200 if ok else 400)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.end_headers()
-        msg = ("<h2>✓ Autorizado — pode fechar esta aba e voltar ao terminal.</h2>" if _Handler.code
-               else f"<h2>✗ Não autorizado ({err}) — rode de novo.</h2>")
+        msg = ("<h2>✓ Autorizado — pode fechar esta aba e voltar ao terminal.</h2>" if ok
+               else f"<h2>✗ Não autorizado ({html.escape(str(err or 'pedido sem código/state válido'))}) — rode de novo.</h2>")
         self.wfile.write(msg.encode())
 
     def log_message(self, format, *args):  # noqa: A002 — assinatura da stdlib
         pass
+
+
+def _serve_until_code(server: HTTPServer) -> None:
+    server.timeout = 1
+    deadline = time.time() + 600
+    while not (_Handler.code or _Handler.denied) and time.time() < deadline:
+        server.handle_request()
 
 
 def main() -> None:
@@ -60,9 +79,11 @@ def main() -> None:
     if not client_id or not client_secret:
         sys.exit("ERRO: GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET ausentes em config/.env — veja guides/google-oauth.md")
     redirect = f"http://localhost:{PORT}"
+    _Handler.expected_state = secrets.token_urlsafe(24)
     auth_url = "https://accounts.google.com/o/oauth2/v2/auth?" + urllib.parse.urlencode({
         "response_type": "code", "client_id": client_id, "redirect_uri": redirect, "scope": SCOPES,
-        "access_type": "offline", "prompt": "consent"})
+        "access_type": "offline", "prompt": "consent",
+        "state": _Handler.expected_state})
     print("Abrindo o navegador (escopos: calendar.events.owned + drive.file)…")
     print(f"Se não abrir: {auth_url}\n")
     # Linux: xdg-open primeiro (`open` pode existir e não ser o launcher). macOS: cai em `open`.
@@ -72,9 +93,9 @@ def main() -> None:
     else:
         print("(não achei xdg-open/open — cole a URL acima no navegador)")
     server = HTTPServer(("127.0.0.1", PORT), _Handler)
-    threading.Thread(target=server.handle_request, daemon=True).start()
+    threading.Thread(target=_serve_until_code, args=(server,), daemon=True).start()
     for _ in range(600):
-        if _Handler.code:
+        if _Handler.code or _Handler.denied:
             break
         time.sleep(1)
     server.server_close()

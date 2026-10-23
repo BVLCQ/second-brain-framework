@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import plistlib
+import re
 import shlex
 import shutil
 import subprocess
@@ -187,7 +188,16 @@ def _schedule_launchd(args, brain) -> None:
     print(f"✓ noturno agendado às {args.time} (launchd: {LAUNCHD_LABEL})")
 
 
+def _check_time(value: str) -> None:
+    m = re.fullmatch(r"(\d{1,2}):(\d{2})", (value or "").strip())
+    if not m or int(m.group(1)) > 23 or int(m.group(2)) > 59:
+        # launchd aceita Hour=25 calado (e nunca roda) — e o agendamento anterior já teria sido removido
+        raise util.BrainError(f"--time inválido: {value!r} (use HH:MM, ex.: 05:00)", code=2)
+
+
 def schedule_cli(args, brain) -> None:
+    if args.action == "install":
+        _check_time(args.time)
     if _use_launchd():
         return _schedule_launchd(args, brain)
     if not shutil.which("crontab"):

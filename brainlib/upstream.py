@@ -45,11 +45,19 @@ SLACK_PLACEHOLDERS = {"seu-workspace", "workspace", "example", "acme", "empresa"
 
 
 # ── git ─────────────────────────────────────────────────────────────────────
+GIT_TIMEOUT_S = 600
+
+
 def _git(root: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess:
+    # sem terminal para pedir senha (noturno, hook): credencial ausente falha em vez de travar para sempre
+    env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
     try:
-        r = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True)
+        r = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True, errors="replace",
+                           env=env, timeout=GIT_TIMEOUT_S)
     except FileNotFoundError as e:
         raise util.BrainError("git não encontrado no PATH") from e
+    except subprocess.TimeoutExpired as e:
+        raise util.BrainError(f"git {' '.join(args[:2])} não respondeu em {GIT_TIMEOUT_S}s", 4) from e
     if check and r.returncode != 0:
         raise util.BrainError(f"git {' '.join(args[:2])} falhou: {(r.stderr or r.stdout).strip()}", 4)
     return r
@@ -170,10 +178,15 @@ def update(inst: config.Instance, check: bool = False, rebase: bool = False,
         res["template_diverged"] = [f"vault/{f[len('template/'):]}" for f in incoming_tpl
                                     if (inst.vault / f[len("template/"):]).exists()
                                     and (inst.vault / f[len("template/"):]).read_bytes() != (root / f).read_bytes()]
-        d = subprocess.run([sys.executable, str(root / "brain"), "doctor"], cwd=root, capture_output=True, text=True)
+        try:
+            d = subprocess.run([sys.executable, str(root / "brain"), "doctor"], cwd=root, capture_output=True,
+                               text=True, timeout=GIT_TIMEOUT_S)
+            doc_out, doc_ok = d.stdout + d.stderr, d.returncode == 0
+        except subprocess.TimeoutExpired:
+            doc_out, doc_ok = f"doctor não respondeu em {GIT_TIMEOUT_S}s", False
         res["hook"] = hook(inst, "install")
-        res["doctor"] = [ln for ln in (d.stdout + d.stderr).splitlines() if ln.strip()]
-        res["doctor_ok"] = d.returncode == 0
+        res["doctor"] = [ln for ln in doc_out.splitlines() if ln.strip()]
+        res["doctor_ok"] = doc_ok
     return res
 
 
@@ -279,10 +292,132 @@ def _scan_line(text: str, term_res: list[tuple[str, re.Pattern]], home: str) -> 
 EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 
 
-def scan(inst: config.Instance, ref: str | None, committed: bool = False) -> list[dict]:
-    """Procura dado pessoal/segredo no que subiria: linhas adicionadas, arquivos novos e mensagens de commit.
+MAX_BLOB_BYTES = 50 * 2**20          # binário maior que isto não é varrido (o framework não carrega blobs assim)
+_PRINTABLE_RUN = re.compile(rb"[\x20-\x7e\t\x80-\xff]{6,}")   # como o `strings`: só trechos legíveis de um binário
+_C_ESCAPES = {"a": 7, "b": 8, "t": 9, "n": 10, "v": 11, "f": 12, "r": 13, '"': 34, "\\": 92}
+
+
+def _unquote(path: str) -> str:
+    """Caminho como o git imprime: `"b/caf\\303\\251.md"` (aspas C, octal UTF-8) → `b/café.md`."""
+    if not (len(path) >= 2 and path[0] == path[-1] == '"'):
+        return path
+    out, i, s = bytearray(), 0, path[1:-1]
+    while i < len(s):
+        c = s[i]
+        if c == "\\" and i + 1 < len(s):
+            nxt = s[i + 1]
+            if re.fullmatch(r"[0-7]{3}", s[i + 1:i + 4]):
+                out.append(int(s[i + 1:i + 4], 8))
+                i += 4
+                continue
+            out.append(_C_ESCAPES.get(nxt, ord(nxt)))
+            i += 2
+            continue
+        out += c.encode("utf-8")
+        i += 1
+    return out.decode("utf-8", errors="replace")
+
+
+def _strip_side(path: str, side: str) -> str:
+    path = _unquote(path.strip())
+    return path[2:] if path.startswith(f"{side}/") else ("" if path == "/dev/null" else path)
+
+
+def _binary_lines(data: bytes) -> list[str]:
+    return [m.group(0).decode("utf-8", errors="replace") for m in _PRINTABLE_RUN.finditer(data)]
+
+
+def _blob(root: Path, sha: str, path: str) -> bytes | None:
+    """Conteúdo de `path` no commit `sha` (ou da working tree, sem sha) — para varrer binários."""
+    try:
+        if not sha:
+            p = root / path
+            return p.read_bytes() if p.is_file() and p.stat().st_size <= MAX_BLOB_BYTES else None
+        size = subprocess.run(["git", "-C", str(root), "cat-file", "-s", f"{sha}:{path}"],
+                              capture_output=True, text=True, timeout=60)
+        if size.returncode != 0 or int(size.stdout.strip() or 0) > MAX_BLOB_BYTES:
+            return None
+        r = subprocess.run(["git", "-C", str(root), "cat-file", "blob", f"{sha}:{path}"], capture_output=True, timeout=120)
+        return r.stdout if r.returncode == 0 else None
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return None
+
+
+def _scan_diff(root: Path, text: str, check) -> None:
+    """Percorre um `git log -p`/`git diff` (com -U0, inclusive diffs combinados de merge) chamando
+    check(arquivo, linha, texto) para cada linha que existe no resultado e não existia antes.
+
+    Máquina de estados: dentro de um hunk, toda linha começada por marcador é conteúdo — uma linha de
+    código que começa com `++ b/` não se passa por cabeçalho `+++ b/` e escapa da varredura."""
+    cur, lineno, sha, nparents, in_hunk, header_file = "", 0, "", 1, False, ""
+
+    def label(path: str) -> str:
+        return f"{path} (commit {sha[:9]})" if path and sha else path
+
+    for ln in text.splitlines():
+        if ln.startswith("\x01"):
+            sha, cur, in_hunk = ln[1:].strip(), "", False
+            continue
+        if ln.startswith("diff "):
+            in_hunk, cur = False, ""
+            m = re.match(r'diff --git (?:"a/.*?"|a/\S*) ("b/.*"|b/.*)$', ln)
+            header_file = _strip_side(m.group(1), "b") if m else ""
+            if not header_file and (ln.startswith("diff --cc ") or ln.startswith("diff --combined ")):
+                header_file = _unquote(ln.split(" ", 2)[2].strip())
+            if header_file:
+                check(label(header_file), 0, header_file)          # o nome do arquivo também vai a público
+            continue
+        if not in_hunk:
+            if ln.startswith("+++ "):
+                cur = _strip_side(ln[4:], "b")
+                if cur:
+                    check(label(cur), 0, cur)
+            elif ln.startswith("rename to ") or ln.startswith("copy to "):
+                new = _unquote(ln.split(" to ", 1)[1].strip())
+                check(label(new), 0, new)
+            elif ln.startswith("Binary files ") and ln.endswith(" differ"):
+                target = header_file
+                m = re.match(r"Binary files .* and (.*) differ$", ln)
+                if m and _strip_side(m.group(1), "b"):
+                    target = _strip_side(m.group(1), "b")
+                data = _blob(root, sha, target) if target else None
+                for n, piece in enumerate(_binary_lines(data or b""), start=1):
+                    check(f"{label(target)} [binário]", n, piece)
+            elif ln.startswith("@@"):
+                at = len(ln) - len(ln.lstrip("@"))
+                nparents = max(at - 1, 1)
+                m = re.search(r"\+(\d+)", ln)
+                lineno = int(m.group(1)) if m else 0
+                in_hunk = True
+            continue
+        if ln.startswith("@@"):                                     # hunk seguinte do mesmo arquivo
+            at = len(ln) - len(ln.lstrip("@"))
+            nparents = max(at - 1, 1)
+            m = re.search(r"\+(\d+)", ln)
+            lineno = int(m.group(1)) if m else 0
+            continue
+        if ln.startswith("\\"):                                     # "\ No newline at end of file"
+            continue
+        marks, body = ln[:nparents], ln[nparents:]
+        if "-" in marks:
+            continue
+        if "+" in marks and cur:
+            check(label(cur), lineno, body)
+        lineno += 1
+
+
+def _private_path(path: str) -> bool:
+    return path in PRIVATE_FILES or path.startswith(PRIVATE_PREFIXES)
+
+
+def scan(inst: config.Instance, ref: str | None, committed: bool = False,
+         revsets: list[list[str]] | None = None) -> list[dict]:
+    """Procura dado pessoal/segredo no que subiria: linhas adicionadas, nomes de arquivo, binários,
+    arquivos novos e mensagens de commit.
 
     committed=True olha só commits (o que um push envia); False inclui working tree e arquivos novos.
+    `revsets` (só com committed): os conjuntos de commits que o push envia, um por ref atualizada
+    (ex.: [["<sha local>", "^<sha remoto>"]]) — é o que o hook pre-push recebe do git.
     """
     root = inst.root
     term_res = [(kind, re.compile(r"(?<![\w])" + re.escape(t) + r"(?![\w])", re.I)) for t, kind in _leak_terms(inst)]
@@ -296,41 +431,93 @@ def scan(inst: config.Instance, ref: str | None, committed: bool = False) -> lis
                 seen.add((file, line, rule))
                 findings.append({"file": file, "line": line, "rule": rule, "text": text.strip()[:110]})
 
+    if revsets is None:
+        revsets = [[f"{ref}..HEAD"] if ref else ["HEAD"]]
+    q = ("-c", "core.quotePath=false")
     # Em modo committed olha commit a commit: o histórico inteiro vai a público, não só o diff líquido
-    # (um dado removido num commit posterior continuaria legível no commit anterior).
+    # (um dado removido num commit posterior continuaria legível no commit anterior). Merges entram com
+    # diff combinado denso (--cc): só o que o merge introduziu além dos pais (resolução de conflito, "evil merge").
     if committed:
-        diff = _git(root, "log", "-p", "-U0", "--no-color", "--no-merges", "--reverse", "--format=%x01%h",
-                    f"{ref}..HEAD" if ref else "HEAD")
-    else:
-        diff = _git(root, "diff", "-U0", "--no-color", ref or EMPTY_TREE)
-    cur, lineno, sha = "", 0, ""
-    for ln in diff.stdout.splitlines():
-        if ln.startswith("\x01"):
-            sha = ln[1:]
-        elif ln.startswith("+++ "):
-            cur = (ln[6:] if ln.startswith("+++ b/") else "")
-            cur = f"{cur} (commit {sha})" if cur and sha else cur
-        elif ln.startswith("@@"):
-            m = re.search(r"\+(\d+)", ln)
-            lineno = int(m.group(1)) if m else 0
-        elif ln.startswith("+") and cur:
-            check(cur, lineno, ln[1:])
-            lineno += 1
-    for f in ([] if committed else _lines(_git(root, "ls-files", "--others", "--exclude-standard"))):
-        p = root / f
-        try:
-            if not p.is_file() or p.stat().st_size > MAX_SCAN_BYTES:
+        for revs in revsets:
+            if not revs:
                 continue
-            body = p.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
+            diff = _git(root, *q, "log", "-p", "-U0", "--no-color", "--cc", "--reverse", "--format=%x01%H", *revs)
+            _scan_diff(root, diff.stdout, check)
+            for f in _lines(_git(root, *q, "log", "--name-only", "--format=", *revs)):
+                if _private_path(f):
+                    key = (f, 0, "arquivo do dono no histórico")
+                    if key not in seen:
+                        seen.add(key)
+                        findings.append({"file": f, "line": 0, "rule": key[2],
+                                         "text": "vault/ e config pessoal nunca vão ao repo (git rm --cached + reescrever o commit)"})
+    else:
+        _scan_diff(root, _git(root, *q, "diff", "-U0", "--no-color", ref or EMPTY_TREE).stdout, check)
+    for f in ([] if committed else _lines(_git(root, *q, "ls-files", "--others", "--exclude-standard"))):
+        p = root / f
+        check(f, 0, f)
+        try:
+            if not p.is_file() or p.stat().st_size > MAX_BLOB_BYTES:
+                continue
+            raw = p.read_bytes()
+        except OSError:
             continue
-        for n, text in enumerate(body.splitlines(), start=1):
-            check(f, n, text)
-    rng = f"{ref}..HEAD" if ref else "HEAD"
-    for n, text in enumerate(_git(root, "log", "--format=%B", rng).stdout.splitlines(), start=1):
-        if "noreply@" not in text:
-            check("(mensagem de commit)", n, text)
+        try:
+            body = raw.decode("utf-8") if len(raw) <= MAX_SCAN_BYTES and b"\0" not in raw else None
+        except UnicodeDecodeError:
+            body = None
+        lines = body.splitlines() if body is not None else _binary_lines(raw)
+        for n, text in enumerate(lines, start=1):
+            check(f if body is not None else f"{f} [binário]", n, text)
+    for revs in revsets:
+        if not revs:
+            continue
+        for n, text in enumerate(_git(root, "log", "--format=%B", *revs).stdout.splitlines(), start=1):
+            if "noreply@" not in text:
+                check("(mensagem de commit)", n, text)
     return findings
+
+
+ZERO_SHA_RE = re.compile(r"^0+$")
+
+
+def push_revsets(inst: config.Instance, remote: str, stdin_text: str) -> list[list[str]]:
+    """Linhas do pre-push (`<ref local> <sha local> <ref remota> <sha remoto>`) → conjuntos de commits enviados.
+
+    Apagar ref remota (sha local zero) não envia nada. Ref nova (sha remoto zero) ou sha remoto que não
+    existe aqui: tudo que o remoto ainda não tem segundo as refs locais dele (`--not --remotes=<remote>`);
+    se `remote` não é um remote nomeado (push direto para URL), nada é excluído — varre o histórico inteiro.
+    """
+    root = inst.root
+    named = remote in _git(root, "remote").stdout.split()
+    out: list[list[str]] = []
+    for ln in stdin_text.splitlines():
+        parts = ln.split()
+        if len(parts) < 4:
+            continue
+        local_sha, remote_sha = parts[1], parts[3]
+        if ZERO_SHA_RE.match(local_sha):
+            continue
+        known = (not ZERO_SHA_RE.match(remote_sha)
+                 and _git(root, "cat-file", "-e", f"{remote_sha}^{{commit}}", check=False).returncode == 0)
+        if known:
+            out.append([local_sha, f"^{remote_sha}"])
+        elif named:
+            out.append([local_sha, "--not", f"--remotes={remote}"])
+        else:
+            out.append([local_sha])
+    return out
+
+
+def pre_push_scan(inst: config.Instance, remote: str, stdin_text: str) -> dict:
+    """O que o hook pre-push roda: varre exatamente os commits que este push envia (qualquer branch,
+    tag, HEAD solto ou ref nova), sem depender do branch atual."""
+    revsets = push_revsets(inst, remote, stdin_text)
+    tracked = [f for f in _lines(_git(inst.root, "ls-files")) if _private_path(f)]
+    findings = [{"file": f, "line": 0, "rule": "arquivo do dono rastreado pelo git",
+                 "text": "git rm --cached antes de enviar"} for f in tracked]
+    findings += scan(inst, None, committed=True, revsets=revsets) if revsets else []
+    return {"remote": remote, "branch": "(pre-push)", "ref": None, "ahead": 0, "behind": 0, "changed": [], "new": [],
+            "local_scripts": [], "committed_only": True, "revsets": revsets, "findings": findings}
 
 
 def _local_scripts(root: Path) -> list[str]:
@@ -365,8 +552,11 @@ def _print_findings(findings: list[dict]) -> None:
 
 
 def _print_scan(st: dict) -> None:
-    ref = st["ref"] or f"{st['remote']}/{st['branch']} (ainda sem referência local)"
-    print(f"{ref}: {st['ahead']} commit(s) à frente · {st['behind']} atrás (sem rede; `--fetch` atualiza)")
+    if "revsets" in st:
+        print(f"pre-push → {st['remote']}: {len(st['revsets'])} ref(s) com commits a varrer")
+    else:
+        ref = st["ref"] or f"{st['remote']}/{st['branch']} (ainda sem referência local)"
+        print(f"{ref}: {st['ahead']} commit(s) à frente · {st['behind']} atrás (sem rede; `--fetch` atualiza)")
     if not st["committed_only"] and (st["changed"] or st["new"]):
         print(f"não enviados: {len(st['changed'])} alterado(s) · {len(st['new'])} novo(s)")
         for f in st["changed"][:30]:
@@ -390,17 +580,26 @@ def _print_scan(st: dict) -> None:
 
 # ── hook pre-push (git nativo) ──────────────────────────────────────────────
 HOOK_MARK = "# brain-upstream-scan"
+# O git passa ao pre-push o remoto ($1) e, no stdin, uma linha por ref enviada; a varredura lê as duas
+# coisas (BRAIN_PRE_PUSH) e olha exatamente os commits do push — qualquer branch, tag, HEAD solto, ref nova.
+# Falha da varredura BLOQUEIA (fail-closed): rede de segurança que some em silêncio não protege nada.
+# Exceção: ./brain ausente/não executável (126/127 — árvore sem o CLI) só avisa.
 HOOK_BODY = f"""#!/bin/sh
-{HOOK_MARK} — instalado por `brain update`/`brain init`; `brain upstream hook remove` tira; `git push --no-verify` ignora
-root="$(git rev-parse --show-toplevel)" || exit 0
-"$root/brain" upstream scan --committed
+{HOOK_MARK} — instalado por `brain update`/`brain init`; `brain upstream hook remove` tira
+root="$(git rev-parse --show-toplevel)" || exit 1
+BRAIN_PRE_PUSH="$1" "$root/brain" upstream scan --committed
 rc=$?
+[ "$rc" -eq 0 ] && exit 0
 if [ "$rc" -eq 4 ]; then
   echo "push bloqueado: dado pessoal/segredo nos commits (acima). Limpe e commite de novo." >&2
   exit 1
 fi
-[ "$rc" -ne 0 ] && echo "aviso: a varredura do brain falhou (código $rc); push liberado." >&2
-exit 0
+if [ "$rc" -eq 126 ] || [ "$rc" -eq 127 ]; then
+  echo "aviso: ./brain ausente ou não executável nesta árvore — varredura não rodou; push liberado." >&2
+  exit 0
+fi
+echo "push bloqueado: a varredura do brain falhou (código $rc) — corrija o erro acima e tente de novo." >&2
+exit 1
 """
 
 
@@ -482,7 +681,11 @@ def cli_upstream(args, _b) -> None:
                "de-outro": "⚠ já existe um pre-push que não é do brain — não mexi",
                "sem-git": "esta instância não é um clone git"}[state])
         return
-    st = upstream_scan(inst, args.remote, args.branch, committed=args.committed, fetch=args.fetch)
+    pre_push = os.environ.get("BRAIN_PRE_PUSH")
+    if args.committed and pre_push is not None:          # chamado pelo hook: refs do push no stdin
+        st = pre_push_scan(inst, args.remote or pre_push or "origin", sys.stdin.read())
+    else:
+        st = upstream_scan(inst, args.remote, args.branch, committed=args.committed, fetch=args.fetch)
     if args.json:
         print(json.dumps(st, ensure_ascii=False, indent=2))
     else:

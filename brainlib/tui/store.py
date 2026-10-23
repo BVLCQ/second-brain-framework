@@ -5,6 +5,7 @@ Nada aqui escreve. O TUI recarrega depois de cada comando que ele mesmo dispara.
 from __future__ import annotations
 
 import re
+import tomllib
 from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any
@@ -143,11 +144,13 @@ class Store:
         self.health: list[dict] = []
         self.inbox = 0
         self.rendered_age_h: float | None = None
+        self._cfg_stat = self._stat(self._cfg_file)
         self.load()
 
     # ── carga ──────────────────────────────────────────────────────────────
     def load(self) -> None:
         """Relê tudo do disco. Pode levantar BrainError (ledger corrompido)."""
+        self._reload_cfg()
         brain = Brain(self.inst)
         m = model.build(brain)
         health = doctor.checks(brain)
@@ -181,16 +184,36 @@ class Store:
             self.sources, self.watch_error = [], str(e)
         self.sig = self.signature()
 
+    @property
+    def _cfg_file(self):
+        return self.inst.config_dir / "brain.toml"
+
+    @staticmethod
+    def _stat(p) -> tuple:
+        try:
+            x = p.stat()
+            return (x.st_mtime_ns, x.st_size)
+        except OSError:
+            return (0, 0)
+
+    def _reload_cfg(self) -> None:
+        """brain.toml mudou desde a última leitura (`brain agent allow`, outro editor)? Relê: o allowlist do agente, o
+        [outbound].allow e os destinos do publish valem já, sem reabrir o TUI. TOML quebrado mantém a config anterior."""
+        st = self._stat(self._cfg_file)
+        if st == self._cfg_stat:
+            return
+        try:
+            user = tomllib.loads(self._cfg_file.read_text(encoding="utf-8")) if self._cfg_file.exists() else {}
+        except (OSError, tomllib.TOMLDecodeError):
+            return
+        self.inst.cfg = config._merge(config.DEFAULTS, user)
+        self._cfg_stat = st
+
     def signature(self) -> tuple:
-        """Muda quando o vault muda fora do TUI (agente, outro terminal): ledger, PLANNING e inbox."""
-        def st(p) -> tuple:
-            try:
-                x = p.stat()
-                return (x.st_mtime_ns, x.st_size)
-            except OSError:
-                return (0, 0)
+        """Muda quando o vault muda fora do TUI (agente, outro terminal): ledger, PLANNING, inbox, watch.toml e brain.toml."""
+        st = self._stat
         inbox = sorted(p.name for p in self.inst.inbox.glob("*")) if self.inst.inbox.exists() else []
-        return (st(self.brain.ledger_path), st(self.inst.planning_file), st(watch.path(self.inst)), tuple(inbox))
+        return (st(self.brain.ledger_path), st(self.inst.planning_file), st(watch.path(self.inst)), st(self._cfg_file), tuple(inbox))
 
     def _sources(self) -> list[dict]:
         """Fontes do watch.toml + o que o ledger sabe de cada pull; pulls avulsos (/connect) aparecem fora do watch."""

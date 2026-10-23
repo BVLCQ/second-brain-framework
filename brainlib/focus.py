@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 
@@ -287,20 +288,26 @@ def apply(brain, fid: str, mode: str | None = None, cal=None) -> dict:
                           "data": {"mode": "ics", "created": created, "ics": brain.inst.rel(path)}})
         return {"mode": "ics", "created": len(created), "file": str(path), "removed": 0, "skipped": []}
 
+    if os.environ.get("BRAIN_NIGHTLY") == "1":
+        # o ledger recusaria o focus.applied, mas só DEPOIS de apagar/criar eventos no Google: barra antes
+        raise util.BrainError("focus apply (google): proibido no noturno — exige o dono presente", code=4)
     from .gcal import GoogleCalendar
     cal = cal or GoogleCalendar(brain.inst)
     for other in st.focus_plans.values():
         if other.id == fid or other.mode != "google":
             continue
         gone = []
-        for b in other.applied:
-            if util.parse_dt(b["start"]) > now and b.get("event_id"):
-                cal.delete_guarded(b["event_id"], b["action"])
-                gone.append(b)
-        if gone:
-            brain.record_one({"type": "focus.removed", "id": other.id, "by": "system",
-                              "data": {"removed": gone, "reason": f"substituído pelo plano aprovado {fid}"}})
-            removed.extend(gone)
+        try:
+            for b in other.applied:
+                if util.parse_dt(b["start"]) > now and b.get("event_id"):
+                    cal.delete_guarded(b["event_id"], b["action"])
+                    gone.append(b)
+        finally:
+            # mesmo se a API cair no meio, o que já saiu do calendário fica registrado
+            if gone:
+                brain.record_one({"type": "focus.removed", "id": other.id, "by": "system",
+                                  "data": {"removed": gone, "reason": f"substituído pelo plano aprovado {fid}"}})
+                removed.extend(gone)
     if blocks:
         lo = min(b["start"] for b in blocks)
         hi = max(b["end"] for b in blocks)
@@ -309,13 +316,22 @@ def apply(brain, fid: str, mode: str | None = None, cal=None) -> dict:
     else:
         busy = []
     fc = brain.inst.cfg["focus"]
-    for b in blocks:
-        bs, be = util.parse_dt(b["start"]), util.parse_dt(b["end"])
-        if any(s < be and e > bs for s, e in busy):
-            skipped.append(b)
-            continue
-        ev = cal.insert_focus(b, fid, _title(brain, b), _description(brain, b), fc["decline_message"])
-        created.append({**b, "event_id": ev.get("id", ""), "link": ev.get("htmlLink", "")})
+    try:
+        for b in blocks:
+            bs, be = util.parse_dt(b["start"]), util.parse_dt(b["end"])
+            if any(s < be and e > bs for s, e in busy):
+                skipped.append(b)
+                continue
+            ev = cal.insert_focus(b, fid, _title(brain, b), _description(brain, b), fc["decline_message"])
+            created.append({**b, "event_id": ev.get("id", ""), "link": ev.get("htmlLink", "")})
+    except Exception as e:
+        # falha no meio do lote: os eventos já criados ficam no ledger (o próximo plano aprovado os substitui
+        # e o sync os enxerga); sem isso eles ficariam órfãos no calendário e um novo apply os duplicaria
+        if created:
+            brain.record_one({"type": "focus.applied", "id": fid, "by": "system",
+                              "data": {"mode": "google", "created": created, "skipped": skipped,
+                                       "error": str(e)[:300]}})
+        raise
     brain.record_one({"type": "focus.applied", "id": fid, "by": "system",
                       "data": {"mode": "google", "created": created, "skipped": skipped}})
     return {"mode": "google", "created": len(created), "removed": len(removed), "skipped": skipped}
@@ -333,18 +349,22 @@ def sync(brain, dry_run: bool = False, cal=None) -> list[dict]:
     if dry_run or not todo:
         return [b for _, b in todo]
     by_plan: dict[str, list] = {}
-    for fid, b in todo:
-        f = st.focus_plans[fid]
-        if f.mode == "google":
-            if cal is None:
-                from .gcal import GoogleCalendar
-                cal = GoogleCalendar(brain.inst)
-            cal.delete_guarded(b["event_id"], b["action"])
-        by_plan.setdefault(fid, []).append(b)
-    for fid, gone in by_plan.items():
-        note = "ação fechada" if st.focus_plans[fid].mode == "google" else \
-            "ação fechada — remova do calendário manualmente (modo ics)"
-        brain.record_one({"type": "focus.removed", "id": fid, "by": "system", "data": {"removed": gone, "reason": note}})
+    try:
+        for fid, b in todo:
+            f = st.focus_plans[fid]
+            if f.mode == "google":
+                if cal is None:
+                    from .gcal import GoogleCalendar
+                    cal = GoogleCalendar(brain.inst)
+                cal.delete_guarded(b.get("event_id", ""), b["action"])
+            by_plan.setdefault(fid, []).append(b)
+    finally:
+        # o que já saiu do calendário fica registrado mesmo se a API cair no meio
+        for fid, gone in by_plan.items():
+            note = "ação fechada" if st.focus_plans[fid].mode == "google" else \
+                "ação fechada — remova do calendário manualmente (modo ics)"
+            brain.record_one({"type": "focus.removed", "id": fid, "by": "system",
+                              "data": {"removed": gone, "reason": note}})
     return [b for _, b in todo]
 
 

@@ -75,7 +75,7 @@ footer{color:var(--muted);font-size:12px;text-align:center;padding:24px}
 (function(){
 "use strict";
 const M = JSON.parse(document.getElementById("data").textContent);
-const idx = (arr, k="id") => Object.fromEntries(arr.map(x => [x[k], x]));
+const idx = (arr, k="id") => Object.assign(Object.create(null), Object.fromEntries(arr.map(x => [x[k], x])));  // sem protótipo: #project/__proto__ não "acha" nada
 const A = idx(M.actions), D = idx(M.decisions), P = idx(M.projects), G = idx(M.goals), PE = idx(M.people), ART = idx(M.artifacts);
 const DL = idx(M.deliveries), DD = idx(M.deliverables_done);
 const $ = s => document.querySelector(s);
@@ -144,7 +144,7 @@ function timelineList(items, limit){
 }
 
 // ── views ───────────────────────────────────────────────────────────────
-const V = {};
+const V = Object.create(null);
 V.home = () => {
   const c = M.counts;
   let h = "<h1>☀ " + fmtDW(M.today) + "</h1>";

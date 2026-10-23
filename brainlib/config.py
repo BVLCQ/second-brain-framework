@@ -141,7 +141,10 @@ def load(root: Path | None = None) -> Instance:
         except tomllib.TOMLDecodeError as e:
             raise util.BrainError(f"config/brain.toml inválido: {e}") from e
     cfg = _merge(DEFAULTS, user)
-    util.set_timezone(cfg["timezone"])
+    try:
+        util.set_timezone(cfg["timezone"])
+    except (KeyError, ValueError, TypeError) as e:     # ZoneInfoNotFoundError é KeyError: BrainError em vez de traceback
+        raise util.BrainError(f"config/brain.toml: timezone inválido {cfg['timezone']!r}", code=5) from e
     return Instance(root=root, vault=vault, config_dir=config_dir, cfg=cfg)
 
 
@@ -187,6 +190,8 @@ def is_external_write(rule: str) -> bool:
     if not rule.startswith("mcp__"):
         return False
     tool = rule.split("__")[-1] if rule.count("__") >= 2 else ""
+    if not tool or "*" in tool:          # `mcp__slack`, `mcp__slack__*`: o servidor inteiro, envio incluso — não dá para provar leitura
+        return True
     return bool(_words(tool) & WRITE_VERBS)
 
 

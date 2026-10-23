@@ -172,11 +172,17 @@ def transcribe(path: str | Path, locales: list[str] | None = None, start: float 
     procs = {loc: subprocess.Popen([*tool, str(p), loc, str(start), str(length)], stdout=subprocess.PIPE,
                                    stderr=subprocess.PIPE, text=True) for loc in locales}
     rows: dict[str, list[tuple[int, str]]] = {}
-    for loc, pr in procs.items():
-        out, err = pr.communicate()
-        if pr.returncode != 0:
-            raise util.BrainError(f"transcrição ({loc}) falhou: {err.strip().splitlines()[-1] if err.strip() else 'erro'}", code=3)
-        rows[loc] = parse(out)
+    try:
+        for loc, pr in procs.items():
+            out, err = pr.communicate()
+            if pr.returncode != 0:
+                raise util.BrainError(f"transcrição ({loc}) falhou: {err.strip().splitlines()[-1] if err.strip() else 'erro'}", code=3)
+            rows[loc] = parse(out)
+    finally:
+        for pr in procs.values():          # um idioma falhou (ou Ctrl-C): os outros não ficam rodando órfãos
+            if pr.poll() is None:
+                pr.kill()
+                pr.wait()
     merged = merge(rows) if len(rows) > 1 else [(t, x, locales[0]) for t, x in rows[locales[0]]]
     return "\n".join(f"{_fmt(t)} {x}" for t, x, _ in merged) + "\n"
 
@@ -186,6 +192,9 @@ def frames(path: str | Path, every: int = 150, width: int = 900, start: float = 
     p = Path(path)
     if not p.is_file():
         raise util.BrainError(f"arquivo não encontrado: {p}", code=3)
+    if every <= 0 or width <= 0:
+        # o programa swift avança `t += every`: 0 (ou negativo) nunca chega ao fim e enche o disco de PNG
+        raise util.BrainError("--every e --width precisam ser maiores que zero", code=2)
     tool = swift_tool(SWIFT_FRAMES, "frames", library=True)
     if not tool:
         raise util.BrainError(HINT, code=3)
