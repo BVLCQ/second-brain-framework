@@ -30,10 +30,22 @@
 # folder = "<id da pasta>"
 # window = "1d"
 
+# Jira pelo MCP do Atlassian (OAuth do conector). `cloud` = o site, usado como cloudId.
+# Janela: só o que mudou desde o último pull (comentários inclusos).
 # [[source]]
 # key = "jira-me"
 # kind = "jira"
+# cloud = "<site>.atlassian.net"
 # jql = "assignee = currentUser() AND updated >= -1d"
+# window = "auto"
+#
+# Estado completo (mode = "state"): tudo que bate na jql, sem janela; hash igual = silêncio.
+# [[source]]
+# key = "jira-assigned"
+# kind = "jira"
+# cloud = "<site>.atlassian.net"
+# mode = "state"
+# jql = "assignee = currentUser() AND statusCategory != Done ORDER BY key"
 
 # Clones git locais: o CLI lê (`./brain repos pull github-repos`), não o MCP. `git fetch` em cada repo antes
 # (só baixa; `fetch = "false"` desliga); 1ª leitura = o repo inteiro, depois só commit novo → RAW/…/github/.

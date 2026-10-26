@@ -24,6 +24,14 @@ No noturno (`BRAIN_NIGHTLY=1`) isto é o único comando largo permitido. Sem apr
 MCP vazio por erro/negação → `--fail "MCP não devolveu nada"` (isso sim é falha).
 Fonte com `folder = …`: siga o protocolo de pasta de `commands/drive/SKILL.md` — um `--item` por arquivo e por subpasta (hash próprio), `--rev` + `--check` antes de ler. Pasta sem item novo é silêncio, não falha.
 Fonte `kind = "drive-doc"` (playbook de um processo ou one-pager de uma oportunidade; campos `doc` = id do Drive e `link` = `PROC-…`/`OPP-…`): pegue o `modifiedTime` do doc pelo MCP do Drive (só metadados) e rode `./brain snapshot --key <key> --item <doc> --rev <modifiedTime> --check` — `inalterado` = pule, sem gastar leitura. Se mudou: exporte o doc (Markdown/texto) e grave `./brain snapshot --key <key> --item <doc> --rev <modifiedTime> --name "<título>" --prefix playbook --ext md`. No `/dump` desse snapshot, registre o artefato com `./brain artifact … --link <PROC-…>`; o processo passa a mostrar "playbook atualizado em …".
+Fonte `kind = "jira"`: o MCP do Atlassian (OAuth do conector) é a única leitura. Campo `cloud` (ex.: `<site>.atlassian.net`) vai direto
+como `cloudId` — não adivinhe o site; sem `cloud`, `getAccessibleAtlassianResources` uma vez. Pagine `searchJiraIssuesUsingJql` até
+acabar (`nextPageToken`). Dois modos:
+- **janela** (padrão): troque `-1d` da `jql` por `"<jql de watch since>"`; leia os comentários de cada card que veio.
+- **`mode = "state"`**: a `jql` é o universo inteiro (ex.: tudo aberto atribuído ao dono) — **sem janela**. Grave um snapshot
+  determinístico, ordenado por key, com key, link, título, status, prioridade, prazo, reporter e o último comentário (autor + data);
+  nada volátil (nada de `updated`, contagem de views, horário da leitura). Hash igual = silêncio; mudou = o `/dump` faz o change
+  digest contra o anterior da mesma key (card novo, status mudou, saiu da lista = fechado ou reatribuído).
 Fonte `kind = "github"` (campo `path` = pasta local com os clones): **não** use MCP — rode `./brain repos pull <key>` **antes do `/dump`**. O CLI faz `git fetch` em cada repositório (só baixa; `fetch = "false"` na fonte desliga), e grava um snapshot `github-<repo>-<ts>.md` por repo que mudou: na **primeira leitura, o repositório inteiro** (todo o histórico, árvore, documentos), depois só os commits que as pontas do último pull não alcançavam. Repo sem novidade é silêncio; fetch que falha é aviso (lê o local). `--full` relê um repo inteiro. Nunca rode git à mão nesses repos.
 2+ falhas seguidas da mesma key → **escalar ao dono**: `./brain ask add "A fonte <key> falhou 2× seguidas: …" --kind outro --context <key> --prov observado --source <key>` (e `brain doctor`).
 3. `/dump` no que chegou.
