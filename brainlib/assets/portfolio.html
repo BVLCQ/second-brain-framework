@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mapa de Oportunidades</title>
+<style>
+:root{--sug:#d6336c;--bg:#f6f7f9;--panel:#fff;--ink:#16181d;--muted:#6b7280;--line:#e5e7eb;--accent:#3b5bdb;
+--ok:#2f9e44;--okbg:#e6f6ea;--warn:#e67700;--warnbg:#fff4e0;--risk:#e03131;--riskbg:#fdeaea;--info:#1c7ed6;--infobg:#e7f1fd;
+--chip:#f1f3f5;--shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.08);}
+@media (prefers-color-scheme:dark){:root{--sug:#f06595;--bg:#0f1115;--panel:#171a21;--ink:#e6e8ec;--muted:#9aa3af;--line:#262b35;
+--accent:#748ffc;--okbg:#14301d;--warnbg:#3a2a10;--riskbg:#3d1717;--infobg:#132a44;--chip:#222733;--shadow:none}}
+*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,Ubuntu,sans-serif}
+a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+header{position:sticky;top:0;z-index:5;display:flex;gap:16px;align-items:center;padding:10px 20px;background:var(--panel);border-bottom:1px solid var(--line)}
+.brand{font-weight:700;font-size:16px;white-space:nowrap}.brand small{font-weight:400;color:var(--muted);margin-left:8px}
+#q{flex:1;max-width:520px;min-width:0;padding:7px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit}
+nav{display:flex;gap:2px;padding:0 14px;background:var(--panel);border-bottom:1px solid var(--line);overflow-x:auto;position:sticky;top:51px;z-index:4}
+nav a{padding:10px 12px;color:var(--muted);border-bottom:2px solid transparent;white-space:nowrap}
+nav a.on{color:var(--ink);border-bottom-color:var(--accent);font-weight:600}nav a:hover{text-decoration:none;color:var(--ink)}
+nav .n{color:var(--muted);font-size:12px;margin-left:4px}
+main{padding:20px;max-width:1360px;margin:0 auto}
+h1{font-size:20px;margin:0 0 4px}h2{font-size:15px;margin:22px 0 10px}h3{font-size:12px;margin:14px 0 8px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.muted{color:var(--muted)}.sug{color:var(--sug);font-weight:600}.late{color:var(--risk);font-weight:600}.soon{color:var(--warn);font-weight:600}
+.grid{display:grid;gap:14px}.g2{grid-template-columns:repeat(auto-fit,minmax(380px,1fr))}.g3{grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}.mx{grid-template-columns:repeat(2,minmax(0,1fr))}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:12px 0 4px}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;box-shadow:var(--shadow)}
+.kpi b{display:block;font-size:24px;font-variant-numeric:tabular-nums}.kpi span{color:var(--muted);font-size:12px}.kpi.risk b{color:var(--risk)}.kpi.ok b{color:var(--ok)}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;box-shadow:var(--shadow);margin-top:14px;overflow-x:auto}
+.panel h2:first-child{margin-top:0}
+.bar{display:inline-block;width:120px;height:8px;border-radius:5px;background:var(--chip);vertical-align:middle;margin-right:8px;overflow:hidden}
+.bar>span{display:block;height:100%;background:var(--accent);border-radius:5px}
+.chip{display:inline-block;padding:1px 8px;border-radius:10px;font-size:12px;background:var(--chip);color:var(--muted);white-space:nowrap}
+.s-ideia,.s-triagem{background:var(--chip);color:var(--muted)}.s-priorizada{background:var(--infobg);color:var(--info)}
+.s-em-andamento,.s-piloto,.s-validando{background:var(--warnbg);color:var(--warn)}.s-entregue{background:var(--okbg);color:var(--ok)}
+.s-em-espera{background:var(--chip);color:var(--ink)}.s-descartada{background:var(--riskbg);color:var(--risk)}
+.h-em-risco{background:var(--riskbg);color:var(--risk)}.h-travado,.h-atencao{background:var(--warnbg);color:var(--warn)}.h-em-dia,.h-concluido{background:var(--okbg);color:var(--ok)}
+table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:12px;color:var(--muted);font-weight:600;white-space:nowrap}td:first-child{white-space:nowrap}td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
+ul.clean{list-style:none;padding:0;margin:0}ul.clean li{padding:6px 0;border-bottom:1px solid var(--line)}ul.clean li:last-child{border:0}
+.funnel{display:flex;gap:6px;flex-wrap:wrap}.funnel a{flex:1;min-width:96px;background:var(--chip);border-radius:10px;padding:8px 10px;color:var(--ink)}
+.funnel a b{display:block;font-size:20px;font-variant-numeric:tabular-nums}.funnel a span{font-size:12px;color:var(--muted)}.funnel a:hover{text-decoration:none;outline:2px solid var(--accent)}
+.funnel a.zero{opacity:.5}
+.col{background:var(--chip);border-radius:12px;padding:10px;min-height:100px}.col h3{margin:2px 4px 10px}
+.card{display:block;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:9px 10px;margin-bottom:8px;box-shadow:var(--shadow);color:var(--ink)}
+a.card:hover{text-decoration:none;border-color:var(--accent)}.card-title{font-weight:600;margin:3px 0}.card-meta{font-size:12px;color:var(--muted)}
+.filters{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 4px}
+select{font:inherit;padding:5px 8px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--ink)}
+.detail-head{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:6px 0 4px}
+dl.kv{display:grid;grid-template-columns:max-content 1fr;gap:6px 16px;margin:0}dl.kv dt{color:var(--muted)}dl.kv dd{margin:0}
+.text{white-space:pre-wrap}.empty{color:var(--muted);font-style:italic;padding:6px 0}
+.crumb{margin:0 0 6px}footer{color:var(--muted);font-size:12px;text-align:center;padding:24px}
+@media (max-width:700px){main{padding:16px}header{padding:10px 16px}.brand small{display:none}.g2,.g3,.mx{grid-template-columns:1fr}}
+@media print{header,nav{position:static}#q{display:none}.panel{break-inside:avoid}}
+</style>
+</head>
+<body>
+<header><div class="brand">Mapa de Oportunidades<small id="gen"></small></div><input id="q" placeholder="Buscar oportunidades, processos, pessoas, arquivos…" autocomplete="off"></header>
+<nav id="tabs"></nav>
+<main id="view"></main>
+<footer id="foot"></footer>
+<script id="data" type="application/json">__DATA__</script>
+<script>
+(function(){
+"use strict";
+const M = JSON.parse(document.getElementById("data").textContent);
+const PF = M.portfolio;
+const idx = arr => Object.assign(Object.create(null), Object.fromEntries(arr.map(x => [x.id, x])));  // sem protótipo: #opp/__proto__ não "acha" nada
+const OPP = idx(PF.opportunities), PROC = idx(PF.processes), AREA = idx(PF.areas), PE = idx(M.people), PR = idx(M.projects), G = idx(M.goals), A = idx(M.actions);
+const ART = Object.create(null); M.artifacts.forEach(a => { ART[a.id] = a; if (a.raw) ART[a.raw] = a; });
+const STAGES = Object.keys(PF.funnel);
+const QUADS = [["ganho rápido", "impacto alto · facilidade alta"], ["aposta", "impacto alto · facilidade baixa"],
+  ["preencher depois", "impacto baixo · facilidade alta"], ["evitar", "impacto baixo · facilidade baixa"]];
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const enc = encodeURIComponent;
+const fmtD = iso => { if (!iso) return "—"; const p = iso.slice(0, 10).split("-"); return p[2] + "/" + p[1] + "/" + p[0]; };
+const hrs = v => v == null ? "—" : (Math.round(v * 10) / 10).toLocaleString("pt-BR") + " h/mês";
+const empty = t => '<div class="empty">' + esc(t) + "</div>";
+const chip = (cls, label) => '<span class="chip ' + esc(cls) + '">' + esc(label) + "</span>";
+const st = s => chip("s-" + s, s);
+const bar = p => !p || p.pct == null ? '<span class="muted">sem entregáveis</span>' : '<span class="bar"><span style="width:' + p.pct + '%"></span></span><b>' + p.pct + "%</b>";
+const iceTxt = o => o.score == null ? '<span class="muted">sem ICE</span>' : '<span class="' + (o.ice_suggested ? "sug" : "") + '" title="' + esc(o.ice_reason || "") + '">' +
+  o.impact + "×" + o.confidence + "×" + o.ease + " = <b>" + o.score + "</b>" + (o.ice_suggested ? " · sugerido" : "") + "</span>";
+const areaName = a => AREA[a] ? AREA[a].name : (a || "—");
+const oL = (id, long) => OPP[id] ? '<a href="#opp/' + enc(id) + '">' + esc(id) + (long ? " " + esc(OPP[id].title) : "") + "</a>" : esc(id || "—");
+const prL = (id, long) => PROC[id] ? '<a href="#proc/' + enc(id) + '">' + esc(id) + (long ? " " + esc(PROC[id].title) : "") + "</a>" : esc(id || "—");
+const arL = id => AREA[id] ? '<a href="#area/' + enc(id) + '">' + esc(AREA[id].name) + "</a>" : esc(id || "—");
+const peL = id => PE[id] ? '<a href="#person/' + enc(id) + '">' + esc(PE[id].name) + "</a>" : esc(id || "—");
+const pjL = id => PR[id] ? '<a href="#project/' + enc(id) + '">' + esc(id) + " " + esc(PR[id].title) + "</a>" : esc(id || "—");
+const panel = (title, body) => '<div class="panel">' + (title ? "<h2>" + title + "</h2>" : "") + body + "</div>";
+const list = (items, none) => items.length ? '<ul class="clean">' + items.map(x => "<li>" + x + "</li>").join("") + "</ul>" : empty(none || "nenhum");
+const crumb = (href, label) => '<p class="crumb muted"><a href="#' + href + '">← ' + esc(label) + "</a></p>";
+const byScore = (a, b) => (b.score ?? -1) - (a.score ?? -1) || a.id.localeCompare(b.id);
+
+// relações derivadas (uma passada)
+const peopleOf = o => [...new Set([...(o.people || []), ...(PROC[o.process] ? [PROC[o.process].owner, ...PROC[o.process].executors] : [])].filter(Boolean))];
+const procPeople = p => [...new Set([p.owner, ...p.executors].filter(Boolean))];
+function docLink(d){
+  const label = esc(d.title || d.ref);
+  return chip("", d.kind) + " " + (d.url ? '<a href="' + esc(d.url) + '" target="_blank" rel="noopener">' + label + " ↗</a>" : label) +
+    (d.read ? ' <span class="muted">· lido ' + fmtD(d.read) + "</span>" : "");
+}
+function fileLine(path, why){
+  const a = ART[path];
+  return chip("", why) + " " + (a ? "<b>" + esc(a.title) + '</b> <span class="muted">· ' + fmtD(a.date) + " · " + esc(a.kind) + "</span>" +
+    (a.summary ? '<div class="muted">' + esc(a.summary.slice(0, 280)) + (a.summary.length > 280 ? "…" : "") + "</div>" : "") : "") +
+    '<div class="muted"><code>' + esc(path) + "</code></div>";
+}
+function filesOf(x){
+  const out = x.docs.map(d => ({html: docLink(d), key: d.ref}));
+  if (x.source) out.push({html: fileLine(x.source, "origem"), key: x.source});
+  (x.evidence || []).filter(e => e !== x.source).forEach(e => out.push({html: fileLine(e, "evidência"), key: e}));
+  return out;
+}
+function oppTable(rows, cols){
+  if (!rows.length) return empty("nenhuma oportunidade");
+  cols = cols || ["area", "process"];
+  return "<table><tr><th>ID</th><th>Oportunidade</th>" + (cols.includes("area") ? "<th>Área</th>" : "") + (cols.includes("process") ? "<th>Processo</th>" : "") +
+    "<th>ICE</th><th>Status</th><th>Quadrante</th><th>Projeto</th><th>Ganho</th></tr>" +
+    rows.map(o => "<tr><td>" + oL(o.id) + "</td><td>" + esc(o.title) + '<div class="muted">' + esc(o.kind) + "</div></td>" +
+      (cols.includes("area") ? "<td>" + arL(o.area) + "</td>" : "") + (cols.includes("process") ? "<td>" + (o.process ? prL(o.process) : "—") + "</td>" : "") +
+      '<td class="num">' + iceTxt(o) + "</td><td>" + st(o.status) + "</td><td>" + esc(o.quadrant || "—") + "</td><td>" +
+      (o.project ? pjL(o.project) : "—") + '</td><td class="num">' + hrs(o.hours_saved) + "</td></tr>").join("") + "</table>";
+}
+function procTable(rows){
+  if (!rows.length) return empty("nenhum processo");
+  return "<table><tr><th>ID</th><th>Processo</th><th>Área</th><th>Responsável</th><th>Recorrência</th><th>Horas</th><th>Oport.</th><th>Lacunas</th></tr>" +
+    rows.map(p => '<tr><td>' + prL(p.id) + "</td><td>" + esc(p.title) + (p.status !== "ativo" ? " " + chip("s-descartada", "aposentado") : "") + "</td><td>" + arL(p.area) +
+      "</td><td>" + (p.owner ? peL(p.owner) : "—") + "</td><td>" + esc(p.recurrence || "—") + '</td><td class="num">' + hrs(p.hours_month) + '</td><td class="num">' +
+      p.opportunities.length + "</td><td>" + (p.gaps.length ? '<span class="late">⚠ ' + p.gaps.map(esc).join("; ") + "</span>" : "✓") + "</td></tr>").join("") + "</table>";
+}
+function matrix(){
+  return '<div class="grid mx">' + QUADS.map(([q, d]) => '<div class="col"><h3>' + esc(q) + ' <span class="muted">· ' + d + "</span></h3>" +
+    ((PF.matrix[q] || []).map(i => OPP[i]).filter(Boolean).sort(byScore).map(o => '<a class="card" href="#opp/' + enc(o.id) + '"><span class="muted">' + esc(o.id) + "</span>" +
+      '<div class="card-title">' + esc(o.title) + '</div><div class="card-meta">' + iceTxt(o) + " · " + esc(o.status) + " · " + esc(areaName(o.area)) + "</div></a>").join("") || empty("—")) +
+    "</div>").join("") + "</div>";
+}
+
+const V = Object.create(null);
+V.overview = () => {
+  if (!PF.areas.length && !PF.processes.length && !PF.opportunities.length)
+    return "<h1>Mapa de Oportunidades</h1>" + empty("Nada cadastrado ainda.");
+  const active = PF.processes.filter(p => p.status === "ativo");
+  const mapped = active.reduce((t, p) => t + (p.hours_month || 0), 0);
+  const gain = PF.opportunities.filter(o => o.status !== "descartada").reduce((t, o) => t + (o.hours_saved || 0), 0);
+  let h = "<h1>Visão geral</h1><p class=muted>Processos que existem e o que vale melhorar neles, por área. ICE = impacto × confiança × facilidade (1–5 cada).</p>" +
+    '<div class="kpis"><div class="kpi"><b>' + PF.counts.opportunities + "</b><span>oportunidades</span></div>" +
+    '<div class="kpi"><b>' + PF.counts.prioritized + "</b><span>priorizadas</span></div>" +
+    '<div class="kpi"><b>' + PF.counts.processes + "</b><span>processos ativos</span></div>" +
+    '<div class="kpi"><b>' + hrs(mapped).replace(" h/mês", "") + "</b><span>h/mês em processos mapeados</span></div>" +
+    '<div class="kpi"><b>' + hrs(gain).replace(" h/mês", "") + "</b><span>h/mês de ganho declarado</span></div>" +
+    '<div class="kpi ' + (PF.gaps.total ? "risk" : "ok") + '"><b>' + PF.gaps.total + "</b><span>lacunas</span></div></div>";
+  h += panel("Funil", '<div class="funnel">' + STAGES.map(s => '<a class="' + (PF.funnel[s] ? "" : "zero") + '" href="#opps?status=' + enc(s) + '"><b>' + PF.funnel[s] + "</b><span>" + esc(s) + "</span></a>").join("") + "</div>");
+  h += panel("Matriz impacto × facilidade", matrix());
+  const top = PF.ranking.slice(0, 10).map(i => OPP[i]);
+  h += panel('Ranking ICE <span class="muted">· top ' + top.length + ' · <a href="#opps">ver todas</a></span>', oppTable(top));
+  h += panel("Por área", '<div class="grid g3">' + PF.areas.map(a => {
+    const procs = active.filter(p => p.area === a.id), opps = PF.opportunities.filter(o => o.area === a.id);
+    return '<a class="card" href="#area/' + enc(a.id) + '"><div class="card-title">' + esc(a.name) + "</div><div class=card-meta>" + procs.length + " processos · " +
+      hrs(procs.reduce((t, p) => t + (p.hours_month || 0), 0)) + " · " + opps.length + " oportunidades</div><div style=margin-top:6px>" +
+      STAGES.filter(s => opps.some(o => o.status === s)).map(s => chip("s-" + s, s + " " + opps.filter(o => o.status === s).length)).join(" ") + "</div></a>";
+  }).join("") + "</div>");
+  const goals = Object.entries(PF.by_goal || {});
+  if (goals.length) h += panel("Por goal", list(goals.sort(([a], [b]) => !a - !b || a.localeCompare(b)).map(([g, ids]) => g
+    ? "<b>" + esc(g) + "</b> " + esc(G[g] ? G[g].title : "") + " — " + ids.map(i => oL(i)).join(", ")
+    : '<span class="muted">sem goal ainda: ' + ids.length + " oportunidade(s) — ganham goal ao serem promovidas a projeto</span>")));
+  return h + panel("Lacunas", gapsList());
+};
+function gapsList(){
+  const g = PF.gaps, out = [];
+  g.areas_without_process.forEach(a => out.push("área sem processo: " + arL(a)));
+  g.processes.forEach(p => out.push(prL(p.id, true) + ': <span class="late">' + p.gaps.map(esc).join("; ") + "</span>"));
+  if (g.no_ice.length) out.push("sem ICE: " + g.no_ice.map(i => oL(i)).join(", "));
+  if (g.ice_suggested.length) out.push('ICE só sugerido (<span class="sug">a confirmar</span>): ' + g.ice_suggested.map(i => oL(i)).join(", "));
+  g.stale.forEach(s => out.push(oL(s.id, true) + " parada há " + s.days + " dias"));
+  return list(out, "nenhuma lacuna");
+}
+V.opps = q => {
+  const f = {area: q.get("area") || "", status: q.get("status") || "", quad: q.get("quad") || "", kind: q.get("kind") || ""};
+  const rows = PF.opportunities.filter(o => (!f.area || o.area === f.area) && (!f.status || o.status === f.status) &&
+    (!f.quad || o.quadrant === f.quad) && (!f.kind || o.kind === f.kind)).sort(byScore);
+  const sel = (id, label, opts, v) => '<select id="' + id + '"><option value="">' + label + "</option>" +
+    opts.map(([k, t]) => '<option value="' + esc(k) + '"' + (k === v ? " selected" : "") + ">" + esc(t) + "</option>").join("") + "</select>";
+  const kinds = [...new Set(PF.opportunities.map(o => o.kind))].sort();
+  setTimeout(() => ["#fa", "#fs", "#fq", "#fk"].forEach(s => $(s).onchange = () =>
+    go("opps", {area: $("#fa").value, status: $("#fs").value, quad: $("#fq").value, kind: $("#fk").value})));
+  return "<h1>Oportunidades <span class=muted>· " + rows.length + " de " + PF.opportunities.length + "</span></h1>" +
+    '<div class="filters">' + sel("fa", "todas as áreas", PF.areas.map(a => [a.id, a.name]), f.area) + sel("fs", "todos os status", STAGES.map(s => [s, s]), f.status) +
+    sel("fq", "todos os quadrantes", QUADS.map(([k]) => [k, k]), f.quad) + sel("fk", "todos os tipos", kinds.map(k => [k, k]), f.kind) + "</div>" + panel("", oppTable(rows));
+};
+V.opp = (q, id) => {
+  const o = OPP[id]; if (!o) return empty("Oportunidade não encontrada");
+  const proc = PROC[o.process], proj = PR[o.project];
+  let h = crumb("opps", "oportunidades") + "<h1>" + esc(o.id) + " · " + esc(o.title) + '</h1><div class="detail-head">' + st(o.status) + chip("", o.kind) +
+    "<span>" + arL(o.area) + "</span>" + (o.quadrant ? chip("", o.quadrant) : "") + "<span>ICE " + iceTxt(o) + "</span></div>";
+  h += '<div class="grid g2">' + panel("Resumo", '<dl class="kv"><dt>Área</dt><dd>' + arL(o.area) + "</dd><dt>Processo</dt><dd>" + (o.process ? prL(o.process, true) : "—") +
+    "</dd><dt>ICE</dt><dd>" + iceTxt(o) + (o.ice_suggested && o.ice_reason ? '<div class="muted">' + esc(o.ice_reason) + "</div>" : "") +
+    "</dd><dt>Ganho esperado</dt><dd>" + esc(o.gain || "não consta") + (o.hours_saved ? " · " + hrs(o.hours_saved) : "") +
+    "</dd><dt>Goal</dt><dd>" + (o.goal ? esc(o.goal) + " " + esc(o.goal_title || "") : "—") + "</dd><dt>Projeto</dt><dd>" + (o.project ? pjL(o.project) + (o.project_progress ? " · " + bar(o.project_progress) : "") : "—") +
+    "</dd><dt>Registrada</dt><dd>" + fmtD(o.added) + " · por " + esc(o.by === "owner" ? "dono" : "agente") + " [" + esc(o.prov) + "]</dd><dt>Última atividade</dt><dd>" + fmtD(o.last_activity) + "</dd></dl>") +
+    panel("Pessoas", list(peopleOf(o).map(p => peL(p) + ' <span class="muted">' + esc(o.people.includes(p) ? "envolvida" : proc && p === proc.owner ? "responsável pelo processo" : "executa o processo") +
+      (PE[p] && PE[p].role ? " · " + esc(PE[p].role) : "") + "</span>"), "nenhuma pessoa ligada")) + "</div>";
+  h += '<div class="grid g2">' + panel("Problema", '<div class="text">' + esc(o.problem || "não consta") + "</div>") +
+    panel("Sugestão", '<div class="text">' + esc(o.suggestion || "não consta") + "</div>") + "</div>";
+  if (o.notes && o.notes.length) h += panel("Notas", list(o.notes.map(esc)));
+  h += panel("Arquivos e evidências <span class=muted>· " + filesOf(o).length + "</span>", list(filesOf(o).map(x => x.html)));
+  if (proj) h += projectBlock(proj);
+  if (proc) {
+    const sib = proc.opportunities.filter(i => i !== o.id).map(i => OPP[i]).filter(Boolean);
+    h += panel("Processo: " + prL(proc.id, true), procSummary(proc) + (sib.length ? "<h3>Outras oportunidades neste processo</h3>" + oppTable(sib.sort(byScore), []) : ""));
+  }
+  h += panel("Histórico de status", o.status_history.length ? list(o.status_history.map(x => fmtD(x.date) + " · " + st(x.from) + " → " + st(x.to) + (x.reason ? ' <span class="muted">' + esc(x.reason) + "</span>" : "")))
+    : empty("criada em " + fmtD(o.added) + " como " + o.status));
+  return h;
+};
+function procSummary(p){
+  return '<dl class="kv"><dt>Área</dt><dd>' + arL(p.area) + "</dd><dt>Responsável</dt><dd>" + (p.owner ? peL(p.owner) : "—") +
+    "</dd><dt>Executores</dt><dd>" + (p.executors.length ? p.executors.map(peL).join(", ") : "—") +
+    "</dd><dt>Recorrência</dt><dd>" + esc(p.recurrence || "—") + (p.per_month ? " (" + String(p.per_month).replace(".", ",") + "/mês)" : "") +
+    "</dd><dt>Duração</dt><dd>" + (p.duration_min ? p.duration_min + " min por execução" : "—") + "</dd><dt>Horas/mês</dt><dd>" + hrs(p.hours_month) +
+    "</dd><dt>Ferramentas</dt><dd>" + (p.tools.length ? p.tools.map(t => chip("", t)).join(" ") : "—") + "</dd><dt>Entradas → saídas</dt><dd>" + esc(p.io || "—") +
+    "</dd><dt>Maturidade</dt><dd>" + esc(p.maturity || "—") + "</dd><dt>Playbook</dt><dd>" + (p.playbook ? docLink(p.playbook) : "—") + "</dd></dl>";
+}
+function projectBlock(p){
+  const acts = M.actions.filter(a => a.project === p.id), open = acts.filter(a => a.open), decs = M.decisions.filter(d => d.project === p.id);
+  const due = a => a.due ? (a.overdue_days ? '<span class="late">⚠ ' + fmtD(a.due) + " · " + a.overdue_days + "d atrasada</span>" : fmtD(a.due)) : '<span class="muted">sem prazo</span>';
+  return panel("Projeto: " + pjL(p.id), '<div class="detail-head">' + chip("h-" + p.health.level, p.health.label) + "<span>" + bar(p.progress) + "</span><span class=muted>goal " + esc(p.goal) + " " + esc(p.goal_title) + "</span>" +
+    (p.owner ? "<span>dono " + peL(p.owner) + "</span>" : "") + "</div>" +
+    "<h3>Entregáveis</h3>" + list(p.deliverables.map(d => (d.status === "feito" ? "✓ " : d.status === "cancelado" ? "× " : "○ ") + esc(d.id) + " " + esc(d.title) +
+      ' <span class="muted">' + (d.done_date ? "feito " + fmtD(d.done_date) : d.due ? "prazo " + fmtD(d.due) : "") + "</span>")) +
+    "<h3>Ações abertas · " + open.length + "</h3>" + (open.length ? "<table><tr><th>ID</th><th>O quê</th><th>Quem</th><th>Prazo</th><th>Estado</th></tr>" +
+      open.map(a => "<tr><td>" + esc(a.id) + "</td><td>" + esc(a.title) + "</td><td>" + peL(a.owner) + "</td><td>" + due(a) + "</td><td>" + chip("", a.status) + "</td></tr>").join("") + "</table>" : empty("nenhuma")) +
+    (decs.length ? "<h3>Decisões</h3>" + list(decs.map(d => fmtD(d.date) + " · <b>" + esc(d.title) + "</b> — " + d.decided_by.map(peL).join(", ") + (d.rationale ? '<div class="muted">' + esc(d.rationale) + "</div>" : ""))) : ""));
+}
+V.procs = q => {
+  const a = q.get("area") || "";
+  setTimeout(() => $("#pa").onchange = () => go("procs", {area: $("#pa").value}));
+  const areas = PF.areas.filter(x => !a || x.id === a);
+  return "<h1>Processos</h1>" + '<div class="filters"><select id="pa"><option value="">todas as áreas</option>' +
+    PF.areas.map(x => '<option value="' + esc(x.id) + '"' + (x.id === a ? " selected" : "") + ">" + esc(x.name) + "</option>").join("") + "</select></div>" +
+    areas.map(x => { const rows = PF.processes.filter(p => p.area === x.id);
+      return rows.length ? panel(arL(x.id) + ' <span class="muted">· ' + rows.length + " · " + hrs(rows.filter(p => p.status === "ativo").reduce((t, p) => t + (p.hours_month || 0), 0)) + "</span>", procTable(rows)) : ""; }).join("") ||
+    empty("nenhum processo");
+};
+V.proc = (q, id) => {
+  const p = PROC[id]; if (!p) return empty("Processo não encontrado");
+  const opps = p.opportunities.map(i => OPP[i]).filter(Boolean).sort(byScore);
+  let h = crumb("procs", "processos") + "<h1>" + esc(p.id) + " · " + esc(p.title) + '</h1><div class="detail-head">' + chip(p.status === "ativo" ? "s-priorizada" : "s-descartada", p.status) +
+    "<span>" + arL(p.area) + "</span><span>" + hrs(p.hours_month) + "</span>" + (p.gaps.length ? '<span class="late">⚠ ' + p.gaps.map(esc).join("; ") + "</span>" : "") + "</div>";
+  h += '<div class="grid g2">' + panel("Ficha", procSummary(p) + (p.retired_reason ? "<p class=late>Aposentado: " + esc(p.retired_reason) + "</p>" : "")) +
+    panel("Pessoas", list(procPeople(p).map(x => peL(x) + ' <span class="muted">' + (x === p.owner ? "responsável" : "executa") + (PE[x] && PE[x].role ? " · " + esc(PE[x].role) : "") + "</span>"), "nenhuma pessoa ligada")) + "</div>";
+  if (p.pains.length) h += panel("Dores", list(p.pains.map(esc)));
+  if (p.notes.length) h += panel("Notas", list(p.notes.map(esc)));
+  h += panel("Oportunidades <span class=muted>· " + opps.length + "</span>", oppTable(opps, []));
+  h += panel("Arquivos <span class=muted>· " + filesOf(p).length + "</span>", list(filesOf(p).map(x => x.html)));
+  return h;
+};
+V.areas = () => "<h1>Áreas</h1>" + panel("", "<table><tr><th>Área</th><th>Também chamada</th><th>Processos</th><th>Horas/mês</th><th>Oportunidades</th><th>Priorizadas</th></tr>" +
+  PF.areas.map(a => { const procs = PF.processes.filter(p => p.area === a.id && p.status === "ativo"), opps = PF.opportunities.filter(o => o.area === a.id);
+    return "<tr><td>" + arL(a.id) + "</td><td class=muted>" + a.aliases.map(esc).join(", ") + '</td><td class="num">' + procs.length + '</td><td class="num">' + hrs(procs.reduce((t, p) => t + (p.hours_month || 0), 0)) +
+      '</td><td class="num">' + opps.length + '</td><td class="num">' + opps.filter(o => o.status === "priorizada").length + "</td></tr>"; }).join("") + "</table>");
+V.area = (q, id) => {
+  const a = AREA[id]; if (!a) return empty("Área não encontrada");
+  const opps = PF.opportunities.filter(o => o.area === id).sort(byScore), procs = PF.processes.filter(p => p.area === id);
+  const ppl = [...new Set([...procs.flatMap(procPeople), ...opps.flatMap(o => o.people)])];
+  return crumb("areas", "áreas") + "<h1>" + esc(a.name) + "</h1>" + (a.aliases.length ? '<p class="muted">também: ' + a.aliases.map(esc).join(", ") + "</p>" : "") + (a.note ? "<p>" + esc(a.note) + "</p>" : "") +
+    panel("Processos · " + procs.length, procTable(procs)) + panel("Oportunidades · " + opps.length, oppTable(opps, ["process"])) +
+    panel("Pessoas · " + ppl.length, ppl.length ? ppl.map(peL).join(" · ") : empty("nenhuma"));
+};
+function personLinks(id){
+  const opps = PF.opportunities.filter(o => o.people.includes(id) || (PROC[o.process] && procPeople(PROC[o.process]).includes(id)));
+  const procs = PF.processes.filter(p => procPeople(p).includes(id));
+  const projs = M.projects.filter(p => p.owner === id || p.people.some(x => x.id === id));
+  return {opps, procs, projs};
+}
+V.people = () => {
+  const rows = M.people.map(p => [p, personLinks(p.id)]).filter(([p, l]) => l.opps.length || l.procs.length || l.projs.length)
+    .sort((a, b) => (b[1].opps.length + b[1].procs.length) - (a[1].opps.length + a[1].procs.length) || a[0].name.localeCompare(b[0].name));
+  return "<h1>Pessoas</h1>" + panel("", rows.length ? "<table><tr><th>Pessoa</th><th>Papel</th><th>Processos</th><th>Oportunidades</th><th>Projetos</th></tr>" +
+    rows.map(([p, l]) => "<tr><td>" + peL(p.id) + "</td><td class=muted>" + esc(p.role || p.relation || "") + '</td><td class="num">' + l.procs.length + '</td><td class="num">' + l.opps.length +
+      '</td><td class="num">' + l.projs.length + "</td></tr>").join("") + "</table>" : empty("nenhuma pessoa ligada ao portfólio"));
+};
+V.person = (q, id) => {
+  const p = PE[id]; if (!p) return empty("Pessoa não encontrada");
+  const l = personLinks(id);
+  return crumb("people", "pessoas") + "<h1>" + esc(p.name) + "</h1><p class=muted>" + esc([p.role, p.relation].filter(Boolean).join(" · ")) + (p.aliases.length ? " · também: " + p.aliases.map(esc).join(", ") : "") + "</p>" +
+    panel("Processos · " + l.procs.length, l.procs.length ? procTable(l.procs) : empty("nenhum")) +
+    panel("Oportunidades · " + l.opps.length, oppTable(l.opps.sort(byScore))) +
+    (l.projs.length ? panel("Projetos · " + l.projs.length, list(l.projs.map(x => pjL(x.id) + " · " + bar(x.progress)))) : "");
+};
+V.project = (q, id) => { const p = PR[id]; if (!p) return empty("Projeto não encontrado");
+  const opps = PF.opportunities.filter(o => o.project === id);
+  return crumb("overview", "visão geral") + "<h1>" + esc(p.id) + " · " + esc(p.title) + "</h1>" + panel("Oportunidades de origem", oppTable(opps)) + projectBlock(p); };
+V.files = () => {
+  const rows = [];
+  PF.opportunities.forEach(o => filesOf(o).forEach(f => rows.push([oL(o.id, true), f])));
+  PF.processes.forEach(p => filesOf(p).forEach(f => rows.push([prL(p.id, true), f])));
+  return "<h1>Arquivos <span class=muted>· " + rows.length + "</span></h1><p class=muted>Documentos ligados (Drive, playbooks, one-pagers) e os registros de onde cada item saiu.</p>" +
+    panel("", rows.length ? "<table><tr><th>De</th><th>Arquivo</th></tr>" + rows.map(([w, f]) => "<tr><td>" + w + "</td><td>" + f.html + "</td></tr>").join("") + "</table>" : empty("nenhum"));
+};
+V.matrix = () => "<h1>Matriz impacto × facilidade</h1><p class=muted>Impacto e facilidade altos = nota ≥ 3. Fora da matriz: oportunidades sem ICE.</p>" + panel("", matrix()) + panel("Ranking ICE completo", oppTable(PF.ranking.map(i => OPP[i])));
+V.search = q => {
+  const norm = s => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  const terms = norm(q.get("q")).split(/\s+/).filter(t => t.length > 1), hit = s => terms.length && terms.every(t => norm(s).includes(t));
+  const res = [];
+  PF.opportunities.forEach(o => hit([o.id, o.title, o.problem, o.suggestion, o.gain, areaName(o.area), o.status, o.people_names.join(" ")].join(" ")) && res.push(["oportunidade", oL(o.id, true) + " " + st(o.status)]));
+  PF.processes.forEach(p => hit([p.id, p.title, p.tools.join(" "), p.pains.join(" "), p.io, areaName(p.area), p.owner_name].join(" ")) && res.push(["processo", prL(p.id, true)]));
+  M.people.forEach(p => hit(p.name + " " + p.aliases.join(" ") + " " + p.role) && res.push(["pessoa", peL(p.id)]));
+  PF.areas.forEach(a => hit(a.name + " " + a.aliases.join(" ")) && res.push(["área", arL(a.id)]));
+  [...PF.opportunities, ...PF.processes].forEach(x => x.docs.forEach(d => hit(d.title + " " + d.kind) && res.push(["arquivo", docLink(d) + ' <span class="muted">· ' + esc(x.id) + "</span>"])));
+  return "<h1>Busca: " + esc(q.get("q")) + "</h1>" + panel("", res.length ? list(res.map(r => chip("", r[0]) + " " + r[1])) : empty("não consta"));
+};
+
+const TABS = [["overview", "Visão geral"], ["opps", "Oportunidades", PF.opportunities.length], ["matrix", "Matriz"], ["procs", "Processos", PF.processes.filter(p => p.status === "ativo").length],
+  ["areas", "Áreas", PF.areas.length], ["people", "Pessoas"], ["files", "Arquivos"]];
+const PARENT = {opp: "opps", proc: "procs", area: "areas", person: "people", project: "overview"};
+function go(view, params){ const q = new URLSearchParams(Object.entries(params || {}).filter(([, v]) => v)).toString(); location.hash = view + (q ? "?" + q : ""); }
+function route(){
+  const raw = location.hash.slice(1) || "overview", [path, qs] = raw.split("?"), [view, arg] = path.split("/"), q = new URLSearchParams(qs || "");
+  $("#tabs").innerHTML = TABS.map(([k, label, n]) => '<a href="#' + k + '" class="' + (view === k || PARENT[view] === k ? "on" : "") + '">' + label + (n ? '<span class="n">' + n + "</span>" : "") + "</a>").join("");
+  $("#view").innerHTML = (V[view] || V.overview)(q, arg && decodeURIComponent(arg));
+  window.scrollTo(0, 0);
+}
+$("#gen").textContent = " · " + M.owner.name + " · gerado " + M.generated_at.slice(0, 16).replace("T", " ");
+$("#foot").textContent = "Retrato de " + fmtD(M.today) + ", derivado do livro-razão do Segundo Cérebro. Um arquivo só, funciona offline.";
+let tmr; $("#q").addEventListener("input", e => { clearTimeout(tmr); const v = e.target.value.trim(); tmr = setTimeout(() => v.length > 1 ? go("search", {q: v}) : go("overview"), 250); });
+window.addEventListener("hashchange", route);
+route();
+})();
+</script>
+</body>
+</html>

@@ -27,6 +27,8 @@ class PortfolioKeys:
         from .app import Key
         add = lambda k, label, fn, **kw: K.append(Key(k, label, fn, **kw))  # noqa: E731
         w = lambda cond: every or cond  # noqa: E731
+        if p in (1, 4):
+            add("o", "mapa HTML", lambda: self.run_sys("sys:openpf"))
         if p == 2:
             add("n", "novo", self.f_proc_new)
             if w(it and it.kind == "proc"):

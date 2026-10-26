@@ -577,7 +577,7 @@ def cmd_render(args, b: Brain) -> None:
     report = render.render_all(b, do_harvest=not args.no_harvest)
     _out(args, report, render.summary(report))
     if args.open:
-        render.open_dashboard(b)
+        render.open_dashboard(b, args.open)
 
 
 def cmd_sync(args, b: Brain) -> None:
@@ -955,7 +955,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("render", help="colhe edições do dono e regenera TODAS as views (sem LLM)")
     p.add_argument("--no-harvest", action="store_true")
-    p.add_argument("--open", action="store_true", help="abre o painel no navegador")
+    p.add_argument("--open", nargs="?", const="execucao", choices=["execucao", "portfolio"],
+                   help="abre no navegador o painel da face Execução (padrão) ou o mapa de oportunidades (portfolio)")
     p.add_argument("--json", action="store_true")
     p.set_defaults(fn=cmd_render)
 

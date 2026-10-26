@@ -493,6 +493,21 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(got[-1], [["opportunity", "add", "Algo totalmente novo", "--by", "owner", "--area", "growth",
                                         "--kind", "melhoria-de-processo", "--problem", "outro assunto", "--hours-saved", "12.0"]])
 
+    async def test_portfolio_o_opens_opportunity_map(self):
+        """Face Portfólio: `o` na Visão e na Matriz abre o mapa HTML (o mesmo gesto do painel da face Execução)."""
+        self.seed_portfolio()
+        app = self.app()
+        got: list = []
+        app.exec = lambda cmds, **kw: got.append(cmds)
+        async with app.run_test(size=(150, 46)) as pilot:
+            await pilot.pause(0.4)
+            for panel in ("1", "4"):
+                await pilot.press("tab", panel)
+                await pilot.press("o")
+                await pilot.pause(0.1)
+                self.assertEqual(got[-1], [["render", "--open", "portfolio"]])
+                await pilot.press("tab")                                         # volta à face Execução
+
     async def test_process_keys_and_open_playbook(self):
         ids = self.seed_portfolio()
         app = self.app()

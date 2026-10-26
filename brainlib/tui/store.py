@@ -64,6 +64,9 @@ SYS_OPS = [
              "Roda sozinho depois de cada escrita feita aqui."},
     {"id": "sys:open", "name": "Abrir o painel HTML", "args": ["render", "--open"],
      "desc": "Regenera as views e abre o painel (um arquivo, offline) no navegador."},
+    {"id": "sys:openpf", "name": "Abrir o mapa de oportunidades (HTML)", "args": ["render", "--open", "portfolio"],
+     "desc": "Regenera as views e abre o mapa do portfólio — oportunidades, processos, áreas, pessoas e arquivos — "
+             "num arquivo só, offline e navegável, feito para compartilhar (FRESH/dashboard/portfolio.html)."},
     {"id": "sys:sync", "name": "Colher edições do dono", "args": ["sync"],
      "desc": "Só colhe o que você editou à mão (checkbox em todo.md, status: na ficha da ação, goals.md), sem redesenhar as views."},
     {"id": "sys:validate", "name": "Validar o ledger", "args": ["validate"],

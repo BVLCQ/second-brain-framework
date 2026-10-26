@@ -203,6 +203,10 @@ Arquivo: `vault/FRESH/dashboard/index.html`.
 ./brain render --open
 ```
 
+O mapa de oportunidades (`vault/FRESH/dashboard/portfolio.html`) sai no
+mesmo render, num arquivo à parte, só com o portfólio — para compartilhar:
+`./brain render --open portfolio` (na TUI: `o` na face Portfólio).
+
 Atualize depois de mudanças. A data no canto ("gerado …") é a do último
 render, não "agora". O rodapé lembra: nada ali é informação única.
 

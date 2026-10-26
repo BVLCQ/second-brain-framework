@@ -184,3 +184,55 @@ def render(pg: Pages) -> dict[str, str]:
             body.append("_nenhum_")
         pg.put(f, _frontmatter(fm) + "\n".join(body))
     return statuses
+
+
+# ── painel HTML do portfólio (FRESH/dashboard/portfolio.html) ──────────────────
+def doc_url(d: dict) -> str | None:
+    """Link clicável de um documento ligado: URL como veio; id do Drive vira pasta ou arquivo; caminho do vault, nenhum."""
+    from .watch import drive_doc_id
+    ref = d.get("ref") or ""
+    if ref.startswith(("http://", "https://")):
+        return ref
+    if "/" not in ref and drive_doc_id(ref) == ref:
+        return (f"https://drive.google.com/drive/folders/{ref}" if d.get("kind") == "pasta"
+                else f"https://drive.google.com/open?id={ref}")
+    return None
+
+
+def html_payload(m: dict) -> dict:
+    """Recorte do view model que o mapa de oportunidades precisa — e só isso, porque o arquivo é feito para circular:
+    o portfólio inteiro, mais as pessoas, goals, projetos (com ações e decisões) e artefatos ligados a ele."""
+    pf = m["portfolio"]
+    opps, procs = pf["opportunities"], pf["processes"]
+    for x in opps + procs:
+        for d in x["docs"]:
+            d["url"] = doc_url(d)
+        if x.get("playbook"):
+            x["playbook"]["url"] = doc_url(x["playbook"])
+    projects = {p["id"]: p for p in m["projects"]}
+    linked = {o["project"] for o in opps if o["project"] in projects}
+    goal_ids = {o["goal"] for o in opps if o["goal"]} | {projects[p]["goal"] for p in linked}
+    actions = [a for a in m["actions"] if a["project"] in linked]
+    decisions = [d for d in m["decisions"] if d["project"] in linked]
+    paths = {s for x in opps + procs for s in [x["source"], *x.get("evidence", [])] if s}
+    artifacts = [a for a in m["artifacts"] if a["id"] in paths or a["raw"] in paths]
+    people_ids = {x for o in opps for x in o["people"]} | {m["owner"]["id"]}
+    people_ids |= {x for p in procs for x in [p["owner"], *p["executors"]] if x}
+    people_ids |= {pp["id"] for p in linked for pp in projects[p]["people"]}
+    people_ids |= {projects[p]["owner"] for p in linked if projects[p]["owner"]}
+    people_ids |= {a["owner"] for a in actions} | {x for d in decisions for x in d["decided_by"]}
+    return {
+        "generated_at": m["generated_at"], "today": m["today"], "owner": m["owner"], "portfolio": pf,
+        "people": [{k: p[k] for k in ("id", "name", "aliases", "role", "relation", "is_owner")}
+                   for p in m["people"] if p["id"] in people_ids],
+        "goals": [{k: g[k] for k in ("id", "title", "status", "horizon", "why", "progress", "health_label")}
+                  for g in m["goals"] if g["id"] in goal_ids],
+        "projects": [{k: projects[p][k] for k in ("id", "title", "goal", "goal_title", "status", "owner", "progress",
+                                                  "deliverables", "people", "health", "next_due")} for p in sorted(linked)],
+        "actions": [{k: a[k] for k in ("id", "title", "owner", "owner_name", "list", "status", "open", "due",
+                                       "overdue_days", "project", "closed")} for a in actions],
+        "decisions": [{k: d[k] for k in ("id", "title", "date", "decided_by", "project", "rationale", "status")}
+                      for d in decisions],
+        "artifacts": [{k: a[k] for k in ("id", "kind", "title", "date", "raw", "people", "summary", "prov")}
+                      for a in artifacts],
+    }

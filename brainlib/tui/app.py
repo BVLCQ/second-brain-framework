@@ -122,6 +122,7 @@ CMD_CATALOG = [               # paleta de comandos: nome, linha da CLI, (face, p
     ("Ver o log de comandos", "painel 6", (0, 6, 0, None)),
     # face Portfólio
     ("Visão do portfólio", "brain opportunity list --sort score", (1, 1, 0, None)),
+    ("Abrir mapa de oportunidades (HTML)", "brain render --open portfolio", (1, 1, 0, "o")),
     ("Processos", "brain process list", (1, 2, 0, None)),
     ("Processos com lacuna", "brain process list --gaps", (1, 2, 2, None)),
     ("Novo processo", 'brain process add "…" --area … --owner …', (1, 2, 0, "n")),

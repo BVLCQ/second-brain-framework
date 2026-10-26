@@ -140,7 +140,7 @@ Cria uma instância fictícia, completa, para ver o painel ou mostrar a alguém.
 | Opção | Uso |
 |---|---|
 | `--dir PASTA` | **obrigatório**: onde criar |
-| `--open` | abre o painel no navegador |
+| `--open [execucao\|portfolio]` | abre no navegador o painel (padrão) ou o mapa de oportunidades (`dashboard/portfolio.html`) |
 
 ```bash
 brain demo --dir /tmp/brain-demo --open

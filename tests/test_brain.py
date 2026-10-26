@@ -1872,6 +1872,35 @@ class PortfolioViewsTests(unittest.TestCase):
             r = subprocess.run([node, "--check", str(js)], capture_output=True, text=True)
             self.assertEqual(r.returncode, 0, r.stderr)
 
+    def test_portfolio_html_is_shareable_and_valid_js(self):
+        """FRESH/dashboard/portfolio.html: o mapa de oportunidades sai a cada render, só com o recorte do portfólio."""
+        import shutil
+        with tempfile.TemporaryDirectory() as td:
+            b, p1, ids, fresh = self._render(td)
+            b.record_one({"type": "doc.linked", "id": ids["aposta"], "by": "owner",
+                          "data": {"target": ids["aposta"], "ref": "1AbCdEfGhIjKlMnOp", "kind": "pasta", "title": "Pasta da aposta"}})
+            report = render.render_all(b, do_harvest=False)
+            html = Path(report["portfolio"]).read_text(encoding="utf-8")
+            self.assertEqual(Path(report["portfolio"]).name, "portfolio.html")
+            data = json.loads(html.split('type="application/json">', 1)[1].split("</script>", 1)[0])
+            self.assertIn(ids["aposta"], {o["id"] for o in data["portfolio"]["opportunities"]})
+            self.assertNotIn("outbox", data)                       # nada da face Execução além do que liga ao portfólio
+            docs = next(o for o in data["portfolio"]["opportunities"] if o["id"] == ids["aposta"])["docs"]
+            self.assertIn("https://drive.google.com/drive/folders/1AbCdEfGhIjKlMnOp", [d["url"] for d in docs])
+            self.assertIn("mapa de oportunidades", render.summary(report))
+            node = shutil.which("node")
+            if node:
+                js = Path(td) / "pf.js"
+                js.write_text(html.split("<script>", 1)[1].rsplit("</script>", 1)[0], encoding="utf-8")
+                r = subprocess.run([node, "--check", str(js)], capture_output=True, text=True)
+                self.assertEqual(r.returncode, 0, r.stderr)
+
+    def test_doc_url(self):
+        from brainlib.render_portfolio import doc_url
+        self.assertEqual(doc_url({"ref": "https://x.example.com/a", "kind": "outro"}), "https://x.example.com/a")
+        self.assertEqual(doc_url({"ref": "1AbCdEfGhIjKlMnOp", "kind": "one-pager"}), "https://drive.google.com/open?id=1AbCdEfGhIjKlMnOp")
+        self.assertIsNone(doc_url({"ref": "PROCESSED/2026/10/x.md", "kind": "fonte"}))
+
 
 class PortfolioOutputsTests(unittest.TestCase):
     """Passos 8–9: exports (/share portfolio, one-pager), skills e as ferramentas MCP somente-leitura."""

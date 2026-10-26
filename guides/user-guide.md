@@ -808,10 +808,12 @@ e fica ligada ao projeto (o progresso dele aparece na ficha).
 onde você estava; dentro de formulários o Tab continua mudando de campo). Painéis do Portfólio: **1 Visão** (funil,
 top 5 por ICE, lacunas; por área; por goal) · **2 Processos** (todos, por área, lacunas) · **3 Oportunidades**
 (triagem, priorizadas, em curso, arquivo) · **4 Matriz** (impacto × facilidade em 2×2, ranking) · **5 Registro**
-(áreas, documentos). Teclas: processos `n e l o a x`; oportunidades `n e s i c l v p x` (`O` pede o one-pager ao agente);
+(áreas, documentos). Teclas: `o` na Visão e na Matriz abre o mapa de oportunidades em HTML; processos `n e l o a x`; oportunidades `n e s i c l v p x` (`O` pede o one-pager ao agente);
 áreas `n e`; documentos `enter` abre e `u` desliga.
 
 **Nos outros lugares:** `FRESH/processes.md`, `FRESH/opportunities.md` e as fichas em `FRESH/records/processes|opportunities/`
-(editar `status:` na ficha da oportunidade é colhido), a aba **Portfólio** do painel HTML, a linha "Portfólio:" no
+(editar `status:` na ficha da oportunidade é colhido), a aba **Portfólio** do painel HTML, o **mapa de oportunidades**
+(`FRESH/dashboard/portfolio.html`, `./brain render --open portfolio`: um HTML só, offline e navegável — visão geral, funil,
+matriz, cada oportunidade e processo com pessoas, arquivos do Drive, evidências e o projeto ligado), a linha "Portfólio:" no
 `home.md`, `/share portfolio` (roadmap priorizado para mandar a um colega) e as ferramentas MCP somente-leitura
 `portfolio_overview`, `process`, `opportunity` e `opportunities`.

@@ -264,7 +264,7 @@ Qualquer outra edição em FRESH é descartada. Narrativas do agente
 Views: `home.md`, `todo.md`, `goals.md`, `projects/PROJ-#.md`, `decisions.md`,
 `wins.md`, `people/<id>.md`, `timeline.md`, `map.md`, `focus.md`, `outbox.md`,
 `processes.md`, `opportunities.md`, `health.md`, `records/` (ações, decisões, processos,
-oportunidades), `dashboard/index.html`.
+oportunidades), `dashboard/index.html`, `dashboard/portfolio.html`.
 `/map` e `/timeline` são sob demanda só no sentido de "o dono pediu para
 olhar"; o arquivo já existe depois de qualquer render.
 
@@ -285,6 +285,11 @@ apontar, trate como pista e confirme no arquivo.
 
 - **Painel HTML** (`vault/FRESH/dashboard/index.html`) — um arquivo, offline,
   abre em qualquer navegador. `./brain render --open`.
+- **Mapa de oportunidades** (`vault/FRESH/dashboard/portfolio.html`) — o mesmo
+  formato, só com o portfólio (oportunidades, processos, áreas, pessoas,
+  arquivos e projetos ligados): navegável e feito para circular.
+  `./brain render --open portfolio`; na TUI, `o` na face Portfólio. Sair da
+  máquina continua sendo pelas portas `share` / `publish`.
 - **Qualquer editor de texto** — FRESH/ é Markdown plano; checkbox em `todo.md`
   e `status:` na ficha da ação são colhidos no próximo render.
 - **MCP somente-leitura** — `./brain mcp` (stdio). Outras IAs consultam;

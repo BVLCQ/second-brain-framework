@@ -10,6 +10,8 @@ from . import doctor, model, render_md, render_portfolio, util
 from . import harvest as harvest_mod
 
 ASSET = Path(__file__).resolve().parent / "assets" / "dashboard.html"
+PORTFOLIO_ASSET = ASSET.with_name("portfolio.html")
+PANELS = {"execucao": "index.html", "portfolio": "portfolio.html"}   # brain render --open [execucao|portfolio]
 MANAGED_DIRS = ("projects", "people", "records/actions", "records/decisions",
                 "records/processes", "records/opportunities")
 
@@ -23,13 +25,13 @@ def _notes(fresh: Path) -> list[dict]:
     return out
 
 
-def render_html(m: dict) -> str:
+def render_html(m: dict, asset: Path = ASSET) -> str:
     # `<`, `>` e `&` só aparecem dentro de strings JSON: \u003c etc. é JSON válido e não deixa o texto fechar o
     # <script> nem abrir comentário. (`<\!--` NÃO é escape JSON válido — derrubava o JSON.parse do painel inteiro.)
     data = json.dumps(m, ensure_ascii=False, default=str)
     data = (data.replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
             .replace("\u2028", "\\u2028").replace("\u2029", "\\u2029"))
-    return ASSET.read_text(encoding="utf-8").replace("__DATA__", data, 1)
+    return asset.read_text(encoding="utf-8").replace("__DATA__", data, 1)
 
 
 def _cleanup(fresh: Path, keep: set[Path]) -> list[str]:
@@ -69,11 +71,14 @@ def render_all(brain, do_harvest: bool = True) -> dict:
     pages.health_page(m["health"])
     dashboard = brain.inst.fresh / "dashboard" / "index.html"
     pages.files[dashboard] = render_html(m)
+    pf_html = dashboard.with_name(PANELS["portfolio"])
+    pages.files[pf_html] = render_html(render_portfolio.html_payload(m), PORTFOLIO_ASSET)
     written = sum(util.atomic_write(path, text) for path, text in pages.files.items())
     removed = _cleanup(brain.inst.fresh, set(pages.files))
     harvest_mod.save_state(brain.inst.fresh, todo_checks, record_status)
     return {"harvested": [f"{e['type']} {e.get('id', '')}" for e in harvested], "written": written,
             "total": len(pages.files), "removed": removed, "dashboard": str(dashboard),
+            "portfolio": str(pf_html),
             "warnings": notices + [c for c in m["health"] if c["level"] != "ok"]}
 
 
@@ -83,13 +88,14 @@ def summary(report: dict) -> str:
     if report["harvested"]:
         lines.append("  colhido das suas edições: " + ", ".join(report["harvested"]))
     lines.append(f"  painel: {report['dashboard']}")
+    lines.append(f"  mapa de oportunidades: {report['portfolio']}")
     for w in report["warnings"][:6]:
         lines.append(f"  {'✗' if w['level'] == 'error' else '⚠'} {w['title']}: {w['detail']}")
     return "\n".join(lines)
 
 
-def open_dashboard(brain) -> None:
-    path = brain.inst.fresh / "dashboard" / "index.html"
+def open_dashboard(brain, panel: str = "execucao") -> None:
+    path = brain.inst.fresh / "dashboard" / PANELS[panel]
     opener = shutil.which("xdg-open") or shutil.which("open")
     if opener:
         subprocess.run([opener, str(path)], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
