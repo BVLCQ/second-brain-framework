@@ -26,7 +26,8 @@ OPP_STATUS = {"ideia", "triagem", "em-espera", "descartada", "priorizada", "em-a
               "validando", "entregue"}
 OPP_REASON_STATUS = {"em-espera", "descartada"}            # laterais: exigem motivo
 OPP_KINDS = {"melhoria-de-processo", "novo-processo", "estruturante"}
-DOC_KINDS = {"playbook", "one-pager", "planilha", "artefato", "apresentacao", "outro"}
+DOC_KINDS = {"playbook", "one-pager", "planilha", "artefato", "apresentacao", "pasta", "outro"}
+WATCH_KINDS = {"playbook", "one-pager"}       # doc do Drive que o /update relê quando o modifiedTime muda
 
 ACTION_ID, PLAN_NODE = ids.ACTION_ID, ids.PLAN_NODE
 PROC_ID = re.compile(r"^PROC-\d{4,}$")
@@ -90,6 +91,7 @@ TYPES: dict[str, dict] = {
     "opportunity.promoted": {"entity": "opportunity", "req": ["project", "goal"]},
     "doc.linked": {"entity": "doclink", "req": ["target", "kind", "ref"]},
     "doc.unlinked": {"entity": "doclink", "req": ["target", "ref"]},
+    "doc.suggested": {"entity": "doclink", "req": ["target", "ref", "what"]},   # porta oppdrive: sugestão no Docs, nunca edição
 }
 
 
@@ -414,6 +416,6 @@ def _validate_portfolio(t: str, ev: dict, data: dict, state, plan) -> None:
         _need(ev.get("id") == tgt, "doc: id do evento deve ser o alvo")
         if t == "doc.linked":
             _need(data["kind"] in DOC_KINDS, f"kind de documento inválido: {data['kind']!r} — {sorted(DOC_KINDS)}")
-        else:
+        else:                            # unlinked / suggested: o doc precisa estar ligado ao alvo
             coll = state.processes if tgt in state.processes else state.opportunities
             _need(any(d.ref == data["ref"] for d in coll[tgt].docs), f"doc: {data['ref']!r} não está ligado a {tgt}")

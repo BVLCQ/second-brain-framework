@@ -148,7 +148,7 @@ def _agent_name(cfg: dict) -> str | None:
 def agent_argv(cfg: dict, prompt: str, run_id: str | None = None, extra_allow: list[str] | None = None) -> list[str] | None:
     """Comando headless do agente configurado ([runner] em brain.toml), com o prompt dado. `run_id` entra no prompt."""
     r = cfg["runner"]
-    extra = runner.read_allow(cfg) + [t for t in cfg.get("tui", {}).get("agent_allow", []) if t] + list(extra_allow or [])
+    extra = runner.read_allow(cfg) + runner.door_allow(cfg) + [t for t in cfg.get("tui", {}).get("agent_allow", []) if t] + list(extra_allow or [])
     full = run_prefix(run_id) + prompt
     if r.get("command"):
         return [part.replace("{prompt}", full) for part in shlex.split(r["command"])]

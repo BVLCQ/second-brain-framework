@@ -80,8 +80,9 @@ somente-leitura para o mundo.
 3. **Publicação** — `brain publish`. Export (`brain share`) → pedido →
    aprovação por publicação → o agente posta no destino listado em
    `[publish].destinations` (Slack canvas / Drive) e registra o link.
-4. **Backup** — `brain backup`. Única escrita no Drive: cria/apaga os próprios
-   `brain-backup-*.zip` na pasta `GOOGLE_BACKUP_FOLDER_ID`. Escopo `drive.file`.
+4. **Backup** — `brain backup`. Cria/apaga os próprios `brain-backup-*.zip`
+   na pasta `GOOGLE_BACKUP_FOLDER_ID`. Escopo `drive.file`. (A outra escrita
+   no Drive é a porta 6, pelo MCP.)
 5. **Framework (upstream)** — git puro, com hook. Esta instância é um clone do
    repo público do framework; `vault/` e a config pessoal são cegos pro git.
    **Toda melhoria de código ou estrutura** feita aqui — `brainlib/`,
@@ -102,10 +103,27 @@ somente-leitura para o mundo.
      `config/.env`. O noturno nunca sobe.
    - **Descer.** `./brain update` traz melhorias do framework (`--check`
      antes, se quiser). Se o upstream andou, `update` vem antes do push.
+6. **Pastas de oportunidade (Google Drive)** — `brain oppdrive`. Ligada em
+   `[oppdrive]` (`enabled`, `root` = pasta-raiz, `tools` = ferramentas MCP da
+   porta). O dono aprova a porta **uma vez** ao ligá-la; daí em diante o agente
+   age sozinho no `/dump` e no `/update` (noturno incluso) e relata. Escopo:
+   - **Cria, uma vez:** uma subpasta por oportunidade (`OPP-####: título`)
+     direto na raiz, e dentro dela o one-pager (Google Doc) a partir do
+     ledger (`brain oppdrive onepager`). Nada fora da raiz.
+   - **Depois de criado, o doc é de quem edita no Drive.** O agente só deixa
+     **sugestões** (Docs `writeMode = SUGGEST`, no nome do dono) — nunca
+     `EDIT`, nunca apaga, renomeia, move ou compartilha. O dono aceita ou
+     recusa no Docs. Arquivo relacionado (muitas vezes de outra pessoa) entra
+     como sugestão na seção "Arquivos relacionados" com o link — o cérebro
+     não copia, não move e não cria atalho.
+   - O one-pager é vigiado (`drive-doc`): o `/update` relê quando muda; o que
+     o dono escreveu lá é `[doc]`.
+   - Cada pasta, doc e sugestão vira evento (`oppdrive record`, `oppdrive
+     suggested`); o CLI recusa pasta fora da raiz e segundo one-pager.
 
 O noturno roda com `BRAIN_NIGHTLY=1`: o ledger **recusa** qualquer evento do
 dono, aprovação, envio, publicação ou `focus.apply` no Google. Não há dono
-presente.
+presente. A porta 6 é a exceção: já aprovada, só cria e sugere.
 
 ## O livro-razão (a verdade das entidades)
 
@@ -177,6 +195,8 @@ vai e volta livremente entre eles. Tipos: `melhoria-de-processo` · `novo-proces
   diff). Proibido no noturno. `em-andamento` só nasce da promoção.
 - Playbooks moram no Drive; a ligação (`brain doc link … --kind playbook --watch`) cria uma fonte
   `drive-doc` no watch e o `/update` só relê quando o `modifiedTime` muda.
+- Pasta e one-pager de cada oportunidade moram no Drive (porta 6, `brain oppdrive`); o one-pager
+  local (`brain share opportunity`) continua valendo quando a porta está desligada.
 - Fora do escopo: escrever em Jira/Sheets/Notion, R$, aprovação de terceiros.
 
 ## PLANNING — a árvore e o único gate estrutural

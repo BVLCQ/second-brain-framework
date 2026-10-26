@@ -128,7 +128,7 @@ class Brain:
             ev["id"] = pid
         elif t == "area.added":
             ev["id"] = util.slugify(ev.get("id") or data.get("name", ""), 32)
-        elif t in ("doc.linked", "doc.unlinked"):
+        elif t.startswith("doc."):
             ev["id"] = data.get("target")
         elif t == "artifact.added":
             ev["id"] = self._vault_rel(ev.get("id") or data.get("path", ""))

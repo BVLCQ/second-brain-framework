@@ -309,8 +309,8 @@ def drive_doc_id(ref: str) -> str | None:
     return ref if DRIVE_ID_RE.match(ref) else None
 
 
-def playbook_key(target: str) -> str:
-    return f"playbook-{target.lower()}"
+def playbook_key(target: str, kind: str = "playbook") -> str:
+    return f"{kind}-{target.lower()}"
 
 
 def check_fields(brain, fields: dict) -> None:
@@ -340,13 +340,13 @@ def broken_links(brain) -> list[str]:
     return out
 
 
-def link_playbook(brain, target: str, ref: str) -> dict:
-    """`doc link --kind playbook --watch`: cria (ou atualiza) a fonte drive-doc estável do alvo."""
+def link_playbook(brain, target: str, ref: str, kind: str = "playbook") -> dict:
+    """`doc link --kind playbook|one-pager --watch`: cria (ou atualiza) a fonte drive-doc estável do alvo."""
     doc = drive_doc_id(ref)
     if not doc:
         raise util.BrainError(f"--watch pede um doc do Drive (URL ou id); recebi {ref!r}", code=4)
-    key = playbook_key(target)
-    fields = {"kind": DRIVE_DOC, "doc": doc, "link": target, "note": f"playbook de {target}"}
+    key = playbook_key(target, kind)
+    fields = {"kind": DRIVE_DOC, "doc": doc, "link": target, "note": f"{kind} de {target}"}
     check_fields(brain, fields)
     if key in {s.get("key") for s in list_sources(brain.inst)}:
         return edit(brain.inst, key, {"doc": doc, "link": target})
@@ -354,11 +354,11 @@ def link_playbook(brain, target: str, ref: str) -> dict:
 
 
 def unlink_playbook(brain, target: str, ref: str) -> bool:
-    key = playbook_key(target)
-    src = next((s for s in list_sources(brain.inst) if s.get("key") == key), None)
-    if src is None or src.get("doc") != drive_doc_id(ref):
+    doc, keys = drive_doc_id(ref), {playbook_key(target, k) for k in ("playbook", "one-pager")}
+    src = next((s for s in list_sources(brain.inst) if s.get("key") in keys and s.get("doc") == doc), None)
+    if src is None or doc is None:
         return False
-    remove(brain.inst, key)
+    remove(brain.inst, src["key"])
     return True
 
 

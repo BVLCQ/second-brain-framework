@@ -31,8 +31,10 @@ AUTO_ORDER = ["cursor", "claude", "codex", "agy", "gemini"]
 NIGHT_PROMPT = ("{base} — MODO NOTURNO: o dono não está presente. Permitido: ler fontes pelas ferramentas MCP de "
                 "LEITURA listadas no config/watch.toml, gravar snapshots (./brain snapshot), processar a inbox (/dump) "
                 "e registrar fatos com ./brain. PROIBIDO: qualquer ferramenta MCP de escrita (enviar mensagem, criar "
-                "canvas/doc, mover card), aprovações, envios, publicações e mudanças de PLANNING. Na dúvida, não faça "
-                "— registre uma proposta.")
+                "canvas/doc, mover card), aprovações, envios, publicações e mudanças de PLANNING. Única exceção: a porta "
+                "oppdrive (pastas de oportunidade no Drive), se ligada — criar pasta/one-pager dentro da raiz e deixar "
+                "SUGESTÕES (writeMode SUGGEST) no one-pager, nunca editar, apagar, renomear ou mover; siga "
+                "commands/opportunity/SKILL.md. Na dúvida, não faça — registre uma proposta.")
 
 
 def agent_command(cfg: dict) -> list[str] | None:
@@ -48,7 +50,7 @@ def agent_command(cfg: dict) -> list[str] | None:
         if preset and shutil.which(preset[0]):
             argv = [p.replace("{prompt}", prompt) for p in preset]
             if name == "claude":
-                argv += read_allow(cfg)
+                argv += read_allow(cfg) + door_allow(cfg)
             return argv
     return None
 
@@ -56,6 +58,13 @@ def agent_command(cfg: dict) -> list[str] | None:
 def read_allow(cfg: dict) -> list[str]:
     """Ferramentas MCP de LEITURA que o agente headless pode usar ([runner].allow) — vale para o noturno e o TUI."""
     return [t for t in cfg["runner"].get("allow", []) if t]
+
+
+def door_allow(cfg: dict) -> list[str]:
+    """Ferramentas MCP de escrita da porta oppdrive, só com a porta ligada. O dono as lista à mão em [oppdrive].tools:
+    `brain agent allow` continua recusando escrita externa."""
+    od = cfg.get("oppdrive") or {}
+    return [t for t in od.get("tools", []) if t] if od.get("enabled") and od.get("root") else []
 
 
 def _log(brain, line: str) -> None:

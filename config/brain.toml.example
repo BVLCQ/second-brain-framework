@@ -41,6 +41,16 @@ daily_max = 10
 # Exemplos: "slack:#seu-canal" · "drive:<folder-id>"
 destinations = []
 
+[oppdrive]
+# Porta 6: pastas de oportunidade no Google Drive. Ligada, o agente cria uma subpasta por OPP dentro de `root`
+# e o one-pager (Google Doc) uma vez; depois só deixa SUGESTÕES no doc (Docs writeMode=SUGGEST), nunca edita.
+enabled = false
+root = ""                       # id ou URL da pasta-raiz ("Oportunidades")
+# Ferramentas MCP da porta para o agente headless (noturno e TUI), no formato `mcp__<servidor>__<ferramenta>`:
+# a de criar arquivo do Drive, a de ler/atualizar doc do Docs e a de busca. `brain agent allow` não libera escrita
+# externa — só esta lista, editada à mão pelo dono.
+tools = []
+
 [memory]
 engine = "none"                 # "hindsight" quando o servidor estiver no ar (bancos em chunks: retain sem LLM)
 url = "http://localhost:8888"

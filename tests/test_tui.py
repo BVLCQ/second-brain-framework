@@ -2052,7 +2052,8 @@ class CoverageTest(unittest.TestCase):
     AGENT_ONLY = {        # quem escreve é o agente (extração, snapshot, envio), conforme a Constituição
         "init", "add", "snapshot", "repos pull", "proposal add", "outbox sent", "outbox failed", "publish done",
         "pdf text", "pdf render", "video transcribe", "video frames", "person merge",
-        "raw archive", "raw sort", "ask add", "ask applied"}
+        "raw archive", "raw sort", "ask add", "ask applied",
+        "oppdrive status", "oppdrive onepager", "oppdrive record", "oppdrive suggested"}   # porta do Drive: quem cria é o agente
     NOT_IN_TUI = {"demo", "tui", "migrate ids"}      # migração única, feita no terminal com o dono (backup + dry-run)
     DYNAMIC = {"memory recall", "memory reflect"}      # o formulário "Memória: perguntar" monta o subcomando
 

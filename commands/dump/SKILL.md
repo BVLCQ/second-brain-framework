@@ -48,7 +48,11 @@ o `GOAL-#` no resumo). Extraia ações/decisões só do que a nota afirmar; o v�
 - **Oportunidade:** `./brain opportunity add "<título>" --area <slug> --problem "…" --suggestion "…" --by agent --prov observado --source <artefato>`. O CLI checa duplicata sozinho (código 2, nada gravado): se for a mesma ideia, `./brain opportunity evidence OPP-#### --source <artefato>` (mais uma fonte reforça, não duplica); se for nova, repita com `--force`. O agente **só cria em `ideia`** — nunca mova status, nunca grave ICE como firme (sugestão é `/opportunity triage`) e nunca promova.
 - **Processo citado e ainda sem ficha:** `./brain process add "<título>" --area <slug> --by agent --prov observado --source <artefato>` (confira antes com `./brain search`). Só o que o texto afirma; recorrência, duração e responsável que não constam ficam vazios (viram lacuna).
 - A área precisa existir (`./brain area list`); não existe → proponha ao dono, não invente.
-- Artefato lido de um playbook vigiado (`kind = "drive-doc"` no watch): registre com `--link PROC-####`.
+- Artefato lido de um playbook ou one-pager vigiado (`kind = "drive-doc"` no watch): registre com `--link PROC-####`/`--link OPP-####`.
+- **Link do Drive sobre uma oportunidade** (doc, planilha, slides citados no item) ou arquivo achado numa pasta `OPP-####: …`
+  da fonte `oppdrive`: `./brain doc link OPP-#### --kind planilha|apresentacao|artefato|outro --ref <url> --title "…" --prov observado --source <RAW>`.
+- **Fim do `/dump`, com `[oppdrive].enabled`:** rode a seção **Drive** de `commands/opportunity/SKILL.md` (pastas, one-pagers e
+  sugestões pendentes) antes do `./brain render`.
 
 Regras transversais: proveniência em toda extração · `brain person resolve` antes de qualquer menção · IDs só o CLI numera.
 

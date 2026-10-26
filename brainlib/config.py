@@ -33,6 +33,9 @@ DEFAULTS: dict = {
     },
     "outbound": {"allow": [], "daily_max": 10},
     "publish": {"destinations": []},       # ["slack:#seu-canal", "drive:<folder-id>"]
+    "oppdrive": {"enabled": False,         # porta das pastas de oportunidade (AGENTS.md, porta 6)
+                 "root": "",               # id/URL da pasta-raiz no Drive: o agente só cria DENTRO dela
+                 "tools": []},             # ferramentas MCP da porta liberadas ao agente headless (criar arquivo, sugerir no Docs)
     "memory": {
         "engine": "none",                  # "hindsight" quando o servidor estiver no ar
         "url": "http://localhost:8888",

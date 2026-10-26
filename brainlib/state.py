@@ -196,6 +196,7 @@ class DocLink:
     date: date | None = None
     watch: bool = False
     read: date | None = None         # última leitura registrada pelo /dump (artefato com data.link)
+    suggestions: list = field(default_factory=list)   # [{date, what}] — sugestões que o agente deixou no Docs (porta oppdrive)
 
 
 @dataclass
@@ -506,7 +507,7 @@ def apply(st: State, ev: dict) -> None:
         tgt = st.processes.get(data.get("link", "")) or st.opportunities.get(data.get("link", ""))
         if tgt is not None:
             for d in tgt.docs:
-                if d.kind == "playbook":
+                if d.kind in ("playbook", "one-pager"):
                     d.read = when
 
     elif t == "proposal.opened":
@@ -673,12 +674,17 @@ def _apply_portfolio(st: State, ev: dict, t: str, eid: str, data: dict, when: da
             o.project, o.goal = data["project"], data["goal"]
         o.last_activity = when
 
-    elif t in ("doc.linked", "doc.unlinked"):
+    elif t.startswith("doc."):
         tgt = st.processes.get(data["target"]) or st.opportunities[data["target"]]
-        if t == "doc.linked":
+        if t == "doc.suggested":
+            for d in tgt.docs:
+                if d.ref == data["ref"]:
+                    d.suggestions.append({"date": when, "what": data["what"]})
+        elif t == "doc.linked":
+            old = next((d for d in tgt.docs if d.ref == data["ref"]), None)
             tgt.docs = [d for d in tgt.docs if d.ref != data["ref"]]
             tgt.docs.append(DocLink(data["ref"], data["kind"], data.get("title", ""), when,
-                                    bool(data.get("watch"))))
+                                    bool(data.get("watch")), suggestions=old.suggestions if old else []))
         else:
             tgt.docs = [d for d in tgt.docs if d.ref != data["ref"]]
         tgt.last_activity = when

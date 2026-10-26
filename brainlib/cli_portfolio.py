@@ -12,6 +12,7 @@ import os
 from . import planning, portfolio, util, watch
 from .cli import _common, _create_project, _fact_opts, _out, _resolve_people
 from .core import Brain
+from .schema import WATCH_KINDS
 
 REC_LABEL = {"diaria": "diária", "semanal": "semanal", "quinzenal": "quinzenal", "mensal": "mensal",
              "trimestral": "trimestral", "sob-demanda": "sob demanda", "por-evento": "por evento"}
@@ -276,8 +277,8 @@ def _promote(args, b: Brain) -> None:
 # ── documentos ──────────────────────────────────────────────────────────────
 def cmd_doc(args, b: Brain) -> None:
     if args.dcmd == "link":
-        if args.watch and args.kind != "playbook":
-            raise util.BrainError("--watch vale só para --kind playbook (doc do Drive)", code=4)
+        if args.watch and args.kind not in WATCH_KINDS:
+            raise util.BrainError(f"--watch vale só para --kind {'/'.join(sorted(WATCH_KINDS))} (doc do Drive)", code=4)
         if args.watch and not watch.drive_doc_id(args.ref):
             raise util.BrainError(f"--watch pede um doc do Drive (URL ou id); recebi {args.ref!r}", code=4)
         data = {"target": args.target, "kind": args.kind, "ref": args.ref, "title": args.title,
@@ -285,7 +286,7 @@ def cmd_doc(args, b: Brain) -> None:
         ev = b.record_one(_common({"type": "doc.linked", "data": data}, args))
         watched = ""
         if args.watch:
-            src = watch.link_playbook(b, args.target, args.ref)
+            src = watch.link_playbook(b, args.target, args.ref, args.kind)
             watched = f"\n  ↳ fonte {src['key']} no watch.toml: o /update relê quando o doc mudar"
         _out(args, ev, f"✓ {args.target} · doc [{args.kind}] {args.title or args.ref}{watched}")
     else:
@@ -424,7 +425,7 @@ def add_parsers(sub) -> None:
     x.add_argument("--kind", required=True, choices=sorted(DOC_KINDS))
     x.add_argument("--ref", required=True, help="URL, id do Drive ou caminho RAW/PROCESSED")
     x.add_argument("--title")
-    x.add_argument("--watch", action="store_true", help="playbook do Drive: o /update relê quando mudar")
+    x.add_argument("--watch", action="store_true", help="playbook/one-pager do Drive: o /update relê quando mudar")
     _fact_opts(x)
     x = s.add_parser("unlink")
     x.add_argument("target")
