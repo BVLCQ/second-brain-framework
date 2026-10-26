@@ -300,7 +300,7 @@ Com mais de um idioma (reunião bilíngue), cada idioma é transcrito por inteir
 O RAW é organizado por tipo: `RAW/<ano>/<mês>/<tipo>/<arquivo>`. Tipos: `slack` (snapshots do Slack), `meetings`
 (transcrições do Meet, `.vtt`/`.srt`), `documents` (PDF, Office, `.md`/`.txt` soltos), `videos` (vídeo e áudio),
 `artifacts` (`.html`), `notes` (notas do `brain note`), `images`, `connectors` (Jira, Gmail, Calendar, Databricks e
-listagens do Drive) e `misc` (o resto). A classificação é por prefixo do snapshot e extensão — o mesmo arquivo cai
+listagens do Drive), `github` (snapshots dos repositórios, `brain repos pull`) e `misc` (o resto). A classificação é por prefixo do snapshot e extensão — o mesmo arquivo cai
 sempre na mesma pasta.
 
 - `archive [arquivo…] [--type T] [--date AAAA-MM-DD]` — move da inbox para a pasta do tipo (o passo de arquivar do
@@ -414,6 +414,7 @@ Muda qualquer campo da ação.
 | `--status aberta\|fazendo\|aguardando` | status de trabalho |
 | `--title`, `--owner`, `--list`, `--due`, `--effort`, `--project`, `--deliverable`, `--blocked-by`, `--unblocks`, `--people`, `--priority` | como no `open` |
 | `--clear-due` | remove o prazo |
+| `--park` / `--unpark` | "não agora": adia de propósito (só `--by owner`); o foco não agenda e a ação sai da vista "esta semana" da TUI. `--unpark` desfaz |
 | + opções de registro | |
 
 ```bash

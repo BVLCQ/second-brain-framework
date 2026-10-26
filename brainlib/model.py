@@ -65,7 +65,7 @@ class ModelBuilder:
             "due_suggested": bool(a.open and a.due and a.due_suggested), "due_reason": a.due_reason,
             "overdue_days": overdue,
             "aging_days": (self.today - last).days if a.open and last else None,
-            "effort_min": a.effort_min, "priority": a.priority,
+            "effort_min": a.effort_min, "priority": a.priority, "parked": bool(a.open and a.parked),
             "project": project, "project_title": self.plan.title(project) if project else None,
             "goal": self.plan.goal_of(project), "deliverable": a.deliverable,
             "blocked_by": self.st.blocked(a), "blocked_by_all": a.blocked_by, "unblocks": a.unblocks,

@@ -63,7 +63,7 @@ def unchanged(brain, key: str, rev: str, item: str | None = None) -> bool:
 
 
 def take(brain, key: str, content: str, prefix: str | None = None, ext: str = "md",
-         item: str | None = None, rev: str | None = None, name: str | None = None) -> dict:
+         item: str | None = None, rev: str | None = None, name: str | None = None, with_key: bool = True) -> dict:
     inst = brain.inst
     if not EXT_RE.match(ext or ""):
         # a extensão entra crua no nome do arquivo: `md/../../x` escaparia da inbox
@@ -94,9 +94,11 @@ def take(brain, key: str, content: str, prefix: str | None = None, ext: str = "m
         return {"changed": False, "failed": False, "path": None, "why": "alias", "alias": twin}
     inst.inbox.mkdir(parents=True, exist_ok=True)
     stamp = util.now().strftime("%Y-%m-%dT%H%M%S")
-    parts = [util.slugify(prefix or key.split("-")[0], 16), util.slugify(key, 40 if not item else 32)]
+    parts = [util.slugify(prefix or key.split("-")[0], 16)]
+    if with_key or not item:                 # `with_key=False`: o item já é o nome (github-<repo>-<ts>)
+        parts.append(util.slugify(key, 40 if not item else 32))
     if item:
-        parts.append(util.slugify(name or item, 24))
+        parts.append(util.slugify(name or item, 24 if with_key else 48))
     base = "-".join(parts) + f"-{stamp}"
     path, n = inst.inbox / f"{base}.{ext}", 2
     body = content if content.endswith("\n") else content + "\n"

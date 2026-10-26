@@ -18,10 +18,10 @@ from pathlib import Path
 
 from . import util
 
-CATEGORIES = ("slack", "meetings", "documents", "videos", "artifacts", "notes", "images", "connectors", "misc")
+CATEGORIES = ("slack", "meetings", "documents", "videos", "artifacts", "notes", "images", "connectors", "github", "misc")
 
 SNAPSHOT_PREFIXES = {"slack": "slack", "jira": "connectors", "gmail": "connectors", "gcal": "connectors",
-                     "drive": "connectors", "databricks": "connectors"}
+                     "drive": "connectors", "databricks": "connectors", "github": "github"}
 VIDEO_EXT = {".mp4", ".mov", ".m4v", ".mkv", ".webm", ".avi", ".m4a", ".mp3", ".wav", ".aac", ".ogg", ".flac"}
 IMAGE_EXT = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".heic", ".svg", ".tiff", ".bmp"}
 DOC_EXT = {".pdf", ".doc", ".docx", ".ppt", ".pptx", ".xls", ".xlsx", ".odt", ".rtf", ".txt", ".md", ".csv", ".key",

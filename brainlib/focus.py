@@ -133,6 +133,8 @@ def build_plan(brain, busy: list[Interval], days: int | None = None) -> dict:
     for a in st.actions.values():
         if not (a.open and a.owner == brain.owner and a.list == "mine" and a.status in ("aberta", "fazendo")):
             continue
+        if a.parked:                                   # "não agora": adiada de propósito, o foco não agenda
+            continue
         if st.blocked(a):
             blocked.append(a.id)
             continue

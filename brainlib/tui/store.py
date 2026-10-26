@@ -8,6 +8,7 @@ import re
 import tomllib
 from collections import defaultdict
 from dataclasses import dataclass, field
+from datetime import date, timedelta
 from typing import Any
 
 from .. import config, doctor, ids, model, notes as notes_mod, util, watch
@@ -21,6 +22,24 @@ PANELS_EXEC = {
     5: ("Registro", ["Decisões", "Entregas", "Pessoas", "Artefatos"]),
     6: ("Log de comandos", ["Log"]),
 }
+
+# Vistas do painel Ações (tecla v): Todas · Esta semana (+ atrasadas) · Depois · Não agora (adiadas de propósito).
+ACTION_VIEWS = ["Todas", "Esta semana", "Depois", "Não agora"]
+
+
+def action_view(a: dict, today) -> int:
+    """Em qual vista uma ação aberta cai: 1 esta semana · 2 depois · 3 não agora. Fechadas só aparecem em "Todas" (0).
+
+    Esta semana = até o domingo corrente, incluindo o que já está atrasado; sem prazo só entra se já está em andamento.
+    Depois = semana que vem em diante e o que não tem data."""
+    if not a["open"]:
+        return 0
+    if a.get("parked"):
+        return 3
+    if a["due"]:
+        return 1 if date.fromisoformat(a["due"]) <= today + timedelta(days=6 - today.weekday()) else 2
+    return 1 if a["status"] == "fazendo" else 2
+
 
 PANELS_PORT = {
     1: ("Visão", ["Resumo", "Por área", "Por goal"]),
@@ -365,8 +384,14 @@ class Store:
     def destinations(self) -> list[str]:
         return list(self.inst.cfg["publish"]["destinations"])
 
-    def project_ids(self) -> list[str]:
-        return list(self.by_project)
+    def active_goals(self, keep: str = "") -> list[dict]:
+        """Goals ativos, na ordem do goals.md (`keep` = um goal que já está escolhido e precisa continuar na lista)."""
+        return [g for g in self.m["goals"] if g["status"] == "ativo" or g["id"] == keep]
+
+    def active_projects(self, goal: str = "", keep: str = "") -> list[dict]:
+        """Projetos ativos — de um goal, ou de todos. `keep` = projeto já escolhido que precisa continuar na lista."""
+        return [p for p in self.m["projects"]
+                if (p["status"] == "ativo" and (not goal or p["goal"] == goal)) or p["id"] == keep]
 
     def text_sha(self, mid: str) -> str:
         m = self.brain.state.messages.get(mid)
@@ -418,7 +443,7 @@ class Store:
 
     # ── listas por painel ──────────────────────────────────────────────────
     def items(self, face: int, panel: int, tab: int, show_all: bool = False, filt: str = "",
-              collapsed: set[str] | None = None) -> list[Item]:
+              collapsed: set[str] | None = None, view: int = 0) -> list[Item]:
         if face != 0:
             return self._items_face(face, panel, tab, show_all, filt)
         m, collapsed = self.m, (set() if filt else collapsed or set())     # filtrando, a árvore abre sozinha
@@ -436,6 +461,9 @@ class Store:
         elif panel == 2:
             lst = ["mine", "waiting", "watching"][tab]
             rows = [a for a in m["actions"] if a["list"] == lst and (show_all or a["open"])]
+            if view:
+                today = util.today()
+                rows = [a for a in rows if action_view(a, today) == view]
             rows.sort(key=lambda a: (not a["open"], a["due"] is None, a["due"] or "", a["id"]))
             out = [Item(a["id"], "action", a, q=f"{a['id']} {a['title']} {a['project'] or ''} {a['owner_name']}")
                    for a in rows]

@@ -151,7 +151,7 @@ não fecha só porque um e-mail "parece" resolver. Fecho é do dono (`/done` ou
 checkbox em `FRESH/todo.md` / `status:` na ficha da ação — colhido no próximo render).
 
 **Prazo sugerido:** ação nova sem prazo dito recebe do agente uma data **sugerida**
-(`due_suggested`, com `due_reason`): só o agente sugere; aparece em rosa até o dono
+(`due_suggested`, com `due_reason`): só o agente sugere; aparece em roxo até o dono
 definir uma data (qualquer `--due` dele a torna firme) ou confirmar (`--confirm-due`).
 Sem base de contexto (entregável, acordo, agenda), não se sugere — "não consta".
 
@@ -211,7 +211,7 @@ via `brain plan deliverable` e uma linha em `PLANNING/log.md`.
    ignorado.
 2. **Arquive** em `vault/RAW/<ano>/<mês>/<tipo>/` pela **data de captura**
    (`./brain raw archive`). Tipos: `slack` · `meetings` · `documents` · `videos` ·
-   `artifacts` · `notes` · `images` · `connectors` · `misc`. Mover, nunca editar.
+   `artifacts` · `notes` · `images` · `connectors` · `github` · `misc`. Mover, nunca editar.
    Caminho `RAW/<ano>/<mês>/<arquivo>` já gravado no ledger continua válido:
    `./brain raw where` acha o arquivo na pasta do tipo.
 3. **Classifique**: `reunião` · `documento` · `nota` · `conector`.
@@ -310,6 +310,12 @@ O LLM **nunca** chama APIs externas diretamente. Durante a sessão (e no
 noturno, via o agente headless), o agente usa as ferramentas MCP de **leitura**
 listadas em `config/watch.toml`, grava o resultado com `./brain snapshot`
 (`--key` estável; hash idêntico = silêncio) e processa com `/dump`.
+
+**Exceção — repositórios git locais** (`kind = "github"`, campo `path`): quem lê
+é o CLI, `./brain repos pull <key>`, no `/update` antes do `/dump`: `git fetch`
+em cada repo (só baixa), e um snapshot `github-<repo>-<ts>.md` por repo que
+mudou — o repositório inteiro na primeira leitura, só os commits novos depois.
+Nunca pull, merge, checkout, push nem escrita no working tree.
 
 Não existem mais scripts `jira.py` / `gmail.py` / `slack.py`. OAuth do Google
 neste repo pede só as duas portas de escrita: `calendar.events.owned` +

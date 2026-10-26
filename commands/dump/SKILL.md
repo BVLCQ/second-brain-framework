@@ -29,7 +29,7 @@ Toda entidade (ação, decisão, pessoa, artefato) entra pelo `./brain` — nunc
 | **reunião** | transcrição, ata, gravação com falantes | contexto · decisões com base (quem/min) · ações por dono e lista · threads abertas · citações-chave com minuto · menções |
 | **documento** | PDF, política, apresentação, doc extenso | do-que-trata · TL;DR (≤5 linhas) · mapa de seções com página/âncora · pontos que afetam goals · perguntas que o doc responde |
 | **nota** | anotação curta, ideia, lembrete | nota limpa · ligações com entidades existentes |
-| **conector** | snapshot prefixado (`jira-…`, `gmail-…`, `gcal-…`, `slack-…`) | **change digest**: só o que mudou vs. o snapshot anterior da mesma `--key`; primeira vez = estado inicial. Cabeçalho `desde <data>` (janela `auto`) = o arquivo já é só o delta: extraia tudo dele, sem comparar com o anterior |
+| **conector** | snapshot prefixado (`jira-…`, `gmail-…`, `gcal-…`, `slack-…`, `github-…`) | **change digest**: só o que mudou vs. o snapshot anterior da mesma `--key`; primeira vez = estado inicial. Cabeçalho `desde <data>` (janela `auto`) = o arquivo já é só o delta: extraia tudo dele, sem comparar com o anterior. `github-…` (cai em `RAW/…/github/`): título "leitura completa" = estado inicial do repo (histórico inteiro, árvore, documentos) — extraia do que trata, quem mexe, entregas e pendências dos docs; título "commits novos" = só o delta. Resuma por tema, ligue a projeto/entregável quando o assunto casar, e trate autor de commit como pessoa (`person resolve` pelo nome/e-mail) |
 
 **Ações — detecte na extração:**
 - dono da ação → `mine` se for o dono do cérebro, `waiting` se for terceiro que deve a ele, `watching` se for só contexto
@@ -67,7 +67,7 @@ Para cada item da inbox (ignore `.keep.md`):
 1. Arquive com `./brain raw archive "<arquivo>"` (sem argumento arquiva a inbox toda). O CLI move para
    `vault/RAW/<ano>/<mês>/<tipo>/` pela data de **captura** (hoje; `--date AAAA-MM-DD` se souber outra) e escolhe o
    tipo por nome/extensão: `slack` · `meetings` · `documents` · `videos` · `artifacts` · `notes` · `images` ·
-   `connectors` · `misc`. Se a sua classificação pelo conteúdo discordar (um `.md` solto que é transcrição de
+   `connectors` · `github` · `misc`. Se a sua classificação pelo conteúdo discordar (um `.md` solto que é transcrição de
    reunião → `meetings`), force com `--type`. Colisão de nome → sufixo `-2`. O comando imprime o caminho final:
    use-o em `--raw` e `--source`.
 2. Escreva o artefato em `vault/PROCESSED/<ano>/<mês>/<slug>.md`.
@@ -88,15 +88,26 @@ Para cada item da inbox (ignore `.keep.md`):
   {"type":"decision.made","prov":"observado","source":"PROCESSED/…/x.md",
    "data":{"title":"…","decided_by":["marina-demo"],"project":"PROJ-1","rationale":"…"}},
   {"type":"action.opened","prov":"observado","source":"PROCESSED/…/x.md",
-   "data":{"title":"…","owner":"eu","due":"AAAA-MM-DD","effort_min":90,"project":"PROJ-1"}}
+   "data":{"title":"…","owner":"eu","due":"AAAA-MM-DD","effort_min":90,"project":"PROJ-1"}},
+  {"type":"action.opened","prov":"observado","source":"PROCESSED/…/x.md",
+   "data":{"title":"…","owner":"eu","due":"AAAA-MM-DD","due_suggested":true,
+           "due_reason":"entregável PROJ-1.6 vence 30/11; folga de 1 semana","project":"PROJ-1"}}
 ]
 ```
 
 `./brain add --file vault/RAW/inbox/.tmp/lote.json` (apague o arquivo depois).
 
-Prazo de ação: o que o documento/conversa **diz** ("até sexta") vai em `due` normal, `[doc]`/`[observado]`. Ação nova
-sem prazo dito: sugira um pelo contexto (`"due_suggested":true,"due_reason":"…"` em `data`; método em `commands/todo/SKILL.md`,
-seção *Sugerir prazo*). Sem base, deixe sem prazo — não invente.
+**Prazo de toda ação nova (`mine`/`waiting`) é decisão sua, não opcional** — o CLI recusa `action.opened` do agente sem
+`due`, a menos que traga `due_none_reason`:
+
+- o documento/conversa **diz** o prazo ("até sexta") → `due` normal, sem `due_suggested`;
+- não diz → **sugira** pelo contexto: `"due":"AAAA-MM-DD","due_suggested":true,"due_reason":"…"` (método e ordem de base
+  em `commands/todo/SKILL.md`, seção *Sugerir prazo*: entregável/projeto → acordos → agenda e carga → prioridade).
+  Consulte `./brain project PROJ-#`, `./brain action list` e o último snapshot `gcal-*.json` antes de escolher o dia;
+- sem base nenhuma → `"due_none_reason":"sem entregável, acordo ou agenda ligados"` (não invente data);
+- `watching` não leva prazo.
+
+Ao fim do lote, rode `./brain action list --undated`: o que sobrar sem prazo precisa ter motivo no recibo.
 
 Fonte já registrada (`artifact.added` com o mesmo `raw`) = **pule**. Re-rodar = zero duplicatas.
 

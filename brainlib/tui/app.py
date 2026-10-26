@@ -36,7 +36,7 @@ from .modals import (AgentModal, ChoiceModal, ConfirmModal, Field, FilterModal, 
                      PickItem, TextModal)
 from .ask_keys import AskKeys
 from .portfolio_keys import PortfolioKeys
-from .store import FACE_START, FACES, SYS_OPS, Item, Store
+from .store import ACTION_VIEWS, FACE_START, FACES, SYS_OPS, Item, Store
 
 UCAP = 3                      # linhas visíveis de um painel sem foco
 
@@ -215,7 +215,7 @@ class BrainApp(AskKeys, PortfolioKeys, App):
         """Estado de navegação de uma face: cada face volta exatamente onde estava."""
         return {"p": start, "lp": start,   # lp: último painel de lista (1-5) em foco; o log (6) mantém o detalhe dele
                 "tab": {1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0}, "sel_idx": {}, "sel_id": {}, "win": {},
-                "filt": None, "zoom": False, "show_all": False, "items": {}}
+                "filt": None, "zoom": False, "show_all": False, "view": 0, "items": {}}
 
     # As propriedades abaixo apontam para a face atual: o resto do app lê e escreve `self.p`, `self.tab[p]`,
     # `self.filt`… sem saber de faces. Trocar de face é só trocar `self.face`.
@@ -272,6 +272,14 @@ class BrainApp(AskKeys, PortfolioKeys, App):
     @zoom.setter
     def zoom(self, v: bool) -> None:
         self._nv["zoom"] = v
+
+    @property
+    def view(self) -> int:
+        return self._nv["view"]
+
+    @view.setter
+    def view(self, v: int) -> None:
+        self._nv["view"] = v
 
     @property
     def show_all(self) -> bool:
@@ -338,7 +346,7 @@ class BrainApp(AskKeys, PortfolioKeys, App):
                 self._items[key] = []
             else:
                 f = self.filt[2] if self.filt and self.filt[:2] == key else ""
-                self._items[key] = self.store.items(self.face, p, t, self.show_all, f, self.collapsed)
+                self._items[key] = self.store.items(self.face, p, t, self.show_all, f, self.collapsed, self.view if p == 2 and self.face == 0 else 0)
         return self._items[key]
 
     def sel_index(self, p: int) -> int:
@@ -464,6 +472,8 @@ class BrainApp(AskKeys, PortfolioKeys, App):
                 spans.append((start, t.cell_len, i))
                 if i < len(tabs) - 1:
                     t.append(" · ", "dim")
+        if pid == 2 and self.face == 0 and self.view:
+            t.append(f" · vista {ACTION_VIEWS[self.view]}", "bold magenta")
         t.append(" ")
         self.query_one(f"#p{pid}", ListPanel).tab_spans = spans
         return t
@@ -770,6 +780,8 @@ class BrainApp(AskKeys, PortfolioKeys, App):
         ids = [i.id for i in self.items(p)]
         if node not in ids and p in (2, 4):
             self.show_all, self._items = True, {}
+            if p == 2 and self.face == 0:
+                self.view = 0                      # a ação saltada pode estar fora da vista atual
             ids = [i.id for i in self.items(p)]
         if node in ids:
             self.set_sel(p, ids.index(node))
@@ -830,6 +842,9 @@ class BrainApp(AskKeys, PortfolioKeys, App):
                 add("m", "cobrar", self.f_chase)
             if w(it and not it.data["open"]):
                 add("o", "reabrir", self.f_reopen)
+            if w(it and it.data["open"]):
+                add("z", "voltar" if it and it.data["parked"] else "não agora", self.toggle_park)
+            add("v", f"vista: {ACTION_VIEWS[self.view].lower()}", self.cycle_view)
             add("a", "só abertas" if self.show_all else "todas", self.toggle_all)
             add("enter", "ficha", self.toggle_zoom)
         elif p == 3:
@@ -992,6 +1007,15 @@ class BrainApp(AskKeys, PortfolioKeys, App):
     def toggle_all(self) -> None:
         self.show_all = not self.show_all
         self.redraw()
+
+    def cycle_view(self) -> None:
+        """v: Todas → Esta semana (e o que está atrasado) → Depois → Não agora."""
+        self.view = (self.view + 1) % len(ACTION_VIEWS)
+        self.redraw()
+
+    def toggle_park(self) -> None:
+        a = self.cur().data
+        self.exec([["action", "update", a["id"], "--unpark" if a["parked"] else "--park", "--by", "owner"]])
 
     def toggle_collapse(self) -> None:
         it = self.cur()
@@ -1183,6 +1207,23 @@ class BrainApp(AskKeys, PortfolioKeys, App):
         hit = self.store.by_deliv.get(full)
         return f"→ {full} · {hit[1]['title']}" if hit else ""
 
+    def _goal_project_fields(self, project: str = "—") -> list[Field]:
+        """Goal antes de projeto: o goal filtra os projetos; só projetos ativos, com o nome ao lado do ID.
+        O campo `goal` só serve para filtrar — nenhuma CLI o recebe."""
+        st = self.store
+        proj = st.by_project.get(project)
+        goal0 = proj["goal"] if proj else "—"
+        short = lambda t: t if len(t) <= 46 else t[:45] + "…"  # noqa: E731
+
+        def projects(v: dict) -> list[tuple[str, str]]:
+            g = v.get("goal", "—")
+            return [("—", "—")] + [(p["id"], f"{p['id']} · {short(p['title'])}")
+                                   for p in st.active_projects("" if g == "—" else g, keep=project if g in ("—", goal0) else "")]
+
+        return [Field("goal", "goal", value=goal0, options=lambda v: [("—", "— (todos os goals)")] + [
+                    (g["id"], f"{g['id']} · {short(g['title'])}") for g in st.active_goals(keep=goal0)]),
+                Field("project", "projeto", value=project, options=projects, depends="goal")]
+
     def f_new_action(self, pre: dict | None = None) -> None:
         pre = pre or {}
         lst = ["mine", "waiting", "watching"][self.tab[2]] if self.p == 2 else "mine"
@@ -1209,13 +1250,13 @@ class BrainApp(AskKeys, PortfolioKeys, App):
             return [a]
 
         def after_suggest() -> None:
-            """Sem prazo digitado: oferece o agente para sugerir um (aparece em rosa até você decidir)."""
+            """Sem prazo digitado: oferece o agente para sugerir um (aparece em roxo até você decidir)."""
             title = self._suggest_for
             hit = [] if not title else sorted((x["id"] for x in self.store.m["actions"] if x["title"] == title and x["open"] and not x["due"]))
             if hit:
                 self.ask_agent(f"Sugerir prazo para {hit[-1]}", [
                     "Lê o contexto: PLANNING (prazos de projeto/entregável), acordos com pessoas, agenda e carga atual",
-                    "Grava o prazo como sugestão (brain action update … --due-suggested): fica rosa até você definir a data",
+                    "Grava o prazo como sugestão (brain action update … --due-suggested): fica roxo até você definir a data",
                     "Sem base para sugerir, diz 'não consta' e deixa a ação sem prazo"], f"/todo prazo {hit[-1]}")
 
         def build_and_remember(v):
@@ -1226,7 +1267,7 @@ class BrainApp(AskKeys, PortfolioKeys, App):
             Field("title", "título", req=True, ph="o que precisa acontecer"),
             Field("due", "prazo", ph=dates.HELP, check=self._due_check, res=dates.describe),
             Field("effort", "esforço", ph="90m · 2h · 1h30 · 1d", check=self._effort_check),
-            Field("project", "projeto", choice=["—"] + self.store.project_ids(), value=pre.get("project", "—")),
+            *self._goal_project_fields(pre.get("project", "—")),
             Field("prio", "prioridade", choice=["normal", "alta", "baixa"]),
             Field("list", "lista", choice=["mine", "waiting", "watching"], value=lst),
             Field("owner", "dono", ph="você (ou id/alias da pessoa)", value=owner),
@@ -1235,7 +1276,7 @@ class BrainApp(AskKeys, PortfolioKeys, App):
             Field("people", "pessoas", ph="marina-demo, heitor-demo (opcional)"),
             Field("blocked", "bloqueada por", ph="TASK-#### (opcional)"),
             Field("link", "link", ph="URL (opcional)")],
-            build_and_remember, sub="Equivalente ao /todo. Sem prazo, o agente oferece uma sugestão (rosa).",
+            build_and_remember, sub="Equivalente ao /todo. Sem prazo, o agente oferece uma sugestão (roxa).",
             after=after_suggest))
 
     def clear_log(self) -> None:
@@ -1355,7 +1396,7 @@ class BrainApp(AskKeys, PortfolioKeys, App):
             Field("due", "prazo", value=a["due"] or "", check=self._due_check, res=dates.describe, ph="vazio remove o prazo"),
             Field("effort", "esforço", value=eff0, check=self._effort_check),
             Field("prio", "prioridade", choice=["normal", "alta", "baixa"], value=a["priority"] or "normal"),
-            Field("project", "projeto", choice=["—"] + self.store.project_ids(), value=proj0),
+            *self._goal_project_fields(proj0),
             Field("deliv", "entregável", value=deliv_shown, ph="só o número, no projeto escolhido (9 → PROJ-1.9), ou PROJ-#.#",
                   check=self._deliv_check, res=self._deliv_res),
             Field("blocked", "bloqueada por", value=blocked0, ph="TASK-#### (a CLI não remove bloqueio)"),
@@ -1370,7 +1411,7 @@ class BrainApp(AskKeys, PortfolioKeys, App):
         def build(v):
             return [["action", "update", a["id"]] + (self._due_arg(v["due"]) or ["--clear-due"]) + ["--by", "owner"]]
 
-        sub = ("Prazo sugerido pelo agente (rosa): salve com a mesma data para confirmar, ou digite outra."
+        sub = ("Prazo sugerido pelo agente (roxo): salve com a mesma data para confirmar, ou digite outra."
                if a.get("due_suggested") else "Deixe em branco para remover o prazo.")
         self.form(FormSpec(f"Prazo de {a['id']}", [
             Field("due", "prazo", value=a["due"] or "", ph=dates.HELP, check=self._due_check, res=dates.describe)],
@@ -1635,7 +1676,7 @@ class BrainApp(AskKeys, PortfolioKeys, App):
             return [c + ["--by", "owner"]]
 
         self.form(FormSpec("Registrar decisão", [Field("title", "título", req=True), Field("by", "quem decidiu", req=True, ph="marina-demo, sonia-demo"),
-                                                 Field("project", "projeto", choice=["—"] + self.store.project_ids()), Field("why", "porquê", ph="opcional")], build))
+                                                 *self._goal_project_fields(), Field("why", "porquê", ph="opcional")], build))
 
     def f_supersede(self) -> None:
         d = self.cur().data

@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 os.environ.setdefault("BRAIN_NOW", "2026-10-09T10:00:00-03:00")
 
-from brainlib import config, demo as demo_mod, util, watch
+from brainlib import config, demo as demo_mod, planning, util, watch
 from brainlib.tui import bridge, dates
 
 HAVE_TEXTUAL = importlib.util.find_spec("textual") is not None
@@ -51,6 +51,24 @@ class DatesTest(unittest.TestCase):
             dates.parse_due("qualquer dia", self.TODAY)          # não é "qua"
         self.assertIn("não reconhecida", dates.describe("xyz", self.TODAY))
         self.assertIn("2026-10-16", dates.describe("sex", self.TODAY))
+
+
+class ActionViewTest(unittest.TestCase):
+    TODAY = date(2026, 10, 14)   # quarta; a semana vai até domingo 18/10
+
+    def bucket(self, **kw):
+        from brainlib.tui.store import action_view
+        a = {"open": True, "parked": False, "due": None, "status": "aberta"} | kw
+        return action_view(a, self.TODAY)
+
+    def test_buckets(self):
+        self.assertEqual(self.bucket(due="2026-10-01"), 1)                   # atrasada fica em "esta semana"
+        self.assertEqual(self.bucket(due="2026-10-18"), 1)                   # domingo ainda é a semana
+        self.assertEqual(self.bucket(due="2026-10-19"), 2)                   # segunda: semana que vem
+        self.assertEqual(self.bucket(), 2)                                   # sem prazo: depois
+        self.assertEqual(self.bucket(status="fazendo"), 1)                   # sem prazo mas em andamento: agora
+        self.assertEqual(self.bucket(parked=True, due="2026-10-01"), 3)      # adiada de propósito vence o atraso
+        self.assertEqual(self.bucket(open=False, due="2026-10-15"), 0)       # fechada só em "Todas"
 
 
 class BridgeTest(unittest.TestCase):
@@ -164,15 +182,15 @@ class AgentRunTest(unittest.TestCase):
 
 @unittest.skipUnless(HAVE_TEXTUAL, "textual não instalado (./brain tui --setup)")
 class DetailTest(unittest.TestCase):
-    def test_suggested_due_is_pink_until_owner_decides(self):
+    def test_suggested_due_is_purple_until_owner_decides(self):
         from brainlib.tui import rows
         base = {"open": True, "due": "2026-10-20", "due_in": 3, "overdue_days": 0, "closed": None}
         plain, sug = rows.due_tag(base), rows.due_tag({**base, "due_suggested": True})
         self.assertEqual(plain.plain, sug.plain)
-        self.assertTrue(all(str(sp.style).endswith(rows.PNK) for sp in sug.spans))
-        self.assertFalse(any(rows.PNK in str(sp.style) for sp in plain.spans))
+        self.assertTrue(all(str(sp.style).endswith(rows.PUR) for sp in sug.spans))
+        self.assertFalse(any(rows.PUR in str(sp.style) for sp in plain.spans))
         late = rows.due_tag({**base, "due_in": -2, "overdue_days": 2, "due_suggested": True})
-        self.assertTrue(all(rows.PNK in str(sp.style) for sp in late.spans))
+        self.assertTrue(all(rows.PUR in str(sp.style) for sp in late.spans))
 
     def test_every_action_detail_renders(self):
         """Regressão: ação que destrava outra (campo 'destrava') quebrava a ficha com ValueError do rich."""
@@ -1035,6 +1053,36 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(a.due, util.today().replace() + (date(2026, 10, 12) - date(2026, 10, 9)))
             self.assertEqual(a.owner, self.inst.owner_id)
 
+    async def test_new_action_goal_filters_active_projects_with_names(self):
+        planning.edit_node(self.inst.vault / "PLANNING" / "goals.md", "PROJ-2", status="congelado")
+        app = self.app()
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause(0.4)
+            await pilot.press("n")
+            await pilot.pause(0.3)
+            form = app.screen
+            ids = [f.id for f in form.spec.fields]
+            self.assertLess(ids.index("goal"), ids.index("project"))              # goal antes do projeto
+            proj = lambda: [str(v) for _, v in form.query_one("#f_project")._options]  # noqa: E731
+            labels = lambda: [str(r) for r, _ in form.query_one("#f_project")._options]  # noqa: E731
+            self.assertEqual(proj()[0], "—")
+            self.assertNotIn("PROJ-2", proj())                                    # congelado não aparece
+            self.assertIn("PROJ-1", proj())
+            self.assertTrue(any("PROJ-1 · Reforma do novo ponto" in x for x in labels()))   # o nome aparece
+            self.assertIn("GOAL-1", [str(v) for _, v in form.query_one("#f_goal")._options])
+            form.query_one("#f_goal").value = "GOAL-3"                            # o goal restringe os projetos
+            await pilot.pause(0.3)
+            self.assertEqual(proj(), ["—", "PROJ-4"])
+            self.assertEqual(form.query_one("#f_project").value, "—")
+            form.query_one("#f_project").value = "PROJ-4"
+            await self.fill(pilot, title="Com projeto filtrado")
+            self.assertIn("--project PROJ-4", self.text_of(form.query_one("#cmdp")))
+            self.assertNotIn("--goal", self.text_of(form.query_one("#cmdp")))     # o goal só filtra
+            await pilot.press("ctrl+s")
+            await self.settle_new_action(app, pilot)
+            a = next(x for x in self.state(app).actions.values() if x.title == "Com projeto filtrado")
+            self.assertEqual(a.project, "PROJ-4")
+
     async def test_invalid_date_blocks_submit(self):
         app = self.app()
         async with app.run_test(size=(140, 44)) as pilot:
@@ -1318,7 +1366,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn("--priority", cmd)                   # nada mudou: nada além de --by
             self.assertEqual(cmd[:3], ["action", "update", target])
             await pilot.press("end")                              # (foco no título) e escreve uma nota
-            await pilot.press("tab", "tab", "tab", "tab", "tab", "tab", "tab", "tab", "tab", "tab")
+            await pilot.press(*["tab"] * 11)                      # +1: o campo goal vem antes do projeto
             await self.typ(pilot, "revisada")
             await pilot.press("enter")
             await self.settle(app, pilot)
@@ -1331,7 +1379,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             await pilot.press("n")
             await pilot.pause(0.3)
             await self.typ(pilot, "Alinhar com Caio-demo")
-            for _ in range(7):
+            for _ in range(8):                                 # +1: o campo goal vem antes do projeto
                 await pilot.press("tab")
             await self.typ(pilot, "PROJ-1.3")
             await pilot.press("tab")
@@ -1376,6 +1424,30 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(type(app.screen).__name__, "FormModal")
             self.assertTrue(app.screen.vals()["to"])
             await pilot.press("escape")
+
+    async def test_v_cycles_views_and_z_parks_an_action(self):
+        app = self.app()
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause(0.4)
+            all_n = len(app.items(2))
+            self.assertIn("v", {k.k for k in app.ctx_keys(every=True)})
+            seen = []
+            for _ in range(4):                                       # Todas → semana → depois → não agora → Todas
+                await pilot.press("v")
+                seen.append((app.view, len(app.items(2))))
+            self.assertEqual([v for v, _ in seen], [1, 2, 3, 0])
+            self.assertEqual(seen[-1][1], all_n)
+            self.assertEqual(seen[0][1] + seen[1][1], sum(1 for i in app.items(2) if i.data["open"]))
+            self.assertEqual(seen[2][1], 0)                          # nada adiado ainda
+            target = app.cur().id
+            await pilot.press("z")
+            await self.settle(app, pilot)
+            self.assertTrue(self.state(app).actions[target].parked)
+            await pilot.press("v", "v", "v")                         # não agora
+            self.assertEqual([i.id for i in app.items(2)], [target])
+            await pilot.press("z")                                   # volta
+            await self.settle(app, pilot)
+            self.assertFalse(self.state(app).actions[target].parked)
 
     async def test_registry_forms_and_share_publish_flow(self):
         app = self.app()
@@ -1976,9 +2048,9 @@ class CoverageTest(unittest.TestCase):
     READ_ONLY_VIEWS = {   # a leitura já está num painel (modelo em processo), sem precisar chamar a CLI
         "person list", "action show", "action list", "decision list", "plan show", "focus show", "outbox show",
         "outbox list", "proposal list", "publish list", "doctor", "search", "status", "artifact", "watch list", "watch since", "watch folders",
-        "note list", "raw where", "ask list", "area list", "process show", "process list", "opportunity show", "opportunity list"}
+        "repos list", "note list", "raw where", "ask list", "area list", "process show", "process list", "opportunity show", "opportunity list"}
     AGENT_ONLY = {        # quem escreve é o agente (extração, snapshot, envio), conforme a Constituição
-        "init", "add", "snapshot", "proposal add", "outbox sent", "outbox failed", "publish done",
+        "init", "add", "snapshot", "repos pull", "proposal add", "outbox sent", "outbox failed", "publish done",
         "pdf text", "pdf render", "video transcribe", "video frames", "person merge",
         "raw archive", "raw sort", "ask add", "ask applied"}
     NOT_IN_TUI = {"demo", "tui", "migrate ids"}      # migração única, feita no terminal com o dono (backup + dry-run)

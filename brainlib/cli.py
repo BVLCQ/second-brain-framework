@@ -145,6 +145,8 @@ def _action_line(b: Brain, aid: str) -> str:
         bits.append(f"prazo {a.due.isoformat()}" + (" (sugerido)" if a.due_suggested else ""))
     if a.effort_min:
         bits.append(f"esforço {util.fmt_duration(a.effort_min)}")
+    if a.parked and a.open:
+        bits.append("não agora")
     if a.project:
         bits.append(a.project)
     if a.list != "mine":
@@ -157,13 +159,16 @@ def cmd_action(args, b: Brain) -> None:
     if c == "open":
         owner = _resolve_people(b, [args.owner])[0] if args.owner else b.owner
         lst = args.list or ("mine" if owner == b.owner else "waiting")
-        ev = b.record_one(_common({"type": "action.opened", "data": {
+        item = _common({"type": "action.opened", "data": {
             "title": args.title, "owner": owner, "list": lst, "due": args.due,
             "due_suggested": args.due_suggested or None, "due_reason": args.due_reason,
+            "due_none_reason": args.due_none_reason,
             "effort_min": _effort(b, args.effort), "project": args.project, "deliverable": args.deliverable,
             "blocked_by": util.split_csv(args.blocked_by), "unblocks": util.split_csv(args.unblocks),
             "people": _resolve_people(b, args.people or []), "priority": args.priority,
-            "link": args.link, "origin": args.origin}}, args))
+            "link": args.link, "origin": args.origin}}, args)
+        schema.require_due_decision(item)
+        ev = b.record_one(item)
         _out(args, ev, "✓ " + _action_line(b, ev["id"]))
     elif c == "update":
         data = {"note": args.note, "status": args.status, "due": args.due, "list": args.list,
@@ -173,6 +178,8 @@ def cmd_action(args, b: Brain) -> None:
             data["due_suggested"], data["due_reason"] = True, args.due_reason
         if args.confirm_due:
             data["due_confirmed"] = True
+        if args.park or args.unpark:
+            data["parked"] = bool(args.park)
         if args.owner:
             data["owner"] = _resolve_people(b, [args.owner])[0]
         if args.blocked_by is not None:
@@ -219,6 +226,8 @@ def cmd_action(args, b: Brain) -> None:
             rows = [r for r in rows if r["owner"] == pid]
         if not args.all:
             rows = [r for r in rows if r["open"]]
+        if args.undated:
+            rows = [r for r in rows if r["open"] and not r["due"] and r["list"] != "watching"]
         rows.sort(key=lambda r: (r["due"] or "9999", r["id"]))
         _out(args, rows, "\n".join(_action_line(b, r["id"]) for r in rows) or "(nenhuma)")
 
@@ -521,6 +530,8 @@ def cmd_add(args, b: Brain) -> None:
         # confere a fala literal do dono; pelo lote o agente forjaria um "by": "owner"
         raise util.BrainError(f"add: {', '.join(gates)} não entra por lote — use o comando da porta; nada gravado",
                               code=4)
+    for it in items:
+        schema.require_due_decision({"by": "agent", **{k: v for k, v in it.items() if v not in (None, "")}})
     recorded = b.record(items)
     _out(args, recorded, "\n".join(f"✓ {e['type']} {e.get('id', '')}" for e in recorded))
 
@@ -599,6 +610,11 @@ def cmd_publish(args, b: Brain) -> None:
 def cmd_snapshot(args, b: Brain) -> None:
     from . import snapshot
     snapshot.cli(args, b)
+
+
+def cmd_repos(args, b: Brain) -> None:
+    from . import repos
+    repos.cli(args, b)
 
 
 def cmd_note(args, b: Brain) -> None:
@@ -738,8 +754,9 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--list", choices=["mine", "waiting", "watching"])
     x.add_argument("--due")
     x.add_argument("--due-suggested", action="store_true",
-                   help="o prazo é sugestão do agente (--by agent); aparece em rosa até o dono definir/confirmar")
+                   help="o prazo é sugestão do agente (--by agent); aparece em roxo até o dono definir/confirmar")
     x.add_argument("--due-reason", help="por que essa data (com --due-suggested)")
+    x.add_argument("--due-none-reason", help="agente, sem --due: por que não há base para sugerir prazo ('não consta')")
     x.add_argument("--effort", help="90m · 2h · 1h30 · 1d")
     x.add_argument("--project")
     x.add_argument("--deliverable")
@@ -759,11 +776,14 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--list", choices=["mine", "waiting", "watching"])
     x.add_argument("--due")
     x.add_argument("--due-suggested", action="store_true",
-                   help="o prazo é sugestão do agente (--by agent); aparece em rosa até o dono definir/confirmar")
+                   help="o prazo é sugestão do agente (--by agent); aparece em roxo até o dono definir/confirmar")
     x.add_argument("--due-reason", help="por que essa data (com --due-suggested)")
     x.add_argument("--confirm-due", action="store_true",
                    help="dono aceita o prazo sugerido como está (--by owner)")
     x.add_argument("--clear-due", action="store_true")
+    x.add_argument("--park", action="store_true",
+                   help='"não agora": adia de propósito (--by owner); sai do foco e da vista "esta semana"')
+    x.add_argument("--unpark", action="store_true", help='tira da vista "não agora" (--by owner)')
     x.add_argument("--effort")
     x.add_argument("--project")
     x.add_argument("--deliverable")
@@ -792,6 +812,7 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--list", choices=["mine", "waiting", "watching"])
     x.add_argument("--project")
     x.add_argument("--owner")
+    x.add_argument("--undated", action="store_true", help="abertas (mine/waiting) sem prazo — fila para sugerir prazo")
     x.add_argument("--all", action="store_true")
     x.add_argument("--json", action="store_true")
     p.set_defaults(fn=cmd_action)
@@ -1025,6 +1046,19 @@ def build_parser() -> argparse.ArgumentParser:
                    help="a leitura funcionou e a janela não tem nada novo (window=auto): registra o pull sem gravar arquivo")
     p.add_argument("--json", action="store_true")
     p.set_defaults(fn=cmd_snapshot)
+
+    p = sub.add_parser("repos", help="fonte kind=github: commits novos dos clones locais → snapshot por repo na inbox")
+    rs = p.add_subparsers(dest="rcmd", required=True)
+    x = rs.add_parser("pull", help="git fetch + lê cada repo da pasta `path`: 1ª vez o repo inteiro, depois só commit novo")
+    x.add_argument("key", help="fonte do watch.toml (kind = \"github\")")
+    x.add_argument("--fetch", action=argparse.BooleanOptionalAction, default=None,
+                   help="git fetch antes de ler (padrão: sim, salvo `fetch = \"false\"` na fonte)")
+    x.add_argument("--full", action="store_true", help="relê o repositório inteiro (histórico, árvore, documentos)")
+    x.add_argument("--json", action="store_true")
+    x = rs.add_parser("list", help="repositórios que a fonte enxerga")
+    x.add_argument("key")
+    x.add_argument("--json", action="store_true")
+    p.set_defaults(fn=cmd_repos)
 
     p = sub.add_parser("pdf", help="lê um PDF sem poppler: texto por página ou PNGs (pdftotext/pdftoppm → PDFKit do macOS → pypdf)")
     ps = p.add_subparsers(dest="pcmd", required=True)

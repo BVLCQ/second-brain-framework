@@ -51,6 +51,7 @@ class Action:
     unblocks: _new_list[str] = field(default_factory=_new_list)
     people: _new_list[str] = field(default_factory=_new_list)
     priority: str = "normal"
+    parked: bool = False             # "não agora": o dono adiou de propósito (só o dono marca); sai do foco e da vista da semana
     link: str = ""
     origin: str = ""
     source: str = ""
@@ -449,6 +450,8 @@ def apply(st: State, ev: dict) -> None:
                 a.due_reason = data.get("due_reason", "") if a.due_suggested else ""
             if data.get("due_confirmed"):
                 a.due_suggested, a.due_reason = False, ""
+            if "parked" in data:
+                a.parked = bool(data["parked"])
             for f in data.get("clear", []):
                 if f in ("due", "effort_min", "project", "deliverable"):
                     setattr(a, f, None)

@@ -194,10 +194,11 @@ class Pages:
                "Desmarcar reabre. Outras edições neste arquivo são descartadas.", ""]
         mine = [a for a in m["actions"] if a["list"] == "mine" and a["mine"]]
         recent_cut = (self.today.toordinal() - 14)
-        groups = [("Fazendo", lambda a: a["open"] and a["status"] == "fazendo"),
-                  ("A fazer", lambda a: a["open"] and a["status"] == "aberta"),
-                  ("Bloqueadas", lambda a: a["open"] and a["status"] == "bloqueada"),
-                  ("Aguardando terceiros", lambda a: a["open"] and a["status"] == "aguardando"),
+        groups = [("Fazendo", lambda a: a["open"] and not a["parked"] and a["status"] == "fazendo"),
+                  ("A fazer", lambda a: a["open"] and not a["parked"] and a["status"] == "aberta"),
+                  ("Bloqueadas", lambda a: a["open"] and not a["parked"] and a["status"] == "bloqueada"),
+                  ("Aguardando terceiros", lambda a: a["open"] and not a["parked"] and a["status"] == "aguardando"),
+                  ("Não agora (adiadas de propósito)", lambda a: a["open"] and a["parked"]),
                   ("Feitas (14 dias)", lambda a: a["status"] == "fechada" and a["closed"]
                    and date.fromisoformat(a["closed"]).toordinal() >= recent_cut)]
         checks: dict[str, bool] = {}

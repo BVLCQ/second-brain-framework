@@ -19,7 +19,7 @@ sys.path.insert(0, str(ROOT))
 
 os.environ.setdefault("BRAIN_NOW", "2026-10-09T10:00:00-03:00")
 
-from brainlib import config, doctor, ids, portfolio as portfolio_mod, notes as notes_mod, focus, harvest, mcp_server, memory, outbox, planning, people, rawsort, render, schema, share, snapshot, upstream, util
+from brainlib import config, doctor, ids, model, portfolio as portfolio_mod, notes as notes_mod, focus, harvest, mcp_server, memory, outbox, planning, people, rawsort, render, schema, share, snapshot, upstream, util
 from brainlib.core import Brain
 from brainlib.gcal import GoogleCalendar
 from brainlib import demo as demo_mod
@@ -132,6 +132,29 @@ class LedgerTests(unittest.TestCase):
             self.assertEqual(b.state.blocked(b.state.actions["TASK-0002"]), [])
             self.assertEqual(b.validate_all(), [])
 
+    def test_agent_must_decide_due_on_cli_open_and_add(self):
+        with tempfile.TemporaryDirectory() as td:
+            _brain(Path(td))
+            env = {**os.environ, "BRAIN_HOME": td}
+
+            def run(*a):
+                return subprocess.run([sys.executable, str(ROOT / "brain"), *a], capture_output=True, text=True, env=env)
+            fact = ["--by", "agent", "--prov", "observado", "--source", "chat"]
+            r = run("action", "open", "Sem prazo", *fact)
+            self.assertEqual(r.returncode, 4)
+            self.assertIn("due_none_reason", r.stderr)
+            self.assertEqual(run("action", "open", "Sugerida", "--due", "2026-10-30", "--due-suggested",
+                                 "--due-reason", "entregável vence 05/11", *fact).returncode, 0)
+            self.assertEqual(run("action", "open", "Sem base", "--due-none-reason", "sem entregável nem acordo", *fact).returncode, 0)
+            self.assertEqual(run("action", "open", "Só contexto", "--list", "watching", *fact).returncode, 0)
+            self.assertEqual(run("action", "open", "Do dono", "--by", "owner").returncode, 0)
+            batch = Path(td) / "lote.json"
+            batch.write_text(json.dumps([{"type": "action.opened", "prov": "observado", "source": "chat",
+                                          "data": {"title": "Em lote", "owner": "eu"}}]), encoding="utf-8")
+            self.assertEqual(run("add", "--file", str(batch)).returncode, 4)
+            undated = json.loads(run("action", "list", "--undated", "--json").stdout)
+            self.assertEqual([a["title"] for a in undated], ["Sem base", "Do dono"])
+
     def test_suggested_due_lifecycle(self):
         with tempfile.TemporaryDirectory() as td:
             b = _brain(Path(td))
@@ -166,6 +189,38 @@ class LedgerTests(unittest.TestCase):
             self.assertFalse(b.state.actions[a].due_suggested)
             self.assertIsNone(b.state.actions[a].due)
             self.assertEqual(b.validate_all(), [])
+
+    def test_parked_is_owner_only_and_leaves_todo_groups(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            a = b.record_one({"type": "action.opened", "by": "owner", "data": {"title": "Adiar", "owner": "eu"}})["id"]
+            with self.assertRaises(util.BrainError):      # adiar de propósito é decisão do dono
+                b.record_one({"type": "action.updated", "id": a, "by": "agent", "prov": "observado", "source": "chat",
+                              "data": {"parked": True}})
+            with self.assertRaises(util.BrainError):
+                b.record_one({"type": "action.updated", "id": a, "by": "owner", "data": {"parked": "sim"}})
+            b.record_one({"type": "action.updated", "id": a, "by": "owner", "data": {"parked": True}})
+            self.assertTrue(b.state.actions[a].parked)
+            self.assertTrue(next(x for x in model.build(b)["actions"] if x["id"] == a)["parked"])
+            b.record_one({"type": "action.updated", "id": a, "by": "owner", "data": {"parked": False}})
+            self.assertFalse(b.state.actions[a].parked)
+            self.assertEqual(b.validate_all(), [])
+
+    def test_park_flags_on_cli(self):
+        with tempfile.TemporaryDirectory() as td:
+            _brain(Path(td))
+            env = {**os.environ, "BRAIN_HOME": td}
+
+            def run(*a):
+                return subprocess.run([sys.executable, str(ROOT / "brain"), *a], capture_output=True, text=True, env=env)
+            self.assertEqual(run("action", "open", "Depois eu vejo", "--by", "owner").returncode, 0)
+            aid = json.loads(run("action", "list", "--json").stdout)[-1]["id"]
+            self.assertIn("não agora", run("action", "update", aid, "--park", "--by", "owner").stdout)
+            self.assertTrue(json.loads(run("action", "show", aid, "--json").stdout)["parked"])
+            self.assertNotEqual(run("action", "update", aid, "--unpark", "--by", "agent", "--prov", "observado",
+                                    "--source", "chat").returncode, 0)
+            self.assertNotIn("não agora", run("action", "update", aid, "--unpark", "--by", "owner").stdout)
+            self.assertFalse(json.loads(run("action", "show", aid, "--json").stdout)["parked"])
 
     def test_decision_supersede(self):
         with tempfile.TemporaryDirectory() as td:

@@ -35,6 +35,13 @@
 # kind = "jira"
 # jql = "assignee = currentUser() AND updated >= -1d"
 
+# Clones git locais: o CLI lê (`./brain repos pull github-repos`), não o MCP. `git fetch` em cada repo antes
+# (só baixa; `fetch = "false"` desliga); 1ª leitura = o repo inteiro, depois só commit novo → RAW/…/github/.
+# [[source]]
+# key = "github-repos"
+# kind = "github"
+# path = "~/Github/"
+
 # Playbook de um processo (Portfólio): o /update só relê o doc quando o modifiedTime muda.
 # Normalmente criada por `./brain doc link PROC-0001 --kind playbook --ref <url|id> --watch`.
 # [[source]]

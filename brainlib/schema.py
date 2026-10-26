@@ -145,6 +145,22 @@ def _action_or_node(state, plan, ref: str, field: str) -> None:
         _plan_node(plan, ref, field)
 
 
+def require_due_decision(ev: dict) -> None:
+    """Só na gravação (não na revalidação do ledger antigo): ação nova do agente decide o prazo.
+
+    `mine`/`waiting` sem `due` exige `due_none_reason` ("sem base: …") — o agente não pode simplesmente esquecer
+    de sugerir. `watching` não leva prazo."""
+    data = ev.get("data") or {}
+    if ev.get("type") != "action.opened" or ev.get("by") != "agent":
+        return
+    if data.get("list", "mine") == "watching" or data.get("due"):
+        return
+    _need(data.get("due_none_reason"),
+          "action.opened: ação nova sem prazo — sugira um (due + due_suggested + due_reason, método em "
+          "commands/todo/SKILL.md) ou, sem nenhuma base de contexto, diga por quê em due_none_reason "
+          "(CLI: --due-none-reason \"…\")")
+
+
 def validate(ev: dict, state, plan) -> None:
     """Valida um evento já com id atribuído contra o estado atual. Levanta BrainError(code=4)."""
     t = ev.get("type")
@@ -194,6 +210,9 @@ def validate(ev: dict, state, plan) -> None:
             _need(data.get("due"), f"{t}: due_suggested exige data.due")
             _need(ev.get("by") == "agent", f"{t}: só o agente sugere prazo (by=agent); "
                   "prazo do dono é declaração, sem due_suggested")
+        if "parked" in data:
+            _need(t == "action.updated" and ev.get("by") == "owner" and isinstance(data["parked"], bool),
+                  f"{t}: parked (true/false) é só do dono (by=owner) em action.updated — adiar de propósito é decisão dele")
         if data.get("due_confirmed"):
             _need(t == "action.updated" and ev.get("by") == "owner" and state.actions[eid].due_suggested,
                   f"{t}: due_confirmed é só do dono (by=owner) e só vale com prazo sugerido pendente")

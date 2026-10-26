@@ -77,7 +77,7 @@ invisível: qualquer arquivo abre num editor de texto. A organização:
 ```
 vault/
 ├── RAW/inbox/          ← a ÚNICA porta de entrada. Jogue qualquer coisa aqui.
-├── RAW/<ano>/<mês>/<tipo>/ ← arquivo morto imutável, separado por tipo (slack, meetings, documents, videos, artifacts, notes, images, connectors, misc)
+├── RAW/<ano>/<mês>/<tipo>/ ← arquivo morto imutável, separado por tipo (slack, meetings, documents, videos, artifacts, notes, images, connectors, github, misc)
 ├── PROCESSED/<ano>/<mês>/  ← o resumo extraído de cada fonte (append-only)
 ├── PROCESSED/_ledger/events.jsonl  ← O LIVRO-RAZÃO (explicado abaixo)
 ├── PLANNING/goals.md   ← sua árvore de goals → projetos → entregáveis
@@ -295,7 +295,18 @@ key = "gcal-primary"
 kind = "gcal"
 window = "14d"
 note = "agenda ocupada — alimenta o planejador de foco"
+
+[[source]]
+key = "github-repos"
+kind = "github"
+path = "~/Github/"         # pasta com os clones; cada repo é um item
 ```
+
+Repositórios git são a única fonte que não passa por MCP: o próprio CLI lê
+(`./brain repos pull github-repos`), só leitura. Ele faz `git fetch` em cada repo
+(`fetch = "false"` desliga), lê o **repositório inteiro** na primeira vez — histórico,
+árvore e documentos, por mais antigo que seja — e depois só os commits novos. Os
+snapshots (`github-<repo>-<ts>.md`) ficam em `RAW/<ano>/<mês>/github/`.
 
 Copie para `config/watch.toml` (o seu é privado, não vai pro git) e ajuste.
 A partir daí, o noturno (e o `/update` manual) puxa exatamente essas fontes
@@ -408,12 +419,15 @@ em outros agentes, o texto é entendido do mesmo jeito.)
   15/10 · PROJ-1`. E a tarefa já está no painel.
 - **Prazo sugerido:** se você não disse prazo, o agente **sugere** um pelo
   contexto (prazo do entregável/projeto, acordos com pessoas, agenda e carga)
-  e diz o porquê. Enquanto for sugestão, a data aparece **em rosa** na TUI e no
+  e diz o porquê. Enquanto for sugestão, a data aparece **em roxo** na TUI e no
   painel (e com "(sugerido)" nos Markdown). Você decide: digita outra data
   (`/todo prazo TASK-0012` repete a sugestão; na TUI, tecla `t`) e a cor volta ao
   normal, ou aceita como está (`brain action update TASK-0012 --confirm-due --by owner`,
   ou salve o formulário de prazo da TUI com a mesma data). Sem base nenhuma, ele
   não sugere ("não consta") e a ação fica sem prazo.
+  Vale também para as ações que o `/dump` extrai: o CLI recusa ação nova do
+  agente sem prazo, a menos que ele diga o motivo (`--due-none-reason`).
+  `brain action list --undated` mostra o que ficou sem data.
 - **Pegadinha:** tarefa sem prazo fica sem `due` — e o planejador de foco
   **ignora** o que não tem data (um prazo sugerido já conta como data).
   Ele avisa; escute.
@@ -662,6 +676,12 @@ terminal (painéis, atalhos contextuais, paleta de comandos) e executa as escrit
 `./brain`, mostrando a linha exata antes de confirmar. É opcional: `./brain tui --setup`
 instala o Textual numa venv à parte. Para experimentar com dados fictícios, abra
 `guides/tui-mockup.html` no navegador.
+
+**Vistas do painel Ações (`v`).** A tecla `v` gira entre quatro vistas: **Todas** → **Esta semana**
+(até o domingo corrente, mais tudo que já está atrasado; sem prazo só entra se estiver em andamento) →
+**Depois** (semana que vem em diante e o que não tem data) → **Não agora**. `z` põe a ação selecionada em
+"não agora" (adiada de propósito; é decisão sua, o agente não marca) e `z` de novo a traz de volta. Ação em
+"não agora" sai do planejador de foco e ganha seção própria no `todo.md`. Fechadas só aparecem em **Todas**.
 
 ## 9. Editar arquivos na mão: o que é colhido e o que é descartado
 

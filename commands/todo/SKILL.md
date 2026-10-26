@@ -1,6 +1,6 @@
 ---
 name: todo
-description: "Cria uma ação TASK-#### a partir do que o dono digitou: '/todo preciso ler X até quarta' → ledger com prazo resolvido, pessoas e projeto linkados. Sem prazo dito, sugere um pelo contexto (rosa até o dono decidir). '/todo prazo TASK-####' sugere prazo para ação existente. Use quando o dono disser 'preciso', 'tenho que', 'lembra de', ou pedir criação direta."
+description: "Cria uma ação TASK-#### a partir do que o dono digitou: '/todo preciso ler X até quarta' → ledger com prazo resolvido, pessoas e projeto linkados. Sem prazo dito, sugere um pelo contexto (roxo até o dono decidir). '/todo prazo TASK-####' sugere prazo para ação existente. Use quando o dono disser 'preciso', 'tenho que', 'lembra de', ou pedir criação direta."
 ---
 
 # /todo — declaração do dono vira ação
@@ -24,7 +24,7 @@ Isto é `[declarado]`. Não passe pela inbox.
 ## Sugerir prazo
 
 Quando a ação nasce sem prazo (ou o dono pede `/todo prazo TASK-####`), o agente **sugere** uma data pelo contexto.
-Sugestão é julgamento seu; a data fica marcada no ledger (`due_suggested`) e aparece **em rosa** na TUI e no painel
+Sugestão é julgamento seu; a data fica marcada no ledger (`due_suggested`) e aparece **em roxo** na TUI e no painel
 até o dono definir outra data ou confirmar. O CLI só guarda e colore — você escolhe a data.
 
 Base, em ordem de força (cite a que usou em `--due-reason`, uma frase):
@@ -35,6 +35,10 @@ Base, em ordem de força (cite a que usou em `--due-reason`, uma frase):
 4. **Prioridade/idade**: `alta` pede data curta; `baixa` sem âncora pode ficar sem sugestão.
 
 Regras: data ≥ hoje, de preferência dia útil; nunca inventar âncora — **sem base nenhuma, não sugira** ("não consta" e a ação fica sem prazo, avise). Ação `watching` não leva prazo.
+
+O CLI não deixa o agente "esquecer": `action open --by agent` sem `--due` é recusado, a menos que venha
+`--due-none-reason "…"` (o "não consta" com o motivo). Fila de ações abertas sem prazo: `./brain action list --undated`
+— percorra-a com `/todo prazo TASK-####` quando o dono pedir ou ao fim de um `/dump`.
 
 ```
 ./brain action open "<título>" --due AAAA-MM-DD --due-suggested --due-reason "entregável PROJ-1.6 vence 30/11; folga de 1 semana" \

@@ -30,11 +30,19 @@ class Field:
     label: str
     value: str = ""
     ph: str = ""
-    choice: list[str] | None = None
+    choice: list[str | tuple[str, str]] | None = None    # valores, ou (valor, rótulo) quando o rótulo mostra mais que o valor
+    options: Callable[[dict], list[tuple[str, str]]] | None = None   # (campos) → (valor, rótulo): lista que depende de outro campo
+    depends: str | None = None                       # id do campo que, ao mudar, recalcula `options`
     req: bool = False
     check: Callable[..., str] | None = None          # (valor) ou (valor, campos) → mensagem de erro, ou ""
     res: Callable[..., str] | None = None            # (valor) ou (valor, campos) → texto de apoio (ex.: data resolvida)
     multi: bool = False                              # caixa de texto grande (várias linhas); enter quebra a linha
+
+
+def _pairs(f: Field, vals: dict) -> list[tuple[str, str]]:
+    """Opções de um campo de escolha como (rótulo, valor) — a ordem que o Select espera."""
+    raw = f.options(vals) if f.options else (f.choice or [])
+    return [((c[1], c[0]) if isinstance(c, tuple) else (c, c)) for c in raw]
 
 
 @dataclass
@@ -92,9 +100,10 @@ class FormModal(ModalScreen):
                     yield Label(Text.assemble(f.label, (" *", "red") if f.req else ""), classes="flab")
                     if f.multi:
                         yield TextArea(f.value, placeholder=f.ph, id=f"f_{f.id}", classes="fin")
-                    elif f.choice:
-                        val = f.value if f.value in f.choice else f.choice[0]
-                        yield Select([(c, c) for c in f.choice], value=val, allow_blank=False, id=f"f_{f.id}", classes="fin")
+                    elif f.choice or f.options:
+                        pairs = _pairs(f, {x.id: x.value for x in s.fields})
+                        val = f.value if f.value in [v for _, v in pairs] else pairs[0][1]
+                        yield Select(pairs, value=val, allow_blank=False, id=f"f_{f.id}", classes="fin")
                     else:
                         yield Input(value=f.value, placeholder=f.ph, id=f"f_{f.id}", classes="fin")
                 yield Static("", id=f"r_{f.id}", classes="fres")
@@ -131,8 +140,20 @@ class FormModal(ModalScreen):
     def on_input_changed(self, _e) -> None:
         self._update()
 
-    def on_select_changed(self, _e) -> None:
+    def on_select_changed(self, e: Select.Changed) -> None:
+        changed = (e.select.id or "")[2:]
+        for f in self.spec.fields:
+            if f.options and f.depends == changed:
+                self._refresh_options(f)
         self._update()
+
+    def _refresh_options(self, f: Field) -> None:
+        """Recalcula a lista de um campo que depende de outro (ex.: projetos do goal escolhido), mantendo o valor se ainda existir."""
+        sel = self.query_one(f"#f_{f.id}", Select)
+        pairs = _pairs(f, self.vals())
+        keep = sel.value if sel.value in [v for _, v in pairs] else pairs[0][1]
+        sel.set_options(pairs)
+        sel.value = keep
 
     def on_text_area_changed(self, _e) -> None:
         self._update()

@@ -5,10 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Segundo Cérebro</title>
 <style>
-:root{--sug:#d6336c;--bg:#f6f7f9;--panel:#fff;--ink:#16181d;--muted:#6b7280;--line:#e5e7eb;--accent:#3b5bdb;
+:root{--sug:#d6336c;--dsug:#7c3aed;--bg:#f6f7f9;--panel:#fff;--ink:#16181d;--muted:#6b7280;--line:#e5e7eb;--accent:#3b5bdb;
 --ok:#2f9e44;--okbg:#e6f6ea;--warn:#e67700;--warnbg:#fff4e0;--risk:#e03131;--riskbg:#fdeaea;--info:#1c7ed6;--infobg:#e7f1fd;
 --chip:#f1f3f5;--shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.08);}
-@media (prefers-color-scheme:dark){:root{--sug:#f06595;--bg:#0f1115;--panel:#171a21;--ink:#e6e8ec;--muted:#9aa3af;--line:#262b35;
+@media (prefers-color-scheme:dark){:root{--sug:#f06595;--dsug:#b794f6;--bg:#0f1115;--panel:#171a21;--ink:#e6e8ec;--muted:#9aa3af;--line:#262b35;
 --accent:#748ffc;--okbg:#14301d;--warnbg:#3a2a10;--riskbg:#3d1717;--infobg:#132a44;--chip:#222733;--shadow:none}}
 *{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,Ubuntu,sans-serif}
 a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
@@ -21,7 +21,7 @@ nav a.on{color:var(--ink);border-bottom-color:var(--accent);font-weight:600}nav 
 nav .badge{display:inline-block;min-width:18px;padding:0 5px;margin-left:4px;border-radius:9px;background:var(--riskbg);color:var(--risk);font-size:11px;text-align:center}
 main{padding:20px;max-width:1360px;margin:0 auto}
 h1{font-size:20px;margin:0 0 4px}h2{font-size:15px;margin:22px 0 10px;color:var(--ink)}h3{font-size:13px;margin:14px 0 8px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
-.muted{color:var(--muted)}.sug{color:var(--sug);font-weight:600}.late{color:var(--risk);font-weight:600}.soon{color:var(--warn);font-weight:600}
+.muted{color:var(--muted)}.sug{color:var(--sug);font-weight:600}.dsug{color:var(--dsug);font-weight:600}.late{color:var(--risk);font-weight:600}.soon{color:var(--warn);font-weight:600}
 .grid{display:grid;gap:14px}.g2{grid-template-columns:repeat(auto-fit,minmax(420px,1fr))}.g3{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:12px 0 4px}
 .kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;box-shadow:var(--shadow)}
@@ -104,7 +104,7 @@ const KIND_ICON = {"decisão":"◆","entrega":"✓","entregável":"✓","reuniã
 function dueTxt(a){
   if (!a.open) return '<span class="muted">' + (a.status === "fechada" ? "feita " : "descartada ") + fmtD(a.closed) + "</span>";
   if (!a.due) return '<span class="muted">sem prazo</span>';
-  if (a.due_suggested) return '<span class="sug" title="' + esc(a.due_reason || "prazo sugerido pelo agente") + '">' + (a.overdue_days ? "⚠ " : "") + fmtDW(a.due) + " · sugerido" +
+  if (a.due_suggested) return '<span class="dsug" title="' + esc(a.due_reason || "prazo sugerido pelo agente") + '">' + (a.overdue_days ? "⚠ " : "") + fmtDW(a.due) + " · sugerido" +
     (a.overdue_days ? " · " + a.overdue_days + "d atrasada" : a.due_in != null && a.due_in <= 7 ? " · " + (a.due_in ? "em " + a.due_in + "d" : "hoje") : "") + "</span>";
   if (a.overdue_days) return '<span class="late">⚠ ' + fmtDW(a.due) + " · " + a.overdue_days + "d atrasada</span>";
   if (a.due_in != null && a.due_in <= 7) return '<span class="soon">' + fmtDW(a.due) + " · " + (a.due_in ? "em " + a.due_in + "d" : "hoje") + "</span>";
