@@ -131,6 +131,7 @@ class Pages:
         needs = []
         for p in m["proposals"]:
             needs.append(f"- proposta **{p['id']}** ({p['kind']}): {p['summary']}"
+                         + (f" ({p['target']} → {p['into']})" if p.get("into") else "")
                          + (f" — evidência: `{p['evidence']}`" if p["evidence"] else ""))
         qs = [q for q in m["questions"] if q["status"] == "aberta"]
         if qs:

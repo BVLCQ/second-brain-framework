@@ -10,7 +10,7 @@ import os
 import sys
 from pathlib import Path
 
-from . import __version__, config, ids, people, planning, schema, util
+from . import __version__, config, dupes, ids, people, planning, schema, util
 from .core import Brain
 
 
@@ -168,6 +168,16 @@ def cmd_action(args, b: Brain) -> None:
             "people": _resolve_people(b, args.people or []), "priority": args.priority,
             "link": args.link, "origin": args.origin}}, args)
         schema.require_due_decision(item)
+        if args.force:
+            # quem criou olhou os candidatos e disse "é outra": o par fica julgado e não volta na varredura
+            probe = dupes.profile_from_data(item["data"])
+            item["data"]["not_dup"] = [h["id"] for h in dupes.similar(b.state, probe, threshold=dupes.STRONG)]
+        else:
+            dupes.require_checked(item, b.state)
+            near = dupes.similar(b.state, dupes.profile_from_data(item["data"]))
+            if near:
+                print("↳ parecidas (confira se não é a mesma): " + " · ".join(f"{h['id']} {h['title']} ({h['score']:.2f})"
+                                                                             for h in near), file=sys.stderr)
         ev = b.record_one(item)
         _out(args, ev, "✓ " + _action_line(b, ev["id"]))
     elif c == "update":
@@ -197,9 +207,21 @@ def cmd_action(args, b: Brain) -> None:
     elif c == "close":
         _close_action(args, b)
     elif c in ("drop", "reopen"):
+        data = {"reason": args.reason}
+        if c == "drop" and args.duplicate_of:
+            data["duplicate_of"] = ids.normalize(args.duplicate_of)
         ev = b.record_one(_common({"type": f"action.{'dropped' if c == 'drop' else 'reopened'}",
-                                   "id": args.id, "data": {"reason": args.reason}}, args))
+                                   "id": args.id, "data": data}, args))
         _out(args, ev, "✓ " + _action_line(b, args.id))
+    elif c == "dupes":
+        _action_dupes(args, b)
+    elif c == "not-dup":
+        other = ids.normalize(args.other)
+        ev = b.record_one(_common({"type": "action.updated", "id": args.id, "data": {
+            "not_dup_add": [other], "note": f"não é duplicada de {other}: {args.reason}"}}, args))
+        _out(args, ev, f"✓ {args.id} × {other}: par julgado como ações diferentes (não volta na varredura)")
+    elif c == "merge":
+        _merge_action(args, b)
     elif c == "show":
         from . import model
         m = model.ModelBuilder(b)
@@ -230,6 +252,66 @@ def cmd_action(args, b: Brain) -> None:
             rows = [r for r in rows if r["open"] and not r["due"] and r["list"] != "watching"]
         rows.sort(key=lambda r: (r["due"] or "9999", r["id"]))
         _out(args, rows, "\n".join(_action_line(b, r["id"]) for r in rows) or "(nenhuma)")
+
+
+def _action_dupes(args, b: Brain) -> None:
+    """Sem --title: pares de ações abertas parecidas, ainda não julgados. Com --title: candidatos para uma ação nova."""
+    th = args.threshold if args.threshold is not None else dupes.CANDIDATE
+    if args.title:
+        probe = {"title": args.title, "link": args.link or "", "project": args.project or "",
+                 "deliverable": args.deliverable or "", "people": _resolve_people(b, args.people or [])}
+        hits = dupes.similar(b.state, probe, threshold=th)
+        _out(args, hits, "\n".join(f"{h['id']} ({h['status']}) · {h['title']} · {h['score']:.2f} · {'; '.join(h['why'])}"
+                                    for h in hits) or "(nenhuma parecida)")
+        return
+    rows = dupes.pairs(b.state, threshold=th)
+    _out(args, rows, "\n".join(f"{r['score']:.2f} · {r['a']} {r['a_title']}\n       {r['b']} {r['b_title']}\n"
+                                f"       ({'; '.join(r['why'])})" for r in rows) or "(nenhum par parecido)")
+
+
+def _merge_action(args, b: Brain) -> None:
+    """Unifica: a duplicada (id) é descartada e o que ela tinha de próprio passa para a que fica (--into)."""
+    if args.by != "owner":
+        raise util.BrainError("action merge: unificar é decisão do dono (--by owner, depois do \"ok\" dele); "
+                              "o agente propõe com `brain proposal add --kind unificar-acao`", code=4)
+    st = b.state
+    keep_id = ids.normalize(args.into)
+    dup, keep = st.actions.get(args.id), st.actions.get(keep_id)
+    if dup is None or keep is None or dup.id == keep.id:
+        raise util.BrainError("action merge: informe duas ações existentes e diferentes (ID --into ID)", code=3)
+    if not dup.open or not keep.open:
+        raise util.BrainError(f"action merge: {dup.id} e {keep.id} precisam estar abertas", code=4)
+    data = {"note": f"unificada com {dup.id}: {dup.title}"}
+    if args.title:
+        data["title"] = args.title
+    extra = [p for p in dup.people + ([dup.owner] if dup.owner != keep.owner else []) if p not in keep.people]
+    if extra:
+        data["people_add"] = extra
+    if dup.link and not keep.link:
+        data["link"] = dup.link
+    if dup.due and not dup.due_suggested and (not keep.due or keep.due_suggested or dup.due < keep.due):
+        data["due"] = dup.due.isoformat()
+    for f in ("blocked_by", "unblocks"):
+        merged = [x for x in getattr(keep, f) + getattr(dup, f) if x not in (keep.id, dup.id)]
+        merged = list(dict.fromkeys(merged))
+        if merged != getattr(keep, f):
+            data[f] = merged
+    events = [_common({"type": "action.updated", "id": keep.id, "data": data}, args)]
+    for other in st.actions.values():
+        if other.open and other.id not in (dup.id, keep.id) and dup.id in other.blocked_by:
+            events.append({"type": "action.updated", "id": other.id, "by": "system", "date": args.date, "data": {
+                "blocked_by": list(dict.fromkeys(keep.id if x == dup.id else x for x in other.blocked_by)),
+                "note": f"bloqueio passou de {dup.id} para {keep.id} (unificadas)"}})
+    events.append(_common({"type": "action.dropped", "id": dup.id, "data": {
+        "reason": args.reason or f"unificada em {keep.id}", "duplicate_of": keep.id}}, args))
+    recorded = b.record(events)
+    lines = [f"✓ {dup.id} unificada em {keep.id}", "  " + _action_line(b, keep.id)]
+    for ev in recorded:
+        if ev["type"] == "action.updated" and ev["id"] not in (keep.id, dup.id):
+            lines.append(f"  ↳ {ev['id']}: {ev['data']['note']}")
+        elif ev["type"] == "proposal.superseded":
+            lines.append(f"  ↳ proposta {ev['id']} {ev['data'].get('outcome', 'encerrada')}: {ev['data']['reason']}")
+    _out(args, recorded, "\n".join(lines))
 
 
 def _close_action(args, b: Brain) -> None:
@@ -311,7 +393,7 @@ def cmd_proposal(args, b: Brain) -> None:
     if args.rcmd == "add":
         ev = b.record_one(_common({"type": "proposal.opened", "data": {
             "kind": args.kind, "summary": args.summary, "target": args.target,
-            "evidence": args.evidence}}, args))
+            "into": ids.normalize(args.into) if args.into else None, "evidence": args.evidence}}, args))
         _out(args, ev, f"✓ {ev['id']} · proposta ({args.kind}): {args.summary}")
     elif args.rcmd in ("accept", "reject"):
         t = "proposal.accepted" if args.rcmd == "accept" else "proposal.rejected"
@@ -532,6 +614,7 @@ def cmd_add(args, b: Brain) -> None:
                               code=4)
     for it in items:
         schema.require_due_decision({"by": "agent", **{k: v for k, v in it.items() if v not in (None, "")}})
+        dupes.require_checked(it, b.state)
     recorded = b.record(items)
     _out(args, recorded, "\n".join(f"✓ {e['type']} {e.get('id', '')}" for e in recorded))
 
@@ -766,6 +849,8 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--priority", choices=["alta", "normal", "baixa"])
     x.add_argument("--link")
     x.add_argument("--origin")
+    x.add_argument("--force", action="store_true",
+                   help="grava mesmo parecida com outra (você conferiu: é outra ação); o par fica julgado")
     _fact_opts(x)
     x = acs.add_parser("update")
     x.add_argument("id")
@@ -804,7 +889,28 @@ def build_parser() -> argparse.ArgumentParser:
         x = acs.add_parser(name)
         x.add_argument("id")
         x.add_argument("--reason", required=True)
+        if name == "drop":
+            x.add_argument("--duplicate-of", help="descartada por ser duplicada desta ação (TASK-####)")
         _fact_opts(x)
+    x = acs.add_parser("dupes", help="ações parecidas: pares abertos ainda não julgados, ou candidatos para um título novo")
+    x.add_argument("--title", help="título de uma ação que vai nascer (checa antes de criar)")
+    x.add_argument("--project")
+    x.add_argument("--deliverable")
+    x.add_argument("--people", action="append")
+    x.add_argument("--link")
+    x.add_argument("--threshold", type=float, help=f"similaridade mínima (padrão {dupes.CANDIDATE})")
+    x.add_argument("--json", action="store_true")
+    x = acs.add_parser("not-dup", help="marca um par como ações diferentes (sai da varredura)")
+    x.add_argument("id")
+    x.add_argument("other")
+    x.add_argument("--reason", required=True)
+    _fact_opts(x)
+    x = acs.add_parser("merge", help="unifica: ID é descartada e passa pessoas/link/prazo/bloqueios para --into (dono)")
+    x.add_argument("id", help="a duplicada (sai)")
+    x.add_argument("--into", required=True, help="a ação que fica")
+    x.add_argument("--title", help="novo título para a que fica")
+    x.add_argument("--reason")
+    _fact_opts(x)
     x = acs.add_parser("show")
     x.add_argument("id")
     x.add_argument("--json", action="store_true")
@@ -861,10 +967,10 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("proposal", help="propostas PROP-#### (o dono aceita/rejeita)")
     rs = p.add_subparsers(dest="rcmd", required=True)
     x = rs.add_parser("add")
-    x.add_argument("--kind", required=True,
-                   choices=["fechar-acao", "atualizar-acao", "mudar-plano", "reestimar", "outro"])
+    x.add_argument("--kind", required=True, choices=sorted(schema.PROPOSAL_KINDS))
     x.add_argument("--summary", required=True)
     x.add_argument("--target")
+    x.add_argument("--into", help="descartar-acao/unificar-acao: a ação que fica (--target é a duplicada)")
     x.add_argument("--evidence")
     _fact_opts(x)
     for name in ("accept", "reject"):

@@ -19,7 +19,7 @@ PRIORITIES = {"alta", "normal", "baixa"}
 DELIVERABLE_STATUS = {"nao-iniciado", "em-andamento", "feito", "cancelado"}
 ARTIFACT_KINDS = {"reuniao", "documento", "nota", "conector"}
 QUESTION_KINDS = {"identidade", "classificacao", "permissao", "confirmacao", "outro"}
-PROPOSAL_KINDS = {"fechar-acao", "atualizar-acao", "mudar-plano", "reestimar", "outro"}
+PROPOSAL_KINDS = {"fechar-acao", "atualizar-acao", "descartar-acao", "unificar-acao", "mudar-plano", "reestimar", "outro"}
 RECURRENCE = {"diaria", "semanal", "quinzenal", "mensal", "trimestral", "sob-demanda", "por-evento"}
 RECURRENCE_NEEDS_COUNT = {"sob-demanda", "por-evento"}     # exigem per_month (execuções/mês)
 OPP_STATUS = {"ideia", "triagem", "em-espera", "descartada", "priorizada", "em-andamento", "piloto",
@@ -98,14 +98,14 @@ TYPES: dict[str, dict] = {
 # campos de `data` que, quando presentes, são listas (texto solto quebraria a dobra: `"ana" + []`, `list("ana")`)
 LIST_FIELDS = ("blocked_by", "unblocks", "people", "people_add", "decided_by", "projects", "aliases", "aliases_add", "clear",
                "executors", "executors_add", "tools", "tools_add", "pains", "pains_add", "options",
-               "blocks", "created", "removed")
+               "blocks", "created", "removed", "not_dup", "not_dup_add")
 # aprovações e gates: a fala é do dono — só by=owner grava (o noturno recusa owner; ver core.NIGHT_FORBIDDEN)
 OWNER_ONLY = {"proposal.accepted", "proposal.rejected", "message.approved", "share.approved", "focus.approved",
               "plan.changed", "opportunity.promoted"}
 
 # campos de `data` que guardam IDs (um, ou uma lista); valores que não são ID (URL, texto) passam intactos
 REF_FIELDS = ("project", "deliverable", "goal", "ref", "link", "target", "blocked_by", "unblocks", "supersedes", "by",
-              "process", "projects", "context")
+              "process", "projects", "context", "not_dup", "not_dup_add", "duplicate_of")
 ID_ENTITIES = {"action", "decision", "delivery", "proposal", "message", "share", "focus", "process", "opportunity",
                "question", "plannode", "deliverable", "doclink"}
 
@@ -229,6 +229,11 @@ def validate(ev: dict, state, plan) -> None:
         if data.get("effort_min") is not None:
             _need(isinstance(data["effort_min"], int) and not isinstance(data["effort_min"], bool) and data["effort_min"] > 0,
                   "effort_min deve ser inteiro positivo (minutos)")
+        for o in data.get("not_dup", []) + data.get("not_dup_add", []):
+            _need(o in state.actions and o != eid, f"not_dup: ação {o} não existe")
+    if t == "action.dropped" and data.get("duplicate_of"):
+        dup = data["duplicate_of"]
+        _need(dup in state.actions and dup != eid, f"duplicate_of: ação {dup} não existe")
     if t == "action.closed":
         _need(state.actions[eid].open, f"{eid} já está fechada/descartada — use action.reopened")
     if t == "action.reopened":
@@ -264,6 +269,14 @@ def validate(ev: dict, state, plan) -> None:
                   f"link: {data['link']!r} não existe (PROC-… ou OPP-…)")
     if t == "proposal.opened":
         _need(data["kind"] in PROPOSAL_KINDS, f"kind de proposta inválido: {data['kind']!r}")
+        if data["kind"] in {"descartar-acao", "unificar-acao"}:
+            tgt, into = data.get("target") or "", data.get("into") or ""
+            _need(tgt in state.actions and into in state.actions and tgt != into,
+                  f"{data['kind']}: --target (a duplicada) e --into (a que fica) precisam ser duas ações existentes")
+            _need(state.actions[tgt].open and state.actions[into].open, f"{data['kind']}: {tgt} e {into} precisam estar abertas")
+            dup = next((p.id for p in state.proposals.values() if p.status == "aberta" and p.kind in {"descartar-acao", "unificar-acao"}
+                        and {p.target, p.into} == {tgt, into}), None)
+            _need(dup is None, f"{data['kind']}: já há proposta aberta sobre {tgt}/{into} ({dup})")
     if t in {"proposal.accepted", "proposal.rejected", "proposal.superseded"}:
         _need(state.proposals[eid].status == "aberta", f"proposta {eid} não está aberta")
     if t == "proposal.superseded":

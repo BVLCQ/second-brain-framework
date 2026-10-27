@@ -286,7 +286,7 @@ class ModelBuilder:
             "artifacts": artifacts, "people": people, "wins": wins, "agenda": agenda,
             "timeline": self._timeline(projects, deliveries, deliv_done, decisions, actions, artifacts),
             "focus": focus,
-            "proposals": [{"id": p.id, "kind": p.kind, "summary": p.summary, "target": p.target,
+            "proposals": [{"id": p.id, "kind": p.kind, "summary": p.summary, "target": p.target, "into": p.into,
                            "evidence": p.evidence, "date": _iso(p.date)}
                           for p in st.proposals.values() if p.status == "aberta"],
             "outbox": [{"id": m.id, "to": m.to, "to_name": st.person_name(m.to) if not m.to.startswith("#")

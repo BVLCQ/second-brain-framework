@@ -60,6 +60,8 @@ class Action:
     closed: date | None = None
     how: str = ""
     outcome: str = ""
+    not_dup: _new_list[str] = field(default_factory=_new_list)   # ações que o agente julgou NÃO serem a mesma
+    duplicate_of: str = ""           # descartada/unificada como duplicada desta
     last_activity: date | None = None
     history: _new_list[dict] = field(default_factory=_new_list)
 
@@ -123,6 +125,7 @@ class Proposal:
     date: date | None = None
     quote: str = ""                  # fala do dono; se o sistema encerrou (superseded), o motivo que ele registrou
     seq: int = 0                     # seq do proposal.opened (eventos do dono depois dele podem torná-la obsoleta)
+    into: str = ""                   # descartar-acao/unificar-acao: a ação que fica
 
 
 @dataclass
@@ -438,7 +441,7 @@ def apply(st: State, ev: dict) -> None:
                 people=list(data.get("people", [])),
                 priority=data.get("priority", "normal"), link=data.get("link", ""),
                 origin=data.get("origin", ""), source=ev.get("source", ""), prov=ev.get("prov", ""),
-                opened=when)
+                not_dup=list(data.get("not_dup", [])), opened=when)
         a = st.actions[eid]
         if t == "action.updated":
             for f in ("title", "owner", "list", "status", "priority", "link", "project", "deliverable"):
@@ -467,13 +470,17 @@ def apply(st: State, ev: dict) -> None:
             for p in data.get("people_add", []):
                 if p not in a.people:
                     a.people.append(p)
+            for o in data.get("not_dup_add", []):
+                if o not in a.not_dup:
+                    a.not_dup.append(o)
         elif t == "action.closed":
             a.status, a.closed, a.how = "fechada", when, data["how"]
             a.outcome = data.get("outcome", "")
         elif t == "action.dropped":
             a.status, a.closed, a.how = "descartada", when, data["reason"]
+            a.duplicate_of = data.get("duplicate_of", "")
         elif t == "action.reopened":
-            a.status, a.closed, a.how, a.outcome = "aberta", None, "", ""
+            a.status, a.closed, a.how, a.outcome, a.duplicate_of = "aberta", None, "", "", ""
         a.last_activity = when
         a.history.append(ev)
 
@@ -512,7 +519,7 @@ def apply(st: State, ev: dict) -> None:
 
     elif t == "proposal.opened":
         st.proposals[eid] = Proposal(eid, data["kind"], data["summary"], data.get("target", ""),
-                                     data.get("evidence", ""), date=when, seq=ev.get("seq", 0))
+                                     data.get("evidence", ""), date=when, seq=ev.get("seq", 0), into=data.get("into", ""))
     elif t in ("proposal.accepted", "proposal.rejected"):
         p = st.proposals[eid]
         p.status = "aceita" if t.endswith("accepted") else "rejeitada"

@@ -556,16 +556,21 @@ def d_plan(store, it) -> Doc:
 
 
 EFFECT = {"fechar-acao": "brain action close {t} --how … --by owner", "reestimar": "brain action update {t} --effort … --by owner",
-          "atualizar-acao": "aplique a mudança na ação {t} (e para editar: e)", "mudar-plano": "abre o gate: edite o goals.md com E",
+          "atualizar-acao": "aplique a mudança na ação {t} (e para editar: e)",
+          "unificar-acao": "brain action merge {t} --into {i} --by owner (pessoas, link, prazo e bloqueios passam para {i})",
+          "descartar-acao": "brain action drop {t} --duplicate-of {i} --reason … --by owner", "mudar-plano": "abre o gate: edite o goals.md com E",
           "outro": "só registra a resposta"}
 
 
 def d_prop(store, it) -> Doc:
     r = it.data
     doc = Doc().h(f"{r.id} · {r.kind}", (f" · {r.status}" if r.status != "aberta" else "", DIM)).blank().p(r.summary)
-    doc.kv([("alvo", link(r.target, r.target) if r.target else Text("—", DIM)), ("evidência", Text(r.evidence or "—"))])
+    kv = [("alvo", link(r.target, r.target) if r.target else Text("—", DIM))]
+    if r.into:
+        kv.append(("fica", link(r.into, r.into)))
+    doc.kv(kv + [("evidência", Text(r.evidence or "—"))])
     doc.sec("Se você aceitar").cmd(f"brain proposal accept {r.id} --quote \"…\"")
-    doc.p(("  depois: " + EFFECT.get(r.kind, EFFECT["outro"]).format(t=r.target or "TASK-####"), DIM))
+    doc.p(("  depois: " + EFFECT.get(r.kind, EFFECT["outro"]).format(t=r.target or "TASK-####", i=r.into or "TASK-####"), DIM))
     doc.blank().p(("O cérebro não fecha nem altera nada sozinho. Rejeitada, a proposta só volta com evidência nova.", DIM))
     return doc
 

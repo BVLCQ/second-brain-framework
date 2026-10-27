@@ -164,6 +164,11 @@ Declaração do dono (`--by owner`) leva `[declarado]` e `source: chat`.
 - `waiting` — outra pessoa deve ao dono (cobra)
 - `watching` — contexto; o cérebro **não cobra** e **não fecha sozinho**
 
+**Duplicadas:** antes de criar ação, compare com as existentes (`brain action dupes --title …`); a mesma coisa não vira
+duas ações — acrescente à existente. O CLI recusa criar parecida demais sem `--force`. No fim do `/dump` (e no `/week`),
+`brain action dupes` lista pares ainda não julgados: o agente julga e **propõe** `descartar-acao` ou `unificar-acao`
+(`--target` sai, `--into` fica) ou marca `action not-dup`; quem descarta/unifica (`brain action merge`) é o dono.
+
 O agente **propõe** fechar ação com evidência (`brain proposal add --kind fechar-acao`);
 não fecha só porque um e-mail "parece" resolver. Fecho é do dono (`/done` ou
 checkbox em `FRESH/todo.md` / `status:` na ficha da ação — colhido no próximo render).

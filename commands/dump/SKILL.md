@@ -113,6 +113,31 @@ Para cada item da inbox (ignore `.keep.md`):
 
 Ao fim do lote, rode `./brain action list --undated`: o que sobrar sem prazo precisa ter motivo no recibo.
 
+## Ações duplicadas — sempre que criar ações
+
+**Antes de gravar:** compare cada ação extraída com as existentes (`./brain action list --all`, ou
+`./brain action dupes --title "…"` por ação). O mesmo pedido costuma chegar por reunião, Slack e Jira — a mesma coisa
+não vira duas ações:
+- é a mesma → **não crie**: `action update TASK-#### --note "também em <fonte>" --people … --source <artefato>`;
+- é outra → crie. O CLI recusa (código 2, nada gravado) a que for parecida demais; se você julgou que é outra, repita com
+  `--force` (CLI) ou `"not_dup": ["TASK-####", …]` no `data` do lote.
+
+**Depois de gravar (fim do `/dump`, antes do `./brain render`):** `./brain action dupes` lista os pares de ações abertas
+parecidos que ninguém julgou ainda. Para cada par, julgue pelo sentido (o CLI só aponta palavras em comum):
+- **não são a mesma** → `./brain action not-dup TASK-A TASK-B --reason "…" --prov observado --source chat` (o par sai da varredura);
+- **uma já cobre a outra, nada a aproveitar** → `./brain proposal add --kind descartar-acao --target <a que sai> --into <a que fica>
+  --summary "…" --evidence "…" --prov observado --source <artefato>`;
+- **as duas têm pedaços** (pessoas, link, prazo, bloqueios, contexto) → `--kind unificar-acao`, mesmos campos.
+  Fica a mais antiga, a mais completa ou a que tem link/projeto; diga no `--summary` qual sai, qual fica e por quê.
+
+O cérebro **não descarta nem unifica sozinho**: é proposta, e o dono decide. Com o "ok" dele:
+`./brain proposal accept PROP-#### --quote "ok"` e então
+`./brain action merge <a que sai> --into <a que fica> --by owner` (unificar: pessoas, link, prazo firme mais cedo e bloqueios
+passam para a que fica; quem esperava pela que sai passa a esperar pela que fica) ou
+`./brain action drop <a que sai> --duplicate-of <a que fica> --reason "duplicada de …" --by owner` (descartar).
+Recusada (`proposal reject`) não volta sem evidência nova. Sem dono na conversa (noturno, rodada ⚡), só proponha.
+No recibo: `duplicadas: N propostas · M pares julgados diferentes`.
+
 Fonte já registrada (`artifact.added` com o mesmo `raw`) = **pule**. Re-rodar = zero duplicatas.
 
 ## Recibo (chat)

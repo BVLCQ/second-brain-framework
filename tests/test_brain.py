@@ -1293,6 +1293,111 @@ class ProposalSweepTests(unittest.TestCase):
                 os.environ.pop("BRAIN_NIGHTLY", None)
 
 
+class DupesTests(unittest.TestCase):
+    """Ações duplicadas: o CLI aponta candidatas, recusa criar parecida demais sem --force, e unifica com o dono."""
+
+    def _run(self, td, *a):
+        return subprocess.run([sys.executable, str(ROOT / "brain"), *a], capture_output=True, text=True,
+                              env={**os.environ, "BRAIN_HOME": td})
+
+    def _ok(self, td, *a):
+        r = self._run(td, *a)
+        self.assertEqual(r.returncode, 0, f"{a}: {r.stderr}")
+        return r.stdout
+
+    def test_scoring_signals(self):
+        from brainlib import dupes
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            for t in ("Pedir acesso de editor ao BigQuery", "Revisar orçamento de mídia", "Reunião de onboarding"):
+                b.record_one({"type": "action.opened", "by": "owner", "data": {"title": t, "owner": "eu"}})
+            st = b.state
+            hit = dupes.similar(st, dupes.profile_from_data({"title": "Pedir permissão de editor no BigQuery"}))
+            self.assertEqual(hit[0]["id"], "TASK-0001")
+            self.assertEqual(dupes.similar(st, dupes.profile_from_data({"title": "Comprar café"})), [])
+            same_link = dupes.similar(st, {**dupes.profile_from_data({"title": "x"}), "link": "https://j/1"})
+            self.assertEqual(same_link, [])
+            b.record_one({"type": "action.updated", "id": "TASK-0003", "by": "owner", "data": {"link": "https://j/1"}})
+            self.assertEqual(dupes.similar(b.state, {**dupes.profile_from_data({"title": "x"}), "link": "https://j/1"})[0]["score"], 1.0)
+            # mesma frase, pessoas diferentes: cai abaixo do bloqueio
+            a = {"title": "Reunião de onboarding", "link": "", "project": "", "deliverable": "", "people": ["marina-demo"]}
+            c = {**a, "people": ["eu"]}
+            s, why = dupes.Index(st.actions.values()).score(a, c)
+            self.assertLess(s, dupes.STRONG)
+            self.assertIn("pessoas diferentes", why)
+
+    def test_open_refuses_near_duplicate_until_forced(self):
+        with tempfile.TemporaryDirectory() as td:
+            _brain(Path(td))
+            self._ok(td, "action", "open", "Criar monorepo de Marketing Ops no GitHub", "--by", "owner")
+            r = self._run(td, "action", "open", "Criar o monorepo do Marketing Ops no Github", "--by", "owner")
+            self.assertEqual(r.returncode, 2)
+            self.assertIn("TASK-0001", r.stderr)
+            self.assertIn("nada gravado", r.stderr)
+            self.assertIn("TASK-0002", self._ok(td, "action", "open", "Criar o monorepo do Marketing Ops no Github",
+                                                "--by", "owner", "--force"))
+            b = Brain(config.load(Path(td)))
+            self.assertEqual(b.state.actions["TASK-0002"].not_dup, ["TASK-0001"])
+            self.assertIn("nenhum par", self._ok(td, "action", "dupes"))      # par julgado não volta
+            # lote: mesma regra, com data.not_dup como o "é outra"
+            batch = Path(td) / "lote.json"
+            item = {"type": "action.opened", "by": "agent", "prov": "observado", "source": "chat",
+                    "data": {"title": "Criar monorepo Marketing Ops GitHub", "owner": "eu", "due_none_reason": "não consta"}}
+            batch.write_text(json.dumps([item]), encoding="utf-8")
+            self.assertEqual(self._run(td, "add", "--file", str(batch)).returncode, 2)
+            item["data"]["not_dup"] = ["TASK-0001", "TASK-0002"]
+            batch.write_text(json.dumps([item]), encoding="utf-8")
+            self._ok(td, "add", "--file", str(batch))
+
+    def test_scan_not_dup_and_merge_through_proposal(self):
+        with tempfile.TemporaryDirectory() as td:
+            _brain(Path(td))
+            self._ok(td, "action", "open", "Pedir acesso de editor ao BigQuery", "--by", "owner", "--people", "marina-demo",
+                     "--link", "https://j/7")
+            self._ok(td, "action", "open", "Pedir permissão de editor no BigQuery", "--by", "owner", "--force",
+                     "--due", "2026-10-15")
+            self._ok(td, "action", "open", "Revisar a ata do BigQuery", "--by", "owner", "--blocked-by", "TASK-0001")
+            out = self._ok(td, "action", "dupes", "--json")
+            pairs = json.loads(out)
+            self.assertNotIn({"TASK-0001", "TASK-0002"}, [{p["a"], p["b"]} for p in pairs])   # --force já julgou
+            # proposta: target = a duplicada, into = a que fica
+            r = self._run(td, "proposal", "add", "--kind", "unificar-acao", "--target", "TASK-0001", "--into", "TASK-0001",
+                          "--summary", "x", "--prov", "observado", "--source", "chat")
+            self.assertNotEqual(r.returncode, 0)
+            self._ok(td, "proposal", "add", "--kind", "unificar-acao", "--target", "TASK-0001", "--into", "TASK-0002",
+                     "--summary", "mesmo pedido de acesso", "--prov", "observado", "--source", "chat")
+            r = self._run(td, "proposal", "add", "--kind", "descartar-acao", "--target", "TASK-0002", "--into", "TASK-0001",
+                          "--summary", "de novo", "--prov", "observado", "--source", "chat")
+            self.assertNotEqual(r.returncode, 0)                                 # já há proposta aberta sobre o par
+            self.assertNotEqual(self._run(td, "action", "merge", "TASK-0001", "--into", "TASK-0002").returncode, 0)  # agente não unifica
+            self._ok(td, "proposal", "accept", "PROP-0001", "--quote", "ok")
+            out = self._ok(td, "action", "merge", "TASK-0001", "--into", "TASK-0002", "--by", "owner")
+            self.assertIn("TASK-0003", out)
+            st = Brain(config.load(Path(td))).state
+            dup, keep = st.actions["TASK-0001"], st.actions["TASK-0002"]
+            self.assertEqual((dup.status, dup.duplicate_of), ("descartada", "TASK-0002"))
+            self.assertIn("marina-demo", keep.people)
+            self.assertEqual(keep.link, "https://j/7")
+            self.assertEqual(st.actions["TASK-0003"].blocked_by, ["TASK-0002"])
+            self.assertEqual(self._run(td, "action", "not-dup", "TASK-0002", "TASK-0003", "--reason", "outra",
+                                       "--prov", "observado", "--source", "chat").returncode, 0)
+            self.assertEqual(Brain(config.load(Path(td))).state.actions["TASK-0002"].not_dup, ["TASK-0003"])
+
+    def test_sweep_settles_duplicate_proposals(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            for t in ("Um assunto", "Outro assunto", "Terceiro"):
+                b.record_one({"type": "action.opened", "by": "owner", "data": {"title": t, "owner": "eu"}})
+            for kind, tgt, into in (("descartar-acao", "TASK-0001", "TASK-0002"), ("unificar-acao", "TASK-0003", "TASK-0002")):
+                b.record_one({"type": "proposal.opened", "by": "agent", "prov": "observado", "source": "chat",
+                              "data": {"kind": kind, "summary": "dup", "target": tgt, "into": into}})
+            b.record_one({"type": "action.dropped", "id": "TASK-0001", "by": "owner",
+                          "data": {"reason": "duplicada", "duplicate_of": "TASK-0002"}})
+            self.assertEqual(b.state.proposals["PROP-0001"].status, "aceita")
+            b.record_one({"type": "action.closed", "id": "TASK-0002", "by": "owner", "data": {"how": "feito"}})
+            self.assertEqual(b.state.proposals["PROP-0002"].status, "rejeitada")
+
+
 class PdfTest(unittest.TestCase):
     @staticmethod
     def _pdf(path: Path, text: str) -> None:
@@ -2377,6 +2482,7 @@ class AskTests(unittest.TestCase):
             r = run("add", "--file", str(batch))
             self.assertEqual(r.returncode, 0, r.stderr)
             self.assertIn("TASK-0001", r.stdout)
+            batch.write_text(json.dumps([{"type": "action.opened", "by": "owner", "data": {"title": "Outra coisa", "owner": "eu"}}]), encoding="utf-8")
             self.assertEqual(run("add", str(batch)).returncode, 0)                    # a forma posicional continua valendo
 
     def test_home_lists_open_questions_with_the_three_oldest(self):

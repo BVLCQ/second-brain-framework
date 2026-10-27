@@ -599,7 +599,7 @@ faz isso sozinho:
 ./brain proposal reject PROP-0001 --quote "não, ainda quero validar o número"
 ```
 
-Kinds: `fechar-acao`, `atualizar-acao`, `mudar-plano`, `reestimar`, `outro`.
+Kinds: `fechar-acao`, `atualizar-acao`, `descartar-acao`, `unificar-acao` (duplicadas: `--target` sai, `--into` fica — ver `brain action dupes`), `mudar-plano`, `reestimar`, `outro`.
 
 Aceitar **registra a sua resposta**. Não fecha a ação nem muda o goal. O
 agente, depois do "ok", executa o que foi aceito (um `/done`, um diff de

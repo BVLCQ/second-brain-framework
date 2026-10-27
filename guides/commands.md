@@ -397,7 +397,13 @@ brain person list --json
 | `--priority alta\|normal\|baixa` | |
 | `--link URL` | link externo |
 | `--origin TEXTO` | de onde surgiu |
+| `--force` | grava mesmo parecida com outra ação (você conferiu: é outra). Sem ele, parecida demais = código 2, nada gravado |
 | + opções de registro | `--by --prov --source --date --actor --json` |
+
+Antes de gravar, o CLI compara com as ações abertas e as fechadas há até 30 dias (radicais do título ponderados pela
+raridade no ledger, mesmo link, mesmo entregável/projeto, pessoas). Parecida demais → recusa e mostra as candidatas;
+parecida de leve → grava e avisa no stderr. Com `--force`, as candidatas ficam marcadas como julgadas (`not_dup`).
+O mesmo vale para `action.opened` no `brain add` (`"not_dup": [ids]` no `data` faz o papel do `--force`).
 
 ```bash
 brain action open "Ler a política de dados v3" --by owner --due 2026-10-20 --effort 1h --project PROJ-1
@@ -443,6 +449,31 @@ Ações que esperavam por esta recebem nota de "destravada"; elas não fecham so
 Descarta (não foi feita e não será). `--reason` é obrigatório.
 ```bash
 brain action drop TASK-0009 --reason "projeto cancelado" --by owner
+```
+
+Com `--duplicate-of TASK-####`, registra que foi descartada por ser duplicada daquela.
+
+### `brain action dupes`
+Sem `--title`: pares de ações **abertas** parecidas que ainda não foram julgados (nem `not-dup`, nem proposta sobre o par).
+Com `--title` (e `--project`, `--deliverable`, `--people`, `--link`): candidatas para uma ação que vai nascer.
+`--threshold 0.35` muda o corte; `--json` para o agente.
+```bash
+brain action dupes
+brain action dupes --title "Pedir acesso de editor ao BigQuery" --project PROJ-2
+```
+Quem julga se é a mesma coisa é o agente (o CLI só aponta); quem decide é o dono, por proposta
+`descartar-acao`/`unificar-acao`.
+
+### `brain action not-dup ID OUTRO --reason MOTIVO`
+Marca o par como ações diferentes; ele sai da varredura.
+
+### `brain action merge ID --into OUTRO --by owner`
+Unifica: `ID` (a duplicada) é descartada com `duplicate_of`; a que fica recebe pessoas (e o dono da outra, se diferente),
+link (se não tinha), o prazo firme mais cedo, `blocked_by`/`unblocks` somados e uma nota "unificada com …". Quem esperava
+pela duplicada passa a esperar pela que fica. Só `--by owner` (decisão do dono); `--title` renomeia a que fica.
+```bash
+brain proposal accept PROP-0007 --quote "ok"
+brain action merge TASK-0074 --into TASK-0067 --by owner
 ```
 
 ### `brain action reopen ID --reason MOTIVO`
@@ -555,9 +586,10 @@ O agente sugere; só você aceita ou rejeita. O noturno nunca aprova nada: ele c
 ### `brain proposal add --kind TIPO --summary TEXTO`
 | Opção | Uso |
 |---|---|
-| `--kind fechar-acao\|atualizar-acao\|mudar-plano\|reestimar\|outro` | **obrigatório** |
+| `--kind fechar-acao\|atualizar-acao\|descartar-acao\|unificar-acao\|mudar-plano\|reestimar\|outro` | **obrigatório** |
 | `--summary TEXTO` | **obrigatório** |
-| `--target ID` | alvo (ex.: `TASK-0012`, `PROJ-1`) |
+| `--target ID` | alvo (ex.: `TASK-0012`, `PROJ-1`); em `descartar-acao`/`unificar-acao`, a duplicada (sai) |
+| `--into ID` | `descartar-acao`/`unificar-acao`: a ação que fica |
 | `--evidence TEXTO` | por que sugerir agora |
 | + opções de registro | |
 
@@ -572,7 +604,8 @@ brain proposal add --kind fechar-acao --target TASK-0012 --summary "Heitor-demo 
 brain proposal accept PROP-0001 --quote "ok, pode fechar"
 brain proposal reject PROP-0002 --quote "não, ainda falta o México"
 ```
-Rejeitada não volta sem evidência nova.
+Rejeitada não volta sem evidência nova. `descartar-acao`/`unificar-acao` se encerram sozinhas quando o dono descarta a
+duplicada (aceita) ou quando uma das duas fecha por outro caminho (rejeitada).
 
 ### `brain proposal list`
 ```bash

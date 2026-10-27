@@ -13,5 +13,7 @@ description: "Cockpit semanal: lookahead de 14 dias, radar de goals, ações env
    - Conquistas da semana (entregas + entregáveis)
    - Foco: se não há plano `aprovado`/`aplicado` vigente, **proponha** rodar `/focus` (não aplique)
    - Propostas de plano: só com evidência nova; uma de cada vez
+   - Duplicadas: `./brain action dupes` — julgue cada par como no `/dump` (seção *Ações duplicadas*) e liste as propostas
+     `descartar-acao`/`unificar-acao` abertas para o dono decidir de uma vez
 3. Chat: o cockpit em ≤20 linhas. Ofereça `/focus` e `/share status` se fizer sentido.
 4. Lote de `/done`: se o dono listou várias conclusões, confirme as ambíguas juntas e feche as claras.

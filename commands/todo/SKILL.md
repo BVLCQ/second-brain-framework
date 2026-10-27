@@ -7,6 +7,13 @@ description: "Cria uma ação TASK-#### a partir do que o dono digitou: '/todo p
 
 Isto é `[declarado]`. Não passe pela inbox.
 
+0. **Olhe as existentes antes de criar.** `./brain action dupes --title "<título>" [--project PROJ-#] [--people …] [--link URL]`
+   lista as ações abertas (e as fechadas há até 30 dias) parecidas. Julgue pelo sentido, não pela palavra:
+   - **é a mesma** → não crie. Diga ao dono qual é (`TASK-####`) e acrescente o que veio de novo nela
+     (`action update TASK-#### --note … --people … --due …`, com `--by owner` se for fala dele);
+   - **já foi feita** (fechada há pouco) → avise; só crie se o dono disser que é outra rodada;
+   - **é outra** → crie. Se o CLI recusar por parecida demais (código 2, nada gravado), repita com `--force`: o par fica
+     marcado como julgado e não volta na varredura.
 1. Resolva o prazo ("quarta", "amanhã", "15/10") para `AAAA-MM-DD` com a data de hoje do sistema. Prazo dito pelo dono é firme: **sem** `--due-suggested`. Não disse prazo → siga **Sugerir prazo** abaixo (não deixe a ação sem data se houver base).
 2. Resolva pessoas citadas (`brain person resolve`). Ambíguo → pergunte (sem chat — rodada ⚡ ou noturno — `./brain ask add`). Inexistente → ofereça `person add` (ou `ask add`).
 3. Case projeto/entregável com `PLANNING/goals.md` se for óbvio; senão deixe sem.

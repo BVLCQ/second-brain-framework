@@ -25,6 +25,7 @@ from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.widget import Widget
 from textual.widgets import RichLog, Static
 
+from .. import dupes
 from .. import ids as idmod
 from .. import notes as notes_mod
 from .. import people as people_mod
@@ -1230,8 +1231,16 @@ class BrainApp(AskKeys, PortfolioKeys, App):
         lst = ["mine", "waiting", "watching"][self.tab[2]] if self.p == 2 else "mine"
         owner = ""
 
+        def dup_res(v: str) -> str:
+            """Aviso ao digitar o título: a ação parecida aparece aqui, antes de gravar (gravar é o seu "é outra")."""
+            if len(v.strip()) < 8:
+                return ""
+            hits = dupes.similar(self.store.brain.state, {**dupes.profile_from_data({"title": v}), "people": []})
+            return f"parecida com {hits[0]['id']} · {hits[0]['title']} ({hits[0]['score']:.2f})" if hits else ""
+
         def build(v):
-            a = ["action", "open", v["title"] or "…", "--by", "owner"]
+            # o aviso de parecida já apareceu no campo título: gravar é a decisão do dono de que é outra ação
+            a = ["action", "open", v["title"] or "…", "--by", "owner", "--force"]
             if v["list"] != "mine":
                 a += ["--list", v["list"]]
             if v["owner"]:
@@ -1265,7 +1274,7 @@ class BrainApp(AskKeys, PortfolioKeys, App):
             return build(v)
 
         self.form(FormSpec(f"Nova ação em {pre['deliv']}" if pre.get("deliv") else "Nova ação", [
-            Field("title", "título", req=True, ph="o que precisa acontecer"),
+            Field("title", "título", req=True, ph="o que precisa acontecer", res=dup_res),
             Field("due", "prazo", ph=dates.HELP, check=self._due_check, res=dates.describe),
             Field("effort", "esforço", ph="90m · 2h · 1h30 · 1d", check=self._effort_check),
             *self._goal_project_fields(pre.get("project", "—")),
@@ -1560,6 +1569,11 @@ class BrainApp(AskKeys, PortfolioKeys, App):
                 cmds.append(["action", "close", r.target, "--how", v.get("how") or "…", "--by", "owner"])
             if r.kind == "reestimar" and r.target:
                 cmds.append(["action", "update", r.target, "--effort", v.get("effort") or "…", "--by", "owner"])
+            if r.kind == "unificar-acao" and r.target and r.into:
+                cmds.append(["action", "merge", r.target, "--into", r.into, "--by", "owner"])
+            if r.kind == "descartar-acao" and r.target and r.into:
+                cmds.append(["action", "drop", r.target, "--reason", f"duplicada de {r.into}",
+                             "--duplicate-of", r.into, "--by", "owner"])
             return cmds
 
         def after() -> None:
