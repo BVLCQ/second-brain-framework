@@ -74,7 +74,7 @@ allow = []
 # nunca de MCP de escrita no mundo exterior: isso é a porta (/outbox, /publish), com o seu gate.
 agent_allow = []
 # Modelo e esforço do claude nas ações ⚡ do TUI (o noturno não usa). Vazio = padrão do claude.
-model = ""                     # ex.: "claude-haiku-5-5"
+model = ""                     # ex.: "haiku" (alias; o claude resolve)
 effort = ""                    # low | medium | high | xhigh | max
 
 [backup]
