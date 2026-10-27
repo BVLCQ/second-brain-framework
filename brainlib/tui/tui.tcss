@@ -23,6 +23,7 @@ ModalScreen { align: center middle; background: $background 75%; }
 #dialog.gate { border: round $warning; }
 #dialog.agent { border: round magenta; }
 #ms, #ms0, #mx, #mb { margin-bottom: 1; }
+.fbox { height: auto; }
 .frow { height: 3; }
 .frow.big { height: 14; }
 .frow.big .fin { height: 14; }

@@ -97,7 +97,13 @@ def _clean(fields: dict) -> dict:
         out[k] = str(v).strip()
         if k == "window":
             parse_window(out[k])
+        if k in ("folder", "doc"):                          # aceita a URL colada do Drive; grava só o id
+            out[k] = drive_doc_id(out[k]) or _bad_drive(k, out[k])
     return out
+
+
+def _bad_drive(field: str, value: str) -> str:
+    raise util.BrainError(f"{field}: cole a URL ou o id do Drive (recebi {value!r})", code=4)
 
 
 def parse_window(value: str) -> timedelta | None:
@@ -309,22 +315,83 @@ def drive_doc_id(ref: str) -> str | None:
     return ref if DRIVE_ID_RE.match(ref) else None
 
 
+KINDS = [("gmail", "gmail · e-mails"), ("gcal", "gcal · agenda"), ("slack", "slack · canal ou DM"),
+         ("drive", "drive · pasta"), (DRIVE_DOC, "drive-doc · doc, planilha ou slides"), ("jira", "jira · épico, board, projeto…"),
+         ("github", "github · clones git locais")]
+NO_WINDOW = {DRIVE_DOC, "github"}    # relidos por modifiedTime / pelas pontas do git, não por janela
+JIRA_SCOPES = [("mine", "meus cards (atribuído, reporter ou observador)"), ("epic", "épico (os filhos dele)"),
+               ("project", "projeto"), ("board", "board (o projeto do board)"), ("filter", "filtro salvo"), ("jql", "JQL livre")]
+JIRA_MINE = "(assignee = currentUser() OR reporter = currentUser() OR watcher = currentUser())"
+JIRA_ISSUE_RE = re.compile(r"\b([A-Z][A-Z0-9_]+-\d+)\b")
+JIRA_PROJECT_RE = re.compile(r"/projects/([A-Z][A-Z0-9_]+)\b|/browse/([A-Z][A-Z0-9_]+)(?:[/?#]|$)")
+JIRA_FILTER_RE = re.compile(r"[?&]filter=(\d+)|/filters/(\d+)")
+JIRA_HOST_RE = re.compile(r"^https?://([a-z0-9-]+\.atlassian\.net)", re.I)
+
+
+def jira_cloud(ref: str) -> str | None:
+    """Site Atlassian de uma URL colada (`https://<site>.atlassian.net/...`) — vira o `cloud` da fonte."""
+    m = JIRA_HOST_RE.match((ref or "").strip())
+    return m.group(1).lower() if m else None
+
+
+def jira_base(scope: str, ref: str) -> str:
+    """O universo de uma fonte Jira em JQL, a partir do escopo e de uma chave, id ou URL colada."""
+    ref = (ref or "").strip()
+    if scope == "mine":
+        return JIRA_MINE
+    if scope == "jql":
+        if not ref:
+            raise util.BrainError("escreva a JQL", code=4)
+        return ref
+    if not ref:
+        raise util.BrainError("cole a chave ou a URL", code=4)
+    if scope == "epic":
+        m = JIRA_ISSUE_RE.search(ref.upper() if "://" not in ref else ref)
+        if not m:
+            raise util.BrainError(f"épico: não achei uma chave como OPS-123 em {ref!r}", code=4)
+        return f"parent = {m.group(1)}"
+    if scope == "filter":
+        m = JIRA_FILTER_RE.search(ref)
+        fid = (m.group(1) or m.group(2)) if m else (ref if ref.isdigit() else None)
+        if not fid:
+            raise util.BrainError(f"filtro: cole a URL do filtro ou o id numérico (recebi {ref!r})", code=4)
+        return f"filter = {fid}"
+    if scope in ("project", "board"):
+        m = JIRA_PROJECT_RE.search(ref)
+        key = (m.group(1) or m.group(2)) if m else (ref.upper() if re.fullmatch(r"[A-Za-z][A-Za-z0-9_]+", ref) else None)
+        if not key:
+            hint = "cole a URL do board (…/projects/OPS/boards/12) — o id sozinho não diz o projeto" if scope == "board" \
+                else "cole a chave (OPS) ou a URL do projeto"
+            raise util.BrainError(f"{scope}: {hint}", code=4)
+        return f"project = {key}"
+    raise util.BrainError(f"escopo do jira desconhecido: {scope!r}", code=4)
+
+
+def jira_jql(scope: str, ref: str, mode: str = "") -> str:
+    """JQL final: janela ganha `updated >= -1d` (o /update troca pelo `watch since`); estado ganha só o aberto, por key.
+    JQL livre vai como está."""
+    base = jira_base(scope, ref)
+    if scope == "jql":
+        return base
+    if mode == "state":
+        return f"{base} AND statusCategory != Done ORDER BY key"
+    return f"{base} AND updated >= -1d"
+
+
 def playbook_key(target: str, kind: str = "playbook") -> str:
     return f"{kind}-{target.lower()}"
 
 
 def check_fields(brain, fields: dict) -> None:
-    """Regras das fontes `drive-doc`: `doc` (id do Drive) e `link` (PROC-…/OPP-… que existe no ledger)."""
+    """Regras das fontes `drive-doc`: `doc` (id do Drive) e, se houver, `link` (PROC-…/OPP-… que existe no ledger)."""
     if fields.get("kind") != DRIVE_DOC:
         return
     if not fields.get("doc"):
         raise util.BrainError("fonte drive-doc precisa de `doc` (id do doc no Drive)", code=4)
     if not drive_doc_id(str(fields["doc"])):
         raise util.BrainError(f"doc inválido: {fields['doc']!r} (id do Drive)", code=4)
-    link = fields.get("link")
-    if not link:
-        raise util.BrainError("fonte drive-doc precisa de `link` (PROC-#### ou OPP-####)", code=4)
-    if link not in brain.state.processes and link not in brain.state.opportunities:
+    link = fields.get("link")                               # opcional: doc avulso não precisa de dono no portfólio
+    if link and link not in brain.state.processes and link not in brain.state.opportunities:
         raise util.BrainError(f"link: {link!r} não existe no ledger (PROC-… ou OPP-…)", code=4)
 
 

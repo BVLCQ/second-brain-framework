@@ -37,6 +37,7 @@ class Field:
     check: Callable[..., str] | None = None          # (valor) ou (valor, campos) → mensagem de erro, ou ""
     res: Callable[..., str] | None = None            # (valor) ou (valor, campos) → texto de apoio (ex.: data resolvida)
     multi: bool = False                              # caixa de texto grande (várias linhas); enter quebra a linha
+    show: Callable[[dict], bool] | None = None       # (campos) → aparece? Escondido não conta: valor "", sem req nem check
 
 
 def _pairs(f: Field, vals: dict) -> list[tuple[str, str]]:
@@ -96,17 +97,18 @@ class FormModal(ModalScreen):
             if s.extra is not None:
                 yield Static(s.extra, id="mx")
             for f in s.fields:
-                with Horizontal(classes="frow big" if f.multi else "frow"):
-                    yield Label(Text.assemble(f.label, (" *", "red") if f.req else ""), classes="flab")
-                    if f.multi:
-                        yield TextArea(f.value, placeholder=f.ph, id=f"f_{f.id}", classes="fin")
-                    elif f.choice or f.options:
-                        pairs = _pairs(f, {x.id: x.value for x in s.fields})
-                        val = f.value if f.value in [v for _, v in pairs] else pairs[0][1]
-                        yield Select(pairs, value=val, allow_blank=False, id=f"f_{f.id}", classes="fin")
-                    else:
-                        yield Input(value=f.value, placeholder=f.ph, id=f"f_{f.id}", classes="fin")
-                yield Static("", id=f"r_{f.id}", classes="fres")
+                with Vertical(id=f"b_{f.id}", classes="fbox"):
+                    with Horizontal(classes="frow big" if f.multi else "frow"):
+                        yield Label(Text.assemble(f.label, (" *", "red") if f.req else ""), classes="flab")
+                        if f.multi:
+                            yield TextArea(f.value, placeholder=f.ph, id=f"f_{f.id}", classes="fin")
+                        elif f.choice or f.options:
+                            pairs = _pairs(f, {x.id: x.value for x in s.fields})
+                            val = f.value if f.value in [v for _, v in pairs] else pairs[0][1]
+                            yield Select(pairs, value=val, allow_blank=False, id=f"f_{f.id}", classes="fin")
+                        else:
+                            yield Input(value=f.value, placeholder=f.ph, id=f"f_{f.id}", classes="fin")
+                    yield Static("", id=f"r_{f.id}", classes="fres")
             yield Static("", id="cmdp")
             yield Static("", id="err")
             multi = any(f.multi for f in s.fields)
@@ -119,7 +121,7 @@ class FormModal(ModalScreen):
         if first:
             first.first().focus()
 
-    def vals(self) -> dict:
+    def _raw(self) -> dict:
         out = {}
         for f in self.spec.fields:
             w = self.query_one(f"#f_{f.id}")
@@ -127,8 +129,18 @@ class FormModal(ModalScreen):
             out[f.id] = "" if v is Select.BLANK else str(v).strip()
         return out
 
+    def _hidden(self, raw: dict) -> set[str]:
+        return {f.id for f in self.spec.fields if f.show and not f.show(raw)}
+
+    def vals(self) -> dict:
+        raw = self._raw()
+        hidden = self._hidden(raw)
+        return {k: ("" if k in hidden else v) for k, v in raw.items()}
+
     def _update(self) -> None:
-        v = self.vals()
+        v, hidden = self.vals(), self._hidden(self._raw())
+        for f in self.spec.fields:
+            self.query_one(f"#b_{f.id}").display = f.id not in hidden
         for f in self.spec.fields:
             self.query_one(f"#r_{f.id}", Static).update(Text(_call(f.res, v[f.id], v), "dim") if f.res and v[f.id] else "")
         try:
@@ -170,8 +182,8 @@ class FormModal(ModalScreen):
         self.action_submit()
 
     def action_submit(self) -> None:
-        v = self.vals()
-        for f in self.spec.fields:
+        v, hidden = self.vals(), self._hidden(self._raw())
+        for f in [x for x in self.spec.fields if x.id not in hidden]:
             if f.req and not v[f.id]:
                 self.query_one("#err", Static).update(Text(f'Preencha "{f.label}".', "red"))
                 self.query_one(f"#f_{f.id}").focus()

@@ -1592,11 +1592,55 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             await pilot.press("enter")
             await pilot.pause(0.2)
             self.assertIn("já existe", self.text_of(app.screen.query_one("#err")))
-            await self.fill(pilot, key="nova", other="semigual")
+            await self.fill(pilot, key="nova", channel="#nova", other="semigual")
             await pilot.press("enter")
             await pilot.pause(0.2)
             self.assertIn("campo=valor", self.text_of(app.screen.query_one("#err")))
             self.assertEqual(len(watch.list_sources(self.inst)), 2)
+
+    async def test_source_form_is_contextual_by_kind(self):
+        app = self.app()
+        async with app.run_test(size=(140, 60)) as pilot:
+            await pilot.pause(0.4)
+            await pilot.press("1", "]", "]", "n")
+            await pilot.pause(0.3)
+            shown = lambda: {b.id[2:] for b in app.screen.query(".fbox") if b.display}
+            self.assertEqual(shown(), {"key", "note", "kind", "query", "window", "other"})       # gmail
+            await self.fill(pilot, kind="drive-doc")
+            self.assertEqual(shown(), {"key", "note", "kind", "doc", "other"})                  # só a URL; vínculo é opcional
+            await self.fill(pilot, kind="drive")
+            self.assertEqual(shown(), {"key", "note", "kind", "folder", "window", "other"})
+            await self.fill(pilot, key="drive-mops", folder="https://drive.google.com/drive/folders/1AbCdEfGhIjKlMnOpQrStUvWx?usp=x")
+            await pilot.press("enter")
+            await self.settle(app, pilot)
+            got = next(x for x in watch.list_sources(self.inst) if x["key"] == "drive-mops")
+            self.assertEqual(got["folder"], "1AbCdEfGhIjKlMnOpQrStUvWx")                     # URL → id
+            await pilot.press("n")
+            await pilot.pause(0.3)
+            await self.fill(pilot, key="jira-epico", kind="jira", jscope="epic")
+            await self.fill(pilot, jref="https://acme.atlassian.net/browse/OPS-42", mode="state")
+            self.assertNotIn("window", shown())                                                 # estado completo não tem janela
+            await pilot.press("enter")
+            await self.settle(app, pilot)
+            got = next(x for x in watch.list_sources(self.inst) if x["key"] == "jira-epico")
+            self.assertEqual((got["jql"], got["cloud"], got["mode"]),
+                             ("parent = OPS-42 AND statusCategory != Done ORDER BY key", "acme.atlassian.net", "state"))
+            self.assertNotIn("window", got)
+
+    def test_jira_scope_to_jql(self):
+        self.assertEqual(watch.jira_jql("project", "https://a.atlassian.net/jira/software/c/projects/OPS/boards/12"),
+                         "project = OPS AND updated >= -1d")
+        self.assertEqual(watch.jira_jql("board", "https://a.atlassian.net/jira/software/c/projects/OPS/boards/12", "state"),
+                         "project = OPS AND statusCategory != Done ORDER BY key")
+        self.assertEqual(watch.jira_jql("filter", "https://a.atlassian.net/issues/?filter=10042"), "filter = 10042 AND updated >= -1d")
+        self.assertEqual(watch.jira_jql("epic", "ops-7"), "parent = OPS-7 AND updated >= -1d")
+        self.assertEqual(watch.jira_jql("jql", "project = X"), "project = X")
+        self.assertTrue(watch.jira_jql("mine", "").startswith(watch.JIRA_MINE))
+        self.assertEqual(watch.jira_cloud("https://Acme.atlassian.net/browse/OPS-1"), "acme.atlassian.net")
+        with self.assertRaises(util.BrainError):
+            watch.jira_base("board", "12")                                  # id sozinho não diz o projeto
+        with self.assertRaises(util.BrainError):
+            watch.add(self.inst, "drive-x", {"kind": "drive", "folder": "não é drive"})
 
     async def test_adhoc_connector_can_be_included_in_watch(self):
         import subprocess

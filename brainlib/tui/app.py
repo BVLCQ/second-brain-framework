@@ -1937,25 +1937,82 @@ class BrainApp(AskKeys, PortfolioKeys, App):
             out[k.strip()] = val.strip()
         return out
 
-    def _source_fields(self, src: dict | None, key_locked: bool = False) -> list[Field]:
+    SOURCE_META = {"key", "kind", "in_watch", "last_ok", "last_error", "failures", "pulls", "last_changed"}
+    SOURCE_FIELDS = {"window", "note", "channel", "user", "query", "folder", "doc", "jql", "cloud", "mode", "path"}
+
+    def _source_fields(self, src: dict | None) -> list[Field]:
+        """Campos por tipo: só aparece o que aquele `kind` usa. Drive aceita a URL; Jira monta a JQL pelo escopo."""
         from .. import watch
         src = src or {}
-        known = {"key", "kind", "window", "channel", "jql", "note", "in_watch", "last_ok", "last_error", "failures", "pulls", "last_changed"}
-        other = "; ".join(f"{k}={v}" for k, v in src.items() if k not in known)
+        other = "; ".join(f"{k}={v}" for k, v in src.items() if k not in self.SOURCE_META | self.SOURCE_FIELDS)
         taken = {x["key"] for x in self.store.sources if x["in_watch"] and x["key"] != src.get("key")}
+        kinds = list(watch.KINDS)
+        if src.get("kind") and src["kind"] not in {k for k, _ in kinds}:
+            kinds.append((src["kind"], src["kind"]))
+        cloud0 = src.get("cloud") or next((x["cloud"] for x in self.store.sources if x.get("cloud")), "")
 
         def key_check(v: str) -> str:
             if not watch.KEY_RE.match(v):
                 return "key: minúsculas, números, '.', '_' e '-' (ex.: slack-time-dados)"
             return "já existe uma fonte com essa key" if v in taken else ""
 
+        def drive_res(v: str) -> str:
+            got = watch.drive_doc_id(v)
+            return f"id {got}" if got else "não parece uma URL ou id do Drive"
+
+        def drive_check(v: str) -> str:
+            return "" if watch.drive_doc_id(v) else "cole a URL (ou o id) do Drive"
+
+        def jira_res(v: str, vals: dict) -> str:
+            try:
+                return "→ " + watch.jira_jql(vals["jscope"], v, vals["mode"])
+            except util.BrainError as e:
+                return str(e)
+
+        def jira_check(v: str, vals: dict) -> str:
+            try:
+                watch.jira_base(vals["jscope"], v)
+                return ""
+            except util.BrainError as e:
+                return str(e)
+
+        def of(*ks):
+            return lambda v: v.get("kind") in ks
+
         return [Field("key", "key", value=src.get("key", ""), req=True, ph="slack-time-dados", check=key_check),
-                Field("kind", "tipo", value=src.get("kind", ""), req=True, ph="gmail · slack · gcal · drive · jira"),
-                Field("window", "janela", value=src.get("window", ""), ph="auto · 1d · 7d"),
-                Field("channel", "canal", value=src.get("channel", ""), ph="#time-dados (slack)"),
-                Field("jql", "jql", value=src.get("jql", ""), ph="consulta (jira)"),
                 Field("note", "nota", value=src.get("note", ""), ph="para que serve esta fonte"),
+                Field("kind", "tipo", value=src.get("kind") or "gmail", choice=kinds),
+                Field("channel", "canal", value=src.get("channel", ""), req=True, ph="#time-dados ou @pessoa", show=of("slack")),
+                Field("user", "só de quem", value=src.get("user", ""), ph="@pessoa (opcional)", show=of("slack")),
+                Field("query", "filtro", value=src.get("query", ""), ph="from:alguem label:x (opcional; busca do Gmail)", show=of("gmail")),
+                Field("folder", "pasta (URL)", value=src.get("folder", ""), req=True, ph="https://drive.google.com/drive/folders/…",
+                      show=of("drive"), check=drive_check, res=drive_res),
+                Field("doc", "doc (URL)", value=src.get("doc", ""), req=True, ph="URL do Doc, Planilha ou Slides",
+                      show=of(watch.DRIVE_DOC), check=drive_check, res=drive_res),
+                Field("jscope", "o quê", value="jql" if src.get("jql") else "mine", choice=watch.JIRA_SCOPES, show=of("jira")),
+                Field("jref", "chave / URL", value=src.get("jql", ""), req=True, ph="OPS-123 · OPS · URL do épico, board ou filtro · JQL",
+                      show=lambda v: v.get("kind") == "jira" and v.get("jscope") != "mine", check=jira_check, res=jira_res),
+                Field("mode", "leitura", value=src.get("mode", ""), choice=[("", "só o que mudou (janela)"), ("state", "estado completo (o que está aberto)")],
+                      show=of("jira")),
+                Field("cloud", "site", value=cloud0, ph="<site>.atlassian.net (vem da URL, se colar uma)", show=of("jira")),
+                Field("path", "pasta local", value=src.get("path", ""), req=True, ph="~/Github/", show=of("github")),
+                Field("window", "janela", value=src.get("window", ""), ph="auto · 1d · 7d",
+                      show=lambda v: v.get("kind") not in watch.NO_WINDOW and not (v.get("kind") == "jira" and v.get("mode") == "state")),
                 Field("other", "outros", value=other, ph="campo=valor; campo=valor", check=self._extras_check)]
+
+    def _source_values(self, v: dict) -> dict:
+        """Valores do formulário → campos da fonte no watch.toml (só os do tipo escolhido; vazio = fora)."""
+        from .. import watch
+        out = {k: v[k] for k in ("window", "note", "channel", "user", "query", "folder", "doc", "path") if v.get(k)}
+        if v["kind"] == "jira":
+            try:
+                out["jql"] = watch.jira_jql(v["jscope"], v["jref"], v["mode"])
+            except util.BrainError:
+                out["jql"] = v["jref"] or "…"
+            cloud = v["cloud"] or watch.jira_cloud(v["jref"])
+            out |= {"cloud": cloud} if cloud else {}
+            out |= {"mode": "state"} if v["mode"] == "state" else {}
+        return out | self._extras(v["other"])
 
     def _source_after(self, getkey) -> None:
         self.p, self.tab[1] = 1, 2
@@ -1977,18 +2034,16 @@ class BrainApp(AskKeys, PortfolioKeys, App):
         def build(v):
             made["key"] = v["key"]
             c = ["watch", "add", v["key"] or "…", "--kind", v["kind"] or "…"]
+            vals = self._source_values(v)
             for opt, k in (("--window", "window"), ("--note", "note")):
-                if v[k]:
-                    c += [opt, v[k]]
-            for k in ("channel", "jql"):
-                if v[k]:
-                    c += ["--set", f"{k}={v[k]}"]
-            for k, val in self._extras(v["other"]).items():
+                if vals.get(k):
+                    c += [opt, vals.pop(k)]
+            for k, val in vals.items():
                 c += ["--set", f"{k}={val}"]
             return [c]
 
         self.form(FormSpec("Adicionar fonte ao watch.toml", self._source_fields(pre), build,
-                           sub="Fonte que não está no watch.toml não é puxada pelo /update nem pelo noturno.",
+                           sub="Fonte que não está no watch.toml não é puxada pelo /update nem pelo noturno. Os campos mudam com o tipo.",
                            render=False, after=lambda: self._source_after(lambda: made.get("key"))))
 
     def f_source_include(self) -> None:
@@ -2005,16 +2060,14 @@ class BrainApp(AskKeys, PortfolioKeys, App):
             c = ["watch", "edit", old["key"]]
             if v["key"] != old["key"]:
                 c += ["--rename", v["key"]]
-            for opt, k in (("--kind", "kind"), ("--window", "window"), ("--note", "note")):
-                if v[k] != (old.get(k) or "") and v[k]:
-                    c += [opt, v[k]]
-            new = {k: v[k] for k in ("channel", "jql") if v[k]} | self._extras(v["other"])
+            if v["kind"] != old.get("kind"):
+                c += ["--kind", v["kind"]]
+            new = self._source_values(v)
             for k, val in new.items():
                 if str(old.get(k, "")) != val:
-                    c += ["--set", f"{k}={val}"]
-            known = {"key", "kind", "in_watch", "last_ok", "last_error", "failures", "pulls", "last_changed"}
+                    c += {"window": ["--window", val], "note": ["--note", val]}.get(k, ["--set", f"{k}={val}"])
             for k in old:
-                if k not in known and k not in new and (k != "window" or not v["window"]) and (k != "note" or not v["note"]):
+                if k not in self.SOURCE_META and k not in new:
                     c += ["--unset", k]
             return [c]
 
