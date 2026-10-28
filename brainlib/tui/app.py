@@ -37,7 +37,7 @@ from .modals import (AgentModal, ChoiceModal, ConfirmModal, Field, FilterModal, 
                      PickItem, TextModal)
 from .ask_keys import AskKeys
 from .portfolio_keys import PortfolioKeys
-from .store import ACTION_VIEWS, FACE_START, FACES, SYS_OPS, Item, Store
+from .store import ACTION_SORTS, ACTION_VIEWS, FACE_START, FACES, SYS_OPS, Item, Store
 
 UCAP = 3                      # linhas visíveis de um painel sem foco
 
@@ -217,7 +217,7 @@ class BrainApp(AskKeys, PortfolioKeys, App):
         """Estado de navegação de uma face: cada face volta exatamente onde estava."""
         return {"p": start, "lp": start,   # lp: último painel de lista (1-5) em foco; o log (6) mantém o detalhe dele
                 "tab": {1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0}, "sel_idx": {}, "sel_id": {}, "win": {},
-                "filt": None, "zoom": False, "show_all": False, "view": 0, "items": {}}
+                "filt": None, "zoom": False, "show_all": False, "view": 0, "sort": 0, "items": {}}
 
     # As propriedades abaixo apontam para a face atual: o resto do app lê e escreve `self.p`, `self.tab[p]`,
     # `self.filt`… sem saber de faces. Trocar de face é só trocar `self.face`.
@@ -284,6 +284,14 @@ class BrainApp(AskKeys, PortfolioKeys, App):
         self._nv["view"] = v
 
     @property
+    def sort(self) -> int:
+        return self._nv["sort"]
+
+    @sort.setter
+    def sort(self, v: int) -> None:
+        self._nv["sort"] = v
+
+    @property
     def show_all(self) -> bool:
         return self._nv["show_all"]
 
@@ -348,7 +356,8 @@ class BrainApp(AskKeys, PortfolioKeys, App):
                 self._items[key] = []
             else:
                 f = self.filt[2] if self.filt and self.filt[:2] == key else ""
-                self._items[key] = self.store.items(self.face, p, t, self.show_all, f, self.collapsed, self.view if p == 2 and self.face == 0 else 0)
+                self._items[key] = self.store.items(self.face, p, t, self.show_all, f, self.collapsed,
+                                              self.view if p == 2 and self.face == 0 else 0, self.sort if p == 2 and self.face == 0 else 0)
         return self._items[key]
 
     def sel_index(self, p: int) -> int:
@@ -476,6 +485,8 @@ class BrainApp(AskKeys, PortfolioKeys, App):
                     t.append(" · ", "dim")
         if pid == 2 and self.face == 0 and self.view:
             t.append(f" · vista {ACTION_VIEWS[self.view]}", "bold magenta")
+        if pid == 2 and self.face == 0 and self.sort:
+            t.append(f" · ordem {ACTION_SORTS[self.sort].lower()}", "bold magenta")
         t.append(" ")
         self.query_one(f"#p{pid}", ListPanel).tab_spans = spans
         return t
@@ -847,6 +858,7 @@ class BrainApp(AskKeys, PortfolioKeys, App):
             if w(it and it.data["open"]):
                 add("z", "voltar" if it and it.data["parked"] else "não agora", self.toggle_park)
             add("v", f"vista: {ACTION_VIEWS[self.view].lower()}", self.cycle_view)
+            add("O", f"ordem: {ACTION_SORTS[self.sort].lower()}", self.cycle_sort)
             add("a", "só abertas" if self.show_all else "todas", self.toggle_all)
             add("enter", "ficha", self.toggle_zoom)
         elif p == 3:
@@ -1013,6 +1025,11 @@ class BrainApp(AskKeys, PortfolioKeys, App):
     def cycle_view(self) -> None:
         """v: Todas → Esta semana (e o que está atrasado) → Depois → Não agora."""
         self.view = (self.view + 1) % len(ACTION_VIEWS)
+        self.redraw()
+
+    def cycle_sort(self) -> None:
+        """O: ordena as ações por prazo (padrão; empate pelo ID) ou só pelo ID, sempre crescente."""
+        self.sort = (self.sort + 1) % len(ACTION_SORTS)
         self.redraw()
 
     def toggle_park(self) -> None:

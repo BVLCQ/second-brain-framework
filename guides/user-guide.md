@@ -683,6 +683,10 @@ instala o Textual numa venv à parte. Para experimentar com dados fictícios, ab
 "não agora" (adiada de propósito; é decisão sua, o agente não marca) e `z` de novo a traz de volta. Ação em
 "não agora" sai do planejador de foco e ganha seção própria no `todo.md`. Fechadas só aparecem em **Todas**.
 
+**Ordem do painel Ações (`O`).** A tecla `O` alterna entre **Prazo** (padrão: atrasadas primeiro, sem prazo por
+último; empate pelo ID) e **ID** (`TASK-0001`, `TASK-0002`…). As duas são crescentes. Vale para as três listas
+(mine · waiting · watching) e combina com a vista `v`; ações abertas ficam sempre antes das fechadas.
+
 ## 9. Editar arquivos na mão: o que é colhido e o que é descartado
 
 Pode abrir o `vault/` no editor que quiser. As regras de colheita (na

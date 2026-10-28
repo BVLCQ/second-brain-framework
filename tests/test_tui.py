@@ -1440,6 +1440,22 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(app.screen.vals()["to"])
             await pilot.press("escape")
 
+    async def test_O_sorts_actions_by_due_then_id(self):
+        app = self.app()
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause(0.4)
+            self.assertIn("O", {k.k for k in app.ctx_keys(every=True)})
+            by_due = [i.id for i in app.items(2)]
+            await pilot.press("O")
+            self.assertEqual(app.sort, 1)
+            its = app.items(2)
+            self.assertEqual(sorted(by_due), sorted(i.id for i in its))
+            opens = [i for i in its if i.data["open"]]
+            ids = [i.id for i in opens]
+            self.assertEqual(ids, sorted(ids))
+            await pilot.press("O")                                  # volta ao prazo
+            self.assertEqual([i.id for i in app.items(2)], by_due)
+
     async def test_v_cycles_views_and_z_parks_an_action(self):
         app = self.app()
         async with app.run_test(size=(140, 44)) as pilot:

@@ -25,6 +25,7 @@ PANELS_EXEC = {
 
 # Vistas do painel Ações (tecla v): Todas · Esta semana (+ atrasadas) · Depois · Não agora (adiadas de propósito).
 ACTION_VIEWS = ["Todas", "Esta semana", "Depois", "Não agora"]
+ACTION_SORTS = ["Prazo", "ID"]
 
 
 def action_view(a: dict, today) -> int:
@@ -446,7 +447,7 @@ class Store:
 
     # ── listas por painel ──────────────────────────────────────────────────
     def items(self, face: int, panel: int, tab: int, show_all: bool = False, filt: str = "",
-              collapsed: set[str] | None = None, view: int = 0) -> list[Item]:
+              collapsed: set[str] | None = None, view: int = 0, sort: int = 0) -> list[Item]:
         if face != 0:
             return self._items_face(face, panel, tab, show_all, filt)
         m, collapsed = self.m, (set() if filt else collapsed or set())     # filtrando, a árvore abre sozinha
@@ -467,7 +468,10 @@ class Store:
             if view:
                 today = util.today()
                 rows = [a for a in rows if action_view(a, today) == view]
-            rows.sort(key=lambda a: (not a["open"], a["due"] is None, a["due"] or "", a["id"]))
+            if sort == 1:
+                rows.sort(key=lambda a: (not a["open"], a["id"]))
+            else:
+                rows.sort(key=lambda a: (not a["open"], a["due"] is None, a["due"] or "", a["id"]))
             out = [Item(a["id"], "action", a, q=f"{a['id']} {a['title']} {a['project'] or ''} {a['owner_name']}")
                    for a in rows]
         elif panel == 3:
