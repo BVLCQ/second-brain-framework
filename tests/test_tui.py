@@ -2131,6 +2131,7 @@ class CoverageTest(unittest.TestCase):
         "pdf text", "pdf render", "video transcribe", "video frames", "person merge",
         "raw archive", "raw sort", "ask add", "ask applied",
         "oppdrive status", "oppdrive onepager", "oppdrive record", "oppdrive suggested",   # porta do Drive: quem cria é o agente
+        "oppdrive build", "oppdrive sync", "oppdrive synced", "oppdrive restyle",    # (e quem mantém o Resumo)
         "action not-dup"}     # julgamento do agente sobre um par de candidatas; o dono decide pela proposta
     NOT_IN_TUI = {"demo", "tui", "migrate ids"}      # migração única, feita no terminal com o dono (backup + dry-run)
     DYNAMIC = {"memory recall", "memory reflect"}      # o formulário "Memória: perguntar" monta o subcomando

@@ -337,8 +337,8 @@ class PortfolioKeys:
         o = self.cur().data
         self.ask_agent(f"One-pager de {o['id']}", [
             "Confere os campos e as evidências (o que não consta, não consta)",
-            f"Gera o documento: brain share opportunity {o['id']} (vault/reports/share/)",
-            f"Liga ao registro: brain doc link {o['id']} --kind one-pager … · publicar é outro gate (/publish)"],
+            "Com a porta do Drive ligada: Resumo em tabelas (segue o Brain) + Detalhamento escrito pelo agente",
+            f"Sem a porta: brain share opportunity {o['id']} (vault/reports/share/) · publicar é outro gate (/publish)"],
             f"/opportunity onepager {o['id']}")
 
     def f_promote(self) -> None:

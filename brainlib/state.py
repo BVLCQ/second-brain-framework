@@ -200,6 +200,8 @@ class DocLink:
     watch: bool = False
     read: date | None = None         # última leitura registrada pelo /dump (artefato com data.link)
     suggestions: list = field(default_factory=list)   # [{date, what}] — sugestões que o agente deixou no Docs (porta oppdrive)
+    synced: dict = field(default_factory=dict)        # {campo: texto} — o Resumo que o cérebro escreveu por último (porta oppdrive)
+    synced_on: date | None = None
 
 
 @dataclass
@@ -687,11 +689,16 @@ def _apply_portfolio(st: State, ev: dict, t: str, eid: str, data: dict, when: da
             for d in tgt.docs:
                 if d.ref == data["ref"]:
                     d.suggestions.append({"date": when, "what": data["what"]})
+        elif t == "doc.synced":
+            for d in tgt.docs:
+                if d.ref == data["ref"]:
+                    d.synced, d.synced_on = dict(data["fields"]), when
         elif t == "doc.linked":
             old = next((d for d in tgt.docs if d.ref == data["ref"]), None)
             tgt.docs = [d for d in tgt.docs if d.ref != data["ref"]]
             tgt.docs.append(DocLink(data["ref"], data["kind"], data.get("title", ""), when,
-                                    bool(data.get("watch")), suggestions=old.suggestions if old else []))
+                                    bool(data.get("watch")), suggestions=old.suggestions if old else [],
+                                    synced=old.synced if old else {}, synced_on=old.synced_on if old else None))
         else:
             tgt.docs = [d for d in tgt.docs if d.ref != data["ref"]]
         tgt.last_activity = when

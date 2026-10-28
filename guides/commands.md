@@ -1107,6 +1107,18 @@ Mapa de processos (`PROC-####`) e oportunidades/iniciativas (`OPP-####`) por ár
 (`playbook-proc-0001`): o `/update` só relê o doc quando o `modifiedTime` muda. Um artefato do `/dump` ligado ao processo
 (`brain artifact … --link PROC-####`) mostra "playbook lido em …".
 
+### `brain oppdrive` (porta 6 — pastas e one-pagers no Drive)
+| Comando | O que faz |
+|---|---|
+| `status [OPP-####] [--pending] [--json]` | o que falta por OPP: pasta, one-pager, `template` (antigo/novo), arquivos fora do Resumo |
+| `record OPP-#### --folder\|--onepager <id> --parent <parentId>` | registra pasta (direto na raiz) ou one-pager (na pasta da OPP), uma vez só |
+| `onepager OPP-#### [--detail F] [--out F]` | prévia em Markdown: Resumo em tabelas + Detalhamento |
+| `build OPP-#### --detail F --end N --out plano.json` | pedidos `batchUpdate` que escrevem o doc inteiro (criação ou troca do template antigo); cada célula de valor vira intervalo nomeado `brain:<campo>`. Recusa doc já no template novo sem `--force` |
+| `sync OPP-#### [--snapshot export.md] [--force] [--out plano.json]` | compara o Resumo com o Brain: `ok` · `desatualizado` (pedidos `replaceNamedRangeContent` só dos campos que mudaram) · `divergente`/`resumo-ausente` (alguém mexeu e o texto não bate: grava `ASK-####`, nada a escrever) · `template-antigo` |
+| `restyle OPP-#### --doc-json read_doc.json --out plano.json` | padrão de tabela da marca (`[oppdrive.brand]`: cabeçalho/rótulo na cor da marca com texto branco, corpo preto 10 pt, bordas cinza) nas tabelas de um doc já escrito; só estilo |
+| `synced OPP-#### --plan plano.json` | registra o Resumo escrito (`doc.synced`), depois do `update_doc` |
+| `suggested OPP-#### --doc <id> --what "…"` | registra uma sugestão no Detalhamento (`writeMode=SUGGEST`) |
+
 ---
 
 ## 23. Migração — `migrate ids`

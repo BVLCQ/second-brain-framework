@@ -32,8 +32,9 @@ NIGHT_PROMPT = ("{base} — MODO NOTURNO: o dono não está presente. Permitido:
                 "LEITURA listadas no config/watch.toml, gravar snapshots (./brain snapshot), processar a inbox (/dump) "
                 "e registrar fatos com ./brain. PROIBIDO: qualquer ferramenta MCP de escrita (enviar mensagem, criar "
                 "canvas/doc, mover card), aprovações, envios, publicações e mudanças de PLANNING. Única exceção: a porta "
-                "oppdrive (pastas de oportunidade no Drive), se ligada — criar pasta/one-pager dentro da raiz e deixar "
-                "SUGESTÕES (writeMode SUGGEST) no one-pager, nunca editar, apagar, renomear ou mover; siga "
+                "oppdrive (pastas de oportunidade no Drive), se ligada — criar pasta/one-pager dentro da raiz, manter o "
+                "Resumo (tabelas) igual ao Brain só pelos intervalos brain:* do plano do `brain oppdrive sync` e deixar "
+                "SUGESTÕES (writeMode SUGGEST) no Detalhamento; nunca editar fora do Resumo, apagar, renomear ou mover; siga "
                 "commands/opportunity/SKILL.md. Na dúvida, não faça — registre uma proposta.")
 
 

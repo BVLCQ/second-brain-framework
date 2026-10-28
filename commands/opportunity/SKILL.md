@@ -22,34 +22,65 @@ O dono vai e volta livremente entre eles. **O agente só grava status `ideia`**;
 Com a porta 6 ligada (`[oppdrive].enabled`), o one-pager mora no Drive — siga **Drive** abaixo. Desligada, o fluxo local:
 
 1. Confira os campos: o que não consta, não consta (não preencha com palpite).
-2. `./brain share opportunity OPP-#### --format md` → `vault/reports/share/…`. É ponto no tempo, sem jargão interno: pontuação de prioridade, problema, sugestão, ganho, evidências.
+2. `./brain share opportunity OPP-#### --format md` → `vault/reports/share/…` (ou `./brain oppdrive onepager OPP-#### --detail …`
+   para a prévia no formato novo, com as tabelas). É ponto no tempo, sem jargão interno: pontuação de prioridade, problema, sugestão, ganho, evidências.
 3. Ligue ao registro: `./brain doc link OPP-#### --kind one-pager --ref reports/share/<arquivo> --by owner`.
 4. Mostre o caminho e peça revisão. Publicar é `/publish` (outro gate, aprovação por publicação).
 
 ## Drive — pastas e one-pagers (porta 6, `brain oppdrive`)
 
 A porta foi aprovada pelo dono uma vez; rode sozinho no fim do `/dump` e do `/update` (noturno incluso) e relate.
-**Só cria e sugere.** Nunca `writeMode: EDIT`, nunca apague, renomeie, mova, compartilhe ou crie atalho. Nada fora da raiz.
+O one-pager tem duas metades (`brainlib/onepager.py`):
+- **Resumo** — duas tabelas do ledger. É do cérebro: **alterou no Brain, altera na tabela**, sem aprovação, `writeMode: EDIT`,
+  e só por `replaceNamedRangeContent` nos intervalos `brain:*` que o CLI monta. Nunca escreva fora deles.
+- **Detalhamento** — você escreve na criação; depois é de quem edita: só `writeMode: SUGGEST`.
+Nunca apague, renomeie, mova ou compartilhe o doc, nem crie atalho. Nada fora da raiz.
 
-1. `./brain oppdrive status --pending --json` → `root` e, por OPP, `todo` (`pasta`, `one-pager`) e `related` sem `in_onepager`.
+1. `./brain oppdrive status --pending --json` → `root` e, por OPP, `todo` (`pasta`, `one-pager`), `template` (`antigo`/`novo`)
+   e `related` sem `in_onepager`.
 2. **Pasta** (`todo` tem `pasta`): procure antes (`search_files`: `parentId = '<root>' and title = '<folder_title>'`,
    `excludeContentSnippets`) — se já existir, só registre. Senão, `create_file` com `title = folder_title`,
    `contentMimeType = application/vnd.google-apps.folder`, `parentId = root`. Registre com o `parentId` que o Drive devolveu:
    `./brain oppdrive record OPP-#### --folder <id> --parent <parentId>` (o CLI recusa pasta fora da raiz).
-3. **One-pager** (`todo` tem `one-pager`, pasta já existe): `./brain oppdrive onepager OPP-#### --out <scratch>/OPP-####.md`,
-   leia o arquivo e `create_file` com `title = "One-pager — <folder_title>"`, `textContent` = o Markdown,
-   `contentMimeType = text/markdown`, `parentId` = pasta da OPP (vira Google Doc). Registre:
-   `./brain oppdrive record OPP-#### --onepager <id> --parent <parentId>` — o doc passa a ser vigiado (`drive-doc`).
-   Uma vez só: o CLI recusa o segundo.
-4. **Arquivo relacionado** (`related` com `in_onepager: false`): `read_doc` do one-pager, ache o fim da seção
-   "Arquivos relacionados" (se o dono a apagou, use o fim do corpo) e `update_doc` com
-   `writeControl: {"writeMode": "SUGGEST"}` e um `insertText` `"\n<título>: <url>"`. Depois:
-   `./brain oppdrive suggested OPP-#### --doc <one-pager> --what "Arquivos relacionados: <url>"`.
-5. **Mudança de conteúdo** (fato novo no ledger que contradiz ou completa o one-pager — problema, ganho, evidência):
-   só como sugestão, mesmo `update_doc` com `SUGGEST`; trecho curto, com a fonte. Registre com `oppdrive suggested`.
-   Não reescreva seções inteiras; não sugira de novo o que o dono já recusou (sugestão sumiu e o texto não entrou).
-6. Recibo: `pastas criadas: N · one-pagers: N · sugestões: N` com os links. Erro do MCP = pare naquela OPP, siga as outras
-   e conte no recibo; 2 rodadas seguidas falhando → `ask add`.
+3. **One-pager novo** (`todo` tem `one-pager`, pasta já existe): `create_file` com `title = "One-pager — <folder_title>"`,
+   `contentMimeType = application/vnd.google-apps.document` (sem conteúdo), `parentId` = pasta da OPP; registre com
+   `./brain oppdrive record OPP-#### --onepager <id> --parent <parentId>` (uma vez só). Depois siga o passo 4 com `--end 2`.
+4. **Escrever o doc inteiro** (one-pager novo, ou `template: antigo`):
+   - **Detalhamento**: leia tudo que o Brain tem da OPP — `opportunity show`, artefatos das evidências, ações e decisões
+     ligadas (`./brain search "<tema>"`), processo e projeto — e escreva em `<scratch>/OPP-####.md` (Markdown simples:
+     `###` subtítulos, parágrafos, `-` e `1.` listas, `**negrito**`, `[texto](url)`). Seções: **Onde estamos** (fatos do
+     Brain, com data) · **Proposta de solução** · **Procedimentos sugeridos** · **O que fazer e o que evitar** (cada item com
+     o porquê) · **Perguntas em aberto**. Pode ir além do que está registrado com sugestões e recomendações, desde que
+     fique claro que é recomendação; fato que não consta, não consta. É o ponta-pé inicial do projeto: o dono ajusta depois.
+   - `template: antigo`: antes, confira se alguém escreveu no doc (`read_doc`; o texto deve ser só o rascunho gerado).
+     Se houver conteúdo de alguém, não reescreva: `ask add` (`--kind confirmacao`) mostrando o trecho.
+   - `./brain oppdrive build OPP-#### --detail <scratch>/OPP-####.md --end <endIndex> --out <scratch>/plan-OPP-####.json`
+     (`endIndex` = o `endIndex` do último elemento de `body.content` no `read_doc`; doc vazio = 2).
+   - `update_doc` com `documentId`, `requests` e `writeControl` exatamente como estão no plano; depois
+     `./brain oppdrive synced OPP-#### --plan <scratch>/plan-OPP-####.json`. Erro do Docs = nada aplicado (o lote é atômico):
+     não registre; conte no recibo.
+5. **Resumo em dia** (todo one-pager `template: novo`, a cada `/dump`/`/update`):
+   `./brain oppdrive sync OPP-#### --snapshot <export do doc, se o /update leu um> --source <RAW> --out <scratch>/sync-OPP-####.json`.
+   - `ok` → nada. `desatualizado` → `update_doc` com os `requests` do plano (EDIT) e `oppdrive synced --plan`.
+   - `divergente` / `resumo-ausente` → alguém mexeu no Resumo e o texto não bate com o Brain: o CLI já gravou a `ASK-####`
+     (o dono responde na TUI). Não escreva nada nesse doc até a resposta. No passo 0 do próximo `/dump`/`/update`:
+     *o Brain vale* → `sync --force` e aplique; *o doc vale* → corrija o Brain pelo que o CLI permite ao agente
+     (`opportunity update … --prov doc --source <snapshot>`; status e ICE firmes são do dono — diga a ele qual mover) e rode
+     `sync` de novo; *deixar sem Resumo* → nada (o `sync` segue perguntando só se a resposta mudar: a ASK igual não se
+     repete); *reescrever o doc inteiro* → `build --force` com um Detalhamento novo. Registre `ask applied`.
+   - Erro `named range not found` no `update_doc` = alguém apagou uma célula inteira: `ask add` com o campo, não reconstrua.
+5b. **Padrão visual** (tabelas no padrão da marca, `[oppdrive.brand]`: cabeçalho e rótulos na cor da marca com texto
+   branco, corpo preto 10 pt, bordas cinza — o `build` já sai assim). Doc escrito antes do padrão: `read_doc` (o resultado grande cai num
+   arquivo salvo) → `./brain oppdrive restyle OPP-#### --doc-json <esse arquivo> --out <scratch>/style-OPP-####.json` →
+   `update_doc` (EDIT) com os pedidos → `oppdrive synced --plan`. Só estilo: nenhum texto muda.
+6. **Arquivo relacionado** (`related` com `in_onepager: false`): já está no ledger, então entra no Resumo pelo passo 5
+   (linha "Arquivos relacionados"). Nada de sugestão para isso.
+7. **Detalhamento desatualizado** (fato novo no ledger que contradiz ou completa o texto, e que não cabe nas tabelas):
+   só sugestão, `update_doc` com `writeControl: {"writeMode": "SUGGEST"}`, trecho curto com a fonte, no fim da subseção
+   certa. Registre `./brain oppdrive suggested OPP-#### --doc <one-pager> --what "…"`. Não reescreva seções inteiras; não
+   sugira de novo o que o dono já recusou (sugestão sumiu e o texto não entrou).
+8. Recibo: `pastas criadas: N · one-pagers escritos: N · resumos atualizados: N · perguntas: N · sugestões: N` com os links.
+   Erro do MCP = pare naquela OPP, siga as outras e conte no recibo; 2 rodadas seguidas falhando → `ask add`.
 
 De onde vêm os arquivos relacionados:
 - **No `/dump`**: link do Drive/Docs/Sheets/Slides citado num item (Slack, e-mail, reunião) que trata de uma OPP →
@@ -57,8 +88,9 @@ De onde vêm os arquivos relacionados:
   Na dúvida sobre qual OPP, não ligue (pergunte com `ask add`).
 - **Na pasta**: a fonte `oppdrive` do watch (criada pelo primeiro `record --folder`) desce nas pastas; arquivo que alguém
   soltou na pasta `OPP-####: …` e que não é o one-pager → mesmo `doc link` (`--source` = o snapshot).
-- O conteúdo que o dono escreveu no one-pager chega pelo `drive-doc` (`[doc]`): registre o artefato com `--link OPP-####` e
-  atualize a OPP só pelo que o CLI permite ao agente (evidência, ICE sugerido); status é do dono.
+- O conteúdo que o dono escreveu no one-pager chega pelo `drive-doc` (`[doc]`): registre o artefato com `--link OPP-####`,
+  rode o passo 5 com esse snapshot (edição no Resumo → pergunta) e, do Detalhamento, atualize a OPP só pelo que o CLI
+  permite ao agente (evidência, ICE sugerido); status é do dono.
 
 ## triage
 

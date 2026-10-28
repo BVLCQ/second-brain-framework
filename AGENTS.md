@@ -108,22 +108,28 @@ somente-leitura para o mundo.
    porta). O dono aprova a porta **uma vez** ao ligá-la; daí em diante o agente
    age sozinho no `/dump` e no `/update` (noturno incluso) e relata. Escopo:
    - **Cria, uma vez:** uma subpasta por oportunidade (`OPP-####: título`)
-     direto na raiz, e dentro dela o one-pager (Google Doc) a partir do
-     ledger (`brain oppdrive onepager`). Nada fora da raiz.
-   - **Depois de criado, o doc é de quem edita no Drive.** O agente só deixa
-     **sugestões** (Docs `writeMode = SUGGEST`, no nome do dono) — nunca
-     `EDIT`, nunca apaga, renomeia, move ou compartilha. O dono aceita ou
-     recusa no Docs. Arquivo relacionado (muitas vezes de outra pessoa) entra
-     como sugestão na seção "Arquivos relacionados" com o link — o cérebro
-     não copia, não move e não cria atalho.
+     direto na raiz, e dentro dela o one-pager (Google Doc). Nada fora da raiz.
+   - **O one-pager tem duas metades.** **Resumo** = duas tabelas derivadas do
+     ledger (área/tipo/status; problema, sugestão, ganho, prioridade, relacionado,
+     arquivos, fontes): é do cérebro — **alterou no Brain, altera na tabela**, sem
+     aprovação, só pelos intervalos nomeados `brain:*` (`brain oppdrive sync`,
+     `writeMode = EDIT`). **Detalhamento** = proposta de solução, procedimentos, o
+     que fazer e não fazer e por quê, escrito pelo agente na criação a partir de
+     tudo que há no Brain; depois de criado é **de quem edita no Drive** — o agente
+     só deixa **sugestões** ali (`writeMode = SUGGEST`). Nunca apaga, renomeia,
+     move ou compartilha o doc. Arquivo relacionado entra na tabela, com o link —
+     o cérebro não copia, não move e não cria atalho.
+   - **Resumo editado por alguém e divergente do Brain:** o cérebro não
+     sobrescreve — `oppdrive sync --snapshot` grava uma `ASK-####` (o Brain vale /
+     o doc vale) e o dono responde na TUI; o agente aplica a resposta.
    - O one-pager é vigiado (`drive-doc`): o `/update` relê quando muda; o que
      o dono escreveu lá é `[doc]`.
-   - Cada pasta, doc e sugestão vira evento (`oppdrive record`, `oppdrive
-     suggested`); o CLI recusa pasta fora da raiz e segundo one-pager.
+   - Cada pasta, doc, Resumo escrito e sugestão vira evento (`oppdrive record`,
+     `oppdrive synced`, `oppdrive suggested`); o CLI recusa pasta fora da raiz e segundo one-pager.
 
 O noturno roda com `BRAIN_NIGHTLY=1`: o ledger **recusa** qualquer evento do
 dono, aprovação, envio, publicação ou `focus.apply` no Google. Não há dono
-presente. A porta 6 é a exceção: já aprovada, só cria e sugere.
+presente. A porta 6 é a exceção: já aprovada, cria, mantém o Resumo e sugere.
 
 ## O livro-razão (a verdade das entidades)
 

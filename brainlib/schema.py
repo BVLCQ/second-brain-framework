@@ -91,7 +91,8 @@ TYPES: dict[str, dict] = {
     "opportunity.promoted": {"entity": "opportunity", "req": ["project", "goal"]},
     "doc.linked": {"entity": "doclink", "req": ["target", "kind", "ref"]},
     "doc.unlinked": {"entity": "doclink", "req": ["target", "ref"]},
-    "doc.suggested": {"entity": "doclink", "req": ["target", "ref", "what"]},   # porta oppdrive: sugestão no Docs, nunca edição
+    "doc.suggested": {"entity": "doclink", "req": ["target", "ref", "what"]},   # porta oppdrive: sugestão no Detalhamento
+    "doc.synced": {"entity": "doclink", "req": ["target", "ref", "fields"]},     # porta oppdrive: o Resumo que o cérebro escreveu
 }
 
 
@@ -432,3 +433,6 @@ def _validate_portfolio(t: str, ev: dict, data: dict, state, plan) -> None:
         else:                            # unlinked / suggested: o doc precisa estar ligado ao alvo
             coll = state.processes if tgt in state.processes else state.opportunities
             _need(any(d.ref == data["ref"] for d in coll[tgt].docs), f"doc: {data['ref']!r} não está ligado a {tgt}")
+        if t == "doc.synced":
+            _need(isinstance(data["fields"], dict) and all(isinstance(v, str) for v in data["fields"].values()),
+                  "doc.synced: fields é {campo: texto}")
