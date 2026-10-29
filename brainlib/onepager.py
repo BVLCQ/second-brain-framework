@@ -4,8 +4,12 @@ Duas metades com donos diferentes:
 - **Resumo** — duas tabelas derivadas do ledger (área/tipo/status; problema, sugestão, ganho, prioridade, relacionado,
   arquivos, fontes). É do cérebro: o agente reescreve sem pedir aprovação sempre que o Brain muda. Cada célula de valor
   é um intervalo nomeado `brain:<campo>`, então a atualização é `replaceNamedRangeContent` — sem aritmética de índice.
-- **Detalhamento** — escrito pelo agente na criação (proposta de solução, procedimentos, o que fazer e não fazer);
-  depois disso é de quem edita no Drive: o agente só deixa sugestões.
+- **Detalhamento** — escrito pelo agente na criação (proposta de solução, procedimentos, o que fazer e não fazer, e a
+  Timeline — decisões e conversas, na ordem em que aconteceram — como último tópico); depois disso é de quem edita no
+  Drive: o agente só deixa sugestões.
+
+Quem lê o one-pager não tem acesso ao Brain: todo ID aparece como `ID: Título` e, sendo de oportunidade com one-pager,
+vira link para ele (`expand`, `expand_detail`, `links`). Reunião entra só como dia + participantes — nunca a transcrição.
 
 Se alguém mexeu no Resumo e o texto do doc diverge do Brain, o cérebro não sobrescreve: vira pergunta (`ASK-####`).
 Este módulo só monta texto e pedidos `documents.batchUpdate`; quem chama o Docs é o agente, pelo MCP.
@@ -13,6 +17,7 @@ Este módulo só monta texto e pedidos `documents.batchUpdate`; quem chama o Doc
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 from . import model, share, util
 
@@ -43,25 +48,124 @@ def use_brand(cfg: dict | None) -> None:
 LABEL_WIDTH = 130                   # pt — coluna de rótulos da tabela 2 (o resto do corpo da página fica com o valor)
 
 
+ID_RE = re.compile(r"\b(OPP|PROC|TASK|DEC|WIN|PROP)-(\d{4})\b")   # IDs zero-padded são do Brain (PROJ-1 pode ser do Jira)
+NO_LINK_KINDS = ("pasta", "one-pager", "fontes", "fonte")             # docs ligados que não são "arquivo relacionado"
+MEETING = {"reuniao", "reunião"}
+DOC_URL = "https://docs.google.com/document/d/{}/edit"
+FILE_URL = "https://drive.google.com/file/d/{}/view"
+
+
+def entity_title(b, eid: str) -> str:
+    st = b.state
+    coll = {"OPP": st.opportunities, "PROC": st.processes, "TASK": st.actions, "DEC": st.decisions,
+            "WIN": st.deliveries, "PROP": st.proposals}[eid.split("-")[0]]
+    e = coll.get(eid)
+    return (getattr(e, "title", None) or getattr(e, "summary", "") or "") if e else ""
+
+
+def label(b, eid: str) -> str:
+    """`ID: Título` — quem lê o one-pager não tem o Brain, então ID sozinho não diz nada."""
+    t = entity_title(b, eid)
+    return f"{eid}: {t}" if t else eid
+
+
+def onepager_url(b, oid: str) -> str | None:
+    o = b.state.opportunities.get(oid)
+    d = next((d for d in (o.docs if o else []) if d.kind == "one-pager" and d.ref), None)
+    return DOC_URL.format(d.ref) if d else None
+
+
+def expand(b, text: str) -> str:
+    """Todo ID do Brain no texto vira `ID: Título` (o que já vem assim fica como está)."""
+    def sub(m):
+        t = entity_title(b, m.group(0))
+        if not t or text[m.end():m.end() + 2 + len(t)] == f": {t}":
+            return m.group(0)
+        return f"{m.group(0)}: {t}"
+    return ID_RE.sub(sub, text)
+
+
+_MD_ID = re.compile(r"(\[[^\]]*\]\([^)]*\))|" + ID_RE.pattern)
+
+
+def expand_detail(b, detail: str) -> str:
+    """Detalhamento em Markdown: ID vira `ID: Título` e, sendo OPP com one-pager, `[ID: Título](url)`. Links que o agente
+    já escreveu ficam como estão; OPP sem one-pager fica só `ID: Título`."""
+    out, pos = [], 0
+    for m in _MD_ID.finditer(detail):
+        out.append(detail[pos:m.start()])
+        pos = m.end()
+        if m.group(1):
+            out.append(m.group(1))
+            continue
+        eid = m.group(0)
+        t = entity_title(b, eid)
+        if t and detail.startswith(f": {t}", pos):
+            pos += 2 + len(t)
+        text = f"{eid}: {t}" if t else eid
+        url = onepager_url(b, eid) if eid.startswith("OPP") else None
+        out.append(f"[{text}]({url})" if url else text)
+    out.append(detail[pos:])
+    return "".join(out)
+
+
+def uploaded(b, o) -> dict[str, str]:
+    """{nome do arquivo RAW: id do arquivo na pasta Fontes} — o que a porta já subiu para esta OPP."""
+    return {d.title: d.ref for d in o.docs if d.kind == "fonte"}
+
+
+def source_line(b, o, path: str) -> str:
+    """Uma fonte como o leitor do one-pager a entende: reunião = dia + participantes (nunca a transcrição); documento
+    = título e data (e, se subiu para a pasta Fontes, o arquivo está lá)."""
+    st = b.state
+    a = st.artifacts.get((path or "").split("#")[0])
+    if not a:
+        return model.ModelBuilder(b).source_label(path)
+    title = re.sub(r"\s*[—-]\s*\d{2}/\d{2}/\d{4}$", "", a.title)
+    when = a.date.strftime("%d/%m/%Y") if a.date else ""
+    if a.kind in MEETING or "/meetings/" in a.raw:
+        names = ", ".join(st.person_name(p) for p in a.people)
+        return f"Reunião {title} — {when}" + (f" · participantes: {names}" if names else "")
+    return f"{title} ({when})" if when else title
+
+
 def fields(b, oid: str) -> tuple[str, dict]:
     """(título, {campo: texto}) — o Resumo como o Brain o vê agora. Mesma base do `share opportunity`."""
     title, sections, sources = share._sections_opportunity(b, model.build(b), oid)
     sec = {name: items for name, items in sections}
     o = b.state.opportunities[oid]
     area = re.search(r"\*\*Área:\*\* (.*?) · \*\*Tipo:\*\* (.*?) · \*\*Status:\*\* (.*)$", sec[""][0])
-    label = model.ModelBuilder(b).source_label
-    related = [f"{d.title or d.ref} — {d.ref}" for d in o.docs if d.kind not in ("pasta", "one-pager")]
-    dedup = lambda t: re.sub(r"(\([^()]+\))\s*\1$", r"\1", t)   # noqa: E731 — título que já traz a data
-    src = [dedup(sources[0])] + [f"evidência: {dedup(label(e))}" for e in o.evidence]
+    related = [f"{d.title or d.ref} — {d.ref}" for d in o.docs if d.kind not in NO_LINK_KINDS]
+    rel = [ln.replace("Processo: ", f"Processo — {o.process}: ", 1) if o.process and ln.startswith("Processo: ") else
+           ln.replace("Projeto: ", f"Projeto — {o.project}: ", 1) if o.project and ln.startswith("Projeto: ") else ln
+           for ln in sec["Relacionado"]]
+    src = [f"origem: {source_line(b, o, o.source)}"] + [f"evidência: {source_line(b, o, e)}" for e in o.evidence]
     out = {"area": area.group(1), "tipo": area.group(2), "status": area.group(3),
            "problema": sec["Problema"], "sugestao": sec["Sugestão"], "ganho": sec["Ganho esperado"],
-           "prioridade": sec["Prioridade"], "relacionado": sec["Relacionado"], "arquivos": related, "fontes": src}
-    return title, {k: ("\n".join(v) if isinstance(v, list) else v) or NONE for k, v in out.items()}
+           "prioridade": sec["Prioridade"], "relacionado": rel, "arquivos": related, "fontes": src}
+    return title, {k: expand(b, "\n".join(v) if isinstance(v, list) else v or NONE) or NONE for k, v in out.items()}
+
+
+def links(b, oid: str, f: dict) -> dict[str, str]:
+    """{texto: url} do que, no Resumo, deve ser link: OPP com one-pager (`OPP-0023: Título`) e documento já enviado à
+    pasta Fontes. Texto que o doc mostra exatamente assim; a própria OPP não se linka."""
+    o = b.state.opportunities[oid]
+    text = "\n".join(f.values())
+    out = {}
+    for m in re.finditer(r"\bOPP-\d{4}\b", text):
+        if m.group(0) != oid and (url := onepager_url(b, m.group(0))):
+            out[label(b, m.group(0))] = url
+    up = uploaded(b, o)
+    for path in [o.source, *o.evidence]:
+        a = b.state.artifacts.get((path or "").split("#")[0])
+        fid = up.get(Path(a.raw).name) if a and a.raw else None
+        if fid and (line := source_line(b, o, path)) in text:
+            out[line] = FILE_URL.format(fid)
+    return out
 
 
 def stamp() -> str:
-    return (f"Resumo mantido pelo cérebro · atualizado em {util.now().strftime('%d/%m/%Y %H:%M')} · "
-            "o Detalhamento é de quem edita; o cérebro só deixa sugestões nele")
+    return f"Resumo atualizado em {util.now().strftime('%d/%m/%Y %H:%M')}"
 
 
 def norm(s: str | None) -> str:
@@ -76,8 +180,11 @@ def norm(s: str | None) -> str:
 
 
 # ── Markdown (prévia local e fallback com a porta desligada) ─────────────────────────────────────────────────────
-def markdown(title: str, oid: str, f: dict, detail: str | None) -> str:
-    cell = lambda s: s.replace("|", "\\|").replace("\n", "<br>")   # noqa: E731
+def markdown(title: str, oid: str, f: dict, detail: str | None, lk: dict | None = None) -> str:
+    def cell(s: str) -> str:
+        for text, url in sorted((lk or {}).items(), key=lambda kv: -len(kv[0])):
+            s = s.replace(text, f"[{text}]({url})")
+        return s.replace("|", "\\|").replace("\n", "<br>")
     out = [f"# {oid}: {title}", f"_{stamp()}_", "", "## Resumo", "",
            "| " + " | ".join(lab for _, lab in HEAD) + " |", "|" + " --- |" * len(HEAD),
            "| " + " | ".join(cell(f[k]) for k, _ in HEAD) + " |", "", "| | |", "| --- | --- |"]
@@ -197,13 +304,15 @@ class _Plan:
             r.append({"createNamedRange": {"name": RANGE + named, "range": self._rng(1, n)}})
         self.below = {"style": STYLE[kind], "list": kind in PRESET, "styled": kind == "meta" or bool(marks and marks[0][0] == 0)}
 
-    def table(self, rows: list[list[tuple[str, str | None, bool]]], shade: list[tuple[int, int]]) -> None:
+    def table(self, rows: list[list[tuple[str, str | None, bool]]], shade: list[tuple[int, int]],
+              lk: dict | None = None) -> None:
         """rows[r][c] = (texto, intervalo nomeado | None, negrito). Insere num parágrafo normal e vazio (os parágrafos
         das células herdam dele), preenche de trás para frente e aplica o padrão de tabela (`style_table`)."""
         self.para("p", "")
         rr, cc = len(rows), len(rows[0])
         self.reqs.append({"insertTable": {"rows": rr, "columns": cc, "location": {"index": 1}}})
         start = 2                                         # o Docs põe um "\n" antes da tabela
+        link_reqs: list[dict] = []
         for r in reversed(range(rr)):
             for c in reversed(range(cc)):
                 text, named, bold = rows[r][c]
@@ -214,6 +323,7 @@ class _Plan:
                                                           "fields": "bold"}})
                 if named:
                     self.reqs.append({"createNamedRange": {"name": RANGE + named, "range": self._rng(p, p + u16(text))}})
+                link_reqs += link_text(text, p, lk or {})
         cells, at = [], start + 1
         for r in range(rr):
             at += 1                                       # marcador da linha
@@ -223,9 +333,56 @@ class _Plan:
                 row.append((at + 1, at + 1 + n))          # marcador da célula + texto (sem o "\n" final)
                 at += 2 + n
             cells.append(row)
-        self.reqs += style_table(start, cells, set(shade), label_col=cc == 2)
+        self.reqs += style_table(start, cells, set(shade), label_col=cc == 2) + link_reqs   # depois: o estilo da tabela pinta o texto
         self.reqs += shrink(at + 1) + shrink(1)            # o vazio depois da tabela e o "\n" que o Docs pôs antes
         self.below = {"style": "NORMAL_TEXT", "list": False, "styled": False}
+
+
+LINK_BLUE = _rgb("1155CC")
+
+
+def link_style(url: str) -> dict:
+    return {"textStyle": {"link": {"url": url}, "foregroundColor": LINK_BLUE, "underline": True},
+            "fields": "link,foregroundColor,underline"}
+
+
+def link_text(text: str, base: int, lk: dict) -> list[dict]:
+    """Pedidos de link para cada `texto` de `lk` dentro de `text`, que começa no índice `base` do doc."""
+    out = []
+    for label_, url in lk.items():
+        for m in re.finditer(re.escape(label_), text):
+            a = base + u16(text[:m.start()])
+            out.append({"updateTextStyle": {"range": {"startIndex": a, "endIndex": a + u16(label_)}, **link_style(url)}})
+    return out
+
+
+def _body(doc: dict) -> list:
+    inner = doc.get("content", doc)
+    return ((inner.get("tabs") or [{}])[0].get("documentTab", {}).get("body", {}).get("content")
+            if "tabs" in inner else inner.get("body", {}).get("content", [])) or []
+
+
+def link_requests(doc: dict, lk: dict) -> list[dict]:
+    """Links do Resumo de um doc já escrito (JSON do `read_doc`): o texto de `lk` que ainda não é link para aquela URL,
+    só dentro das duas tabelas — o Detalhamento é de quem edita e não se toca."""
+    out = []
+    for e in [e for e in _body(doc) if "table" in e][:2]:
+        for row in e["table"]["tableRows"]:
+            for cell in row["tableCells"]:
+                for para in cell["content"]:
+                    for el in para.get("paragraph", {}).get("elements", []):
+                        run = el.get("textRun")
+                        if not run:
+                            continue
+                        have = (run.get("textStyle") or {}).get("link", {}).get("url")
+                        if have and lk.get(run["content"].rstrip("\n")) == have:
+                            continue                      # o trecho todo já é o link certo
+                        if have:                          # texto novo herdou o link de quem ele substituiu: limpa e refaz
+                            out.append({"updateTextStyle": {"range": {"startIndex": el["startIndex"], "endIndex": el["endIndex"]},
+                                                            "textStyle": {"foregroundColor": BLACK, "underline": False},
+                                                            "fields": "link,foregroundColor,underline"}})
+                        out += link_text(run["content"], el["startIndex"], lk)
+    return out
 
 
 def style_table(start: int, cells: list[list[tuple[int, int]]], heads: set, label_col: bool = False) -> list[dict]:
@@ -275,8 +432,7 @@ def shrink(at: int, n: int = 1) -> list[dict]:
 def restyle_requests(doc: dict) -> list[dict]:
     """Aplica o padrão às duas tabelas do Resumo de um doc já escrito (JSON do `read_doc`). A tabela de 3 colunas tem
     cabeçalho na 1ª linha; a de 2 colunas, rótulos na 1ª coluna."""
-    content = (doc.get("content", doc).get("tabs") or [{}])[0].get("documentTab", {}).get("body", {}).get("content") \
-        if "tabs" in doc.get("content", doc) else doc.get("body", {}).get("content", [])
+    content = _body(doc)
     tables = [e for e in content or [] if "table" in e][:2]
     if len(tables) < 2:
         raise ValueError("o doc não tem as duas tabelas do Resumo")
@@ -300,15 +456,15 @@ def restyle_requests(doc: dict) -> list[dict]:
     return out
 
 
-def build_requests(title: str, oid: str, f: dict, detail: str, end: int) -> list[dict]:
+def build_requests(title: str, oid: str, f: dict, detail: str, end: int, lk: dict | None = None) -> list[dict]:
     """Pedidos que (re)escrevem o doc inteiro: apaga o corpo atual (`end` = endIndex do último elemento do corpo,
     do `read_doc`; 2 = doc vazio) e monta título, carimbo, Resumo (2 tabelas) e Detalhamento."""
     pl = _Plan()
     for kind, text in reversed(blocks(detail)):
         pl.para(kind, text)
     pl.para("h2", "Detalhamento")
-    pl.table([[(LABEL[k], None, True), (f[k], k, False)] for k, _ in BODY], [(r, 0) for r in range(len(BODY))])
-    pl.table([[(lab, None, True) for _, lab in HEAD], [(f[k], k, False) for k, _ in HEAD]], [(0, c) for c in range(len(HEAD))])
+    pl.table([[(LABEL[k], None, True), (f[k], k, False)] for k, _ in BODY], [(r, 0) for r in range(len(BODY))], lk)
+    pl.table([[(lab, None, True) for _, lab in HEAD], [(f[k], k, False) for k, _ in HEAD]], [(0, c) for c in range(len(HEAD))], lk)
     pl.para("h2", "Resumo")
     pl.para("meta", stamp(), named=STAMP)
     pl.para("h1", f"{oid}: {title}")
@@ -322,7 +478,7 @@ def build_requests(title: str, oid: str, f: dict, detail: str, end: int) -> list
 
 
 def sync_requests(f: dict, keys: list[str]) -> list[dict]:
-    reqs = [{"replaceNamedRangeContent": {"namedRangeName": RANGE + k, "text": f[k]}} for k in keys]
+    reqs = [{"replaceNamedRangeContent": {"namedRangeName": RANGE + k, "text": f[k]}} for k in keys if k in KEYS]
     return reqs + [{"replaceNamedRangeContent": {"namedRangeName": RANGE + STAMP, "text": stamp()}}] if reqs else []
 
 

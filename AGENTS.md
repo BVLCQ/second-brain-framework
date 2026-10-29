@@ -108,7 +108,12 @@ somente-leitura para o mundo.
    porta). O dono aprova a porta **uma vez** ao ligá-la; daí em diante o agente
    age sozinho no `/dump` e no `/update` (noturno incluso) e relata. Escopo:
    - **Cria, uma vez:** uma subpasta por oportunidade (`OPP-####: título`)
-     direto na raiz, e dentro dela o one-pager (Google Doc). Nada fora da raiz.
+     direto na raiz, e dentro dela o one-pager (Google Doc) e a subpasta `Fontes`. Nada fora da raiz.
+   - **`Fontes`** guarda cópia dos **documentos** (RAW `documents/`) que sustentam a oportunidade — só isso. Reunião,
+     Slack, nota, vídeo e conector **nunca** sobem (transcrição pode comprometer pessoas): entram no Resumo só como
+     menção — dia + participantes. O CLI recusa registrar qualquer outro tipo (`oppdrive record --source-file`).
+   - **Quem lê o one-pager não tem acesso ao Brain.** Todo ID aparece como `ID: Título`; ID de OPP com one-pager
+     vira link para ele.
    - **O one-pager tem duas metades.** **Resumo** = duas tabelas derivadas do
      ledger (área/tipo/status; problema, sugestão, ganho, prioridade, relacionado,
      arquivos, fontes): é do cérebro — **alterou no Brain, altera na tabela**, sem

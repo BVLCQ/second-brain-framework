@@ -5,19 +5,25 @@ Quem escreve no Drive é o agente, pelas ferramentas MCP do Drive/Docs; este mó
 Regras da porta (AGENTS.md): só dentro de `[oppdrive].root`; cria pasta e one-pager uma vez. O one-pager tem duas
 metades (`brainlib/onepager.py`): o **Resumo** (tabelas) é do cérebro — o agente reescreve sozinho, só pelos intervalos
 nomeados `brain:*`, e divergência com o que alguém escreveu ali vira pergunta; o **Detalhamento** é de quem edita no
-Drive — o agente só deixa SUGESTÕES (Docs `writeMode=SUGGEST`). Nunca apaga, renomeia, move ou compartilha.
+Drive — o agente só deixa SUGESTÕES (Docs `writeMode=SUGGEST`). Dentro da pasta da OPP há ainda uma subpasta "Fontes"
+com cópia dos DOCUMENTOS (RAW `documents/`) que sustentam a oportunidade — reunião, Slack, nota e conector nunca sobem
+(só dia + participantes no Resumo): o CLI recusa registrar qualquer outra coisa. Nunca apaga, renomeia, move ou compartilha.
 """
 from __future__ import annotations
 
 import json
+import mimetypes
 from pathlib import Path
 
-from . import ask, onepager, util, watch
+from . import ask, onepager, rawsort, util, watch
 from .cli import _common, _fact_opts, _out
 from .core import Brain
 
 SKIP_STATUS = {"descartada"}
 TITLE_MAX = 120
+SOURCES_TITLE = "Fontes"            # subpasta de cada OPP com cópia dos documentos-fonte
+TEXT_EXT = {".md", ".txt", ".csv", ".json", ".html", ".htm"}
+MAX_UPLOAD_KB = 2048
 
 
 def root(b: Brain) -> str:
@@ -50,17 +56,47 @@ def _drive_docs(o, kind: str) -> list:
     return [d for d in o.docs if d.kind == kind and watch.drive_doc_id(d.ref)]
 
 
-def entry(o) -> dict:
-    folder, onepager = _drive_docs(o, "pasta"), _drive_docs(o, "one-pager")
-    related = [d for d in o.docs if d.kind not in ("pasta", "one-pager")]
-    todo = ([] if folder else ["pasta"]) + ([] if onepager else ["one-pager"])
+def source_files(b: Brain, o) -> dict:
+    """O que sustenta a OPP (origem + evidências), separado pelo que pode subir para a pasta Fontes e o que só se menciona.
+    Sobem só documentos (RAW `documents/`); reunião (dia + participantes), Slack, nota e conector ficam como menção —
+    transcrição pode expor gente. O próprio one-pager relido pelo /update também não é fonte."""
+    done, up, mention = onepager.uploaded(b, o), [], []
+    vault_raw = b.inst.vault / "RAW"
+    for path in dict.fromkeys(p for p in [o.source, *o.evidence] if p and p != "chat"):
+        a = b.state.artifacts.get(path.split("#")[0])
+        local = rawsort.resolve(b.inst, a.raw) if a and a.raw else None
+        parts = local.relative_to(vault_raw).parts if local and vault_raw in local.parents else ()
+        eligible = (len(parts) >= 4 and parts[2] == "documents" and a.kind not in onepager.MEETING
+                    and a.link != o.id and "one-pager" not in local.name.lower())
+        if not eligible:
+            mention.append({"artifact": path, "label": onepager.source_line(b, o, path)})
+            continue
+        kb = round(local.stat().st_size / 1024)
+        mime = mimetypes.guess_type(local.name)[0] or "application/octet-stream"
+        up.append({"artifact": a.id, "raw": "RAW/" + "/".join(parts), "name": local.name, "local": str(local), "kb": kb,
+                   "mime": mime, "text": local.suffix.lower() in TEXT_EXT, "uploaded": local.name in done,
+                   "too_big": kb > MAX_UPLOAD_KB})
+    return {"upload": up, "mention": mention}
+
+
+def entry(b: Brain, o) -> dict:
+    folder, onepager_ = _drive_docs(o, "pasta"), _drive_docs(o, "one-pager")
+    fontes = _drive_docs(o, "fontes")
+    related = [d for d in o.docs if d.kind not in onepager.NO_LINK_KINDS]
+    src = source_files(b, o)
+    pend = [x for x in src["upload"] if not x["uploaded"] and not x["too_big"]]
+    todo = ([] if folder else ["pasta"]) + ([] if onepager_ else ["one-pager"]) \
+        + (["fontes"] if pend and not fontes else [])
     return {"id": o.id, "title": o.title, "status": o.status, "folder_title": folder_title(o),
-            "folder": folder[0].ref if folder else None, "onepager": onepager[0].ref if onepager else None,
+            "folder": folder[0].ref if folder else None, "onepager": onepager_[0].ref if onepager_ else None,
+            "sources_folder": fontes[0].ref if fontes else None, "sources_title": SOURCES_TITLE,
+            "upload": pend if folder else [], "too_big": [x for x in src["upload"] if x["too_big"] and not x["uploaded"]],
+            "mention": src["mention"],
             "related": [{"ref": d.ref, "kind": d.kind, "title": d.title,
-                         "in_onepager": any(d.ref in s["what"] for od in onepager for s in od.suggestions)
-                         or any(d.ref in od.synced.get("arquivos", "") for od in onepager)}
+                         "in_onepager": any(d.ref in s["what"] for od in onepager_ for s in od.suggestions)
+                         or any(d.ref in od.synced.get("arquivos", "") for od in onepager_)}
                         for d in related],
-            "template": ("novo" if onepager[0].synced else "antigo") if onepager else None,
+            "template": ("novo" if onepager_[0].synced else "antigo") if onepager_ else None,
             "todo": todo}
 
 
@@ -69,8 +105,8 @@ def status(b: Brain, only: str | None = None) -> list[dict]:
     if only:
         if only not in opps:
             raise util.BrainError(f"oportunidade {only} não existe", code=3)
-        return [entry(opps[only])]
-    return [entry(o) for o in opps.values() if o.status not in SKIP_STATUS]
+        return [entry(b, opps[only])]
+    return [entry(b, o) for o in opps.values() if o.status not in SKIP_STATUS]
 
 
 def _doc(b: Brain, oid: str):
@@ -86,7 +122,8 @@ def onepager_md(b: Brain, oid: str, detail: str | None = None) -> str:
     if oid not in b.state.opportunities:
         raise util.BrainError(f"oportunidade {oid} não existe", code=3)
     title, f = onepager.fields(b, oid)
-    return onepager.markdown(title, oid, f, detail)
+    return onepager.markdown(title, oid, f, onepager.expand_detail(b, detail) if detail else detail,
+                             onepager.links(b, oid, f))
 
 
 def _read(path: str | None) -> str | None:
@@ -102,6 +139,14 @@ def _write_plan(out: str, plan: dict) -> None:
     Path(out).write_text(json.dumps(plan, ensure_ascii=False, indent=1), encoding="utf-8")
 
 
+LINKS_KEY = "_links"
+
+
+def _with_links(f: dict, lk: dict) -> dict:
+    """O que o cérebro registra de um Resumo escrito: os campos + os links (para saber quando um link novo aparece)."""
+    return {**f, LINKS_KEY: json.dumps(lk, ensure_ascii=False, sort_keys=True)}
+
+
 def build(b: Brain, oid: str, detail: str, end: int, force: bool = False) -> dict:
     o, d = _doc(b, oid)
     if d is None:
@@ -112,8 +157,10 @@ def build(b: Brain, oid: str, detail: str, end: int, force: bool = False) -> dic
     if not detail.strip():
         raise util.BrainError("Detalhamento vazio — todo one-pager criado pelo agente traz um", code=4)
     title, f = onepager.fields(b, oid)
-    return {"id": oid, "documentId": d.ref, "mode": "build", "fields": f,
-            "writeControl": {"writeMode": "EDIT"}, "requests": onepager.build_requests(title, oid, f, detail, end)}
+    lk = onepager.links(b, oid, f)
+    detail = onepager.expand_detail(b, detail)              # todo ID vira `ID: Título` (OPP com one-pager, link)
+    return {"id": oid, "documentId": d.ref, "mode": "build", "fields": _with_links(f, lk), "links": lk,
+            "writeControl": {"writeMode": "EDIT"}, "requests": onepager.build_requests(title, oid, f, detail, end, lk)}
 
 
 def restyle(b: Brain, oid: str, doc_json: str) -> dict:
@@ -137,9 +184,13 @@ def sync(b: Brain, oid: str, snapshot: str | None, force: bool = False, source: 
     if d is None:
         raise util.BrainError(f"{oid} sem one-pager registrado", code=4)
     _, f = onepager.fields(b, oid)
+    lk = onepager.links(b, oid, f)
     doc = onepager.parse_markdown(snapshot) if snapshot is not None else None
     cmp = onepager.compare(f, d.synced or None, doc)
-    plan = {"id": oid, "documentId": d.ref, "mode": "sync", **cmp, "fields": f, "writeControl": {"writeMode": "EDIT"}}
+    if cmp["state"] == "ok" and json.loads((d.synced or {}).get(LINKS_KEY) or "{}") != lk:
+        cmp = {**cmp, "state": "desatualizado", "changed": ["links"]}     # link novo (OPP citada ganhou one-pager, fonte subiu)
+    plan = {"id": oid, "documentId": d.ref, "mode": "sync", **cmp, "fields": _with_links(f, lk), "links": lk,
+            "writeControl": {"writeMode": "EDIT"}}
     if cmp["state"] == "template-antigo":
         plan["requests"] = []
         plan["hint"] = "one-pager no template antigo: `oppdrive build` (confira antes que ninguém escreveu nele)"
@@ -161,13 +212,28 @@ def sync(b: Brain, oid: str, snapshot: str | None, force: bool = False, source: 
     return plan
 
 
+def links_plan(b: Brain, oid: str, doc_json: str) -> dict:
+    """Pedidos de link do Resumo de um doc já escrito: roda DEPOIS do `update_doc` do build/sync, com o `read_doc` novo."""
+    o, d = _doc(b, oid)
+    if d is None or not d.synced:
+        raise util.BrainError(f"{oid} sem one-pager no template novo", code=4)
+    doc = json.loads(doc_json)
+    got = doc.get("content", doc).get("documentId")
+    if got and got != d.ref:
+        raise util.BrainError(f"o JSON é do doc {got}, não do one-pager da {oid} ({d.ref})", code=4)
+    _, f = onepager.fields(b, oid)
+    lk = onepager.links(b, oid, f)
+    return {"id": oid, "documentId": d.ref, "mode": "links", "fields": _with_links(f, lk), "links": lk,
+            "writeControl": {"writeMode": "EDIT"}, "requests": onepager.link_requests(doc, lk)}
+
+
 def cmd(args, b: Brain) -> None:
     c = args.odcmd
     if c == "status":
         rid = root(b)
         rows = status(b, args.id)
         if args.pending:
-            rows = [r for r in rows if r["todo"] or any(not x["in_onepager"] for x in r["related"])]
+            rows = [r for r in rows if r["todo"] or r["upload"] or any(not x["in_onepager"] for x in r["related"])]
         if args.json:
             print(json.dumps({"root": rid, "opportunities": rows}, ensure_ascii=False, indent=2))
             return
@@ -176,6 +242,7 @@ def cmd(args, b: Brain) -> None:
             todo = ("falta " + " + ".join(r["todo"])) if r["todo"] else "pasta e one-pager ok"
             loose = sum(1 for x in r["related"] if not x["in_onepager"])
             print(f"{r['id']} · {todo}" + (f" · {loose} arquivo(s) a sugerir no one-pager" if loose else "")
+                  + (f" · {len(r['upload'])} documento(s) a subir para Fontes" if r["upload"] else "")
                   + f" · {r['folder_title']}")
         if not rows:
             print("nada pendente")
@@ -214,11 +281,18 @@ def cmd(args, b: Brain) -> None:
         if args.force and plan["requests"]:
             msg = f"--force: {len(plan['requests'])} pedido(s) em {args.out}"
         print(f"{args.id} · {plan['state']} · {msg}")
+    elif c == "links":
+        root(b)
+        plan = links_plan(b, args.id, _read(args.doc_json) or "{}")
+        _write_plan(args.out, plan)
+        print(f"✓ {args.id} · {len(plan['requests'])} link(s) em {args.out}"
+              + (" — update_doc (EDIT); depois `oppdrive synced --plan`" if plan["requests"] else " — nada a linkar"))
     elif c == "synced":
         root(b)
         plan = json.loads(_read(args.plan) or "{}")
         o, d = _doc(b, args.id)
-        if d is None or plan.get("id") != args.id or plan.get("documentId") != d.ref or not plan.get("requests"):
+        if d is None or plan.get("id") != args.id or plan.get("documentId") != d.ref or \
+                not (plan.get("requests") or plan.get("mode") == "links"):
             raise util.BrainError(f"plano não é do one-pager da {args.id} (ou não tinha pedidos) — nada gravado", code=4)
         args.source = args.source or f"drive:{d.ref}"
         ev = b.record_one(_common({"type": "doc.synced", "data": {"target": args.id, "ref": d.ref, "fields": plan["fields"],
@@ -234,8 +308,29 @@ def cmd(args, b: Brain) -> None:
                 raise util.BrainError(f"a pasta precisa estar direto na raiz [oppdrive].root ({rid}); --parent "
                                       f"{args.parent!r} — nada gravado", code=4)
             ref, kind, title = watch.drive_doc_id(args.folder), "pasta", folder_title(o)
+        elif args.sources_folder:
+            e = entry(b, o)
+            if not e["folder"] or watch.drive_doc_id(args.parent or "") != e["folder"]:
+                raise util.BrainError(f"a pasta {SOURCES_TITLE} precisa estar na pasta da {args.id} ({e['folder'] or 'sem pasta'}); "
+                                      f"--parent {args.parent!r} — nada gravado", code=4)
+            if e["sources_folder"]:
+                raise util.BrainError(f"{args.id} já tem pasta {SOURCES_TITLE} ({e['sources_folder']}): a porta cria uma vez só", code=4)
+            ref, kind, title = watch.drive_doc_id(args.sources_folder), "fontes", SOURCES_TITLE
+        elif args.source_file:
+            e = entry(b, o)
+            if not e["sources_folder"] or watch.drive_doc_id(args.parent or "") != e["sources_folder"]:
+                raise util.BrainError(f"o arquivo precisa estar na pasta {SOURCES_TITLE} da {args.id} "
+                                      f"({e['sources_folder'] or 'sem pasta'}); --parent {args.parent!r} — nada gravado", code=4)
+            cand = next((x for x in source_files(b, o)["upload"] if args.raw in (x["raw"], x["name"]) and not x["too_big"]), None)
+            if cand is None:
+                raise util.BrainError(f"{args.raw!r} não é um documento-fonte desta {args.id}: só sobe documento (RAW documents/) "
+                                      "ligado à OPP — reunião, Slack e nota nunca sobem; nada gravado", code=4)
+            if cand["uploaded"]:
+                raise util.BrainError(f"{cand['name']} já foi para {SOURCES_TITLE}", code=4)
+            ref, kind, title = watch.drive_doc_id(args.source_file), "fonte", cand["name"]
+            args.source = args.source or cand["raw"]
         else:
-            e = entry(o)
+            e = entry(b, o)
             if not e["folder"] or watch.drive_doc_id(args.parent or "") != e["folder"]:
                 raise util.BrainError(f"o one-pager precisa estar na pasta da {args.id} ({e['folder'] or 'sem pasta'}); "
                                       f"--parent {args.parent!r} — nada gravado", code=4)
@@ -257,7 +352,7 @@ def cmd(args, b: Brain) -> None:
         _out(args, ev, f"✓ {o.id} · {kind} {ref}{extra}")
     elif c == "suggested":
         root(b)
-        e = entry(b.state.opportunities[args.id]) if args.id in b.state.opportunities else None
+        e = entry(b, b.state.opportunities[args.id]) if args.id in b.state.opportunities else None
         if e is None:
             raise util.BrainError(f"oportunidade {args.id} não existe", code=3)
         ref = watch.drive_doc_id(args.doc)
@@ -289,6 +384,10 @@ def add_parsers(sub) -> None:
     x.add_argument("id")
     x.add_argument("--doc-json", required=True, help="o JSON do read_doc desse one-pager (arquivo)")
     x.add_argument("--out", required=True, help="arquivo JSON do plano")
+    x = s.add_parser("links", help="pedidos de link (OPP com one-pager, documento em Fontes) no Resumo de um doc já escrito")
+    x.add_argument("id")
+    x.add_argument("--doc-json", required=True, help="o JSON do read_doc desse one-pager, lido DEPOIS do update_doc (arquivo)")
+    x.add_argument("--out", required=True, help="arquivo JSON do plano")
     x = s.add_parser("sync", help="compara o Resumo do doc com o Brain: pedidos de atualização ou pergunta ao dono")
     x.add_argument("id")
     x.add_argument("--snapshot", help="export Markdown do doc (o snapshot do /update) para checar edições no Resumo")
@@ -306,7 +405,10 @@ def add_parsers(sub) -> None:
     g = x.add_mutually_exclusive_group(required=True)
     g.add_argument("--folder", help="id/URL da pasta criada")
     g.add_argument("--onepager", help="id/URL do Google Doc criado")
-    x.add_argument("--parent", required=True, help="parentId devolvido pelo Drive (confere a raiz / a pasta da OPP)")
+    g.add_argument("--sources-folder", help="id/URL da subpasta Fontes criada dentro da pasta da OPP")
+    g.add_argument("--source-file", help="id/URL do documento-fonte enviado à pasta Fontes (use com --raw)")
+    x.add_argument("--raw", help="com --source-file: o caminho RAW (ou nome) do documento enviado — só documento é aceito")
+    x.add_argument("--parent", required=True, help="parentId devolvido pelo Drive (confere a raiz / a pasta da OPP / a pasta Fontes)")
     _fact_opts(x)
     x.set_defaults(prov="observado")
     x = s.add_parser("suggested", help="registra uma sugestão deixada no one-pager (writeMode=SUGGEST)")

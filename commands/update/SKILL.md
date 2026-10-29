@@ -43,5 +43,6 @@ Fonte `kind = "github"` (campo `path` = pasta local com os clones): **não** use
 Proibido: ferramentas MCP de escrita, `outbox approve/sent`, `publish`, `focus approve/apply` (google), mudanças de PLANNING.
 Exceção única: a porta 6 (`[oppdrive].enabled`) — no fim do `/dump`, criar pasta/one-pager dentro da raiz, manter o
 **Resumo** (tabelas) em dia com o Brain (`EDIT` só nos intervalos `brain:*`, pelo plano do `oppdrive sync`) e deixar
-**sugestões** no Detalhamento (seção **Drive** de `commands/opportunity/SKILL.md`). Vale no noturno. Nunca `EDIT` fora do
+**sugestões** no Detalhamento e copiar os **documentos**-fonte para a subpasta `Fontes` (seção **Drive** de
+`commands/opportunity/SKILL.md`). Vale no noturno. Nunca `EDIT` fora do
 Resumo, nunca apagar, mover, renomear.

@@ -1110,11 +1110,12 @@ Mapa de processos (`PROC-####`) e oportunidades/iniciativas (`OPP-####`) por ár
 ### `brain oppdrive` (porta 6 — pastas e one-pagers no Drive)
 | Comando | O que faz |
 |---|---|
-| `status [OPP-####] [--pending] [--json]` | o que falta por OPP: pasta, one-pager, `template` (antigo/novo), arquivos fora do Resumo |
-| `record OPP-#### --folder\|--onepager <id> --parent <parentId>` | registra pasta (direto na raiz) ou one-pager (na pasta da OPP), uma vez só |
+| `status [OPP-####] [--pending] [--json]` | o que falta por OPP: pasta, one-pager, pasta Fontes, `template` (antigo/novo), arquivos fora do Resumo, `upload` (documentos a enviar para Fontes) e `mention` (reunião/Slack/nota: só menção) |
+| `record OPP-#### --folder\|--onepager\|--sources-folder\|--source-file <id> --parent <parentId> [--raw R]` | registra pasta (direto na raiz), one-pager ou subpasta `Fontes` (na pasta da OPP), uma vez só; `--source-file` registra um documento enviado à `Fontes` (`--raw` = o RAW; o CLI recusa reunião, Slack, nota e o que não é da OPP) |
 | `onepager OPP-#### [--detail F] [--out F]` | prévia em Markdown: Resumo em tabelas + Detalhamento |
 | `build OPP-#### --detail F --end N --out plano.json` | pedidos `batchUpdate` que escrevem o doc inteiro (criação ou troca do template antigo); cada célula de valor vira intervalo nomeado `brain:<campo>`. Recusa doc já no template novo sem `--force` |
 | `sync OPP-#### [--snapshot export.md] [--force] [--out plano.json]` | compara o Resumo com o Brain: `ok` · `desatualizado` (pedidos `replaceNamedRangeContent` só dos campos que mudaram) · `divergente`/`resumo-ausente` (alguém mexeu e o texto não bate: grava `ASK-####`, nada a escrever) · `template-antigo` |
+| `links OPP-#### --doc-json read_doc.json --out plano.json` | pedidos de link no Resumo: `OPP-####: Título` com one-pager vira link para ele; documento enviado à `Fontes` vira link na linha de fontes. Só nas tabelas; roda depois do `update_doc` |
 | `restyle OPP-#### --doc-json read_doc.json --out plano.json` | padrão de tabela da marca (`[oppdrive.brand]`: cabeçalho/rótulo na cor da marca com texto branco, corpo preto 10 pt, bordas cinza) nas tabelas de um doc já escrito; só estilo |
 | `synced OPP-#### --plan plano.json` | registra o Resumo escrito (`doc.synced`), depois do `update_doc` |
 | `suggested OPP-#### --doc <id> --what "…"` | registra uma sugestão no Detalhamento (`writeMode=SUGGEST`) |

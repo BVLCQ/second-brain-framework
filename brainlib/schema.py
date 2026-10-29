@@ -26,7 +26,7 @@ OPP_STATUS = {"ideia", "triagem", "em-espera", "descartada", "priorizada", "em-a
               "validando", "entregue"}
 OPP_REASON_STATUS = {"em-espera", "descartada"}            # laterais: exigem motivo
 OPP_KINDS = {"melhoria-de-processo", "novo-processo", "estruturante"}
-DOC_KINDS = {"playbook", "one-pager", "planilha", "artefato", "apresentacao", "pasta", "outro"}
+DOC_KINDS = {"playbook", "one-pager", "planilha", "artefato", "apresentacao", "pasta", "fontes", "fonte", "outro"}
 WATCH_KINDS = {"playbook", "one-pager"}       # doc do Drive que o /update relê quando o modifiedTime muda
 
 ACTION_ID, PLAN_NODE = ids.ACTION_ID, ids.PLAN_NODE

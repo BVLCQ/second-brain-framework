@@ -44,7 +44,8 @@ destinations = []
 [oppdrive]
 # Porta 6: pastas de oportunidade no Google Drive. Ligada, o agente cria uma subpasta por OPP dentro de `root`
 # e o one-pager (Google Doc) uma vez. O Resumo (tabelas) segue o Brain: o agente reescreve só os intervalos brain:*;
-# o Detalhamento é de quem edita — ali o agente só deixa SUGESTÕES (Docs writeMode=SUGGEST).
+# o Detalhamento é de quem edita — ali o agente só deixa SUGESTÕES (Docs writeMode=SUGGEST). Cada pasta tem ainda
+# uma subpasta "Fontes" com cópia dos documentos-fonte (reunião, Slack e nota nunca sobem).
 enabled = false
 root = ""                       # id ou URL da pasta-raiz ("Oportunidades")
 # Ferramentas MCP da porta para o agente headless (noturno e TUI), no formato `mcp__<servidor>__<ferramenta>`:
