@@ -454,9 +454,7 @@ class PortfolioKeys:
             from .. import rawsort
             path = rawsort.resolve(self.inst, ref) if ref.startswith("RAW/") else self.inst.vault / ref
             if path and path.exists() and path.resolve().is_relative_to(self.inst.vault.resolve()):
-                import os
-                import shlex
-                self.external([*shlex.split(os.environ.get("PAGER") or "less"), str(path.resolve())])
+                self.action_open_file(self.inst.rel(path.resolve()))
             else:
                 self.log_line(f"{ref}: arquivo não encontrado no vault", "yellow")
             return

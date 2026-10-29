@@ -276,8 +276,34 @@ class Doc:
         return out
 
 
+def file_link(rel: str, text: str, style: str = "") -> Text:
+    """Texto que abre `rel` (relativo ao vault) no aplicativo da máquina ao clicar (app.open_file, mapa em [tui.open])."""
+    st = Style(meta={"@click": f"app.open_file({rel!r})"})
+    return Text(text, style=(Style.parse(style) + st) if style else st)
+
+
+def files_section(doc: Doc, store, node: str = "", sources: tuple = (), docs: list | None = None) -> None:
+    """Arquivos do vault ligados ao item, cada um clicável: abre no Cursor, VLC… conforme [tui.open]."""
+    files = store.linked_files(node, sources, docs)
+    doc.sec("Arquivos linkados")
+    if not files:
+        doc.p(("Nenhum arquivo ligado.", DIM))
+        return
+    for f in files:
+        doc.p((f"[{f['kind']}] ", DIM), file_link(f["rel"], f["name"], "underline"), (f"  → {f['app'] or 'padrão do sistema'}", DIM))
+
+
 def prov(p: str | None) -> Text:
     return Text(f"[{p}]", PROV_STYLE.get(p or "", DIM))
+
+
+def titled(store, ref: str, style: str = "") -> Text:
+    """Link do ID seguido do título quando a entidade existe (ação, goal, projeto, entregável, decisão, oportunidade, processo)."""
+    t = link(ref, ref, style)
+    title = store.title_of(ref)
+    if title:
+        t.append(f" {title}")
+    return t
 
 
 def _links(store, ids: list[str]) -> Text:
@@ -309,7 +335,7 @@ def notes_section(doc: Doc, store, link: str) -> None:
     for i, n in enumerate(ns):
         if i:
             doc.blank()
-        doc.p((n.created, "bold"), ("  " + ("arquivada no RAW" if n.archived else "na inbox, o /dump arquiva")
+        doc.p(file_link(n.path, n.created, "bold underline"), ("  " + ("arquivada no RAW" if n.archived else "na inbox, o /dump arquiva")
                                     + (f" · editada {n.edited}" if n.edited else ""), DIM))
         for ln in n.text.splitlines() or [""]:
             doc.lines.append(Text.assemble(("▌ ", CYN), ln))
@@ -472,13 +498,14 @@ def d_action(store, it) -> Doc:
             ("status", Text.assemble((f"{g} {a['status']}", gs), ("  alta", RED) if a["priority"] == "alta" else "")),
             ("prazo", due), ("esforço", Text(util.fmt_duration(a["effort_min"]))),
             ("projeto", Text.assemble(link(a["project"], a["project"]), f" {a['project_title']}") if a["project"] else Text("—", DIM)),
-            ("entregável", link(a["deliverable"], a["deliverable"])) if a["deliverable"] else None,
+            ("entregável", titled(store, a["deliverable"])) if a["deliverable"] else None,
             ("pessoas", Text(", ".join(store.first_name(p) for p in a["people"]) or "—")),
             ("bloqueada por", Text.assemble(link("⊘ " + bl["id"], bl["id"], AMB), " " + bl["title"])) if bl and bl["open"] else None,
             ("destrava", Text.assemble(*[p for u in un for p in (link(u["id"], u["id"]), " " + u["title"] + "  ")])) if un else None,
             ("origem", Text.assemble(a["origin"] or "—", " ", prov(a["prov"]))),
             ("fonte", Text(a["source_label"], DIM))]
     doc.kv(rows)
+    files_section(doc, store, a["id"], (a["source"],))
     doc.sec("Histórico")
     entries: list[tuple[str, Text]] = []
     for h in a["history"]:
@@ -547,6 +574,7 @@ def d_plan(store, it) -> Doc:
             doc.p(status_mark(a), link(a["id"], a["id"], "bold"), f" {a['title']} ", due_tag(a))
         decisions_section(doc, store, d["id"])
         doc.blank().p(("Marcar estado é um fato, não um gate: space ou s. Criar, renomear ou fechar goal e projeto é gate: E.", DIM))
+    files_section(doc, store, d["id"])
     hint = {"g": "n cria um projeto neste goal · G cria um goal (gate)", "p": "n cria um entregável neste projeto · G cria um goal (gate)",
             "d": "n cria uma ação ligada a este entregável · G cria um goal (gate)"}[k]
     hint += " · / com um id (TASK-####, PROJ-#, PROJ-#.#…) mostra tudo que está associado"
@@ -565,9 +593,9 @@ EFFECT = {"fechar-acao": "brain action close {t} --how … --by owner", "reestim
 def d_prop(store, it) -> Doc:
     r = it.data
     doc = Doc().h(f"{r.id} · {r.kind}", (f" · {r.status}" if r.status != "aberta" else "", DIM)).blank().p(r.summary)
-    kv = [("alvo", link(r.target, r.target) if r.target else Text("—", DIM))]
+    kv = [("alvo", titled(store, r.target) if r.target else Text("—", DIM))]
     if r.into:
-        kv.append(("fica", link(r.into, r.into)))
+        kv.append(("fica", titled(store, r.into)))
     doc.kv(kv + [("evidência", Text(r.evidence or "—"))])
     doc.sec("Se você aceitar").cmd(f"brain proposal accept {r.id} --quote \"…\"")
     doc.p(("  depois: " + EFFECT.get(r.kind, EFFECT["outro"]).format(t=r.target or "TASK-####", i=r.into or "TASK-####"), DIM))
@@ -583,7 +611,7 @@ def d_ask(store, it) -> Doc:
         for i, o in enumerate(q.options, 1):
             doc.p((f"{i}  ", DIM), ("▸ " if q.answer == o else "", GRN), o)
     doc.blank().kv([
-        ("contexto", _ctx(q.context) if q.context else Text("—", DIM)),
+        ("contexto", _ctx(store, q.context) if q.context else Text("—", DIM)),
         ("rodada", Text(q.run or "—")),
         ("fonte", Text(f"{q.source or '—'} ") + prov(q.prov)),
         ("perguntada", Text(util.fmt_date(q.asked))),
@@ -600,10 +628,10 @@ def d_ask(store, it) -> Doc:
     return doc
 
 
-def _ctx(refs: list[str]) -> Text:
+def _ctx(store, refs: list[str]) -> Text:
     t = Text()
     for i, r in enumerate(refs):
-        t.append_text(link(r, r) if r.upper().startswith(("TASK-", "PROJ-", "GOAL-", "DEC-", "PROP-", "OPP-", "PROC-", "MSG-")) else Text(r))
+        t.append_text(titled(store, r) if r.upper().startswith(("TASK-", "PROJ-", "GOAL-", "DEC-", "PROP-", "OPP-", "PROC-", "MSG-")) else Text(r))
         if i < len(refs) - 1:
             t.append(", ")
     return t
@@ -625,7 +653,7 @@ def d_msg(store, it) -> Doc:
     doc.lines.append(Text.assemble(("▌ ", CYN), m["text"]))
     allowed = m["to"] in store.allow()
     sha = store.text_sha(m["id"])
-    doc.blank().kv([("ref", Text.assemble(link(m["ref"], m["ref"]) if m["ref"] else Text("—"), f"  {m['why'] or ''}", style=DIM)),
+    doc.blank().kv([("ref", Text.assemble(titled(store, m["ref"]) if m["ref"] else Text("—"), f"  {m['why'] or ''}", style=DIM)),
                     ("destinatário", Text("✓ em [outbound].allow", GRN) if allowed else Text("✗ fora da allowlist", RED)),
                     ("teto diário", Text(f"{store.sent_today()} de {store.inst.cfg['outbound']['daily_max']} hoje", DIM)),
                     ("trava", Text(f"sha256:{sha}…", DIM)), ("permalink", Text(m["link"], DIM)) if m["link"] else None])
@@ -688,21 +716,24 @@ def d_pub(store, it) -> Doc:
 
 def d_dec(store, it) -> Doc:
     d = it.data
-    return Doc().h(f"{d['id']} · {d['title']}").kv([
+    doc = Doc().h(f"{d['id']} · {d['title']}").kv([
         ("data", Text(f"{d['date']} · {wd_day(d['date'])}")), ("quem decidiu", Text(", ".join(d["decided_by_names"]))),
         ("projeto", Text.assemble(link(d["project"], d["project"]), f" {d['project_title']}") if d["project"] else Text("—", DIM)),
         ("contexto", Text(d["context"] or "—")), ("porquê", Text(d["rationale"] or "—")),
         ("estado", Text(d["status"], DIM)) if d["status"] != "ativa" else None,
         ("substitui", Text(d["supersedes"])) if d["supersedes"] else None,
-        ("fonte", Text.assemble((d["source_label"], DIM), " ", prov(d["prov"])))]).sec("Equivalente na CLI").cmd("brain decision list" + (f" --project {d['project']}" if d["project"] else ""))
+        ("fonte", Text.assemble((d["source_label"], DIM), " ", prov(d["prov"])))])
+    files_section(doc, store, "", (d["source"],))
+    return doc.sec("Equivalente na CLI").cmd("brain decision list" + (f" --project {d['project']}" if d["project"] else ""))
 
 
 def d_del(store, it) -> Doc:
     e = it.data
-    return Doc().h(f"{e['id']} · {e['title']}").kv([
-        ("data", Text(e["date"] or "—")), ("ligada a", Text(e["ref"] or "—")), ("resultado", Text(e["result"])),
-        ("impacto", Text(e["impact"] or "—")), ("evidência", Text(e["evidence"] or "—", DIM))]).blank().p(
-        ("Entregas alimentam o /recap e o /week. Fechar uma ação com --outcome cria uma automaticamente.", DIM))
+    doc = Doc().h(f"{e['id']} · {e['title']}").kv([
+        ("data", Text(e["date"] or "—")), ("ligada a", titled(store, e["ref"]) if e["ref"] else Text("—")), ("resultado", Text(e["result"])),
+        ("impacto", Text(e["impact"] or "—")), ("evidência", Text(e["evidence"] or "—", DIM))])
+    files_section(doc, store, "", (e["source"],))
+    return doc.blank().p(("Entregas alimentam o /recap e o /week. Fechar uma ação com --outcome cria uma automaticamente.", DIM))
 
 
 def d_person(store, it) -> Doc:
@@ -730,11 +761,12 @@ def d_person(store, it) -> Doc:
 
 def d_art(store, it) -> Doc:
     a = it.data
-    return Doc().h(a["title"]).kv([("tipo", Text(a["kind"])), ("data", Text(a["date"] or "—")),
-                                   ("pessoas", Text(", ".join(store.first_name(x) for x in a["people"]) or "—")),
-                                   ("projetos", Text(", ".join(a["projects"]) or "—")), ("resumo", Text(a["summary"] or "—")),
-                                   ("fonte RAW", Text.assemble((a["raw"] or "—", DIM), " · imutável"))]).blank().p(
-        ("Artefatos são append-only. Para a letra exata, abra o RAW (tecla o) no seu editor.", DIM))
+    doc = Doc().h(a["title"]).kv([("tipo", Text(a["kind"])), ("data", Text(a["date"] or "—")),
+                                  ("pessoas", Text(", ".join(store.first_name(x) for x in a["people"]) or "—")),
+                                  ("projetos", Text(", ".join(a["projects"]) or "—")), ("resumo", Text(a["summary"] or "—")),
+                                  ("fonte RAW", Text.assemble((a["raw"] or "—", DIM), " · imutável"))])
+    files_section(doc, store, "", (a["id"],))
+    return doc.blank().p(("Artefatos são append-only. Para a letra exata, clique no RAW acima (ou tecla o).", DIM))
 
 
 # ── face Portfólio ───────────────────────────────────────────────────────────
@@ -778,7 +810,7 @@ def d_opp(store, it) -> Doc:
         proj = Text.assemble(link(o["goal"], o["goal"]), f" {o['goal_title'] or ''}", ("  · p promove a projeto", DIM))
     doc.blank().kv([
         ("ICE", ice), ("ganho", Text(gain)),
-        ("processo", link(o["process"], o["process"]) if o["process"] else None),
+        ("processo", titled(store, o["process"]) if o["process"] else None),
         ("projeto", proj if o["project"] or o["goal"] else None),
         ("pessoas", Text(", ".join(o["people_names"])) if o["people"] else None),
         ("origem", Text(f"{o['by']} · {o['source'] or 'sem fonte'} ") + prov(o["prov"]))])
@@ -797,6 +829,7 @@ def d_opp(store, it) -> Doc:
     if not o["evidence"]:
         doc.p(("Nenhuma. v adiciona uma fonte.", DIM))
     _docs_section(doc, o)
+    files_section(doc, store, o["id"], (o.get("source") or "",), o["docs"])
     notes_section(doc, store, o["id"])
     doc.sec("Equivalente na CLI").cmd(f"brain opportunity show {o['id']}")
     if not o["project"]:
@@ -826,6 +859,7 @@ def d_proc(store, it) -> Doc:
     if not p["pains"]:
         doc.p(("Nenhuma registrada.", DIM))
     _docs_section(doc, p)
+    files_section(doc, store, p["id"], (p.get("source") or "",), p["docs"])
     doc.sec("Oportunidades ligadas")
     for i in p["opportunities"]:
         o = store.by_opp[i]

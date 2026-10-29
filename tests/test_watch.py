@@ -231,11 +231,11 @@ class DriveDocTest(_WatchBase):
 
     def test_validation_requires_existing_link(self):
         for bad in ({"kind": "drive-doc", "link": self.pid},                      # sem doc
-                    {"kind": "drive-doc", "doc": self.DOC},                       # sem link
                     {"kind": "drive-doc", "doc": self.DOC, "link": "PROC-9999"},  # link inexistente
                     {"kind": "drive-doc", "doc": "!!", "link": self.pid}):        # doc inválido
             with self.assertRaises(util.BrainError, msg=str(bad)):
                 watch.check_fields(self.brain, bad)
+        watch.check_fields(self.brain, {"kind": "drive-doc", "doc": self.DOC})    # sem link vale: doc avulso não precisa de dono
         with self.assertRaises(util.BrainError):
             watch.link_playbook(self.brain, "PROC-9999", self.DOC)
         with self.assertRaises(util.BrainError):

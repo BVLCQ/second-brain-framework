@@ -203,6 +203,57 @@ class DetailTest(unittest.TestCase):
             for a in st.m["actions"]:
                 rows.d_action(st, store.Item(a["id"], "action", a))
 
+    def test_linked_files_section_and_opener(self):
+        """Detalhe lista os arquivos ligados (nota, artefato, RAW), clicáveis; o app vem de [tui.open], senão o padrão do sistema."""
+        from brainlib import opener
+        from brainlib.tui import rows, store
+        with tempfile.TemporaryDirectory() as tmp, contextlib.redirect_stdout(io.StringIO()):
+            root = Path(tmp) / "inst"
+            demo_mod.cli(argparse.Namespace(dir=str(root), open=False))
+            inst = config.load(root)
+            inst.cfg["tui"]["open"] = {"md": "Cursor", "mp4": "VLC"}
+            note = inst.vault / "RAW" / "2026" / "10" / "notes" / "TASK-0001-2026-10-21-note.md"
+            note.parent.mkdir(parents=True)
+            note.write_text("---\ntipo: nota\nvinculo: TASK-0001\ncriada: 2026-10-21 09:00\n---\ntexto\n", encoding="utf-8")
+            st = store.Store(inst)
+            rel = inst.rel(note)
+            a = next(a for a in st.m["actions"] if a["id"] == "TASK-0001")
+            files = st.linked_files(a["id"], (a["source"],))
+            self.assertIn(rel, [f["rel"] for f in files])
+            self.assertEqual(len({f["rel"] for f in files}), len(files))      # sem repetidos
+            doc = rows.d_action(st, store.Item(a["id"], "action", a)).text()
+            self.assertIn("Arquivos linkados", doc.plain)
+            clicks = [sp.style.meta["@click"] for sp in doc.spans if getattr(sp.style, "meta", None) and "open_file" in sp.style.meta.get("@click", "")]
+            self.assertIn(f"app.open_file({rel!r})", clicks)
+            # app por extensão; sem mapa = padrão do sistema; fora do vault é recusado
+            self.assertEqual(opener.argv_for(inst.cfg, Path("/v/a.md"), "darwin"), ["open", "-a", "Cursor", "/v/a.md"])
+            self.assertEqual(opener.argv_for(inst.cfg, Path("/v/a.MP4"), "darwin"), ["open", "-a", "VLC", "/v/a.MP4"])
+            self.assertEqual(opener.argv_for(inst.cfg, Path("/v/a.pdf"), "darwin"), ["open", "/v/a.pdf"])
+            self.assertEqual(opener.argv_for(inst.cfg, Path("/v/a.pdf"), "linux"), ["xdg-open", "/v/a.pdf"])
+            for bad in ("../config/brain.toml", "/etc/hosts", "RAW/nao-existe.md"):
+                with self.assertRaises(util.BrainError):
+                    opener.resolve(inst, bad)
+
+    def test_linked_ids_carry_their_title(self):
+        """Na Detalhe, TASK/GOAL/PROJ/entregável vinculados trazem o título, não só o ID."""
+        from brainlib.tui import rows, store
+        with tempfile.TemporaryDirectory() as tmp, contextlib.redirect_stdout(io.StringIO()):
+            root = Path(tmp) / "inst"
+            demo_mod.cli(argparse.Namespace(dir=str(root), open=False))
+            st = store.Store(config.load(root))
+            a, g, p = st.m["actions"][0], st.m["goals"][0], st.m["projects"][0]
+            d = next(d for pr in st.m["projects"] for d in pr["deliverables"])
+            for ref, title in ((a["id"], a["title"]), (g["id"], g["title"]), (p["id"], p["title"]), (d["id"], d["title"])):
+                self.assertEqual(rows.titled(st, ref).plain, f"{ref} {title}")
+            self.assertEqual(rows.titled(st, "2025-01-01:2025-03-31").plain, "2025-01-01:2025-03-31")
+
+            class Prop:
+                id, kind, status, summary, evidence, into = "PROP-0001", "unificar-acao", "aberta", "x", "e", g["id"]
+                target = a["id"]
+            plain = rows.d_prop(st, store.Item("PROP-0001", "prop", Prop)).text().plain
+            self.assertIn(f"{a['id']} {a['title']}", plain)
+            self.assertIn(f"{g['id']} {g['title']}", plain)
+
 
 @unittest.skipUnless(HAVE_TEXTUAL, "textual não instalado (./brain tui --setup)")
 class TuiTest(unittest.IsolatedAsyncioTestCase):

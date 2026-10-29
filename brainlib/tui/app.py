@@ -26,6 +26,7 @@ from textual.widget import Widget
 from textual.widgets import RichLog, Static
 
 from .. import dupes
+from .. import opener
 from .. import ids as idmod
 from .. import notes as notes_mod
 from .. import people as people_mod
@@ -634,6 +635,15 @@ class BrainApp(AskKeys, PortfolioKeys, App):
 
     def action_jump(self, node: str) -> None:
         self.jump(node)
+
+    def action_open_file(self, rel: str) -> None:
+        """Clique num arquivo linkado: abre no aplicativo da máquina ([tui.open]); só lê, nunca escreve."""
+        try:
+            app = opener.open_file(self.inst, rel)
+        except util.BrainError as e:
+            self.log_line(str(e), "yellow")
+            return
+        self.log_line(f"abrindo {Path(rel).name} → {app}", "dim")
 
     # ── teclado ────────────────────────────────────────────────────────────
     def on_key(self, event: events.Key) -> None:

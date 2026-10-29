@@ -83,6 +83,12 @@ agent_allow = []
 model = ""                     # ex.: "haiku" (alias; o claude resolve)
 effort = ""                    # low | medium | high | xhigh | max
 
+[tui.open]
+# Aplicativo que abre o arquivo clicado no detalhe ("Arquivos linkados", notas, documentos): extensão sem ponto = nome do app.
+# Vazio = programa padrão do sistema (macOS: open -a <app>; Linux: o comando).
+# md = "Cursor"
+# mp4 = "VLC"
+
 [backup]
 enabled = false
 max_file_mb = 50                # arquivos maiores entram só no manifesto

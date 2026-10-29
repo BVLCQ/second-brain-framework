@@ -9,9 +9,10 @@ import tomllib
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date, timedelta
+from pathlib import Path
 from typing import Any
 
-from .. import config, doctor, ids, model, notes as notes_mod, util, watch
+from .. import config, doctor, ids, model, notes as notes_mod, opener, rawsort, util, watch
 from ..core import Brain
 
 PANELS_EXEC = {
@@ -189,6 +190,7 @@ class Store:
         self.by_goal = {g["id"]: g for g in m["goals"]}
         self.by_deliv = {d["id"]: (p, d) for p in m["projects"] for d in p["deliverables"]}
         self.by_person = {p["id"]: p for p in m["people"]}
+        self.by_artifact = {a["id"]: a for a in m["artifacts"]}
         self.by_msg = {x["id"]: x for x in m["outbox"]}
         pf = m["portfolio"]
         self.pf = pf
@@ -373,6 +375,63 @@ class Store:
 
     def first_name(self, pid: str) -> str:
         return self.person_name(pid).split(" ")[0]
+
+    def _vault_file(self, ref: str) -> Path | None:
+        """Arquivo real de um caminho do ledger (RAW/… acha a pasta do tipo); None se não for arquivo do vault."""
+        ref = (ref or "").split("#")[0].strip()
+        p = Path(ref)
+        if not ref or ref == "chat" or p.is_absolute() or ".." in p.parts:
+            return None
+        f = rawsort.resolve(self.inst, ref) if p.parts[0] == "RAW" else self.inst.vault / p
+        return f if f and f.is_file() and f.resolve().is_relative_to(self.inst.vault.resolve()) else None
+
+    def linked_files(self, node: str = "", sources: tuple = (), docs: list | None = None) -> list[dict]:
+        """Arquivos do vault ligados a um item, sem repetir: notas do vínculo, artefatos do projeto, fontes (artefato + RAW) e documentos.
+
+        Cada um: {kind, name, rel (relativo ao vault), app (aplicativo que abre; vazio = padrão do sistema)}."""
+        out: dict[str, dict] = {}
+
+        def add(kind: str, name: str, ref: str) -> None:
+            f = self._vault_file(ref)
+            if f is None:
+                return
+            rel = self.inst.rel(f)
+            if rel not in out:
+                out[rel] = {"kind": kind, "name": name or f.name, "rel": rel, "app": opener.app_for(self.inst.cfg, f)}
+
+        for n in self.notes_of(node) if node else []:
+            add("nota", f"{n.created} {n.title}", n.path)
+        pids = set(self.by_goal[node]["projects"]) if node in self.by_goal else \
+            {self.by_deliv[node][0]["id"]} if node in self.by_deliv else {node} if node in self.by_project else set()
+        for a in self.m["artifacts"]:
+            if pids & set(a["projects"]):
+                add("artefato", a["title"], a["id"])
+                add("RAW", Path(a["raw"]).name if a["raw"] else "", a["raw"])
+        for src in sources:
+            key = (src or "").split("#")[0]
+            art = self.by_artifact.get(key)
+            if art:
+                add("artefato", art["title"], art["id"])
+                add("RAW", Path(art["raw"]).name if art["raw"] else "", art["raw"])
+            else:
+                add("RAW" if key.startswith("RAW/") else "documento", "", key)
+        for d in docs or []:
+            add("documento", d.get("title") or "", d["ref"])
+        return list(out.values())
+
+    def title_of(self, ref: str) -> str:
+        """Título da entidade citada (ação, goal, projeto, entregável, decisão, oportunidade, processo); vazio se não for ID conhecido."""
+        ref = ids.normalize(ref or "")
+        if ref in self.by_deliv:
+            return self.by_deliv[ref][1]["title"]
+        for tbl in (self.by_action, self.by_goal, self.by_project, self.by_opp, self.by_proc):
+            if ref in tbl:
+                return tbl[ref]["title"]
+        for key in ("decisions", "deliveries"):
+            for x in self.m[key]:
+                if x["id"] == ref:
+                    return x["title"]
+        return ""
 
     @property
     def owner(self) -> str:
