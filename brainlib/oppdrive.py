@@ -11,6 +11,7 @@ com cópia dos DOCUMENTOS (RAW `documents/`) que sustentam a oportunidade — re
 """
 from __future__ import annotations
 
+import fnmatch
 import json
 import mimetypes
 from pathlib import Path
@@ -61,13 +62,15 @@ def source_files(b: Brain, o) -> dict:
     Sobem só documentos (RAW `documents/`); reunião (dia + participantes), Slack, nota e conector ficam como menção —
     transcrição pode expor gente. O próprio one-pager relido pelo /update também não é fonte."""
     done, up, mention = onepager.uploaded(b, o), [], []
+    skip = [str(x).lower() for x in (b.inst.cfg.get("oppdrive") or {}).get("sources_skip", [])]   # nomes que nunca sobem
     vault_raw = b.inst.vault / "RAW"
     for path in dict.fromkeys(p for p in [o.source, *o.evidence] if p and p != "chat"):
         a = b.state.artifacts.get(path.split("#")[0])
         local = rawsort.resolve(b.inst, a.raw) if a and a.raw else None
         parts = local.relative_to(vault_raw).parts if local and vault_raw in local.parents else ()
         eligible = (len(parts) >= 4 and parts[2] == "documents" and a.kind not in onepager.MEETING
-                    and a.link != o.id and "one-pager" not in local.name.lower())
+                    and a.link != o.id and "one-pager" not in local.name.lower()
+                    and not any(fnmatch.fnmatch(local.name.lower(), g) for g in skip))
         if not eligible:
             mention.append({"artifact": path, "label": onepager.source_line(b, o, path)})
             continue

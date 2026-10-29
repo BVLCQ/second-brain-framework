@@ -52,6 +52,7 @@ root = ""                       # id ou URL da pasta-raiz ("Oportunidades")
 # a de criar arquivo do Drive, a de ler/atualizar doc do Docs e a de busca. `brain agent allow` não libera escrita
 # externa — só esta lista, editada à mão pelo dono.
 tools = []
+# sources_skip = ["*.csv"]      # documentos que nunca sobem para a pasta Fontes (glob no nome do arquivo)
 
 # [oppdrive.brand]                # cores e fonte das tabelas do one-pager (hex sem #)
 # header = "1F3A5F"
