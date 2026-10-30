@@ -17,5 +17,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
-      - name: unittest (stdlib only, no network)
-        run: python -m unittest tests.test_brain tests.test_watch tests.test_tui -v
+      - name: TUI opcional (hashes travados) — ativa os testes do cockpit
+        run: pip install -r requirements-tui.txt
+      - name: unittest discover (todos os arquivos de tests/, sem rede)
+        run: python -m unittest discover -s tests -v

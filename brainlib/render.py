@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import webbrowser
 import subprocess
 from pathlib import Path
 
@@ -47,13 +48,20 @@ def _cleanup(fresh: Path, keep: set[Path]) -> list[str]:
     return removed
 
 
+def view_model(brain) -> dict:
+    """O view model completo (o que o render injeta no painel e o serve devolve em /api/data):
+    modelo + checagens de saúde + notas do agente — mesmas chaves nos dois caminhos."""
+    m = model.build(brain)
+    m["health"] = doctor.checks(brain)
+    m["notes"] = _notes(brain.inst.fresh)
+    return m
+
+
 def render_all(brain, do_harvest: bool = True) -> dict:
     notices: list[dict] = []
     brain.sweep_proposals()        # propostas que o dono já resolveu por fora do painel
     harvested = harvest_mod.run(brain, notices) if do_harvest else []
-    m = model.build(brain)
-    m["health"] = doctor.checks(brain)
-    m["notes"] = _notes(brain.inst.fresh)
+    m = view_model(brain)
     pages = render_md.Pages(brain.inst, m)
     pages.home()
     todo_checks = pages.todo()
@@ -94,10 +102,61 @@ def summary(report: dict) -> str:
     return "\n".join(lines)
 
 
-def open_dashboard(brain, panel: str = "execucao") -> None:
+def ensure_bridge(brain, port: int = 8787, wait_s: float = 3.0) -> str | None:
+    """Ponte no ar? devolve a URL viva. Não está? SOBE uma (daemon destacado) e espera.
+    É o `./brain serve` de sempre, só não fazendo o dono lembrar dele."""
+    try:
+        from .serve import live_panel_url
+        live = live_panel_url(brain.inst)
+    except Exception:                                      # noqa: BLE001 — abrir o painel nunca falha por isso
+        live = None
+    if live:
+        return live
+    import os, subprocess, sys, time, socket
+    from .tui.bridge import FRAMEWORK                        # o script `brain` mora no FRAMEWORK, não na instância
+    log = brain.inst.logs / "serve.log"
+    brain.inst.logs.mkdir(parents=True, exist_ok=True)
+    env = {**os.environ, "BRAIN_HOME": str(brain.inst.root)}
+    try:
+        with open(log, "ab") as fh:
+            subprocess.Popen([sys.executable, str(FRAMEWORK / "brain"), "serve", "--port", str(port)],
+                             cwd=str(brain.inst.root), stdout=fh, stderr=fh, env=env,
+                             stdin=subprocess.DEVNULL, start_new_session=True)
+    except Exception as e:                                 # noqa: BLE001 — sem ponte, segue o retrato
+        print(f"⚠ não consegui subir a ponte ({e}) — abrindo o retrato")
+        return None
+    deadline = time.time() + wait_s
+    while time.time() < deadline:
+        try:
+            with socket.create_connection(("127.0.0.1", port), timeout=0.3):
+                from .serve import live_panel_url as _lpu
+                url = _lpu(brain.inst)
+                if url:
+                    return url
+        except Exception:                                  # noqa: BLE001
+            pass
+        time.sleep(0.15)
+    print("⚠ a ponte não respondeu a tempo — abrindo o retrato (log: logs/serve.log)")
+    return None
+
+
+def open_dashboard(brain, panel: str = "execucao", spawn: bool = True) -> None:
+    # painel VIVO sempre que possível: executa comandos e o reload é sempre fresco
+    try:
+        from .serve import live_panel_url
+        live = live_panel_url(brain.inst)
+        if not live and spawn:
+            live = ensure_bridge(brain)
+    except Exception:                                      # noqa: BLE001
+        live = None
+    if live:
+        print(f"✓ ponte CLI no ar — abrindo o painel vivo ({live.split('#')[0]})")
+        webbrowser.open(live)
+        return
     path = brain.inst.fresh / "dashboard" / PANELS[panel]
     opener = shutil.which("xdg-open") or shutil.which("open")
     if opener:
         subprocess.run([opener, str(path)], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        print("retrato file:// — ./brain serve liga os comandos (e o --open passa a abrir o vivo)")
     else:
-        print(f"abra no navegador: file://{path}")
+        print(f"abra no navegador: file://{path}\n(retrato — ./brain serve liga os comandos)")

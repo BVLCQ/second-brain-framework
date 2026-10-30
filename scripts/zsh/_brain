@@ -1,0 +1,23 @@
+#compdef brain
+# Autocompletar do Segundo Cérebro para o zsh.
+# Instalação: copie para ~/.zsh/completions/_brain e garanta no ~/.zshrc:
+#   fpath=("$HOME/.zsh/completions" $fpath)
+#   autoload -Uz compinit && compinit
+# A fonte é o próprio CLI (`brain --completions`), então só oferece o que existe —
+# dois níveis de subcomando e, na folha, as opções do argparse.
+_brain() {
+  local -a cmds tail
+  local i
+  for (( i = 2; i <= CURRENT - 1; i++ )); do
+    [[ "${words[i]}" != -* ]] && tail+=("${words[i]}")
+  done
+  cmds=(${(f)"$(brain --completions $tail 2>/dev/null)"})
+  if (( ${#cmds[@]} )); then
+    _describe -t brain-cmds 'comando' cmds
+    return 0
+  fi
+  _files
+  return 0
+}
+
+_brain "$@"

@@ -2184,7 +2184,7 @@ class CoverageTest(unittest.TestCase):
         "oppdrive status", "oppdrive onepager", "oppdrive record", "oppdrive suggested",   # porta do Drive: quem cria é o agente
         "oppdrive build", "oppdrive sync", "oppdrive synced", "oppdrive restyle", "oppdrive links",    # (e quem mantém o Resumo)
         "action not-dup"}     # julgamento do agente sobre um par de candidatas; o dono decide pela proposta
-    NOT_IN_TUI = {"demo", "tui", "migrate ids"}      # migração única, feita no terminal com o dono (backup + dry-run)
+    NOT_IN_TUI = {"demo", "tui", "migrate ids", "serve"}   # migração única no terminal; serve é a ponte do painel HTML
     DYNAMIC = {"memory recall", "memory reflect"}      # o formulário "Memória: perguntar" monta o subcomando
 
     def test_every_cli_subcommand_is_accounted_for(self):

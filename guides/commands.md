@@ -280,6 +280,28 @@ completo por contexto, a legenda e uma versão para experimentar com dados fict�
 `tests/test_tui.py::CoverageTest` garante que nenhum subcomando novo da CLI fique sem lugar ou sem justificativa. `[runner].allow` do `brain.toml` lista as ferramentas MCP de leitura do agente headless (noturno e TUI). Em `[tui]`, `model` e `effort` escolhem o modelo e o esforço do claude nas ações ⚡ (ex.: `haiku` · `high`; vazio = padrão; não valem com `[runner].command`), e `agent_allow` lista ferramentas extras, só do TUI, que o
 agente pode usar nas ações ⚡ (por exemplo as de escrita do MCP do Slack, só para enviar uma mensagem aprovada).
 
+### `brain serve`
+Ponte CLI do painel HTML: o mesmo `FRESH/dashboard/index.html` que abre por `file://`, mas executando
+os comandos de verdade — exatamente as linhas que o TUI dispara (`tui/bridge.run_brain`), com os gates
+do CLI valendo igual (`--quote`, aprovações, `--by owner` nos fatos do dono).
+```bash
+brain serve            # imprime http://127.0.0.1:8787/#t=<token> — abra no navegador
+brain serve --open     # já abre o navegador com o token na URL
+brain serve --port 8791
+```
+
+No terminal, `brain <TAB>` completa os dois níveis de subcomando (e as opções na folha) se o
+seu shell estiver apontado para `brain --completions` — no zsh, um `_brain` em `~/.zsh/completions`
+resolve; a lista vem do próprio argparse, então nunca desencontra do CLI.
+`brain render --open` usa a ponte sozinho: se ela estiver no ar abre o painel vivo; se não, sobe
+uma (daemon, log em `logs/serve.log`) e abre do mesmo jeito — o retrato file:// fica para leitura pura.
+Só escuta em `127.0.0.1`, com token (vem no fragmento da URL, guardado no `localStorage`; a `/api/*`
+recusa sem ele). A allowlist é fechada: os subcomandos que o painel emite (ação, foco, perguntas,
+mensagens, portfólio, plano…); todo o resto — `update`, `migrate`, `serve`, `init`, `backup` — é 403,
+mesmo com o token. O noturno nunca serve. `file://` continua sendo retrato somente-leitura: os gestos
+de escrita mostram a linha pronta e copiam para o terminal. Nenhuma porta nova para o mundo exterior:
+a ponte só conversa com o `./brain` local.
+
 ### `brain pdf text` · `brain pdf render`
 Leitura de PDF para o `/dump`, sem instalar nada obrigatório e sem tocar no vault (a saída vai para o stdout ou para uma pasta temporária).
 ```bash

@@ -635,34 +635,69 @@ Já coberto na seção 3. Gatilho: PROFILE e PLANNING vazios.
 ## 8. O painel — um passeio
 
 `./brain render --open` abre `vault/FRESH/dashboard/index.html` — **um
-arquivo**, offline, que funciona em qualquer navegador (dá para mandar para
-você mesmo por Slack e abrir no celular). Tem modo escuro automático e
-busca global. Abas:
+arquivo** que funciona em qualquer navegador, com dois modos:
+
+- **Retrato (file://)** — somente leitura, sempre. Todo gesto de escrita
+  (arrastar card, editar, criar, aprovar) **mostra e copia** a linha exata
+  do terminal — a mesma que o TUI dispara. Nada executa, nada sai da
+  máquina.
+- **Ponte CLI (`./brain serve`)** — servidor local em 127.0.0.1 com token
+  (impresso no terminal). O painel passa a **executar** os comandos de
+  verdade, pelo mesmo caminho do TUI, com os mesmos gates (`--quote`,
+  aprovação literal, `--by owner`). A allowlist é fechada; `update`,
+  `migrate`, `backup` e cia. seguem no terminal.
+
+O painel tem duas **faces** (como o TUI): **Execução** e **Portfólio** —
+`Tab`/`Shift+Tab` troca, e cada face lembra onde você estava. A barra
+lateral traz as páginas (com badges), a busca ⌘K e a barra inferior mostra
+as teclas do contexto — clicáveis, com os gates em destaque.
+
+**Execução** — páginas:
 
 - **Início** — o `/brief` visual: goals com barras de progresso (calculado
-  **e** declarado), saúde, hoje + 7 dias (prazos, ações, blocos de foco),
-  "precisa de você" (propostas, planos, rascunhos), conquistas e decisões
-  recentes.
-- **TODO** (badge: atrasadas) — três listas (minhas · aguardando ·
-  observando) com atraso, esforço, projeto. Clicar numa ação abre a ficha.
+  **e** declarado), saúde, hoje + 7 dias, "precisa de você", conquistas e
+  decisões recentes. `n` escreve uma nota rápida.
+- **TODO** (badge: atrasadas) — kanban (a fazer · fazendo · bloqueada ·
+  feita) com **arrastar-e-soltar**: soltar roda o comando (marcar fazendo,
+  fechar, reabrir); bloqueadas recusam citando o `blocked_by`. Abaixo, a
+  lista de aguardando-de-outros. Teclas: `n` nova, `e` editar, `c` fechar,
+  `s` status, `t` prazo, `D` descartar, `z` não agora, `o` reabrir,
+  `m` rascunhar cobrança. A ficha da ação tem os mesmos botões e
+  `m` mescla duplicada (`action merge`).
 - **Projetos** — ficha por projeto: entregáveis com peso, próximos marcos,
-  saúde com motivo, decisões e ações ligadas. (A árvore completa de goals
-  fica em `FRESH/goals.md`.)
-- **Decisões** — quem decidiu, quando, com base em quê, substituídas por
-  quais (cadeia de supersedes).
-- **Conquistas** — wins por semana: entregas, entregáveis concluídos,
-  ações fechadas.
-- **Pessoas** — ficha por pessoa: papel, o que cada um deve ao outro,
-  decisões que tomou, menções recentes.
-- **Portfólio** — processos por área (horas/mês, responsável, playbook, lacunas),
-  oportunidades com ICE, funil de status e a matriz impacto × facilidade.
-- **Linha do tempo** — o que aconteceu e o que vem: prazos e marcos.
-- **Foco** (badge: plano proposto) — o plano da semana e seus blocos.
-- **Mensagens** (badge: rascunhos pendentes) — o outbox: rascunhos,
-  enviadas, falhas. Nada sai sem sua aprovação do texto exato.
+  saúde com motivo, decisões e ações ligadas. O círculo do entregável
+  marca feito (`space`) ou muda estado (`s`) — é a colheita do checkbox.
+  `n estrutura` cria goal/projeto/entregável (os dois primeiros com gate
+  de aprovação literal); `e` edita com o mesmo gate; o botão ⛏ no goal
+  declara progresso.
+- **Decisões** — quem decidiu, quando, com base em quê, cadeia de
+  supersedes. `n` nova, `S` supera a selecionada.
+- **Conquistas** — wins por semana. `n` registra uma entrega.
+- **Pessoas** — ficha por pessoa. `n` nova pessoa, `u/e` edita, `a` alias.
+- **Linha do tempo** — o que aconteceu e o que vem.
+- **Foco** (badge: plano proposto) — o plano da semana **com o seu
+  calendário real**: eventos ocupados em cinza, blocos propostos em azul,
+  conflitos em vermelho. `A` aprova (gate), `a` aplica, `s` sincroniza,
+  `p` replaneja; clicar num bloco proposto reserva o plano.
+- **Mensagens** (badge: rascunhos) — o outbox: rascunhos, enviadas,
+  falhas. `n` rascunha, `A` aprova o texto exato (gate), `x` cancela.
+- **Perguntas** — a caixa de aprovação: ASKs, propostas (aceitar/rejeitar
+  com quote) e a seção **Publicar** (porta 3). `n` pede publicação.
 - **Saúde** (badge: avisos) — o `doctor` visual.
 
-Fora das abas ficam dois arquivos Mermaid que o render gera e você abre no
+**Portfólio** — páginas: **Visão geral** (funil, horas/mês por área,
+lacunas), **Oportunidades** (kanban por estágio — arrastar muda status;
+`em-espera`/`descartada` pedem motivo digitado; `i` sugere ICE, `c`
+confirma, `p` promover = gate estrutural), **Matriz** impacto × facilidade,
+**Processos** (`n` novo, `e` edita, `x` aposenta) e **Áreas** (`n` nova;
+clicar numa área abre a página da área com processos, oportunidades e
+pessoas dela).
+
+`/` busca em tudo; `?` mostra o mapa de teclas. O mapa de oportunidades
+também sai como arquivo próprio — `vault/FRESH/dashboard/portfolio.html`,
+só o recorte do portfólio, feito para circular (`brain share portfolio`).
+
+Fora do painel ficam dois arquivos Mermaid que o render gera e você abre no
 editor/preview que renderizar Mermaid: `FRESH/map.md` (os três grafos do
 `/map`) e `FRESH/timeline.md` (Gantt 30–45d).
 

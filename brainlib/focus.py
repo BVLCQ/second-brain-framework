@@ -67,15 +67,13 @@ def _subtract(windows: list[Interval], busy: list[Interval]) -> list[Interval]:
     return free
 
 
-def parse_busy(raw, cfg) -> list[Interval]:
-    """Eventos (JSON do MCP de calendário ou da API) → intervalos ocupados.
-    Ignora: transparentes, cancelados, recusados por você, e os próprios blocos do cérebro
-    (serão substituídos). Ausência (out of office) o dia todo bloqueia o dia."""
+def _iter_busy(raw, cfg):
+    """(início, fim, título) dos eventos ocupados — horários CRUS, mesmas regras de filtro
+    de `parse_busy`, mantendo o título para o painel mostrar o que já está na agenda.
+    (O buffer é margem de PLANEJAMENTO: `parse_busy` aplica; a exibição mostra o horário real.)"""
     if isinstance(raw, dict):
         raw = raw.get("events") or raw.get("items") or raw.get("result") or []
     prefix = cfg["focus"]["title_prefix"]
-    buffer = timedelta(minutes=cfg["focus"]["buffer_min"])
-    out: list[Interval] = []
     for ev in raw or []:
         if not isinstance(ev, dict):
             continue
@@ -90,11 +88,28 @@ def parse_busy(raw, cfg) -> list[Interval]:
         s, e = ev.get("start") or {}, ev.get("end") or {}
         etype = str(ev.get("eventType", "")).lower()
         if "dateTime" in s and "dateTime" in e:
-            out.append((util.parse_dt(s["dateTime"]) - buffer, util.parse_dt(e["dateTime"]) + buffer))
+            yield (util.parse_dt(s["dateTime"]), util.parse_dt(e["dateTime"]),
+                   str(ev.get("summary") or "ocupado"))
         elif "date" in s and etype in ("outofoffice", "out_of_office"):
             d0, d1 = util.parse_date(s["date"]), util.parse_date(e.get("date") or s["date"])
-            out.append((datetime.combine(d0, time(0), util.tz()), datetime.combine(d1, time(0), util.tz())))
-    return out
+            yield (datetime.combine(d0, time(0), util.tz()), datetime.combine(d1, time(0), util.tz()),
+                   str(ev.get("summary") or "ausente"))
+
+
+def busy_json(raw, cfg, limit: int = 120) -> list[dict]:
+    """Agenda ocupada serializada — entra no `focus.planned` e sai no view model
+    para o painel desenhar o calendário da semana com os eventos reais."""
+    return [{"start": s.isoformat(), "end": e.isoformat(), "title": t}
+            for s, e, t in _iter_busy(raw, cfg)][:limit]
+
+
+def parse_busy(raw, cfg) -> list[Interval]:
+    """Eventos (JSON do MCP de calendário ou da API) → intervalos ocupados, JÁ com o buffer
+    de folga dos dois lados (o planejador não cola bloco de foco em cima do evento).
+    Ignora: transparentes, cancelados, recusados por você, e os próprios blocos do cérebro
+    (serão substituídos). Ausência (out of office) o dia todo bloqueia o dia."""
+    buffer = timedelta(minutes=cfg["focus"]["buffer_min"])
+    return [(s - buffer, e + buffer) for s, e, _ in _iter_busy(raw, cfg)]
 
 
 def latest_calendar_snapshot(vault: Path) -> Path | None:
@@ -111,7 +126,7 @@ def _spent(brain, aid: str, now: datetime) -> int:
     return mins
 
 
-def build_plan(brain, busy: list[Interval], days: int | None = None) -> dict:
+def build_plan(brain, busy: list[Interval], days: int | None = None, busy_meta: list[dict] | None = None) -> dict:
     cfg, st = brain.inst.cfg, brain.state
     fc = cfg["focus"]
     now = util.now()
@@ -210,7 +225,7 @@ def build_plan(brain, busy: list[Interval], days: int | None = None) -> dict:
             unscheduled.append({"action": a.id, "left_min": left})
     blocks.sort(key=lambda b: b["start"])
     body = {"blocks": blocks, "at_risk": at_risk, "unscheduled": unscheduled, "missing_effort": missing,
-            "consumed": consumed, "blocked": blocked,
+            "consumed": consumed, "blocked": blocked, "busy": busy_meta or [],
             "horizon": {"start": start_day.isoformat(), "end": (end_day - timedelta(days=1)).isoformat()},
             "params": {k: fc[k] for k in ("block_min", "block_max", "daily_max_min", "buffer_min")}}
     body["sha"] = util.sha(json.dumps(body, sort_keys=True))
@@ -381,7 +396,7 @@ def cli(args, brain) -> None:
             raw = json.loads(snap.read_text(encoding="utf-8")) if snap else []
             src = brain.inst.rel(snap) if snap else "nenhum snapshot de calendário (agenda tratada como livre)"
         busy = parse_busy(raw, brain.inst.cfg)
-        body = build_plan(brain, busy, args.days)
+        body = build_plan(brain, busy, args.days, busy_json(raw, brain.inst.cfg))
         ev = brain.record_one({"type": "focus.planned", "by": "system", "source": src,
                                "data": {"plan_file": "FRESH/focus.md", **body}})
         fid = ev["id"]

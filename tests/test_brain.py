@@ -347,6 +347,59 @@ class FocusTests(unittest.TestCase):
         self.assertIn("BEGIN:VEVENT", ics)
         self.assertIn("SUMMARY:Foco · TASK-0001 · Ler", ics)
 
+    def test_busy_json_keeps_titles_and_is_signed_by_plan_sha(self):
+        """A agenda ocupada (com títulos) entra no corpo do plano — o sha cobre ela."""
+        raw = [
+            {"summary": "Dentista", "start": {"dateTime": "2026-10-09T15:00:00-03:00"},
+             "end": {"dateTime": "2026-10-09T15:45:00-03:00"}},
+            {"summary": "foco · TASK-0001", "start": {"dateTime": "2026-10-09T16:00:00-03:00"},
+             "end": {"dateTime": "2026-10-09T17:00:00-03:00"}},
+            {"status": "cancelled", "summary": "x", "start": {"dateTime": "2026-10-09T16:00:00-03:00"},
+             "end": {"dateTime": "2026-10-09T17:00:00-03:00"}},
+        ]
+        cfg0 = {"focus": {"title_prefix": "foco", "buffer_min": 0}}
+        bj = focus.busy_json(raw, cfg0)
+        self.assertEqual([b["title"] for b in bj], ["Dentista"])          # bloco do cérebro e cancelados ficam fora
+        # exibição mostra o horário REAL; o buffer é margem de planejamento (parse_busy)
+        cfg10 = {"focus": {"title_prefix": "foco", "buffer_min": 10}}
+        self.assertEqual(focus.busy_json(raw, cfg10)[0]["start"], "2026-10-09T15:00:00-03:00")
+        self.assertEqual(focus.parse_busy(raw, cfg10)[0][0].isoformat(), "2026-10-09T14:50:00-03:00")
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            body = focus.build_plan(b, focus.parse_busy(raw, {"focus": {"title_prefix": "foco", "buffer_min": 0}}),
+                                    busy_meta=bj)
+            unsigned = {k: v for k, v in body.items() if k != "sha"}
+            self.assertEqual(body["busy"], bj)
+            self.assertEqual(body["sha"], util.sha(json.dumps(unsigned, sort_keys=True)))   # sem invalidar o sha
+
+    def test_plano_antigo_sem_busy_aprova_e_aplica_no_codigo_novo(self):
+        """Usuário real: plano proposto ANTES do update (sem `busy` no corpo), aprovado e
+        aplicado DEPOIS. O sha é lido do evento, nunca recalculado — mistura de eras funciona."""
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            b.record_one({"type": "action.opened", "by": "owner",
+                          "data": {"title": "Ler", "owner": "eu", "effort_min": 60}})
+            body = focus.build_plan(b, [])                     # código NOVO gera corpo COM busy
+            body_sem_busy = {k: v for k, v in body.items() if k not in ("busy", "sha")}
+            body_sem_busy["sha"] = util.sha(json.dumps(body_sem_busy, sort_keys=True))   # formato ANTIGO assinado
+            ev = b.record_one({"type": "focus.planned", "by": "system",
+                               "data": {"plan_file": "FRESH/focus.md", **body_sem_busy}})
+            b.record_one({"type": "focus.approved", "id": ev["id"], "by": "owner",
+                          "data": {"quote": "ok", "sha": body_sem_busy["sha"]}})
+            res = focus.apply(b, ev["id"], mode="ics")         # aplica o plano antigo no código novo
+            self.assertGreaterEqual(res["created"], 1)
+            self.assertEqual(b.validate_all(), [])
+
+    def test_view_model_exposes_busy(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            bj = [{"start": "2026-10-09T10:00:00-03:00", "end": "2026-10-09T11:00:00-03:00", "title": "Reunião"}]
+            body = focus.build_plan(b, [], busy_meta=bj)
+            b.record_one({"type": "focus.planned", "by": "system",
+                          "data": {"plan_file": "FRESH/focus.md", **body}})
+            m = model.build(b)
+            self.assertEqual(m["focus"]["busy"], bj)                     # o painel desenha a agenda da semana
+
     def test_apply_requires_approval(self):
         with tempfile.TemporaryDirectory() as td:
             b = _brain(Path(td))
@@ -722,6 +775,173 @@ class NightlyGateTests(unittest.TestCase):
                     outbox.approve(b, ev["id"], "ok")
             finally:
                 os.environ.pop("BRAIN_NIGHTLY", None)
+
+
+class CliCompletionTests(unittest.TestCase):
+    """`brain --completions` alimenta o autocompletar do shell — fonte única: o argparse."""
+
+    def _run(self, *argv):
+        import io, contextlib
+        from brainlib import cli
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = cli.main(list(argv))
+        return rc, buf.getvalue()
+
+    def test_dois_niveis_e_opcoes_de_folha(self):
+        rc, top = self._run("--completions")
+        self.assertEqual(rc, 0)
+        self.assertIn("action:", top)                              # nível 1, com descrição
+        rc, sub = self._run("--completions", "action")
+        self.assertIn("update", sub.splitlines())                 # nível 2
+        rc, opts = self._run("--completions", "action", "update")
+        self.assertIn("--due", opts.splitlines())                 # folha: opções
+        rc, again = self._run("--completions", "action", "update", "--due")
+        self.assertIn("--status", again.splitlines())             # flags já digitadas não travam a folha
+
+    def test_flag_oculta_nao_polui_help_nem_cobertura(self):
+        from brainlib import cli as _cli
+        import argparse as _ap
+        p = _cli.build_parser()
+        sub = next(a for a in p._actions if isinstance(a, _ap._SubParsersAction))
+        self.assertNotIn("--completions", [o for a in p._actions for o in a.option_strings])
+        self.assertNotIn("completions", sub.choices)              # não é superfície nova p/ TUI/painel
+
+
+class DashboardAssetTests(unittest.TestCase):
+    """Os painéis vêm de brainlib/assets/src e são montados por scripts/build_assets.py.
+    O build tem que ser determinístico: o arquivo commitado é exatamente o que o script gera."""
+
+    def _build(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("build_assets", ROOT / "scripts" / "build_assets.py")
+        assert spec and spec.loader, "build_assets.py não encontrado"
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    def test_committed_assets_match_build(self):
+        mod = self._build()
+        self.assertEqual((ROOT / "brainlib/assets/dashboard.html").read_text(encoding="utf-8"),
+                         mod.assemble(False, "Segundo Cérebro"))
+        self.assertEqual((ROOT / "brainlib/assets/portfolio.html").read_text(encoding="utf-8"),
+                         mod.assemble(True, "Segundo Cérebro — Portfólio"))
+
+    def test_panel_reads_are_guarded_for_any_payload(self):
+        """Compatibilidade retroativa: toda chave que o painel lê (M.x / D0.x) ou existe no view
+        model completo, ou no recorte do portfolio, ou tem default na normalização do próprio painel.
+        Instância antiga = view model com menos chaves: o painel tem que subir igual."""
+        import re as _re
+        core = (ROOT / "brainlib/assets/src/core.js").read_text(encoding="utf-8")
+        extra = (ROOT / "brainlib/assets/src/extra.js").read_text(encoding="utf-8")
+        # defaults declarados no painel (normalizeBrain no core; normalização do D0 no extra)
+        norm = set(_re.findall(r"m\.([a-zA-Z_]+) = m\.", core[core.index("function normalizeBrain"):core.index("const M =")]))
+        norm |= set(_re.findall(r"D0\.([a-zA-Z_]+) = D0\.", extra))
+        # chaves que os dois payloads realmente carregam
+        with tempfile.TemporaryDirectory() as td:
+            import contextlib, io as _io, argparse as _ap
+            with contextlib.redirect_stdout(_io.StringIO()):
+                demo_mod.cli(_ap.Namespace(dir=str(Path(td) / "d"), open=False))
+            from brainlib import render_portfolio as _rp
+            brain2 = Brain(config.load(Path(td) / "d"))
+            full = set(model.build(brain2))                                   # view model completo
+            pfonly = set(_rp.html_payload(model.build(brain2)))               # recorte do portfolio
+        ok_keys = norm | full | pfonly | {"portfolio", "owner", "today", "generated_at"}
+        reads = set(_re.findall(r"\bM\.([a-zA-Z_]+)", core + extra)) | set(_re.findall(r"\bD0\.([a-zA-Z_]+)", extra))
+        missing = sorted(reads - ok_keys)
+        self.assertEqual(missing, [], f"o painel lê chaves sem default nem payload: {missing}")
+
+    def test_legacy_focus_plan_without_busy_renders(self):
+        """Plano de foco gravado ANTES da agenda existir no corpo: renderiza, busy vazio."""
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            b.record_one({"type": "action.opened", "by": "owner",
+                          "data": {"title": "Ler", "owner": "eu", "effort_min": 60}})
+            body = focus.build_plan(b, [])                     # sem busy_meta — formato antigo
+            b.record_one({"type": "focus.planned", "by": "system",
+                          "data": {"plan_file": "FRESH/focus.md", **body}})
+            m = model.build(b)
+            self.assertEqual(m["focus"]["busy"], [])
+            report = render.render_all(b, do_harvest=False)
+            html = Path(report["dashboard"]).read_text(encoding="utf-8")
+            self.assertNotIn("__DATA__", html)
+
+    # ── paridade CLI × painel: espelha o CoverageTest do TUI ──────────────
+    READ_ONLY_VIEWS = {   # a leitura já está numa página do painel (view model embutido)
+        "person list", "action show", "action list", "decision list", "plan show", "focus show", "outbox show",
+        "outbox list", "proposal list", "publish list", "doctor", "search", "status", "note list", "ask list",
+        "area list", "process show", "process list", "opportunity show", "opportunity list", "action dupes",
+        "watch list", "watch since", "watch folders", "repos list", "raw where", "artifact",
+    }
+    AGENT_ONLY = {        # quem escreve é o agente (extração, snapshot, envio), conforme a Constituição
+        "init", "add", "snapshot", "repos pull", "proposal add", "outbox sent", "outbox failed", "publish done",
+        "pdf text", "pdf render", "video transcribe", "video frames", "person merge", "person resolve",
+        "raw archive", "raw sort", "ask add", "ask applied", "opportunity evidence",
+        "oppdrive status", "oppdrive onepager", "oppdrive record", "oppdrive suggested",
+        "oppdrive build", "oppdrive sync", "oppdrive synced", "oppdrive restyle", "oppdrive links",
+        "action not-dup",
+    }
+    NOT_IN_PANEL = {      # ciclo de vida do framework e config: terminal/TUI (o painel é de uso diário)
+        "demo", "tui", "serve", "migrate ids", "update", "upstream hook", "upstream scan", "backup", "mcp",
+        "nightly", "schedule", "validate", "sync", "memory setup", "memory rebuild", "memory sync",
+        "memory status", "agent allow", "watch add", "watch edit", "watch remove", "doc link", "doc unlink",
+        "note edit",                                     # precisa do caminho do arquivo na inbox — terminal/TUI
+    }
+    DYNAMIC = {"memory recall", "memory reflect",       # formulário do TUI monta; o painel busca no índice
+               "decision supersede"}                     # o painel emite `decision add … --supersedes` (tecla S)
+
+    def _cli_cmds(self):
+        from brainlib import cli as _cli
+        sub = next(a for a in _cli.build_parser()._actions if a.__class__.__name__ == "_SubParsersAction")
+        out = []
+        for name, pr in sorted(sub.choices.items()):
+            inner = [a for a in pr._actions if a.__class__.__name__ == "_SubParsersAction"]
+            for sc in (sorted(inner[0].choices) if inner else [None]):
+                out.append((name, sc))
+        return out
+
+    def test_every_cli_command_has_a_place_in_the_panel(self):
+        """Todo subcomando da CLI: ou o painel emite (`brain …` no JS), ou tem justificativa.
+        Espelha tests/test_tui.py::CoverageTest — nenhuma interface fica para trás sem explicação."""
+        import re as _re
+        src = ((ROOT / "brainlib/assets/src/core.js").read_text(encoding="utf-8")
+               + (ROOT / "brainlib/assets/src/extra.js").read_text(encoding="utf-8"))
+        missing = []
+        for name, sc in self._cli_cmds():
+            label = f"{name} {sc}" if sc else name
+            if _re.search(r"\bbrain " + _re.escape(label) + r"\b", src):
+                continue
+            if label in self.READ_ONLY_VIEWS | self.AGENT_ONLY | self.NOT_IN_PANEL | self.DYNAMIC:
+                continue
+            missing.append(label)
+        self.assertEqual(missing, [], "subcomandos sem lugar no painel (e sem justificativa)")
+
+    def test_serve_allowlist_covers_every_panel_command(self):
+        """Nenhum gesto do painel pode morrer com 403 no modo vivo: a allowlist do serve cobre
+        todos os subcomandos que o JS emite."""
+        import re as _re
+        from brainlib import serve as _serve
+        src = ((ROOT / "brainlib/assets/src/core.js").read_text(encoding="utf-8")
+               + (ROOT / "brainlib/assets/src/extra.js").read_text(encoding="utf-8"))
+        emitted = {n for n, sc in self._cli_cmds()
+                   if sc is None or True for n in []}                     # placeholder p/ legibilidade
+        prose = {("serve", None), ("doctor", None)}     # instrução de terminal no texto, não gesto do painel
+        emitted = set()
+        for name, sc in self._cli_cmds():
+            label = f"{name} {sc}" if sc else name
+            if _re.search(r"\bbrain " + _re.escape(label) + r"\b", src):
+                emitted.add((name, sc))
+        denied = [(n, sc) for (n, sc) in emitted - prose if not _serve._allowed_argv([n] + ([sc] if sc else []))]
+        self.assertEqual(denied, [], "comandos emitidos pelo painel fora da allowlist do serve")
+
+    def test_data_placeholder_and_face_split(self):
+        dash = (ROOT / "brainlib/assets/dashboard.html").read_text(encoding="utf-8")
+        pf = (ROOT / "brainlib/assets/portfolio.html").read_text(encoding="utf-8")
+        for html in (dash, pf):
+            self.assertIn("__DATA__", html)                             # render.py injeta o view model aqui
+            self.assertIn("offlineCmd", html)                           # modo retrato: comando copiado p/ o terminal
+        self.assertIn("window.PF_ONLY = true;", pf)                     # portfolio: só a face Portfólio
+        self.assertIn("window.PF_ONLY = false;", dash)
 
 
 class ShareMcpRenderTests(unittest.TestCase):

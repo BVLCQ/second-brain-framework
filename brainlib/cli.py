@@ -775,6 +775,11 @@ def cmd_tui(args, b) -> None:
     tui.cli(args, b)
 
 
+def cmd_serve(args, b) -> None:
+    from . import serve
+    raise SystemExit(serve.serve(b.inst, port=args.port, open_browser=args.open))
+
+
 def cmd_update(args, b) -> None:
     from . import upstream
     upstream.cli_update(args, b)
@@ -1340,6 +1345,10 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("tui", help="cockpit de terminal (Textual, extra opcional): painéis, teclas contextuais e log da CLI")
     p.add_argument("--setup", action="store_true", help="cria a venv .venv-tui com as dependências travadas por hash")
     p.set_defaults(fn=cmd_tui)
+    p = sub.add_parser("serve", help="ponte CLI do painel: 127.0.0.1 + token — o HTML executa as mesmas linhas do TUI")
+    p.add_argument("--port", type=int, default=8787, help="porta local (padrão 8787)")
+    p.add_argument("--open", action="store_true", help="abre o painel no navegador com o token na URL")
+    p.set_defaults(fn=cmd_serve)
     return ap
 
 
@@ -1370,7 +1379,51 @@ def normalize_ids(args: argparse.Namespace) -> argparse.Namespace:
     return args
 
 
+def _print_completions(argv: list[str]) -> int:
+    """`brain --completions [--opts] [palavras…]` → candidatos, um por linha, `nome:descrição`.
+    Fonte única: o próprio argparse — o que o shell completa é exatamente o que existe.
+    Com `--opts` (ou parado numa folha), devolve as opções do subcomando resolvido.
+    Interceptado ANTES do parse (flag oculta: não polui --help nem as coberturas de superfície)."""
+    import argparse as _ap
+    want_opts = "--opts" in argv
+    words = [w for w in argv if not w.startswith("-")]
+
+    def walk(action):
+        helps = {c.dest: c.help for c in getattr(action, "_choices_actions", [])}
+        return action.choices, {k: (v or "") for k, v in helps.items()}
+
+    def sub_action(parser):
+        return next((a for a in parser._actions if isinstance(a, _ap._SubParsersAction)), None)
+
+    p = build_parser()
+    cur, cur_help = walk(sub_action(p))
+    node = p
+    for w in words:
+        if w in cur:
+            node = cur[w]
+            sa = sub_action(node)
+            cur, cur_help = walk(sa) if sa else ({}, {})
+        else:
+            cur, cur_help = {}, {}
+    if cur and not want_opts:
+        for name in sorted(cur):
+            desc = (cur_help.get(name) or "").split(".")[0][:60].replace(":", " -").strip().rstrip(",(")
+            if len(desc) > 48:
+                desc = desc[:48].rsplit(" ", 1)[0]
+            print(f"{name}:{desc}" if desc else name)
+        return 0
+    # folha (ou --opts pedido): opções do subcomando resolvido
+    for a in node._actions:
+        for opt in a.option_strings:
+            if opt.startswith("--"):
+                print(opt)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
+    real = list(sys.argv[1:]) if argv is None else argv
+    if "--completions" in real:
+        return _print_completions([w for w in real if w != "--completions"])
     args = normalize_ids(build_parser().parse_args(argv))
     try:
         b = None if getattr(args, "no_brain", False) else Brain()

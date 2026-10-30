@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Segundo Cérebro</title>
+<style>__CSS__</style>
+</head>
+<body>
+<div class="shell">
+  <aside class="side" id="side">
+    <div class="brand"><span class="mark">SC</span><span>Segundo Cérebro<small id="gen">demo</small></span></div>
+    <div class="faces" id="faces"></div>
+    <nav class="side-nav" id="tabs"></nav>
+    <button class="kbtn" id="openpal">Comandos e busca<span><b>⌘K</b></span></button>
+    <div class="spacer"></div>
+    <div class="foot-row">
+      <div class="ownerchip"><span class="avatar" id="avatar">V</span><span><b class="own-name" id="ownername">—</b><small id="gen2"></small></span></div>
+      <div class="spacer"></div>
+      <button class="iconbtn" id="theme" title="alternar tema">☀</button>
+    </div>
+  </aside>
+  <main class="col">
+    <div class="toprow">
+      <button class="iconbtn" id="burger" title="menu (mostra a barra lateral)">≡</button>
+      <button class="clidot" id="clidot" title="ponte CLI — clique para abrir/fechar o console (`)">
+        <span class="cdot"></span><small>CLI</small><span class="conbadge" id="conbadge" title="linhas novas no console"></span>
+      </button>
+    </div>
+    <div class="content" id="view"></div></main>
+</div>
+
+<div class="pal-back" id="palback">
+  <div class="palette" role="dialog" aria-label="Paleta de comandos">
+    <div class="pin"><input id="palq" placeholder="Buscar ou rodar: tente  TASK, foco, aprovar, ou digite  brain …" autocomplete="off" spellcheck="false"><span class="hint">↑↓ · ↵</span></div>
+    <div class="pal-list" id="pallist"></div>
+    <div class="pal-confirm" id="palconfirm">
+      <div class="cline" id="palcmd"></div>
+      <div class="row">
+        <span class="note-s" id="palnote"></span>
+        <button class="btn ghost" id="palcancel">cancelar</button>
+        <button class="btn primary" id="palrun">executar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="console" id="console">
+  <header><span class="dot"></span> console <span class="muted small" id="conmode"></span><button class="x" id="conx" title="fechar">×</button></header>
+  <pre id="conout"></pre>
+</div>
+<div class="toast" id="toast"></div>
+
+<script id="data" type="application/json">__DATA__</script>
+<script>__EXTRA__</script>
+<script>__CORE__</script>
+</body>
+</html>

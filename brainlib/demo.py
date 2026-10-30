@@ -386,7 +386,11 @@ def cli(args) -> None:
                    "end": {"dateTime": (util.now().replace(hour=11, minute=0, second=0, microsecond=0)
                                         + timedelta(days=i)).isoformat()}, "summary": "Reunião (demo)"}
                   for i in range(0, 7)]
-        body = focus.build_plan(b, focus.parse_busy(events, b.inst.cfg))
+        events.append({"start": {"dateTime": util.now().replace(hour=15, minute=0, second=0, microsecond=0).isoformat()},
+                       "end": {"dateTime": util.now().replace(hour=15, minute=45, second=0, microsecond=0).isoformat()},
+                       "summary": "Dentista (demo)"})
+        body = focus.build_plan(b, focus.parse_busy(events, b.inst.cfg),
+                                busy_meta=focus.busy_json(events, b.inst.cfg))
         b.record_one({"type": "focus.planned", "by": "system", "source": "demo",
                       "data": {"plan_file": "FRESH/focus.md", **body}})
     report = render.render_all(b)

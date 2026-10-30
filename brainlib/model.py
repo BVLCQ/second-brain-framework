@@ -461,6 +461,7 @@ class ModelBuilder:
                 "blocks": f.blocks, "applied": f.applied, "plan_file": f.plan_file,
                 "at_risk": data.get("at_risk", []), "missing_effort": data.get("missing_effort", []),
                 "consumed": data.get("consumed", []), "horizon": data.get("horizon", {}),
+                "busy": data.get("busy", []),
                 "created": _iso(f.created)}
 
     def _timeline(self, projects, deliveries, deliv_done, decisions, actions, artifacts) -> dict:
