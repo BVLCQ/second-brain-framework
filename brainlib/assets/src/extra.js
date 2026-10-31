@@ -381,7 +381,7 @@ function feedbackForm(){
     fields: [
       {k: "kind", label: "Tipo", options: [["sugestao", "💡 sugestão"], ["bug", "🐞 bug"]], value: "sugestao"},
       {k: "title", label: "Título", value: "", ph: "curto e claro"},
-      {k: "body", label: "Descrição", value: "", ph: "o que, onde, como reproduzir"}],
+      {k: "body", label: "Descrição", value: "", ta: true, rows: 5, ph: "o que, onde, como reproduzir"}],
     preview: v => v.title ? "brain feedback add " + q(v.title) + " --kind " + v.kind +
       (v.body ? " --body " + q(v.body) : "") + " --by owner" : null,
     run: (v, m) => { const n = Math.max(0, ...(m.feedback || []).map(x => +x.id.slice(3))) + 1;
@@ -538,7 +538,7 @@ function noteForm(){
     ...M.goals.map(g => [g.id, g.id + " " + g.title]),
     ...M.projects.map(x => [x.id, x.id + " " + x.title])];
   formDialog({title: "Nota rápida", sub: "vai para a inbox — o /dump arquiva e vincula",
-    fields: [{k: "text", label: "Texto", value: ""},
+    fields: [{k: "text", label: "Texto", value: "", ta: true, rows: 5},
       {k: "link", label: "Vínculo", options: links}],
     preview: v => v.text ? "brain note add --text \"" + v.text.replace(/"/g, "'") + "\"" +
       (v.link ? " --link " + v.link : "") : null,
@@ -765,6 +765,7 @@ function formDialog(o){          // {title, sub, fields[{k,label,type,value,opti
   const ov = document.createElement("div"); ov.className = "pal-back open";
   const f = o.fields.map(x => '<div class="frow"><label>' + esc(x.label) + "</label>" +
     (x.options ? '<select data-k="' + x.k + '">' + x.options.map(op => '<option value="' + esc(op[0]) + '"' + (op[0] === x.value ? " selected" : "") + ">" + esc(op[1] || op[0]) + "</option>").join("") + "</select>"
+      : x.ta ? '<textarea data-k="' + x.k + '" rows="' + (x.rows || 4) + '"' + (x.ph ? ' placeholder="' + esc(x.ph) + '"' : "") + ">" + esc(x.value ?? "") + "</textarea>"
       : '<input data-k="' + x.k + '" type="' + (x.type || "text") + '" value="' + esc(x.value ?? "") + '"' + (x.ph ? ' placeholder="' + esc(x.ph) + '"' : "") + ">") + "</div>").join("");
   ov.innerHTML = '<div class="palette"><div class="pin"><b>' + esc(o.title) + "</b>" + (o.gate ? ' <span class="gatebadge">gate — precisa do seu ok literal</span>' : "") + '</div>' +
     '<div class="pal-confirm open" style="display:block;border-top:0;padding:14px 16px;max-height:70vh;overflow:auto">' +
@@ -786,7 +787,7 @@ function formDialog(o){          // {title, sub, fields[{k,label,type,value,opti
     if (!LIVE) { offlineCmd("" + cmd); return; }
     runCommand(cmd, m => o.run && o.run(v, m));
   };
-  const first = ov.querySelector("input,select"); if (first) first.focus();
+  const first = ov.querySelector("input,select,textarea"); if (first) first.focus();
 }
 function needSel(){ toast("selecione um item primeiro (j/k ou passe o mouse) e tente de novo"); }
 

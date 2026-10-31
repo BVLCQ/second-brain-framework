@@ -236,7 +236,8 @@ a.card:hover{text-decoration:none;border-color:var(--accent)}
 .khelp .grp td{border-top:1px solid var(--line);padding-top:8px;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.06em;font-weight:700}
 .frow{display:grid;grid-template-columns:120px 1fr;gap:8px 10px;align-items:center;margin-bottom:8px}
 .frow label{font-size:12.5px;color:var(--muted)}
-.frow input,.frow select{padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);font:inherit;font-size:13px;width:100%;min-width:0}
+.frow input,.frow select,.frow textarea{padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);font:inherit;font-size:13px;width:100%;min-width:0}
+.frow textarea{resize:vertical;min-height:88px;line-height:1.45;font-family:inherit}
 .gatebadge{display:inline-block;padding:2px 9px;border-radius:999px;background:var(--warnbg);color:var(--warn);font-size:11px;font-weight:700}
 #burger{display:none;position:fixed;top:10px;left:10px;z-index:70}
 #burger.open{color:var(--accent);border-color:var(--accent)}
@@ -794,7 +795,7 @@ function feedbackForm(){
     fields: [
       {k: "kind", label: "Tipo", options: [["sugestao", "💡 sugestão"], ["bug", "🐞 bug"]], value: "sugestao"},
       {k: "title", label: "Título", value: "", ph: "curto e claro"},
-      {k: "body", label: "Descrição", value: "", ph: "o que, onde, como reproduzir"}],
+      {k: "body", label: "Descrição", value: "", ta: true, rows: 5, ph: "o que, onde, como reproduzir"}],
     preview: v => v.title ? "brain feedback add " + q(v.title) + " --kind " + v.kind +
       (v.body ? " --body " + q(v.body) : "") + " --by owner" : null,
     run: (v, m) => { const n = Math.max(0, ...(m.feedback || []).map(x => +x.id.slice(3))) + 1;
@@ -951,7 +952,7 @@ function noteForm(){
     ...M.goals.map(g => [g.id, g.id + " " + g.title]),
     ...M.projects.map(x => [x.id, x.id + " " + x.title])];
   formDialog({title: "Nota rápida", sub: "vai para a inbox — o /dump arquiva e vincula",
-    fields: [{k: "text", label: "Texto", value: ""},
+    fields: [{k: "text", label: "Texto", value: "", ta: true, rows: 5},
       {k: "link", label: "Vínculo", options: links}],
     preview: v => v.text ? "brain note add --text \"" + v.text.replace(/"/g, "'") + "\"" +
       (v.link ? " --link " + v.link : "") : null,
@@ -1178,6 +1179,7 @@ function formDialog(o){          // {title, sub, fields[{k,label,type,value,opti
   const ov = document.createElement("div"); ov.className = "pal-back open";
   const f = o.fields.map(x => '<div class="frow"><label>' + esc(x.label) + "</label>" +
     (x.options ? '<select data-k="' + x.k + '">' + x.options.map(op => '<option value="' + esc(op[0]) + '"' + (op[0] === x.value ? " selected" : "") + ">" + esc(op[1] || op[0]) + "</option>").join("") + "</select>"
+      : x.ta ? '<textarea data-k="' + x.k + '" rows="' + (x.rows || 4) + '"' + (x.ph ? ' placeholder="' + esc(x.ph) + '"' : "") + ">" + esc(x.value ?? "") + "</textarea>"
       : '<input data-k="' + x.k + '" type="' + (x.type || "text") + '" value="' + esc(x.value ?? "") + '"' + (x.ph ? ' placeholder="' + esc(x.ph) + '"' : "") + ">") + "</div>").join("");
   ov.innerHTML = '<div class="palette"><div class="pin"><b>' + esc(o.title) + "</b>" + (o.gate ? ' <span class="gatebadge">gate — precisa do seu ok literal</span>' : "") + '</div>' +
     '<div class="pal-confirm open" style="display:block;border-top:0;padding:14px 16px;max-height:70vh;overflow:auto">' +
@@ -1199,7 +1201,7 @@ function formDialog(o){          // {title, sub, fields[{k,label,type,value,opti
     if (!LIVE) { offlineCmd("" + cmd); return; }
     runCommand(cmd, m => o.run && o.run(v, m));
   };
-  const first = ov.querySelector("input,select"); if (first) first.focus();
+  const first = ov.querySelector("input,select,textarea"); if (first) first.focus();
 }
 function needSel(){ toast("selecione um item primeiro (j/k ou passe o mouse) e tente de novo"); }
 
