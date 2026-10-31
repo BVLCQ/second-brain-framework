@@ -384,17 +384,29 @@ V.outbox = () => {
 };
 V.feedback = () => {
   const glyph = {sugestao: "💡", bug: "🐞"};
+  const issueChip = f => {
+    if (f.status !== "criado") return "";
+    if (f.issue_state === "open") return " " + chip("info", "issue aberta");
+    if (f.issue_state === "gone") return " " + chip("em-risco", "issue apagada");
+    if (f.issue_state === "closed") {
+      const why = f.issue_reason === "not_planned" ? " · não será feita" : f.issue_reason === "completed" ? " · concluída" : "";
+      return " " + chip("em-dia", "issue fechada" + why);
+    }
+    return ' <span class="muted small">issue ? — s sincroniza</span>';
+  };
   const row = f => "<div class=\"msgrow\"><header><b>" + f.id + "</b> " + glyph[f.kind] + " " + esc(f.title) + " " +
     chip(f.status === "criado" ? "em-dia" : f.status === "falhou" ? "em-risco" : "info", f.status) +
     (f.status === "criado" && f.url ? ' · <a href="' + esc(f.url) + '" target="_blank" rel="noopener">issue #' + f.number + "</a>" : "") +
+    issueChip(f) +
     (f.added ? ' <span class="muted">· ' + fmtD(f.added) + "</span>" : "") +
     (f.status !== "criado" ? ' · <button class="btn tiny" data-fb="' + esc(f.id) + '" title="criar a issue no GitHub">p publicar</button>' : "") +
     "</header>" + (f.body ? '<div class="msg">' + esc(f.body) + "</div>" : "") +
     (f.status === "falhou" && f.error ? '<div class="msg muted">' + esc(f.error) + "</div>" : "") + "</div>";
   const pend = M.feedback.filter(f => f.status !== "criado"), done = M.feedback.filter(f => f.status === "criado");
+  const doneTitle = done.length ? 'Já no GitHub · ' + done.length + ' <button class="btn tiny" data-fbsync title="relê o estado dos issues no GitHub">s sincronizar</button>' : "Já no GitHub · 0";
   return '<div class="pagehead"><div><h1>Sugestões e bugs</h1><p class="sub">Porta 7 — cada registro vira uma issue pública no repo do framework. O texto não carrega nada seu: nomes, e-mails e caminhos ficam fora.</p></div></div>' +
     panel("Pendente de publicar · " + pend.length, pend.map(row).join("") || empty("nada pendente — n para sugerir ou reportar"), ' style="margin-top:14px"') +
-    panel("Já no GitHub · " + done.length, done.map(row).join("") || empty("—"), ' style="margin-top:14px"');
+    panel(doneTitle, done.map(row).join("") || empty("—"), ' style="margin-top:14px"');
 };
 V.health = () => '<div class="pagehead"><div><h1>Saúde</h1><p class="sub">Checagens do brain doctor.</p></div></div>' +
   panel("", '<ul class="feed health">' + (M.health || []).map(c => '<li class="' + c.level + '"><span class="hicon">' + ({ok: "✓", warn: "⚠", error: "✗"}[c.level]) + "</span> <b>" + esc(c.title) + "</b> — " + esc(c.detail) + "</li>").join("") + "</ul>");

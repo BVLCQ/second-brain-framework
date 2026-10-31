@@ -298,8 +298,9 @@ class ModelBuilder:
             "plan_changes": [{**c, "date": _iso(c["date"])} for c in st.plan_changes],
             "plan_warnings": plan.warnings,
             "feedback": [{"id": f.id, "kind": f.kind, "title": f.title, "body": f.body, "status": f.status,
-                          "number": f.number, "url": f.url, "error": f.error, "added": _iso(f.added),
-                          "pushed": _iso(f.pushed)}
+                          "number": f.number, "url": f.url, "issue_state": f.issue_state,
+                          "issue_reason": f.issue_reason, "error": f.error, "added": _iso(f.added),
+                          "pushed": _iso(f.pushed), "synced": _iso(f.synced)}
                          for f in sorted(st.feedbacks.values(), key=lambda f: f.id, reverse=True)],
             "portfolio": portfolio.build(st, plan, today),
             "questions": [{"id": q.id, "text": q.text, "kind": q.kind, "status": q.status, "options": q.options,

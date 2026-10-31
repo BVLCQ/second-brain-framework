@@ -502,6 +502,9 @@ function wireP0(){
   document.querySelectorAll("#view [data-fb]").forEach(b => { const id0 = b.dataset.fb; b.onclick = () => {
     if (!LIVE) { offlineCmd("brain feedback push " + id0); return; }
     runCommand("brain feedback push " + id0); }});
+  document.querySelectorAll("#view [data-fbsync]").forEach(b => { b.onclick = () => {
+    if (!LIVE) { offlineCmd("brain feedback sync"); return; }
+    runCommand("brain feedback sync"); }});
   const head = document.querySelector("#view .pagehead");
   if (head && !head.querySelector(".planbtns")) {
     const map = {"#home": ["note", "n nota"], "#projects": ["planform", "n estrutura"], "#todo": ["newaction", "n nova ação"],
@@ -1112,6 +1115,8 @@ function ctxKeys(k){
     return false; }
   if (h.startsWith("#feedback")) {
     if (k === "n") { feedbackForm(); return true; }
+    if (k === "s") { if (!LIVE) { offlineCmd("brain feedback sync"); return; true; }
+      runCommand("brain feedback sync"); return true; }
     const fb = M.feedback.find(x0 => x0.status !== "criado");
     if (k === "p" && fb) { if (!LIVE) { offlineCmd("brain feedback push " + fb.id); return; true; }
       runCommand("brain feedback push " + fb.id); return true; }
@@ -1292,7 +1297,7 @@ function keyLegend(){
     add("n", "rascunhar"); add("A", "aprovar", !d, true); add("S", "enviar", !d); add("x", "cancelar", !d);
   } else if (h.startsWith("#feedback")) {
     const fb = M.feedback.some(x => x.status !== "criado");
-    add("n", "sugerir/corrigir"); add("p", "publicar", !fb);
+    add("n", "sugerir/corrigir"); add("p", "publicar", !fb); add("s", "sincronizar");
   } else if (h.startsWith("#decisions")) { add("n", "nova"); add("S", "superar", !id.startsWith("DEC-")); }
   else if (h.startsWith("#pf/opps")) {
     add("n", "nova");

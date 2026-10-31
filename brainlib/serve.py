@@ -41,7 +41,7 @@ ALLOWED: dict[str, set[str] | None] = {
     "search": None,
     "note": {"add"},
     "proposal": {"accept", "reject"},
-    "feedback": {"add", "push"},                       # porta 7: o dono registra/publica pelo painel
+    "feedback": {"add", "push", "sync"},          # porta 7: o dono registra/publica/confere pelo painel
 }
 DENY_HINT = "fora da allowlist da ponte — rode no terminal se for o caso"
 

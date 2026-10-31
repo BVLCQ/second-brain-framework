@@ -319,12 +319,15 @@ class Feedback:
     status: str = "pendente"       # pendente | criado | falhou
     number: int | None = None      # nº do issue no GitHub
     url: str = ""
+    issue_state: str = ""          # '' nunca sincronizado | open | closed (última leitura do GitHub)
+    issue_reason: str = ""         # completed | not_planned | '' (por que fechou)
     error: str = ""                # última tentativa de push que não subiu
     source: str = ""
     prov: str = ""
     by: str = ""
     added: date | None = None
     pushed: date | None = None
+    synced: date | None = None
     history: list[dict] = field(default_factory=list)
 
 
@@ -633,6 +636,8 @@ def apply(st: State, ev: dict) -> None:
         f = st.feedbacks[eid]
         if t == "feedback.pushed":
             f.status, f.number, f.url, f.pushed = "criado", data["number"], data["url"], when
+        elif t == "feedback.synced":
+            f.issue_state, f.issue_reason, f.synced = data["state"], data.get("reason", ""), when
         elif t == "feedback.failed":
             f.status, f.error = "falhou", data["error"]
         f.history.append(ev)

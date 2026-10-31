@@ -24,3 +24,6 @@ class FeedbackKeys:
     def f_feedback_push(self) -> None:
         f = self.cur().data
         self.exec([["feedback", "push", f.id]])
+
+    def f_feedback_sync(self) -> None:
+        self.exec([["feedback", "sync"]])

@@ -34,3 +34,6 @@ cria a issue na sequência e devolve o link. Sem pressa: `--no-push` deixa `FB-#
 6. Título igual ao de um FB existente é recusado — acrescente detalhe ao existente ou `--force`.
 7. No noturno a porta não publica: registre sem push e empurre no dia seguinte.
 8. Reporte ao dono: `FB-####` + o link da issue.
+9. **Acompanhar:** `./brain feedback sync` relê o estado de cada issue no GitHub (aberta/fechada · concluída/não
+   será feita) e grava as mudanças — o dono vê no painel (aba Sugestões) e na TUI (Aprovar › Feedback). O `/update`
+   roda no passo 6; a pedido, rode na hora. Sem `GITHUB_TOKEN`, pula com aviso (não é erro).

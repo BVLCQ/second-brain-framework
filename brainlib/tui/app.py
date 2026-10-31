@@ -85,6 +85,7 @@ CMD_CATALOG = [               # paleta de comandos: nome, linha da CLI, (face, p
     ("Pedir publicação", "brain publish request … --to slack:#canal", (0, 4, 4, "n")),
     ("Sugerir / reportar bug", 'brain feedback add "…" --kind sugestao|bug --body "…"', (0, 4, 5, "n")),
     ("Publicar feedback pendente", "brain feedback push FB-####", (0, 4, 5, "p")),
+    ("Sincronizar estado dos issues", "brain feedback sync", (0, 4, 5, "s")),
     ("Nova decisão", 'brain decision add "…" --decided-by …', (0, 5, 0, "n")),
     ("Registrar entrega", 'brain delivery "…" --ref …', (0, 5, 1, "n")),
     ("Nova pessoa", 'brain person add "…" --id …', (0, 5, 2, "n")),
@@ -933,6 +934,7 @@ class BrainApp(AskKeys, FeedbackKeys, PortfolioKeys, App):
                 add("n", "nova", self.f_feedback_new)
                 if w(it and it.data.status in ("pendente", "falhou")):
                     add("p", "publicar", self.f_feedback_push)
+                add("s", "sincronizar issues", self.f_feedback_sync)
                 add("T", "só pendentes" if self.show_all else "todas", self.toggle_all)
         elif p == 6:
             add("c", "limpar o log", self.clear_log)

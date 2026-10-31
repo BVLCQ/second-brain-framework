@@ -958,6 +958,7 @@ brain feedback add "Painel demora a abrir" --kind bug --body "Abre em ~2s" --by 
 |---|---|
 | `add <título> --kind sugestao\|bug` | registra (`FB-####`) **e publica a issue na sequência** |
 | `--no-push` / `push FB-####` | só registra / tenta publicar depois (a fila é o `list`) |
+| `sync` | relê o estado dos issues no GitHub (aberta/fechada) e grava as mudanças — também no `/update` |
 | `pushed FB-#### --number N --url U` | registra issue criada por fora (o push morreu depois de criar) |
 | `failed FB-#### --error "…"` | registra falha de tentativa |
 | `show FB-####` | o item e o issue **exato** que a porta publica |

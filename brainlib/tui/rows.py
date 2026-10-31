@@ -153,7 +153,12 @@ def row(store, it, width: int) -> Text:
     if k == "fb":
         mark, st = ("◌", AMB) if d.status == "pendente" else (("⚠", RED) if d.status == "falhou" else ("✓", GRN))
         tag = "sugestão" if d.kind == "sugestao" else "bug"
-        right = T((f"#{d.number}", CYN)) if d.status == "criado" and d.number else T((d.status, st))
+        if d.status == "criado" and d.number:
+            right = T((f"#{d.number}", CYN))
+            if d.issue_state:
+                right.append({"open": " aberta", "gone": " apagada"}.get(d.issue_state, " fechada"), DIM)
+        else:
+            right = T((d.status, st))
         return two(T((mark, st), " ", (d.id, DIM), " ", (f"[{tag}] ", DIM), d.title), right, width)
     if k == "dec":
         return two(T((d["id"], DIM), " ", d["title"]), T((util.fmt_date(d["date"]), DIM)), width)
@@ -726,15 +731,24 @@ def d_fb(store, it) -> Doc:
     doc = Doc().h(f"{f.id} · {tag} do cérebro", (f" · {f.status}", DIM)).blank().p(f.title)
     if f.body:
         doc.sec("Descrição").p(f.body)
+    issue = "— ainda não publicada"
+    if f.url:
+        estado = {("open", ""): "aberta", ("closed", "completed"): "fechada · concluída",
+                  ("closed", "not_planned"): "fechada · não será feita", ("closed", ""): "fechada",
+                  ("gone", ""): "apagada (removida do GitHub)"}.get(
+                  (f.issue_state, f.issue_reason), "estado desconhecido (s sincroniza)")
+        issue = f"#{f.number}  {f.url}  ·  issue {estado}"
     doc.blank().kv([
-        ("issue", Text(f"#{f.number}  {f.url}", CYN) if f.url else Text("— ainda não publicada", DIM)),
+        ("issue", Text(issue, CYN) if f.url else Text(issue, DIM)),
         ("erro da tentativa", Text(f.error, RED)) if f.error else None,
         ("registrado", Text(util.fmt_date(f.added))),
         ("publicado", Text(util.fmt_date(f.pushed))) if f.pushed else None,
+        ("sincronizado", Text(util.fmt_date(f.synced))) if f.synced else None,
         ("fonte", Text(f.source or "—", DIM))])
     doc.sec("Porta 7").p(("O issue é público: nada do dono no texto (a porta recusa nomes, e-mails e caminhos). ", DIM),
                          ("n", "bold cyan"), (" registra e publica; sem token/rede fica pendente e ", DIM),
-                         ("p", "bold cyan"), (" tenta de novo.", DIM))
+                         ("p", "bold cyan"), (" tenta de novo; ", DIM), ("s", "bold cyan"),
+                         (" relê o estado dos issues no GitHub.", DIM))
     doc.sec("Equivalente na CLI")
     doc.cmd(f"brain feedback push {f.id}" if f.status in ("pendente", "falhou") else f"brain feedback show {f.id}")
     return doc

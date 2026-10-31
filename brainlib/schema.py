@@ -80,6 +80,7 @@ TYPES: dict[str, dict] = {
     "question.dropped": {"entity": "question", "req": ["reason"]},
     "feedback.added": {"entity": "feedback", "new": True, "prefix": ids.prefix("feedback"), "req": ["kind", "title"]},
     "feedback.pushed": {"entity": "feedback", "req": ["number", "url"]},
+    "feedback.synced": {"entity": "feedback", "req": ["state"]},
     "feedback.failed": {"entity": "feedback", "req": ["error"]},
     "ids.migrated": {"entity": None, "req": ["map", "backup_sha"]},     # `brain migrate ids`: o mapa antigo → novo
     "area.added": {"entity": "area", "new": True, "req": ["name"]},
@@ -344,6 +345,12 @@ def _validate_feedback(t: str, ev: dict, data: dict, state) -> None:
         _need(isinstance(data["number"], int) and not isinstance(data["number"], bool) and data["number"] > 0,
               "number deve ser inteiro positivo (o número do issue no GitHub)")
         _need(f.status in ("pendente", "falhou"), f"{eid} está '{f.status}' — issue já criada")
+    elif t == "feedback.synced":
+        _need(data["state"] in ("open", "closed", "gone"),
+              f"state deve ser open|closed|gone (recebido {data['state']!r})")
+        _need(data.get("reason", "") in ("", "completed", "not_planned", "reopened"),
+              f"reason inválido: {data.get('reason')!r}")
+        _need(f.status == "criado", f"{eid} está '{f.status}' — sem issue para sincronizar")
     elif t == "feedback.failed":
         _need(f.status in ("pendente", "falhou"), f"{eid} está '{f.status}'")
 

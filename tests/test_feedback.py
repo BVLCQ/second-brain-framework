@@ -211,6 +211,88 @@ class FeedbackFlowTests(unittest.TestCase):
         self.assertEqual({f.status for f in st.feedbacks.values()}, {"pendente"})
         self.assertIn("FB-0001", st.collection("feedback"))
 
+    def test_sync_registra_mudanca_e_e_idempotente(self):
+        feedback.add(self.brain, "sugestao", "Modo escuro", force=True)
+        self.brain.record_one({"type": "feedback.pushed", "id": "FB-0001", "by": "system",
+                               "data": {"number": 3, "url": "https://github.com/x/issues/3"}})
+        self._fake_env()
+        orig = feedback.issue_state
+        calls = []
+
+        def fake(inst, repo, number):
+            calls.append(number)
+            return {"state": "closed", "reason": "completed"}
+
+        feedback.issue_state = fake
+        try:
+            events, notes = feedback.sync(self.brain)
+        finally:
+            feedback.issue_state = orig
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["data"], {"state": "closed", "reason": "completed"})
+        f = self.brain.state.feedbacks["FB-0001"]
+        self.assertEqual((f.issue_state, f.issue_reason, f.synced is not None), ("closed", "completed", True))
+        self.assertTrue(any("fechada" in n for n in notes))
+        feedback.issue_state = fake
+        try:
+            events2, _ = feedback.sync(self.brain)          # mesma leitura: nada novo no ledger
+        finally:
+            feedback.issue_state = orig
+        self.assertEqual(events2, [])
+
+    def test_sync_sem_token_pula_sem_erro(self):
+        feedback.add(self.brain, "sugestao", "Sem token")
+        events, notes = feedback.sync(self.brain)
+        self.assertEqual(events, [])
+        self.assertTrue(any("GITHUB_TOKEN" in n for n in notes))
+
+    def test_sync_erro_por_item_continua_os_demais(self):
+        for i, t in enumerate(("Primeira", "Segunda"), 1):
+            feedback.add(self.brain, "sugestao", t)
+            self.brain.record_one({"type": "feedback.pushed", "id": f"FB-000{i:04d}", "by": "system",
+                                   "data": {"number": i, "url": f"https://github.com/x/issues/{i}"}})
+        self._fake_env()
+        orig = feedback.issue_state
+        feedback.issue_state = lambda inst, repo, number: (
+            {"state": "open", "reason": ""} if number == 2 else (_ for _ in ()).throw(util.BrainError("GitHub respondeu 500")))
+        try:
+            events, notes = feedback.sync(self.brain)
+        finally:
+            feedback.issue_state = orig
+        self.assertEqual([e["id"] for e in events], ["FB-0002"])   # só a segunda conseguiu
+        self.assertTrue(any(n.startswith("⚠ FB-0001") for n in notes))
+
+    def test_synced_exige_issue_criada(self):
+        feedback.add(self.brain, "bug", "Sem issue ainda")
+        with self.assertRaises(util.BrainError):
+            self.brain.record_one({"type": "feedback.synced", "id": "FB-0001", "by": "system",
+                                   "data": {"state": "open", "reason": ""}})
+        with self.assertRaises(util.BrainError):
+            self.brain.record_one({"type": "feedback.synced", "id": "FB-0001", "by": "system",
+                                   "data": {"state": "travada", "reason": ""}})
+
+    def test_sync_issue_apagada_vira_estado_gone(self):
+        feedback.add(self.brain, "sugestao", "Issue removida a mão")
+        self.brain.record_one({"type": "feedback.pushed", "id": "FB-0001", "by": "system",
+                               "data": {"number": 9, "url": "https://github.com/x/issues/9"}})
+        self._fake_env()
+        orig, calls = feedback.issue_state, []
+
+        def fake(inst, repo, number):
+            calls.append(number)
+            return {"state": "gone", "reason": ""}
+
+        feedback.issue_state = fake
+        try:
+            events, notes = feedback.sync(self.brain)
+            events2, _ = feedback.sync(self.brain)          # gone já gravado: nem consulta de novo
+        finally:
+            feedback.issue_state = orig
+        self.assertEqual([e["data"]["state"] for e in events], ["gone"])
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(self.brain.state.feedbacks["FB-0001"].issue_state, "gone")
+        self.assertTrue(any("apagada" in n for n in notes))
+
     def test_model_payload_tem_feedback(self):
         from brainlib import model as model_mod
         feedback.add(self.brain, "sugestao", "Modo escuro no painel")

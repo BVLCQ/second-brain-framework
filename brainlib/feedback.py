@@ -88,6 +88,27 @@ def create_issue(inst: config.Instance, repo: str, title: str, body: str, labels
     return {"number": data["number"], "url": data["html_url"]}
 
 
+def issue_state(inst: config.Instance, repo: str, number: int) -> dict:
+    """GET /repos/<repo>/issues/<n> → {state, reason}. state: 'open'|'closed'; reason: completed|not_planned|''."""
+    token = config.load_env(inst).get("GITHUB_TOKEN")
+    if not token:
+        raise util.BrainError("GITHUB_TOKEN ausente no config/.env", code=4)
+    req = urllib.request.Request(f"{API}/repos/{repo}/issues/{number}", method="GET",
+                                 headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json",
+                                          "X-GitHub-Api-Version": "2022-11-28",
+                                          "User-Agent": "second-brain-feedback"})
+    try:
+        with urllib.request.urlopen(req, timeout=TIMEOUT_S) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        if e.code in (404, 410):                    # issue apagada do repo (o dono pode apagar): estado, não erro
+            return {"state": "gone", "reason": ""}
+        raise util.BrainError(f"GitHub respondeu {e.code} ao issue #{number}", code=4) from e
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        raise util.BrainError(f"sem contato com {API} ({e})", code=4) from e
+    return {"state": data.get("state", ""), "reason": data.get("state_reason") or ""}
+
+
 # ── fluxo da entidade ────────────────────────────────────────────────────────
 
 def add(brain: Brain, kind: str, title: str, body: str = "", context: list[str] | None = None,
@@ -146,10 +167,42 @@ def push(brain: Brain, fid: str) -> dict:
 def line(f) -> str:
     bits = [f.id, f.status, KIND_TAG[f.kind] + " " + f.title]
     if f.status == "criado":
-        bits.append(f"#{f.number} {f.url}")
+        issue = f"#{f.number}"
+        if f.issue_state:
+            issue += " · issue " + {"open": "aberta", "gone": "apagada"}.get(f.issue_state, "fechada")
+        bits.append(f"{issue} {f.url}")
     elif f.status == "falhou":
         bits.append(f"última tentativa falhou: {f.error[:80]}")
     return " · ".join(bits)
+
+
+def sync(brain: Brain) -> tuple[list[dict], list[str]]:
+    """Relê o estado de cada issue no GitHub e grava `feedback.synced` quando mudou. → (eventos, avisos)
+
+    Observação de porta já aberta: roda de dia ou no noturno (como connector.pulled). Sem token, pula
+    com aviso em vez de erro — é checagem de status, não publicação. Erro por item não para os demais."""
+    st = brain.state
+    repo = brain.inst.cfg["feedback"]["repo"]
+    if not config.load_env(brain.inst).get("GITHUB_TOKEN"):
+        return [], ["⚠ GITHUB_TOKEN ausente no config/.env — sync pulado"]
+    events: list[dict] = []
+    notes: list[str] = []
+    for f in sorted(st.feedbacks.values(), key=lambda f: f.id):
+        if f.status != "criado" or not f.number or f.issue_state == "gone":
+            continue
+        try:
+            got = issue_state(brain.inst, repo, f.number)
+        except util.BrainError as e:
+            notes.append(f"⚠ {f.id}: {e}")
+            continue
+        if got["state"] != f.issue_state or got["reason"] != f.issue_reason:
+            events.append({"type": "feedback.synced", "id": f.id, "by": "system",
+                           "data": {"state": got["state"], "reason": got["reason"]}})
+        notes.append(f"{f.id}: issue " + {"open": "aberta", "gone": "apagada (removida do GitHub)"}
+                     .get(got["state"], "fechada"))
+    if events:
+        brain.record(events)
+    return events, notes
 
 
 def _need(brain: Brain, fid: str):
@@ -188,6 +241,11 @@ def cli(args, brain: Brain) -> None:
         brain.record_one({"type": "feedback.failed", "id": args.id, "by": "system",
                           "data": {"error": args.error}})
         print(f"✓ falha registrada em {args.id}")
+    elif c == "sync":
+        events, notes = sync(brain)
+        for n in notes:
+            print(n)
+        print(f"✓ {len(events)} mudança(s) de estado registrada(s)" if events else "= nada mudou")
     elif c == "show":
         f = _need(brain, args.id)
         _out(args, {"id": f.id, "kind": f.kind, "title": f.title, "body": f.body, "context": f.context,
@@ -215,6 +273,7 @@ def add_parsers(sub) -> None:
     _fact_opts(x)
     x = s.add_parser("push", help="cria a issue de um FB pendente/falhou no GitHub e registra número+URL")
     x.add_argument("id")
+    x = s.add_parser("sync", help="relê o estado dos issues no GitHub (aberta/fechada) e grava as mudanças")
     x = s.add_parser("pushed", help="registra issue criada por fora (--number/--url) — se o push morreu depois de criar")
     x.add_argument("id")
     x.add_argument("--number", type=int, required=True)

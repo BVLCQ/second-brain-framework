@@ -38,7 +38,9 @@ Fonte `kind = "github"` (campo `path` = pasta local com os clones): **não** use
 3. `/dump` no que chegou.
 4. `./brain render`.
 5. Se memória estiver ligada: `./brain memory sync` (falha isolada — não derruba o resto).
-6. Recibo: fontes puxadas / sem novidade / falhas · itens processados · avisos do doctor.
+6. `./brain feedback sync` — relê o estado dos issues do GitHub (porta 7; observação, vale no noturno;
+   sem `GITHUB_TOKEN` pula com aviso, falha isolada).
+7. Recibo: fontes puxadas / sem novidade / falhas · itens processados · avisos do doctor.
 
 Proibido: ferramentas MCP de escrita, `outbox approve/sent`, `publish`, `focus approve/apply` (google), mudanças de PLANNING.
 Exceção única: a porta 6 (`[oppdrive].enabled`) — no fim do `/dump`, criar pasta/one-pager dentro da raiz, manter o

@@ -1233,6 +1233,9 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             await self.settle(app, pilot)
             self.assertEqual(self.state(app).feedbacks["FB-0001"].status, "pendente")
             self.assertIn("GITHUB_TOKEN", self.log_text(app))
+            await pilot.press("s")                                            # sync: sem token, pula com aviso
+            await self.settle(app, pilot)
+            self.assertIn("sync pulado", self.log_text(app))
 
     async def test_focus_approve_then_apply_ics(self):
         app = self.app()
