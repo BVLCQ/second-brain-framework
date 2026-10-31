@@ -59,6 +59,13 @@ tools = []
 # border = "CCCCCC"
 # font = "Arial"
 
+[feedback]
+# Porta 7: sugestões e bugs do próprio cérebro viram issues no repo público do framework.
+# Título "[sugestão] Título" / "[bug] Título" + label do tipo. O texto é público: a porta recusa
+# título/corpo com dado do dono (mesmas regras da varredura do upstream). No noturno nada é publicado.
+# Token (permissão de criar issues no repo) vai em config/.env: GITHUB_TOKEN=…
+repo = "BVLCQ/second-brain-framework"
+
 [memory]
 engine = "none"                 # "hindsight" quando o servidor estiver no ar (bancos em chunks: retain sem LLM)
 url = "http://localhost:8888"

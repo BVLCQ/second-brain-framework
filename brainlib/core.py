@@ -22,11 +22,12 @@ except ImportError:  # pragma: no cover — Windows não é alvo (cron/launchd)
 LEDGER_REL = Path("PROCESSED") / "_ledger" / "events.jsonl"
 FACT_TYPES = {"action.opened", "action.closed", "decision.made", "delivery.recorded",
               "artifact.added", "deliverable.updated", "proposal.opened", "process.added",
-              "opportunity.added", "opportunity.evidence", "question.asked"}
+              "opportunity.added", "opportunity.evidence", "question.asked", "feedback.added"}
 # No noturno (BRAIN_NIGHTLY=1) não há dono presente: nenhuma aprovação, envio ou publicação.
 # Gates estruturais também: mudar a árvore, aceitar/rejeitar proposta, promover oportunidade, migrar IDs.
 NIGHT_FORBIDDEN = {"question.answered", "message.approved", "message.sent", "share.approved", "share.published", "focus.approved",
-                   "plan.changed", "proposal.accepted", "proposal.rejected", "opportunity.promoted", "ids.migrated"}
+                   "plan.changed", "proposal.accepted", "proposal.rejected", "opportunity.promoted", "ids.migrated",
+                   "feedback.pushed"}
 FIELD_ORDER = ["seq", "ts", "type", "id", "date", "actor", "by", "prov", "source", "data"]
 
 

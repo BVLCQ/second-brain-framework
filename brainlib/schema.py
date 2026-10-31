@@ -19,6 +19,7 @@ PRIORITIES = {"alta", "normal", "baixa"}
 DELIVERABLE_STATUS = {"nao-iniciado", "em-andamento", "feito", "cancelado"}
 ARTIFACT_KINDS = {"reuniao", "documento", "nota", "conector"}
 QUESTION_KINDS = {"identidade", "classificacao", "permissao", "confirmacao", "outro"}
+FEEDBACK_KINDS = {"sugestao", "bug"}
 PROPOSAL_KINDS = {"fechar-acao", "atualizar-acao", "descartar-acao", "unificar-acao", "mudar-plano", "reestimar", "outro"}
 RECURRENCE = {"diaria", "semanal", "quinzenal", "mensal", "trimestral", "sob-demanda", "por-evento"}
 RECURRENCE_NEEDS_COUNT = {"sob-demanda", "por-evento"}     # exigem per_month (execuções/mês)
@@ -77,6 +78,9 @@ TYPES: dict[str, dict] = {
     "question.answered": {"entity": "question", "req": ["answer"]},
     "question.applied": {"entity": "question", "req": ["how"]},
     "question.dropped": {"entity": "question", "req": ["reason"]},
+    "feedback.added": {"entity": "feedback", "new": True, "prefix": ids.prefix("feedback"), "req": ["kind", "title"]},
+    "feedback.pushed": {"entity": "feedback", "req": ["number", "url"]},
+    "feedback.failed": {"entity": "feedback", "req": ["error"]},
     "ids.migrated": {"entity": None, "req": ["map", "backup_sha"]},     # `brain migrate ids`: o mapa antigo → novo
     "area.added": {"entity": "area", "new": True, "req": ["name"]},
     "area.updated": {"entity": "area", "req": []},
@@ -108,7 +112,7 @@ OWNER_ONLY = {"proposal.accepted", "proposal.rejected", "message.approved", "sha
 REF_FIELDS = ("project", "deliverable", "goal", "ref", "link", "target", "blocked_by", "unblocks", "supersedes", "by",
               "process", "projects", "context", "not_dup", "not_dup_add", "duplicate_of")
 ID_ENTITIES = {"action", "decision", "delivery", "proposal", "message", "share", "focus", "process", "opportunity",
-               "question", "plannode", "deliverable", "doclink"}
+               "question", "plannode", "deliverable", "doclink", "feedback"}
 
 
 def normalize_event(ev: dict) -> dict:
@@ -186,7 +190,7 @@ def validate(ev: dict, state, plan) -> None:
     ent = spec["entity"]
     eid = ev.get("id")
     if not spec.get("new") and ent in {"person", "action", "decision", "proposal", "message",
-                                       "share", "focus", "area", "process", "opportunity", "question"}:
+                                       "share", "focus", "area", "process", "opportunity", "question", "feedback"}:
         _need(eid in state.collection(ent), f"{t}: {ent} {eid!r} não existe")
 
     if t == "person.added":
@@ -291,6 +295,8 @@ def validate(ev: dict, state, plan) -> None:
               "pct deve ser inteiro 0–100")
     if ent == "question":
         _validate_question(t, ev, data, state)
+    if ent == "feedback":
+        _validate_feedback(t, ev, data, state)
     if ent in {"area", "process", "opportunity", "doclink"}:
         _validate_portfolio(t, ev, data, state, plan)
 
@@ -325,6 +331,21 @@ def _validate_question(t: str, ev: dict, data: dict, state) -> None:
         _need(q.status == "respondida", f"{eid} está '{q.status}' — só pergunta respondida pode ser aplicada")
     elif t == "question.dropped":
         _need(q.status in {"aberta", "respondida"}, f"{eid} já está '{q.status}'")
+
+
+def _validate_feedback(t: str, ev: dict, data: dict, state) -> None:
+    eid = ev.get("id")
+    if t == "feedback.added":
+        _need(data["kind"] in FEEDBACK_KINDS, f"kind de feedback inválido: {data['kind']!r} — {sorted(FEEDBACK_KINDS)}")
+        _need(isinstance(data.get("context", []), list), "context deve ser lista de referências")
+        return
+    f = state.feedbacks[eid]
+    if t == "feedback.pushed":
+        _need(isinstance(data["number"], int) and not isinstance(data["number"], bool) and data["number"] > 0,
+              "number deve ser inteiro positivo (o número do issue no GitHub)")
+        _need(f.status in ("pendente", "falhou"), f"{eid} está '{f.status}' — issue já criada")
+    elif t == "feedback.failed":
+        _need(f.status in ("pendente", "falhou"), f"{eid} está '{f.status}'")
 
 
 def _int15(data: dict, field: str) -> None:

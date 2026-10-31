@@ -880,7 +880,8 @@ class DashboardAssetTests(unittest.TestCase):
         "oppdrive status", "oppdrive onepager", "oppdrive record", "oppdrive suggested",
         "oppdrive build", "oppdrive sync", "oppdrive synced", "oppdrive restyle", "oppdrive links",
         "action not-dup",
-    }
+        "feedback add", "feedback push", "feedback pushed", "feedback failed", "feedback show", "feedback list",
+    }                                                                                              # porta 7 (GitHub): registra e publica o agente, via skill
     NOT_IN_PANEL = {      # ciclo de vida do framework e config: terminal/TUI (o painel é de uso diário)
         "demo", "tui", "serve", "migrate ids", "update", "upstream hook", "upstream scan", "backup", "mcp",
         "nightly", "schedule", "validate", "sync", "memory setup", "memory rebuild", "memory sync",

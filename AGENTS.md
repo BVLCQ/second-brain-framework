@@ -131,9 +131,16 @@ somente-leitura para o mundo.
      o dono escreveu lá é `[doc]`.
    - Cada pasta, doc, Resumo escrito e sugestão vira evento (`oppdrive record`,
      `oppdrive synced`, `oppdrive suggested`); o CLI recusa pasta fora da raiz e segundo one-pager.
+7. **Sugestões e bugs (GitHub issues)** — `brain feedback`. Toda sugestão ou bug do
+   próprio cérebro vira uma issue no repo público do framework (`[feedback].repo`), com o
+   tipo no título (`[sugestão]`/`[bug]`) e label própria; `FB-####` no ledger guarda número e
+   URL. `add` registra e publica na sequência — o pedido do dono no chat é a aprovação;
+   sugestão que partiu do agente só publica com um "ok". O texto é público: a porta recusa
+   título/corpo com dado do dono (mesmas regras da varredura do `upstream`), sem override.
+   Token: `GITHUB_TOKEN` em `config/.env`. No noturno nada é publicado.
 
 O noturno roda com `BRAIN_NIGHTLY=1`: o ledger **recusa** qualquer evento do
-dono, aprovação, envio, publicação ou `focus.apply` no Google. Não há dono
+dono, aprovação, envio, publicação, issue de feedback ou `focus.apply` no Google. Não há dono
 presente. A porta 6 é a exceção: já aprovada, cria, mantém o Resumo e sugere.
 
 ## O livro-razão (a verdade das entidades)
@@ -154,6 +161,7 @@ validado (`seq`, `ts`, `type`, `id`, `date`, `actor`, `by`, `prov`, `source`,
 | `PROC-####` | processo (portfólio) | `./brain` |
 | `OPP-####` | oportunidade/iniciativa (portfólio) | `./brain` |
 | `ASK-####` | pergunta do agente ao dono | `./brain` |
+| `FB-####` | sugestão/bug do cérebro (vira issue no GitHub) | `./brain` |
 | slug (`operacoes`) | área (`area.added`, com nome e aliases) | o dono, via `brain area add` |
 | `GOAL-#` / `PROJ-#` / `PROJ-#.#` | goal / projeto / entregável | o dono, em `PLANNING/goals.md` |
 
@@ -398,7 +406,8 @@ Nestes casos: pare, explique o dilema ao dono em ≤5 linhas, proponha 2 caminho
 `/done` → `commands/done/SKILL.md` · `/focus` → `commands/focus/SKILL.md` ·
 `/outbox` → `commands/outbox/SKILL.md` · `/share` → `commands/share/SKILL.md` ·
 `/publish` → `commands/publish/SKILL.md` · `/process` → `commands/process/SKILL.md` ·
-`/opportunity` → `commands/opportunity/SKILL.md`
+`/opportunity` → `commands/opportunity/SKILL.md` ·
+`/feedback` → `commands/feedback/SKILL.md`
 
 Ao receber um comando, leia a skill correspondente ANTES de agir. Variantes
 naturais ("meu dia", "atualiza tudo", "manda pro Caio-demo") mapeiam para a skill

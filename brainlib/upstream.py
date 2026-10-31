@@ -25,7 +25,10 @@ PRIVATE_FILES = {".env", "config/.env", "config/brain.toml", "config/watch.toml"
 PRIVATE_PREFIXES = ("vault/",)
 
 PUBLIC_MAIL = {"gmail.com", "googlemail.com", "outlook.com", "hotmail.com", "live.com", "icloud.com",
-               "yahoo.com", "yahoo.com.br", "proton.me", "protonmail.com", "uol.com.br", "bol.com.br"}
+               "yahoo.com", "yahoo.com.br", "proton.me", "protonmail.com", "uol.com.br", "bol.com.br",
+               # RFC 2606: example.com/.org/.net são reservados para documentação — gente de teste no
+               # ledger não pode virar termo (barava até o nome config/brain.toml.example)
+               "example.com", "example.org", "example.net"}
 HOME_PLACEHOLDERS = {"you", "user", "usuario", "seu-usuario", "name", "nome", "voce", "me", "example"}
 MIN_TERM = 4
 MAX_SCAN_BYTES = 1_000_000

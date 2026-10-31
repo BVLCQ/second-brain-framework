@@ -36,6 +36,7 @@ DEFAULTS: dict = {
     "oppdrive": {"enabled": False,         # porta das pastas de oportunidade (AGENTS.md, porta 6)
                  "root": "",               # id/URL da pasta-raiz no Drive: o agente só cria DENTRO dela
                  "tools": []},             # ferramentas MCP da porta liberadas ao agente headless (criar arquivo, sugerir no Docs)
+    "feedback": {"repo": "BVLCQ/second-brain-framework"},   # porta 7: sugestões/bugs viram issues aqui (token GITHUB_TOKEN em config/.env)
     "memory": {
         "engine": "none",                  # "hindsight" quando o servidor estiver no ar
         "url": "http://localhost:8888",

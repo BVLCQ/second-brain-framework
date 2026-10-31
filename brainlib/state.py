@@ -15,7 +15,8 @@ RUNS_PER_MONTH = {"diaria": 21, "semanal": 4.33, "quinzenal": 2.17, "mensal": 1,
 PREFIX_COLL = {ids.prefix("action"): "actions", ids.prefix("decision"): "decisions", ids.prefix("delivery"): "deliveries",
                ids.prefix("proposal"): "proposals", ids.prefix("message"): "messages", ids.prefix("share"): "shares",
                ids.prefix("focus"): "focus_plans", ids.prefix("process"): "processes",
-               ids.prefix("opportunity"): "opportunities", ids.prefix("question"): "questions"}
+               ids.prefix("opportunity"): "opportunities", ids.prefix("question"): "questions",
+               ids.prefix("feedback"): "feedbacks"}
 LIST_LABEL = {"mine": "minhas", "waiting": "aguardando", "watching": "observando"}
 _new_list = list  # Action tem um campo chamado `list`, que sombreia o builtin no corpo da classe
 
@@ -309,6 +310,25 @@ class Question:
 
 
 @dataclass
+class Feedback:
+    id: str
+    kind: str                      # sugestao | bug
+    title: str
+    body: str = ""
+    context: list[str] = field(default_factory=list)      # refs: TASK-…, PROC-…, OPP-…
+    status: str = "pendente"       # pendente | criado | falhou
+    number: int | None = None      # nº do issue no GitHub
+    url: str = ""
+    error: str = ""                # última tentativa de push que não subiu
+    source: str = ""
+    prov: str = ""
+    by: str = ""
+    added: date | None = None
+    pushed: date | None = None
+    history: list[dict] = field(default_factory=list)
+
+
+@dataclass
 class State:
     events: list[dict] = field(default_factory=list)
     people: dict[str, Person] = field(default_factory=dict)
@@ -331,6 +351,7 @@ class State:
     processes: dict[str, Process] = field(default_factory=dict)
     opportunities: dict[str, Opportunity] = field(default_factory=dict)
     questions: dict[str, Question] = field(default_factory=dict)
+    feedbacks: dict[str, Feedback] = field(default_factory=dict)
 
     def max_seq(self) -> int:
         return self.events[-1]["seq"] if self.events else 0
@@ -340,7 +361,8 @@ class State:
                 "delivery": self.deliveries, "artifact": self.artifacts,
                 "proposal": self.proposals, "message": self.messages, "share": self.shares,
                 "focus": self.focus_plans, "area": self.areas, "process": self.processes,
-                "opportunity": self.opportunities, "question": self.questions}[entity]
+                "opportunity": self.opportunities, "question": self.questions,
+                "feedback": self.feedbacks}[entity]
 
     def next_id(self, prefix: str) -> str:
         coll = getattr(self, PREFIX_COLL[prefix])
@@ -602,6 +624,18 @@ def apply(st: State, ev: dict) -> None:
             q.status, q.how = "aplicada", data["how"]
         elif t == "question.dropped":
             q.status, q.reason = "descartada", data["reason"]
+
+    elif t.startswith("feedback."):
+        if t == "feedback.added":
+            st.feedbacks[eid] = Feedback(eid, data["kind"], data["title"], data.get("body", ""),
+                                         list(data.get("context", [])), source=ev.get("source", ""),
+                                         prov=ev.get("prov", ""), by=ev.get("by", ""), added=when)
+        f = st.feedbacks[eid]
+        if t == "feedback.pushed":
+            f.status, f.number, f.url, f.pushed = "criado", data["number"], data["url"], when
+        elif t == "feedback.failed":
+            f.status, f.error = "falhou", data["error"]
+        f.history.append(ev)
 
     elif t.startswith(("area.", "process.", "opportunity.", "doc.")):
         _apply_portfolio(st, ev, t, eid, data, when)

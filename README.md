@@ -92,6 +92,7 @@ Noturno (render → agente `/update` → memória → backup semanal):
 | Agendar foco | `/focus` (proposta → "ok" → apply) |
 | Mandar mensagem | `/outbox` (rascunho → "enviar 1") |
 | Compartilhar status | `/share` · `/recap` · `/publish` |
+| Sugerir ou corrigir o cérebro | `/feedback` (vira issue no repo público) |
 | Mapear processos e oportunidades | `/process` · `/opportunity` · `./brain tui` (Tab: face Portfólio) |
 | Perguntar | `/ask o que sabemos sobre X?` |
 | Saúde da instância | `./brain doctor` |

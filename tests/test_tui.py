@@ -2183,7 +2183,9 @@ class CoverageTest(unittest.TestCase):
         "raw archive", "raw sort", "ask add", "ask applied",
         "oppdrive status", "oppdrive onepager", "oppdrive record", "oppdrive suggested",   # porta do Drive: quem cria é o agente
         "oppdrive build", "oppdrive sync", "oppdrive synced", "oppdrive restyle", "oppdrive links",    # (e quem mantém o Resumo)
-        "action not-dup"}     # julgamento do agente sobre um par de candidatas; o dono decide pela proposta
+        "action not-dup",     # julgamento do agente sobre um par de candidatas; o dono decide pela proposta
+        "feedback add", "feedback push", "feedback pushed", "feedback failed", "feedback show", "feedback list",
+    }                          # porta 7 (GitHub): registra e publica o agente, via skill
     NOT_IN_TUI = {"demo", "tui", "migrate ids", "serve"}   # migração única no terminal; serve é a ponte do painel HTML
     DYNAMIC = {"memory recall", "memory reflect"}      # o formulário "Memória: perguntar" monta o subcomando
 

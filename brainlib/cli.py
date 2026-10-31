@@ -1033,10 +1033,11 @@ def build_parser() -> argparse.ArgumentParser:
         x.add_argument("--json", action="store_true")
     p.set_defaults(fn=cmd_plan)
 
-    from . import ask, cli_portfolio, oppdrive
+    from . import ask, cli_portfolio, feedback, oppdrive
     cli_portfolio.add_parsers(sub)
     ask.add_parsers(sub)
     oppdrive.add_parsers(sub)
+    feedback.add_parsers(sub)
 
     p = sub.add_parser("progress", help="progresso DECLARADO pelo dono (GOAL-#/PROJ-#)")
     p.add_argument("node")

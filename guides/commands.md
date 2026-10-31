@@ -27,13 +27,14 @@ comandos, use o cockpit de terminal (`brain tui`); o guia interativo está em [`
 14. [Mensagens](#14-mensagens--outbox) — `outbox`
 15. [Exportar e publicar](#15-exportar-e-publicar--share--publish) — `share` · `publish`
 16. [Fontes](#16-fontes--snapshot) — `snapshot`
-17. [Memória e MCP](#17-memória-e-mcp--memory--mcp) — `memory` · `mcp`
-18. [Rotina noturna e backup](#18-rotina-noturna-e-backup--nightly--schedule--backup) — `nightly` · `schedule` · `backup`
-19. [Slash commands do agente → CLI](#19-slash-commands-do-agente--cli)
-20. [Serviços desta máquina](#20-serviços-desta-máquina-fora-do-cli)
-21. [Receitas rápidas](#21-receitas-rápidas)
-22. [Portfólio](#22-portfólio--area--process--opportunity--doc) — `area` · `process` · `opportunity` · `doc`
-23. [Migração](#23-migração--migrate-ids) — `migrate ids`
+17. [Sugestões e bugs](#17-sugestões-e-bugs--feedback) — `feedback`
+18. [Memória e MCP](#18-memória-e-mcp--memory--mcp) — `memory` · `mcp`
+19. [Rotina noturna e backup](#19-rotina-noturna-e-backup--nightly--schedule--backup) — `nightly` · `schedule` · `backup`
+20. [Slash commands do agente → CLI](#20-slash-commands-do-agente--cli)
+21. [Serviços desta máquina](#21-serviços-desta-máquina-fora-do-cli)
+22. [Receitas rápidas](#22-receitas-rápidas)
+23. [Portfólio](#23-portfólio--area--process--opportunity--doc) — `area` · `process` · `opportunity` · `doc`
+24. [Migração](#24-migração--migrate-ids) — `migrate ids`
 
 ---
 
@@ -74,6 +75,7 @@ brain --version              # brain 2.0.0
 | `MSG-####` | mensagem no outbox | `MSG-0001` |
 | `PUB-####` | pedido de publicação | `PUB-0001` |
 | `FOCUS-####` | plano de foco | `FOCUS-0001` |
+| `FB-####` | sugestão/bug do cérebro (vira issue no repo público) | `FB-0001` |
 | `PROC-####` | processo (portfólio) | `PROC-0003` |
 | `OPP-####` | oportunidade / iniciativa (portfólio) | `OPP-0007` |
 | slug | área do portfólio (`area.added`) | `operacoes` |
@@ -941,7 +943,35 @@ Depois: `/dump` no agente para processar.
 
 ---
 
-## 17. Memória e MCP — `memory` · `mcp`
+## 17. Sugestões e bugs — `feedback`
+
+O próprio cérebro tem uma porta de melhoria: cada sugestão ou bug registrado vira uma issue no
+repo público do framework (`[feedback].repo` no `brain.toml`). Título `[sugestão] …` / `[bug] …`
++ label do tipo; o número e a URL do issue voltam para o ledger (`FB-####`).
+
+```bash
+brain feedback add "Painel demora a abrir" --kind bug --body "Abre em ~2s" --by owner
+# ✓ FB-0001 · criado · [bug] Painel demora a abrir · #12 https://github.com/…
+```
+
+| Comando | O que faz |
+|---|---|
+| `add <título> --kind sugestao\|bug` | registra (`FB-####`) **e publica a issue na sequência** |
+| `--no-push` / `push FB-####` | só registra / tenta publicar depois (a fila é o `list`) |
+| `pushed FB-#### --number N --url U` | registra issue criada por fora (o push morreu depois de criar) |
+| `failed FB-#### --error "…"` | registra falha de tentativa |
+| `show FB-####` | o item e o issue **exato** que a porta publica |
+| `list` / `list --all` | a fila (pendente/falhou) / tudo |
+
+Regras da porta (AGENTS.md, porta 7): o pedido do dono no chat é a aprovação; sugestão que partiu
+do agente só publica com um "ok". O issue é público — a porta recusa título/corpo com dado do dono
+(nomes, e-mails, caminhos da máquina), sem override. Token: `GITHUB_TOKEN` em `config/.env`
+(permissão de criar issues no repo). No noturno nada é publicado. Título repetido do mesmo tipo é
+recusado — complete o existente ou use `--force`.
+
+---
+
+## 18. Memória e MCP — `memory` · `mcp`
 
 A memória (Hindsight) é um **índice** do vault em mão única. O vault é a verdade:
 se o servidor cair ou for apagado, `rebuild` reconstrói tudo.
@@ -975,7 +1005,7 @@ claude mcp add segundo-cerebro -- brain mcp
 
 ---
 
-## 18. Rotina noturna e backup — `nightly` · `schedule` · `backup`
+## 19. Rotina noturna e backup — `nightly` · `schedule` · `backup`
 
 ### `brain nightly`
 A rotina noturna na mão: render → agente (`/update`) → foco sync → memória → backup
@@ -1005,7 +1035,7 @@ brain backup --status            # últimos backups
 
 ---
 
-## 19. Slash commands do agente → CLI
+## 20. Slash commands do agente → CLI
 
 No chat do Claude Code (na pasta `~/brain`), os comandos `/` orquestram o CLI. O agente
 lê, julga e mostra; o `brain` valida e grava.
@@ -1031,6 +1061,7 @@ lê, julga e mostra; o `brain` valida e grava.
 | `/share` | export para colega | `share` |
 | `/recap` | histórico e impacto datado | `search`, ledger |
 | `/publish` | postar no espaço do time | `publish` |
+| `/feedback` | sugerir/corrigir o próprio cérebro (issue no repo público) | `feedback add/push` |
 | `/process <termo\|PROC-####>` | panorama ou cadastro guiado de um processo | `process`, `area`, `doc link` |
 | `/opportunity <termo\|OPP-####>` · `onepager` · `triage` | oportunidades, one-pager e ICE sugerido | `opportunity`, `share opportunity` |
 | `/backup` | zip do vault | `backup` |
@@ -1038,7 +1069,7 @@ lê, julga e mostra; o `brain` valida e grava.
 
 ---
 
-## 20. Serviços desta máquina (fora do CLI)
+## 21. Serviços desta máquina (fora do CLI)
 
 Específicos desta instalação (OrbStack + LM Studio + watchdog + hook).
 
@@ -1064,7 +1095,7 @@ Específicos desta instalação (OrbStack + LM Studio + watchdog + hook).
 
 ---
 
-## 21. Receitas rápidas
+## 22. Receitas rápidas
 
 ```bash
 # Manhã
@@ -1096,7 +1127,7 @@ brain validate && brain doctor --online
 
 ---
 
-## 22. Portfólio — `area` · `process` · `opportunity` · `doc`
+## 23. Portfólio — `area` · `process` · `opportunity` · `doc`
 
 Mapa de processos (`PROC-####`) e oportunidades/iniciativas (`OPP-####`) por área. Opções de registro (`--by`, `--prov`,
 `--source`, `--date`) valem como nas outras entidades; `status`, `score` e `promote` já assumem `--by owner`.
@@ -1144,7 +1175,7 @@ Mapa de processos (`PROC-####`) e oportunidades/iniciativas (`OPP-####`) por ár
 
 ---
 
-## 23. Migração — `migrate ids`
+## 24. Migração — `migrate ids`
 
 `brain migrate ids [--apply] [--include-external]` — leva uma instância dos nomes antigos (`A-0146`, `D-`, `E-`, `R-`, `M-`, `S-`, `F-`,
 `G1`, `P3`, `P3.2`) para os declarativos (`TASK-0146`, `DEC-`, `WIN-`, `PROP-`, `MSG-`, `PUB-`, `FOCUS-`, `GOAL-1`, `PROJ-3`, `PROJ-3.2`).
