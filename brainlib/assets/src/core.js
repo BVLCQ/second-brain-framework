@@ -339,6 +339,11 @@ V.focus = () => {
     toMin(b.start) < toMin(e.end) && toMin(b.end) > toMin(e.start));
   const hours = [];
   for (let t = Math.ceil(minS / 60) * 60; t <= maxE; t += 60) hours.push(t);
+  const hourMark = t => { const pc = (t - minS) / span * 100;
+    let s = "top:" + pc + "%";
+    if (pc <= 0.5) s = "top:0;transform:none";                       // primeira hora: não vazar acima do eixo
+    else if (pc >= 99.5) s = "top:auto;bottom:0;transform:none";     // última hora: não vazar abaixo
+    return '<span class="hourmark" style="' + s + '">' + String(Math.floor(t / 60)).padStart(2, "0") + "</span>"; };
   const stepPct = 100 / (span / 60);
   const gridBg = 'background-image:repeating-linear-gradient(to bottom,transparent 0,transparent calc(' + stepPct + '% - 1px),var(--line2) calc(' + stepPct + '% - 1px),var(--line2) ' + stepPct + '%)';
   let h = '<div class="pagehead"><div><h1>Foco</h1><div class="sub">' + chip(st[0], "plano " + f.id) + "<span>" + st[1] + "</span>" +
@@ -348,14 +353,14 @@ V.focus = () => {
     '<span><i style="background:var(--risk)"></i>conflito com o calendário</span></div>';
   h += '<div class="week" style="grid-template-columns:34px repeat(' + Math.max(1, days.length) + ',1fr)">' +
     '<div class="hcol"><div class="wslot" style="' + gridBg + '">' +
-    hours.map(t => '<span class="hourmark" style="top:' + ((t - minS) / span * 100) + '%">' + String(Math.floor(t / 60)).padStart(2, "0") + "</span>").join("") +
+    hours.map(hourMark).join("") +
     "</div></div>" + days.map(d => '<div class="wday"><h3>' + fmtDW(d) + '</h3><div class="wslot" style="' + gridBg + '">' +
     busy.filter(e => e.start.startsWith(d)).map(e => { const top = (toMin(e.start) - minS) / span * 100, hgt = (toMin(e.end) - toMin(e.start)) / span * 100;
-      return '<div class="blk busy" style="top:' + top + "%;height:" + hgt + '%"><b>' + e.start.slice(11, 16) + "–" + e.end.slice(11, 16) + "</b> " + esc(e.title || "ocupado") + "</div>"; }).join("") +
+      return '<div class="blk busy' + (hgt < 4.5 ? " tiny" : "") + '" style="top:' + top + "%;height:" + hgt + '%"><b>' + e.start.slice(11, 16) + "–" + e.end.slice(11, 16) + "</b> " + esc(e.title || "ocupado") + "</div>"; }).join("") +
     blocks.filter(b => b.start.startsWith(d)).map(b => { const top = (toMin(b.start) - minS) / span * 100, hgt = (toMin(b.end) - toMin(b.start)) / span * 100, a = A[b.action];
       const conflict = f.status !== "aplicado" && clash(b);
       const mins = toMin(b.end) - toMin(b.start);
-      return '<div class="blk' + (f.status === "aplicado" || b.applied ? "" : " prop") + (conflict ? " conflict" : "") +
+      return '<div class="blk' + (f.status === "aplicado" || b.applied ? "" : " prop") + (conflict ? " conflict" : "") + (hgt < 4.5 ? " tiny" : "") +
         '" style="top:' + top + "%;height:" + hgt + '%" data-action="' + esc(b.action) + '"' +
         ' title="' + esc((a ? a.title : "") + (conflict ? " — conflita com evento do calendário" : "")) + '">' +
         '<b>' + b.start.slice(11, 16) + "–" + b.end.slice(11, 16) + "</b> " + aL(b.action) + (mins >= 90 ? "<br>" + esc(a ? a.title : "") : "") +
