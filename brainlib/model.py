@@ -297,6 +297,10 @@ class ModelBuilder:
                         "link": s.link, "date": _iso(s.date)} for s in st.shares.values()],
             "plan_changes": [{**c, "date": _iso(c["date"])} for c in st.plan_changes],
             "plan_warnings": plan.warnings,
+            "feedback": [{"id": f.id, "kind": f.kind, "title": f.title, "body": f.body, "status": f.status,
+                          "number": f.number, "url": f.url, "error": f.error, "added": _iso(f.added),
+                          "pushed": _iso(f.pushed)}
+                         for f in sorted(st.feedbacks.values(), key=lambda f: f.id, reverse=True)],
             "portfolio": portfolio.build(st, plan, today),
             "questions": [{"id": q.id, "text": q.text, "kind": q.kind, "status": q.status, "options": q.options,
                            "context": q.context, "run": q.run, "answer": q.answer, "asked": _iso(q.asked)}
@@ -314,6 +318,7 @@ class ModelBuilder:
                 "proposals_open": sum(1 for p in st.proposals.values() if p.status == "aberta"),
                 "questions_open": sum(1 for q in st.questions.values() if q.status == "aberta"),
                 "outbox_pending": sum(1 for m in st.messages.values() if m.status in ("rascunho", "aprovada")),
+                "feedback_pending": sum(1 for f in st.feedbacks.values() if f.status in ("pendente", "falhou")),
                 "mine_no_due": sum(1 for a in mine_open if not a["due"]),
                 "mine_no_effort": sum(1 for a in mine_open if not a["effort_min"]),
             },

@@ -37,6 +37,7 @@ from . import bridge, dates, rows
 from .modals import (AgentModal, ChoiceModal, ConfirmModal, Field, FilterModal, FormModal, FormSpec, PickerModal,
                      PickItem, TextModal)
 from .ask_keys import AskKeys
+from .feedback_keys import FeedbackKeys
 from .portfolio_keys import PortfolioKeys
 from .store import ACTION_SORTS, ACTION_VIEWS, FACE_START, FACES, SYS_OPS, Item, Store
 
@@ -82,6 +83,8 @@ CMD_CATALOG = [               # paleta de comandos: nome, linha da CLI, (face, p
     ("Aprovar plano de foco", 'brain focus approve FOCUS-#### --quote "ok"', (0, 4, 3, "A")),
     ("Aplicar foco na agenda", "brain focus apply FOCUS-#### --mode ics|google", (0, 4, 3, "a")),
     ("Pedir publicação", "brain publish request … --to slack:#canal", (0, 4, 4, "n")),
+    ("Sugerir / reportar bug", 'brain feedback add "…" --kind sugestao|bug --body "…"', (0, 4, 5, "n")),
+    ("Publicar feedback pendente", "brain feedback push FB-####", (0, 4, 5, "p")),
     ("Nova decisão", 'brain decision add "…" --decided-by …', (0, 5, 0, "n")),
     ("Registrar entrega", 'brain delivery "…" --ref …', (0, 5, 1, "n")),
     ("Nova pessoa", 'brain person add "…" --id …', (0, 5, 2, "n")),
@@ -194,7 +197,7 @@ class Log(RichLog):
         self.app.goto_panel(6)
 
 
-class BrainApp(AskKeys, PortfolioKeys, App):
+class BrainApp(AskKeys, FeedbackKeys, PortfolioKeys, App):
     CSS_PATH = "tui.tcss"
     TITLE = "brain"
     ENABLE_COMMAND_PALETTE = False
@@ -508,6 +511,8 @@ class BrainApp(AskKeys, PortfolioKeys, App):
                 n = 1 if m["focus"] and m["focus"]["status"] == "proposto" else 0
             elif i == 4:
                 n = sum(1 for s in m["shares"] if s["status"] in ("solicitada", "aprovada"))
+            elif i == 5:
+                n = sum(1 for f in self.store.brain.state.feedbacks.values() if f.status in ("pendente", "falhou"))
         if pid == 1 and i == 1:
             n = sum(1 for h in self.store.health if h["level"] != "ok")
         if pid == 1 and i == 2:
@@ -916,7 +921,7 @@ class BrainApp(AskKeys, PortfolioKeys, App):
                 if w(f and f["status"] == "aprovado"):
                     add("a", "aplicar", self.f_focus_apply, gate=True)
                 add("s", "sync", self.focus_sync)
-            else:
+            elif t == 4:
                 add("n", "pedir", self.f_pub_request)
                 if w(it and it.data["status"] == "solicitada"):
                     add("A", "aprovar", self.f_pub_approve, gate=True)
@@ -924,6 +929,11 @@ class BrainApp(AskKeys, PortfolioKeys, App):
                     add("P", "publicar", self.agent_publish, agent=True)
                 if w(it and it.data["status"] in ("solicitada", "aprovada")):
                     add("x", "cancelar", self.pub_cancel)
+            else:
+                add("n", "nova", self.f_feedback_new)
+                if w(it and it.data.status in ("pendente", "falhou")):
+                    add("p", "publicar", self.f_feedback_push)
+                add("T", "só pendentes" if self.show_all else "todas", self.toggle_all)
         elif p == 6:
             add("c", "limpar o log", self.clear_log)
         elif p == 5:

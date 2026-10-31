@@ -4,6 +4,7 @@
 const D0 = JSON.parse(document.getElementById("data").textContent);
 D0.counts = D0.counts || {}; D0.questions = D0.questions || []; D0.proposals = D0.proposals || [];
 D0.outbox = D0.outbox || []; D0.health = D0.health || []; D0.deliveries = D0.deliveries || [];
+D0.feedback = D0.feedback || [];
 D0.actions = D0.actions || []; D0.shares = D0.shares || []; D0.people = D0.people || [];
 D0.projects = D0.projects || []; D0.goals = D0.goals || []; D0.decisions = D0.decisions || [];
 D0.portfolio = D0.portfolio || {areas: [], processes: [], opportunities: [], gaps: []};
@@ -170,7 +171,7 @@ const pal = {open: false, sel: 0, items: [], confirmCmd: null, confirmMut: null}
 function navEntries(){
   const tabs = [["face/execucao", "→ face Execução"], ["face/portfolio", "→ face Portfólio"],
     ["home", "Início"], ["todo", "TODO"], ["projects", "Projetos"], ["decisions", "Decisões"], ["wins", "Conquistas"],
-    ["people", "Pessoas"], ["timeline", "Linha do tempo"], ["focus", "Foco"], ["outbox", "Mensagens"], ["health", "Saúde"],
+    ["people", "Pessoas"], ["timeline", "Linha do tempo"], ["focus", "Foco"], ["outbox", "Mensagens"], ["feedback", "Sugestões"], ["health", "Saúde"],
     ["pf/visao", "Portfólio · Visão"], ["pf/opps", "Portfólio · Oportunidades"], ["pf/matrix", "Portfólio · Matriz"],
     ["pf/procs", "Portfólio · Processos"], ["pf/areas", "Portfólio · Áreas"]];
   return tabs.map(t => ({group: t[0].startsWith("face/") ? "faces" : "ir para", label: t[1], view: t[0]}));
@@ -375,6 +376,18 @@ function chaseDraft(a){
   draftForm({to: a.owner, ref: a.id, why: "cobrança pelo painel",
     text: 'Oi! Atualização sobre "' + a.title + '"? ' + (a.due ? "Era pra " + a.due.slice(8, 10) + "/" + a.due.slice(5, 7) + ". " : "") + "Consegue me dar um status?"});
 }
+function feedbackForm(){
+  formDialog({title: "Sugestão ou bug", sub: "porta 7 — vira issue pública no repo do framework · sem dados pessoais",
+    fields: [
+      {k: "kind", label: "Tipo", options: [["sugestao", "💡 sugestão"], ["bug", "🐞 bug"]], value: "sugestao"},
+      {k: "title", label: "Título", value: "", ph: "curto e claro"},
+      {k: "body", label: "Descrição", value: "", ph: "o que, onde, como reproduzir"}],
+    preview: v => v.title ? "brain feedback add " + q(v.title) + " --kind " + v.kind +
+      (v.body ? " --body " + q(v.body) : "") + " --by owner" : null,
+    run: (v, m) => { const n = Math.max(0, ...(m.feedback || []).map(x => +x.id.slice(3))) + 1;
+      (m.feedback = m.feedback || []).unshift({id: "FB-" + String(n).padStart(4, "0"), kind: v.kind,
+        title: v.title, body: v.body || null, status: "pendente", number: null, url: null, error: null, added: m.today}); }});
+}
 function pubAction(act, id0){
   if (act === "cancel") { formDialog({title: "Cancelar " + id0, fields: [{k: "reason", label: "Motivo", value: ""}],
     preview: () => "brain publish cancel " + id0,
@@ -403,6 +416,7 @@ function nbForm(kind){
   if (kind === "newaction") return newAction();
   if (kind === "planform") return planForm();
   if (kind === "outbox") return draftForm();
+  if (kind === "feedback") return feedbackForm();
   if (kind === "pub") return pubRequestForm();
   if (kind === "decision") return formDialog({title: "Nova decisão", fields: [
       {k: "title", label: "Decisão", ph: "o que passa a valer"},
@@ -485,10 +499,14 @@ function wireP0(){
   document.querySelectorAll("#view [data-deliv] .dmark").forEach(b => b.onclick = () => delivToggle(b.closest("li").dataset.deliv));
   document.querySelectorAll("#view [data-progress]").forEach(b => b.onclick = () => progressForm(b.dataset.progress));
   document.querySelectorAll("#view [data-pub]").forEach(b => { const parts = b.dataset.pub.split(":"); b.onclick = () => pubAction(parts[0], parts[1]); });
+  document.querySelectorAll("#view [data-fb]").forEach(b => { const id0 = b.dataset.fb; b.onclick = () => {
+    if (!LIVE) { offlineCmd("brain feedback push " + id0); return; }
+    runCommand("brain feedback push " + id0); }});
   const head = document.querySelector("#view .pagehead");
   if (head && !head.querySelector(".planbtns")) {
     const map = {"#home": ["note", "n nota"], "#projects": ["planform", "n estrutura"], "#todo": ["newaction", "n nova ação"],
       "#outbox": ["outbox", "n rascunhar"], "#decisions": ["decision", "n nova decisão"],
+      "#feedback": ["feedback", "n sugerir/corrigir"],
       "#wins": ["delivery", "n nova entrega"], "#people": ["person", "n nova pessoa"],
       "#pf/procs": ["process", "n novo processo"], "#pf/areas": ["area", "n nova área"], "#ask": ["pub", "n pedir publicação"]};
     const spec = map[location.hash.split("?")[0]];
@@ -1091,6 +1109,12 @@ function ctxKeys(k){
     if (k === "x" && draft) { if (!LIVE) { offlineCmd("brain outbox cancel " + draft.id); return; true; }
       runCommand("brain outbox cancel " + draft.id, m => { m.outbox.find(x0 => x0.id === draft.id).status = "cancelada"; }); return true; }
     return false; }
+  if (h.startsWith("#feedback")) {
+    if (k === "n") { feedbackForm(); return true; }
+    const fb = M.feedback.find(x0 => x0.status !== "criado");
+    if (k === "p" && fb) { if (!LIVE) { offlineCmd("brain feedback push " + fb.id); return; true; }
+      runCommand("brain feedback push " + fb.id); return true; }
+    return false; }
   if (h.startsWith("#decisions")) {
     if (k === "n") { nbForm("decision"); return true; }
     if (k === "S") { const d = selDec(); if (d) supersedeForm(d); return true; } return false; }
@@ -1265,6 +1289,9 @@ function keyLegend(){
   } else if (h.startsWith("#outbox")) {
     const d = M.outbox.some(x => x.status === "rascunho");
     add("n", "rascunhar"); add("A", "aprovar", !d, true); add("S", "enviar", !d); add("x", "cancelar", !d);
+  } else if (h.startsWith("#feedback")) {
+    const fb = M.feedback.some(x => x.status !== "criado");
+    add("n", "sugerir/corrigir"); add("p", "publicar", !fb);
   } else if (h.startsWith("#decisions")) { add("n", "nova"); add("S", "superar", !id.startsWith("DEC-")); }
   else if (h.startsWith("#pf/opps")) {
     add("n", "nova");

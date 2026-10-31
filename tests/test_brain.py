@@ -872,6 +872,7 @@ class DashboardAssetTests(unittest.TestCase):
         "outbox list", "proposal list", "publish list", "doctor", "search", "status", "note list", "ask list",
         "area list", "process show", "process list", "opportunity show", "opportunity list", "action dupes",
         "watch list", "watch since", "watch folders", "repos list", "raw where", "artifact",
+        "feedback show", "feedback list",   # painel › Sugestões renderiza fila e ficha do payload do modelo
     }
     AGENT_ONLY = {        # quem escreve é o agente (extração, snapshot, envio), conforme a Constituição
         "init", "add", "snapshot", "repos pull", "proposal add", "outbox sent", "outbox failed", "publish done",
@@ -880,8 +881,8 @@ class DashboardAssetTests(unittest.TestCase):
         "oppdrive status", "oppdrive onepager", "oppdrive record", "oppdrive suggested",
         "oppdrive build", "oppdrive sync", "oppdrive synced", "oppdrive restyle", "oppdrive links",
         "action not-dup",
-        "feedback add", "feedback push", "feedback pushed", "feedback failed", "feedback show", "feedback list",
-    }                                                                                              # porta 7 (GitHub): registra e publica o agente, via skill
+        "feedback pushed", "feedback failed",   # recuperação manual (o push morreu depois de criar) — agente/terminal
+    }
     NOT_IN_PANEL = {      # ciclo de vida do framework e config: terminal/TUI (o painel é de uso diário)
         "demo", "tui", "serve", "migrate ids", "update", "upstream hook", "upstream scan", "backup", "mcp",
         "nightly", "schedule", "validate", "sync", "memory setup", "memory rebuild", "memory sync",

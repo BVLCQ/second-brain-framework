@@ -1215,6 +1215,25 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             await pilot.pause(0.2)
             self.assertIn("[outbound].allow", self.text_of(app.screen.query_one("#err")))
 
+    async def test_feedback_form_registra_e_push_sem_token_fica_pendente(self):
+        app = self.app()
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause(0.4)
+            await pilot.press("4", "]", "]", "]", "]", "]")          # painel 4 › aba Feedback
+            await self.settle(app, pilot)
+            await pilot.press("n")
+            await pilot.pause(0.2)
+            await self.fill(pilot, title="Grafico de horas por semana", body="Poderia ter no painel de execucao")
+            await pilot.press("ctrl+s")
+            await self.settle(app, pilot)
+            f = self.state(app).feedbacks["FB-0001"]
+            self.assertEqual((f.kind, f.status), ("sugestao", "pendente"))   # sem token: registrado, sem issue
+            self.assertIn("feedback add", self.log_text(app))
+            await pilot.press("p")                                            # publicar: sem token, continua pendente
+            await self.settle(app, pilot)
+            self.assertEqual(self.state(app).feedbacks["FB-0001"].status, "pendente")
+            self.assertIn("GITHUB_TOKEN", self.log_text(app))
+
     async def test_focus_approve_then_apply_ics(self):
         app = self.app()
         async with app.run_test(size=(140, 44)) as pilot:
@@ -2175,6 +2194,7 @@ class CoverageTest(unittest.TestCase):
         "person list", "action show", "action list", "decision list", "plan show", "focus show", "outbox show",
         "outbox list", "proposal list", "publish list", "doctor", "search", "status", "artifact", "watch list", "watch since", "watch folders",
         "repos list", "note list", "raw where", "ask list", "area list", "process show", "process list", "opportunity show", "opportunity list",
+        "feedback show", "feedback list",   # painel 4 › Feedback renderiza fila e ficha do estado em processo
         "action dupes"}   # o aviso de parecida aparece no campo título da nova ação
 
     AGENT_ONLY = {        # quem escreve é o agente (extração, snapshot, envio), conforme a Constituição
@@ -2184,15 +2204,16 @@ class CoverageTest(unittest.TestCase):
         "oppdrive status", "oppdrive onepager", "oppdrive record", "oppdrive suggested",   # porta do Drive: quem cria é o agente
         "oppdrive build", "oppdrive sync", "oppdrive synced", "oppdrive restyle", "oppdrive links",    # (e quem mantém o Resumo)
         "action not-dup",     # julgamento do agente sobre um par de candidatas; o dono decide pela proposta
-        "feedback add", "feedback push", "feedback pushed", "feedback failed", "feedback show", "feedback list",
-    }                          # porta 7 (GitHub): registra e publica o agente, via skill
+        "feedback pushed", "feedback failed",   # recuperação manual (o push morreu depois de criar) — agente/terminal
+    }
     NOT_IN_TUI = {"demo", "tui", "migrate ids", "serve"}   # migração única no terminal; serve é a ponte do painel HTML
     DYNAMIC = {"memory recall", "memory reflect"}      # o formulário "Memória: perguntar" monta o subcomando
 
     def test_every_cli_subcommand_is_accounted_for(self):
         import re
         from brainlib import cli
-        src = "".join((ROOT / "brainlib" / "tui" / f).read_text(encoding="utf-8") for f in ("app.py", "store.py", "portfolio_keys.py", "ask_keys.py"))
+        src = "".join((ROOT / "brainlib" / "tui" / f).read_text(encoding="utf-8")
+                      for f in ("app.py", "store.py", "portfolio_keys.py", "ask_keys.py", "feedback_keys.py"))
         sub = next(a for a in cli.build_parser()._actions if a.__class__.__name__ == "_SubParsersAction")
         uncovered = []
         for name, p in sub.choices.items():

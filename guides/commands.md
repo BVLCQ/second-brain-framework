@@ -969,6 +969,10 @@ do agente só publica com um "ok". O issue é público — a porta recusa títul
 (permissão de criar issues no repo). No noturno nada é publicado. Título repetido do mesmo tipo é
 recusado — complete o existente ou use `--force`.
 
+Superfícies: painel HTML (aba **Sugestões** — `n` registra e publica, `p` retry; pela ponte do
+`brain serve` executa de verdade), TUI (painel **Aprovar › Feedback** — `n` formulário, `p`
+publica o pendente, `T` todas) e chat (`/feedback`).
+
 ---
 
 ## 18. Memória e MCP — `memory` · `mcp`

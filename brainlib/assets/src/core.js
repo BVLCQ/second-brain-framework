@@ -7,6 +7,7 @@
 function normalizeBrain(m){
   m.counts = m.counts || {}; m.questions = m.questions || []; m.proposals = m.proposals || [];
   m.outbox = m.outbox || []; m.health = m.health || []; m.deliveries = m.deliveries || [];
+  m.feedback = m.feedback || [];
   m.actions = m.actions || []; m.publishes = m.publishes || []; m.focus = m.focus || null;
   m.deliverables_done = m.deliverables_done || [];
   m.timeline = m.timeline || {past: [], ahead: []}; m.people = m.people || [];
@@ -381,6 +382,20 @@ V.outbox = () => {
       (m.sent ? ' <span class="muted">· enviada ' + fmtD(m.sent) + "</span>" : "") + "</header>" + '<div class="msg">' + esc(m.text) + "</div></div>").join("") || empty("—")), ' style="margin-top:14px"');
   }).join("");
 };
+V.feedback = () => {
+  const glyph = {sugestao: "💡", bug: "🐞"};
+  const row = f => "<div class=\"msgrow\"><header><b>" + f.id + "</b> " + glyph[f.kind] + " " + esc(f.title) + " " +
+    chip(f.status === "criado" ? "em-dia" : f.status === "falhou" ? "em-risco" : "info", f.status) +
+    (f.status === "criado" && f.url ? ' · <a href="' + esc(f.url) + '" target="_blank" rel="noopener">issue #' + f.number + "</a>" : "") +
+    (f.added ? ' <span class="muted">· ' + fmtD(f.added) + "</span>" : "") +
+    (f.status !== "criado" ? ' · <button class="btn tiny" data-fb="' + esc(f.id) + '" title="criar a issue no GitHub">p publicar</button>' : "") +
+    "</header>" + (f.body ? '<div class="msg">' + esc(f.body) + "</div>" : "") +
+    (f.status === "falhou" && f.error ? '<div class="msg muted">' + esc(f.error) + "</div>" : "") + "</div>";
+  const pend = M.feedback.filter(f => f.status !== "criado"), done = M.feedback.filter(f => f.status === "criado");
+  return '<div class="pagehead"><div><h1>Sugestões e bugs</h1><p class="sub">Porta 7 — cada registro vira uma issue pública no repo do framework. O texto não carrega nada seu: nomes, e-mails e caminhos ficam fora.</p></div></div>' +
+    panel("Pendente de publicar · " + pend.length, pend.map(row).join("") || empty("nada pendente — n para sugerir ou reportar"), ' style="margin-top:14px"') +
+    panel("Já no GitHub · " + done.length, done.map(row).join("") || empty("—"), ' style="margin-top:14px"');
+};
 V.health = () => '<div class="pagehead"><div><h1>Saúde</h1><p class="sub">Checagens do brain doctor.</p></div></div>' +
   panel("", '<ul class="feed health">' + (M.health || []).map(c => '<li class="' + c.level + '"><span class="hicon">' + ({ok: "✓", warn: "⚠", error: "✗"}[c.level]) + "</span> <b>" + esc(c.title) + "</b> — " + esc(c.detail) + "</li>").join("") + "</ul>");
 V.action = (q, id) => {
@@ -616,7 +631,7 @@ V.ask = () => {
 // ── router + faces (mesma lógica da TUI: Execução | Portfólio, cada face lembra onde estava) ──
 const TABS_EXEC = [["home", "Início"], ["todo", "TODO", () => M.counts.mine_overdue], ["projects", "Projetos"], ["decisions", "Decisões"], ["ask", "Perguntas", () => ((M.questions || []).filter(q => q.status === "aberta").length + M.proposals.length) || 0], ["wins", "Conquistas"],
   ["people", "Pessoas"], ["timeline", "Linha do tempo"], ["focus", "Foco", () => M.focus && M.focus.status === "proposto" ? 1 : 0],
-  ["outbox", "Mensagens", () => M.counts.outbox_pending], ["health", "Saúde", () => (M.health || []).filter(c => c.level !== "ok").length]];
+  ["outbox", "Mensagens", () => M.counts.outbox_pending], ["feedback", "Sugestões", () => (M.feedback || []).filter(f => f.status !== "criado").length || 0], ["health", "Saúde", () => (M.health || []).filter(c => c.level !== "ok").length]];
 const TABS_PF = [["pf/visao", "Visão geral"], ["pf/opps", "Oportunidades", () => PF.opportunities.filter(o => o.status !== "descartada").length],
   ["pf/matrix", "Matriz"], ["pf/procs", "Processos", () => PF.processes.filter(p => p.status === "ativo").length], ["pf/areas", "Áreas", () => PF.areas.length]];
 const FACES = [["execucao", "Execução", TABS_EXEC], ["portfolio", "Portfólio", TABS_PF]];

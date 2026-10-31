@@ -19,7 +19,7 @@ PANELS_EXEC = {
     1: ("Status", ["Resumo", "Saúde", "Fontes", "Sistema"]),
     2: ("Ações", ["mine", "waiting", "watching"]),
     3: ("Plano", ["Árvore"]),
-    4: ("Aprovar", ["Perguntas", "Propostas", "Outbox", "Foco", "Publicar"]),
+    4: ("Aprovar", ["Perguntas", "Propostas", "Outbox", "Foco", "Publicar", "Feedback"]),
     5: ("Registro", ["Decisões", "Entregas", "Pessoas", "Artefatos"]),
     6: ("Log de comandos", ["Log"]),
 }
@@ -560,9 +560,14 @@ class Store:
                 days = self.focus_days()
                 out = [Item(f"d:{d}", "fday", {"day": d, "blocks": bl}, q=d) for d, bl in days]
                 out.append(Item("f:warn", "fwarn", m["focus"], q="não cabe sem prazo"))
-            else:
+            elif tab == 4:
                 rows = [s for s in m["shares"] if show_all or s["status"] in ("solicitada", "aprovada")]
                 out = [Item(s["id"], "pub", s, q=f"{s['id']} {s['report']} {s['destination']}") for s in rows]
+            else:
+                fbs = [f for f in self.brain.state.feedbacks.values() if show_all or f.status != "criado"]
+                order = {"pendente": 0, "falhou": 1, "criado": 2}      # acionável no topo
+                fbs.sort(key=lambda f: (order.get(f.status, 3), f.id))
+                out = [Item(f.id, "fb", f, q=f"{f.id} {f.kind} {f.title} {f.status} {f.url}") for f in fbs]
         elif panel == 5:
             if tab == 0:
                 out = [Item(d["id"], "dec", d, q=f"{d['id']} {d['title']}") for d in m["decisions"]]

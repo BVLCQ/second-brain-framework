@@ -147,6 +147,18 @@ class ServeTests(unittest.TestCase):
         j = json.loads(body)
         self.assertFalse(j["ok"])
 
+    def test_feedback_pela_ponte_registra_e_o_data_reflete(self):
+        """Porta 7 no painel: add registra (sem token fica pendente), push recusado no pré-checagem."""
+        body = self._cmd('brain feedback add "Painel pelo serve" --kind sugestao --by owner', 200)
+        j = json.loads(body)
+        self.assertTrue(j["ok"], j)
+        f = next(x for x in Brain(self.inst).state.feedbacks.values() if x.title == "Painel pelo serve")
+        self.assertEqual(f.status, "pendente")
+        _, body2 = self._req("/api/data", token=self.token)
+        self.assertTrue(any(x["id"] == f.id for x in json.loads(body2)["model"]["feedback"]))
+        body3 = self._cmd(f"brain feedback push {f.id}", 200)                 # sem GITHUB_TOKEN: o CLI recusa
+        self.assertFalse(json.loads(body3)["ok"])
+
     # ── headers de segurança / framing / origem ───────────────────────────
     def test_painel_nao_e_embebivel(self):
         """Clickjacking: um site qualquer não pode iframar o painel vivo e clicar por você."""

@@ -150,6 +150,11 @@ def row(store, it, width: int) -> Text:
     if k == "pub":
         return two(T(("●", AMB), " ", (d["id"], DIM), " ", d["destination"], " · ", d["report"].split("/")[-1]),
                    T((d["status"], AMB if d["status"] in ("solicitada", "aprovada") else DIM)), width)
+    if k == "fb":
+        mark, st = ("◌", AMB) if d.status == "pendente" else (("⚠", RED) if d.status == "falhou" else ("✓", GRN))
+        tag = "sugestão" if d.kind == "sugestao" else "bug"
+        right = T((f"#{d.number}", CYN)) if d.status == "criado" and d.number else T((d.status, st))
+        return two(T((mark, st), " ", (d.id, DIM), " ", (f"[{tag}] ", DIM), d.title), right, width)
     if k == "dec":
         return two(T((d["id"], DIM), " ", d["title"]), T((util.fmt_date(d["date"]), DIM)), width)
     if k == "del":
@@ -321,7 +326,8 @@ def detail(store, it) -> Text:
     fn = {"resumo": d_resumo, "action": d_action, "g": d_plan, "p": d_plan, "d": d_plan, "prop": d_prop,
           "ask": d_ask, "msg": d_msg, "fday": d_focus, "fwarn": d_focus, "pub": d_pub, "dec": d_dec, "del": d_del,
           "per": d_person, "art": d_art, "doc": d_doc, "sys": d_sys, "src": d_src, "opp": d_opp, "proc": d_proc,
-          "pgrp": d_pgrp, "pvfunil": d_funil, "pvgaps": d_gaps, "mx": d_matrix, "area": d_area, "docl": d_docl}[it.kind]
+          "pgrp": d_pgrp, "pvfunil": d_funil, "pvgaps": d_gaps, "mx": d_matrix, "area": d_area, "docl": d_docl,
+          "fb": d_fb}[it.kind]
     return fn(store, it).text()
 
 
@@ -711,6 +717,26 @@ def d_pub(store, it) -> Doc:
     doc.blank().p(("Se o arquivo mudar depois da aprovação, o pedido precisa ser refeito (conteúdo travado por hash).", DIM))
     if s["status"] == "aprovada":
         doc.blank().p(("⚡ O agente posta no destino e registra o link com P.", VIO))
+    return doc
+
+
+def d_fb(store, it) -> Doc:
+    f = it.data
+    tag = "sugestão" if f.kind == "sugestao" else "bug"
+    doc = Doc().h(f"{f.id} · {tag} do cérebro", (f" · {f.status}", DIM)).blank().p(f.title)
+    if f.body:
+        doc.sec("Descrição").p(f.body)
+    doc.blank().kv([
+        ("issue", Text(f"#{f.number}  {f.url}", CYN) if f.url else Text("— ainda não publicada", DIM)),
+        ("erro da tentativa", Text(f.error, RED)) if f.error else None,
+        ("registrado", Text(util.fmt_date(f.added))),
+        ("publicado", Text(util.fmt_date(f.pushed))) if f.pushed else None,
+        ("fonte", Text(f.source or "—", DIM))])
+    doc.sec("Porta 7").p(("O issue é público: nada do dono no texto (a porta recusa nomes, e-mails e caminhos). ", DIM),
+                         ("n", "bold cyan"), (" registra e publica; sem token/rede fica pendente e ", DIM),
+                         ("p", "bold cyan"), (" tenta de novo.", DIM))
+    doc.sec("Equivalente na CLI")
+    doc.cmd(f"brain feedback push {f.id}" if f.status in ("pendente", "falhou") else f"brain feedback show {f.id}")
     return doc
 
 

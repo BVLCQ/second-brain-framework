@@ -134,10 +134,11 @@ somente-leitura para o mundo.
 7. **Sugestões e bugs (GitHub issues)** — `brain feedback`. Toda sugestão ou bug do
    próprio cérebro vira uma issue no repo público do framework (`[feedback].repo`), com o
    tipo no título (`[sugestão]`/`[bug]`) e label própria; `FB-####` no ledger guarda número e
-   URL. `add` registra e publica na sequência — o pedido do dono no chat é a aprovação;
-   sugestão que partiu do agente só publica com um "ok". O texto é público: a porta recusa
-   título/corpo com dado do dono (mesmas regras da varredura do `upstream`), sem override.
-   Token: `GITHUB_TOKEN` em `config/.env`. No noturno nada é publicado.
+   URL. `add` registra e publica na sequência — o pedido do dono no chat **ou no painel/TUI** é a
+   aprovação; sugestão que partiu do agente só publica com um "ok". Superfícies: painel HTML (aba
+   Sugestões, ponta da ponte `serve`), TUI (Aprovar › Feedback) e chat (`/feedback`). O texto é
+   público: a porta recusa título/corpo com dado do dono (mesmas regras da varredura do `upstream`),
+   sem override. Token: `GITHUB_TOKEN` em `config/.env`. No noturno nada é publicado.
 
 O noturno roda com `BRAIN_NIGHTLY=1`: o ledger **recusa** qualquer evento do
 dono, aprovação, envio, publicação, issue de feedback ou `focus.apply` no Google. Não há dono

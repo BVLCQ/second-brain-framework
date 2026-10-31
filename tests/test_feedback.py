@@ -211,6 +211,14 @@ class FeedbackFlowTests(unittest.TestCase):
         self.assertEqual({f.status for f in st.feedbacks.values()}, {"pendente"})
         self.assertIn("FB-0001", st.collection("feedback"))
 
+    def test_model_payload_tem_feedback(self):
+        from brainlib import model as model_mod
+        feedback.add(self.brain, "sugestao", "Modo escuro no painel")
+        m = model_mod.build(self.brain)
+        self.assertEqual(m["feedback"][0]["id"], "FB-0001")
+        self.assertEqual((m["feedback"][0]["kind"], m["feedback"][0]["status"]), ("sugestao", "pendente"))
+        self.assertEqual(m["counts"]["feedback_pending"], 1)
+
     def test_cli_add_no_push(self):
         from brainlib import cli as cli_mod
         with contextlib.redirect_stdout(io.StringIO()) as out:
