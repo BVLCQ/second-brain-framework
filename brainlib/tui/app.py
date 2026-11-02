@@ -193,8 +193,15 @@ class Detail(VerticalScroll):
 
 class Log(RichLog):
     can_focus = False
+    tab_spans: list[tuple[int, int, int]] = []      # abas do painel 6 desenhadas no título (Log · Feedback)
 
     def on_click(self, event: events.Click) -> None:
+        if event.y == 0:                            # linha do título: clique em aba troca (como nos painéis de lista)
+            for x0, x1, i in self.tab_spans:
+                if x0 + 1 <= event.x <= x1 + 2:
+                    self.app.p, self.app.tab[6] = 6, i
+                    self.app.redraw()
+                    return
         self.app.goto_panel(6)
 
 
@@ -409,7 +416,11 @@ class BrainApp(AskKeys, FeedbackKeys, PortfolioKeys, App):
         its = self.items(pid)
         if not its:
             f = self.filt[2] if self.filt and self.filt[:2] == (pid, t) else ""
-            return Text(f'nada para "{f}"' if f else "vazio", "dim")
+            if f:
+                return Text(f'nada para "{f}"', "dim")
+            if (pid, t) == (6, 1):
+                return Text("vazio — n registra sugestão/bug (vira issue no GitHub)", "dim")
+            return Text("vazio", "dim")
         idx = self.sel_index(pid)
         cap = max(1, height) if (pid == self.fill_panel() or pid == 6 and self.p == 6) else UCAP
         key = (pid, t)
@@ -547,8 +558,9 @@ class BrainApp(AskKeys, FeedbackKeys, PortfolioKeys, App):
         log.display = not fb
         fbp.display = fb
         self.query_one("#detailwrap").set_class(on, "-small")
-        log.border_title = Text.assemble((" [6] ", "bold"), ("Log de comandos ", "bold"))
-        log.border_subtitle = " ] aba Feedback · j k rolam · c limpa · 1-5 voltam " if on and not fb else ""
+        log.border_title = self._title(6)              # abas à vista também no log: Log · Feedback (clicável)
+        log.tab_spans = fbp.tab_spans
+        log.border_subtitle = " j k rolam · c limpa · 1-5 voltam " if on and not fb else ""
         if fb:
             fbp.set_class(True, "-on")
             fbp.border_title = self._title(6)

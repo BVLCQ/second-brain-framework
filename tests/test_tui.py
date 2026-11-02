@@ -1232,7 +1232,10 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
         app = self.app()
         async with app.run_test(size=(140, 44)) as pilot:
             await pilot.pause(0.4)
-            await pilot.press("6", "]")                              # painel 6 (log) › aba Feedback
+            await pilot.press("6")                                 # painel 6: o título do log anuncia as abas
+            await self.settle(app, pilot)
+            self.assertIn("Feedback", str(app.query_one("#log").border_title))
+            await pilot.press("]")                                 # › aba Feedback
             await self.settle(app, pilot)
             await pilot.press("n")
             await pilot.pause(0.2)
