@@ -970,30 +970,35 @@ class BrainApp(AskKeys, FeedbackKeys, PortfolioKeys, App):
             outs: list[str] = []
             self.busy = "executando…"
             self.query_one("#detailwrap").border_subtitle = self._detail_subtitle()
-            for args in cmds:
-                self.log_line("$ " + bridge.display(args), "cyan")
-                res = await asyncio.to_thread(bridge.run_brain, self.inst, args)
-                lines = (res.out.splitlines() if res.out else [])
-                outs.append(res.out or res.err)
-                for ln in lines[:40]:
-                    self.log_line(ln, "green" if res.ok else "")
-                if len(lines) > 40:
-                    self.log_line(f"… +{len(lines) - 40} linhas", "dim")
-                if not res.ok:
-                    self.log_line((res.err or f"saiu com código {res.rc}"), "red")
-                    ok = False
-                    break
-                if not lines and res.ok:
-                    self.log_line("✓ ok", "green")
-            if not ok and on_fail:
-                on_fail()
-            if ok and render:
-                r = await asyncio.to_thread(bridge.run_brain, self.inst, ["render"])
-                self.log_line("↻ brain render · " + (r.out.splitlines()[0] if r.out else "views regeneradas"), "dim")
-            await self._reload()
-            self.busy = ""
-            self._quit_armed = False
-            self.redraw()
+            try:
+                for args in cmds:
+                    self.log_line("$ " + bridge.display(args), "cyan")
+                    res = await asyncio.to_thread(bridge.run_brain, self.inst, args)
+                    lines = (res.out.splitlines() if res.out else [])
+                    outs.append(res.out or res.err)
+                    for ln in lines[:40]:
+                        self.log_line(ln, "green" if res.ok else "")
+                    if len(lines) > 40:
+                        self.log_line(f"… +{len(lines) - 40} linhas", "dim")
+                    if not res.ok:
+                        self.log_line((res.err or f"saiu com código {res.rc}"), "red")
+                        ok = False
+                        break
+                    if not lines and res.ok:
+                        self.log_line("✓ ok", "green")
+                if not ok and on_fail:
+                    on_fail()
+                if ok and render:
+                    r = await asyncio.to_thread(bridge.run_brain, self.inst, ["render"])
+                    self.log_line("↻ brain render · " + (r.out.splitlines()[0] if r.out else "views regeneradas"), "dim")
+                await self._reload()
+            finally:
+                # o worker pode morrer no meio (binário do brain sumiu, callback quebrou): sem isto o busy
+                # fica preso para sempre — o _watch para de reler o vault e o q pede confirmação dobrada
+                self.busy = ""
+                self._quit_armed = False
+                self.query_one("#detailwrap").border_subtitle = self._detail_subtitle()
+                self.redraw()
             if show and ok and any(outs):
                 self.push_screen(TextModal(show, Text("\n\n".join(o for o in outs if o))))
             if ok and after:
@@ -1876,24 +1881,28 @@ class BrainApp(AskKeys, FeedbackKeys, PortfolioKeys, App):
         async with self._lock:
             self.busy = "agente…"
             self.query_one("#detailwrap").border_subtitle = self._detail_subtitle()
-            self.log_line("⚡ " + prompt.splitlines()[0][:100], "magenta")
-            info = bridge.RunInfo(id=run_id, resumed_from=resumed_from)
-            rc = await bridge.run_agent(self.inst, argv, lambda ln: self.log_line("  " + ln, "magenta") if ln else None, info)
-            if info.denials:
-                await self.after_run(info)                # cada negação vira uma pergunta (kind=permissao)
-            await asyncio.to_thread(bridge.record_run, self.inst, info, argv, prompt)
-            if info.session_id:
-                self.last_run = info
-            self.log_line("✓ agente terminou" if rc == 0 else f"✗ agente saiu com código {rc}", "green" if rc == 0 else "red")
-            r = await asyncio.to_thread(bridge.run_brain, self.inst, ["render"])
-            self.log_line("↻ brain render · " + (r.out.splitlines()[0] if r.out else "views regeneradas"), "dim")
-            await self._reload()
-            self.report_run(info)
-            if resumed_from and rc != 0:
-                self.log_line("o resume falhou (sessão expirada ou outro agente): as respostas ficam na fila, o próximo /update ou ⚡ as aplica (passo 0)", "yellow")
-            self.busy = ""
-            self._quit_armed = False
-            self.redraw()
+            try:
+                self.log_line("⚡ " + prompt.splitlines()[0][:100], "magenta")
+                info = bridge.RunInfo(id=run_id, resumed_from=resumed_from)
+                rc = await bridge.run_agent(self.inst, argv, lambda ln: self.log_line("  " + ln, "magenta") if ln else None, info)
+                if info.denials:
+                    await self.after_run(info)                # cada negação vira uma pergunta (kind=permissao)
+                await asyncio.to_thread(bridge.record_run, self.inst, info, argv, prompt)
+                if info.session_id:
+                    self.last_run = info
+                self.log_line("✓ agente terminou" if rc == 0 else f"✗ agente saiu com código {rc}", "green" if rc == 0 else "red")
+                r = await asyncio.to_thread(bridge.run_brain, self.inst, ["render"])
+                self.log_line("↻ brain render · " + (r.out.splitlines()[0] if r.out else "views regeneradas"), "dim")
+                await self._reload()
+                self.report_run(info)
+                if resumed_from and rc != 0:
+                    self.log_line("o resume falhou (sessão expirada ou outro agente): as respostas ficam na fila, o próximo /update ou ⚡ as aplica (passo 0)", "yellow")
+            finally:
+                # idem _exec: exceção no meio (spawn do agente, record_run) não pode prender o busy
+                self.busy = ""
+                self._quit_armed = False
+                self.query_one("#detailwrap").border_subtitle = self._detail_subtitle()
+                self.redraw()
 
     def run_ai(self, op: dict) -> None:
         """Comando de IA da aba Sistema: os cinco com fluxo próprio entram direto; os demais pedem o argumento (se houver) e abrem o modal ⚡."""

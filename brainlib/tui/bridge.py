@@ -104,6 +104,8 @@ def run_brain(inst, args: list[str], timeout: int = 300) -> Result:
                            timeout=timeout, check=False, stdin=subprocess.DEVNULL)
     except subprocess.TimeoutExpired:
         return Result(args, 124, "", f"tempo esgotado ({timeout}s)")
+    except OSError as e:                     # brain sumiu, permissão, fd esgotado: vira erro visível, não exceção no TUI
+        return Result(args, 127, "", f"não consegui rodar {argv[1]}: {e}")
     return Result(args, p.returncode, p.stdout.strip(), p.stderr.strip())
 
 
@@ -226,9 +228,13 @@ async def run_agent(inst, argv: list[str], on_line: Callable[[str], None], info:
     timeout = inst.cfg["runner"]["timeout_min"] * 60
     info = info if info is not None else RunInfo()
     parser = StreamParser(info)
-    proc = await asyncio.create_subprocess_exec(
-        *argv, cwd=str(inst.root), env=_env(inst), stdin=asyncio.subprocess.DEVNULL,
-        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT, limit=16 * 1024 * 1024)
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *argv, cwd=str(inst.root), env=_env(inst), stdin=asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT, limit=16 * 1024 * 1024)
+    except OSError as e:                     # agente desinstalado depois do which(): erro no log, TUI segue
+        on_line(f"não consegui rodar {argv[0]}: {e}")
+        return 127
 
     async def pump() -> None:
         assert proc.stdout is not None
