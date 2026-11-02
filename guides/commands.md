@@ -971,7 +971,7 @@ do agente só publica com um "ok". O issue é público — a porta recusa títul
 recusado — complete o existente ou use `--force`.
 
 Superfícies: painel HTML (aba **Sugestões** — `n` registra e publica, `p` retry, `s` sincroniza; pela ponte do
-`brain serve` executa de verdade), TUI (painel **Aprovar › Feedback** — `n` formulário, `p`
+`brain serve` executa de verdade), TUI (painel do **log (6) › aba Feedback** — `n` formulário, `p`
 publica o pendente, `T` todas) e chat (`/feedback`). Os formulários do painel e da TUI cobrem os
 campos da CLI: tipo, título, descrição, contexto (`--context`), publicar agora ou depois
 (`--no-push`) e título repetido (aviso + criar mesmo assim = `--force`); `pushed`/`failed`

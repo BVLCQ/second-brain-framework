@@ -1232,7 +1232,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
         app = self.app()
         async with app.run_test(size=(140, 44)) as pilot:
             await pilot.pause(0.4)
-            await pilot.press("4", "]", "]", "]", "]", "]")          # painel 4 › aba Feedback
+            await pilot.press("6", "]")                              # painel 6 (log) › aba Feedback
             await self.settle(app, pilot)
             await pilot.press("n")
             await pilot.pause(0.2)
@@ -1256,7 +1256,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
         app = self.app()
         async with app.run_test(size=(140, 44)) as pilot:
             await pilot.pause(0.4)
-            await pilot.press("4", "]", "]", "]", "]", "]")          # painel 4 › aba Feedback
+            await pilot.press("6", "]")                              # painel 6 (log) › aba Feedback
             await self.settle(app, pilot)
             await pilot.press("n")
             await pilot.pause(0.2)

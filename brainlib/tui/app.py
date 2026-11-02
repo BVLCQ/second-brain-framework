@@ -83,9 +83,9 @@ CMD_CATALOG = [               # paleta de comandos: nome, linha da CLI, (face, p
     ("Aprovar plano de foco", 'brain focus approve FOCUS-#### --quote "ok"', (0, 4, 3, "A")),
     ("Aplicar foco na agenda", "brain focus apply FOCUS-#### --mode ics|google", (0, 4, 3, "a")),
     ("Pedir publicação", "brain publish request … --to slack:#canal", (0, 4, 4, "n")),
-    ("Sugerir / reportar bug", 'brain feedback add "…" --kind sugestao|bug --body "…"', (0, 4, 5, "n")),
-    ("Publicar feedback pendente", "brain feedback push FB-####", (0, 4, 5, "p")),
-    ("Sincronizar estado dos issues", "brain feedback sync", (0, 4, 5, "s")),
+    ("Sugerir / reportar bug", 'brain feedback add "…" --kind sugestao|bug --body "…"', (0, 6, 1, "n")),
+    ("Publicar feedback pendente", "brain feedback push FB-####", (0, 6, 1, "p")),
+    ("Sincronizar estado dos issues", "brain feedback sync", (0, 6, 1, "s")),
     ("Nova decisão", 'brain decision add "…" --decided-by …', (0, 5, 0, "n")),
     ("Registrar entrega", 'brain delivery "…" --ref …', (0, 5, 1, "n")),
     ("Nova pessoa", 'brain person add "…" --id …', (0, 5, 2, "n")),
@@ -326,6 +326,7 @@ class BrainApp(AskKeys, FeedbackKeys, PortfolioKeys, App):
                 with Detail(id="detailwrap"):
                     yield Static("", id="detail")
                 yield Log(id="log", markup=False, wrap=True, max_lines=500, auto_scroll=True)
+                yield ListPanel(6)              # aba Feedback: lista no lugar do log (painel 6, aba 1)
         with Horizontal(id="facebar"):
             yield Static("", id="faces")
             yield Static("", id="facehint")
@@ -336,7 +337,7 @@ class BrainApp(AskKeys, FeedbackKeys, PortfolioKeys, App):
     async def on_mount(self) -> None:
         self._lock = asyncio.Lock()
         self.query_one("#detailwrap").border_title = "Detalhe"
-        for pid in (1, 2, 3, 4, 5):
+        for pid in (1, 2, 3, 4, 5, 6):
             self.query_one(f"#p{pid}").border_subtitle_align = "right"
         try:
             self.store = await asyncio.to_thread(Store, self.inst)
@@ -389,7 +390,9 @@ class BrainApp(AskKeys, FeedbackKeys, PortfolioKeys, App):
         self.sel_idx[key], self.sel_id[key] = i, its[i].id
 
     def cur(self) -> Item | None:
-        p = self.lp if self.p == 6 else self.p
+        p = self.p
+        if p == 6 and self.tab[6] != 1:         # no log em si o detalhe é o da última lista (lp)
+            p = self.lp
         its = self.items(p)
         return its[self.sel_index(p)] if its else None
 
@@ -408,7 +411,7 @@ class BrainApp(AskKeys, FeedbackKeys, PortfolioKeys, App):
             f = self.filt[2] if self.filt and self.filt[:2] == (pid, t) else ""
             return Text(f'nada para "{f}"' if f else "vazio", "dim")
         idx = self.sel_index(pid)
-        cap = max(1, height) if pid == self.fill_panel() else UCAP
+        cap = max(1, height) if (pid == self.fill_panel() or pid == 6 and self.p == 6) else UCAP
         key = (pid, t)
         w = self.win.get(key, 0)
         if idx < w:
@@ -512,8 +515,8 @@ class BrainApp(AskKeys, FeedbackKeys, PortfolioKeys, App):
                 n = 1 if m["focus"] and m["focus"]["status"] == "proposto" else 0
             elif i == 4:
                 n = sum(1 for s in m["shares"] if s["status"] in ("solicitada", "aprovada"))
-            elif i == 5:
-                n = sum(1 for f in self.store.brain.state.feedbacks.values() if f.status in ("pendente", "falhou"))
+        if pid == 6 and i == 1:
+            n = sum(1 for f in self.store.brain.state.feedbacks.values() if f.status in ("pendente", "falhou"))
         if pid == 1 and i == 1:
             n = sum(1 for h in self.store.health if h["level"] != "ok")
         if pid == 1 and i == 2:
@@ -538,10 +541,20 @@ class BrainApp(AskKeys, FeedbackKeys, PortfolioKeys, App):
         self.query_one("#detailwrap").scroll_home(animate=False)
         self.query_one("#detailwrap").border_subtitle = self._detail_subtitle()
         log, on = self.query_one("#log"), self.p == 6
-        log.set_class(on, "-on")
+        fb = on and self.tab[6] == 1                   # aba Feedback: a lista ocupa o lugar do log
+        fbp = self.query_one("#p6", ListPanel)
+        log.set_class(on and not fb, "-on")
+        log.display = not fb
+        fbp.display = fb
         self.query_one("#detailwrap").set_class(on, "-small")
         log.border_title = Text.assemble((" [6] ", "bold"), ("Log de comandos ", "bold"))
-        log.border_subtitle = " j k rolam · c limpa · 1-5 voltam " if on else ""
+        log.border_subtitle = " ] aba Feedback · j k rolam · c limpa · 1-5 voltam " if on and not fb else ""
+        if fb:
+            fbp.set_class(True, "-on")
+            fbp.border_title = self._title(6)
+            n = len(self.items(6)) if self.store else 0
+            fbp.border_subtitle = f" {self.sel_index(6) + 1} de {n} " if n else ""
+            fbp.refresh(layout=True)
         self.set_class(self.zoom, "-zoom")
         self.refresh_faces()
         self.refresh_hints()
@@ -769,7 +782,7 @@ class BrainApp(AskKeys, FeedbackKeys, PortfolioKeys, App):
         self.redraw()
 
     def move(self, d: int) -> None:
-        if self.p == 6:
+        if self.p == 6 and self.tab[6] == 0:
             log = self.query_one("#log")
             if abs(d) >= 9999:
                 log.scroll_home(animate=False) if d < 0 else log.scroll_end(animate=False)
@@ -827,7 +840,14 @@ class BrainApp(AskKeys, FeedbackKeys, PortfolioKeys, App):
         w = lambda cond: every or cond  # noqa: E731
         if self.face != 0:
             if p == 6:
-                add("c", "limpar o log", self.clear_log)
+                if t == 1:
+                    add("n", "nova", self.f_feedback_new)
+                    if w(it and it.data.status in ("pendente", "falhou")):
+                        add("p", "publicar", self.f_feedback_push)
+                    add("s", "sincronizar issues", self.f_feedback_sync)
+                    add("T", "só pendentes" if self.show_all else "todas", self.toggle_all)
+                else:
+                    add("c", "limpar o log", self.clear_log)
             else:
                 self.ctx_keys_face(K, p, t, it, every)
             return K
@@ -930,14 +950,15 @@ class BrainApp(AskKeys, FeedbackKeys, PortfolioKeys, App):
                     add("P", "publicar", self.agent_publish, agent=True)
                 if w(it and it.data["status"] in ("solicitada", "aprovada")):
                     add("x", "cancelar", self.pub_cancel)
-            else:
+        elif p == 6:
+            if t == 1:
                 add("n", "nova", self.f_feedback_new)
                 if w(it and it.data.status in ("pendente", "falhou")):
                     add("p", "publicar", self.f_feedback_push)
                 add("s", "sincronizar issues", self.f_feedback_sync)
                 add("T", "só pendentes" if self.show_all else "todas", self.toggle_all)
-        elif p == 6:
-            add("c", "limpar o log", self.clear_log)
+            else:
+                add("c", "limpar o log", self.clear_log)
         elif p == 5:
             if t == 0:
                 add("n", "nova", self.f_decision)

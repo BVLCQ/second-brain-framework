@@ -19,9 +19,9 @@ PANELS_EXEC = {
     1: ("Status", ["Resumo", "Saúde", "Fontes", "Sistema"]),
     2: ("Ações", ["mine", "waiting", "watching"]),
     3: ("Plano", ["Árvore"]),
-    4: ("Aprovar", ["Perguntas", "Propostas", "Outbox", "Foco", "Publicar", "Feedback"]),
+    4: ("Aprovar", ["Perguntas", "Propostas", "Outbox", "Foco", "Publicar"]),
     5: ("Registro", ["Decisões", "Entregas", "Pessoas", "Artefatos"]),
-    6: ("Log de comandos", ["Log"]),
+    6: ("Log de comandos", ["Log", "Feedback"]),
 }
 
 # Vistas do painel Ações (tecla v): Todas · Esta semana (+ atrasadas) · Depois · Não agora (adiadas de propósito).
@@ -49,7 +49,7 @@ PANELS_PORT = {
     3: ("Oportunidades", ["Triagem", "Priorizadas", "Em curso", "Arquivo"]),
     4: ("Matriz", ["Matriz", "Ranking"]),
     5: ("Registro", ["Áreas", "Documentos"]),
-    6: ("Log de comandos", ["Log"]),
+    6: ("Log de comandos", ["Log", "Feedback"]),
 }
 
 # Face = conjunto de painéis 1–5 com abas próprias; o painel 6 (Log) é comum. Tab/Shift+Tab giram entre as faces
@@ -563,11 +563,6 @@ class Store:
             elif tab == 4:
                 rows = [s for s in m["shares"] if show_all or s["status"] in ("solicitada", "aprovada")]
                 out = [Item(s["id"], "pub", s, q=f"{s['id']} {s['report']} {s['destination']}") for s in rows]
-            else:
-                fbs = [f for f in self.brain.state.feedbacks.values() if show_all or f.status != "criado"]
-                order = {"pendente": 0, "falhou": 1, "criado": 2}      # acionável no topo
-                fbs.sort(key=lambda f: (order.get(f.status, 3), f.id))
-                out = [Item(f.id, "fb", f, q=f"{f.id} {f.kind} {f.title} {f.status} {f.url}") for f in fbs]
         elif panel == 5:
             if tab == 0:
                 out = [Item(d["id"], "dec", d, q=f"{d['id']} {d['title']}") for d in m["decisions"]]
@@ -577,6 +572,11 @@ class Store:
                 out = [Item(p["id"], "per", p, q=f"{p['id']} {p['name']} {' '.join(p['aliases'])}") for p in m["people"]]
             else:
                 out = [Item(a["id"], "art", a, q=f"{a['title']} {a['kind']} {a['summary']}") for a in m["artifacts"]]
+        elif panel == 6 and tab == 1:          # aba Feedback do painel do log: a fila do que vira issue
+            fbs = [f for f in self.brain.state.feedbacks.values() if show_all or f.status != "criado"]
+            order = {"pendente": 0, "falhou": 1, "criado": 2}      # acionável no topo
+            fbs.sort(key=lambda f: (order.get(f.status, 3), f.id))
+            out = [Item(f.id, "fb", f, q=f"{f.id} {f.kind} {f.title} {f.status} {f.url}") for f in fbs]
         if filt:
             f, node = util.fold(filt), self.node_for(filt)
             if node:                                  # filtro é um id: mostra tudo que está associado a ele

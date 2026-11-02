@@ -9,6 +9,8 @@ ListPanel.-on { border: round $primary-lighten-2; border-title-color: $text; }
 #detail { width: 100%; height: auto; }
 #log { border: round $primary-darken-1; height: 10; padding: 0 1; scrollbar-size-vertical: 1; border-subtitle-color: $text-muted; }
 #log.-on { border: round $primary-lighten-2; border-title-color: $text; height: 1fr; }
+#p6 { display: none; height: 1fr; min-height: 5; }      /* aba Feedback do painel 6: lista no lugar do log */
+#p6.-on { display: block; }
 #detailwrap.-small { height: 8; }
 .-zoom #left { display: none; }
 #bar { height: 1; dock: bottom; background: $panel; }

@@ -136,7 +136,7 @@ somente-leitura para o mundo.
    tipo no título (`[sugestão]`/`[bug]`) e label própria; `FB-####` no ledger guarda número e
    URL. `add` registra e publica na sequência — o pedido do dono no chat **ou no painel/TUI** é a
    aprovação; sugestão que partiu do agente só publica com um "ok". Superfícies: painel HTML (aba
-   Sugestões, ponta da ponte `serve`), TUI (Aprovar › Feedback) e chat (`/feedback`). O texto é
+   Sugestões, ponta da ponte `serve`), TUI (log › Feedback) e chat (`/feedback`). O texto é
    público: a porta recusa título/corpo com dado do dono (mesmas regras da varredura do `upstream`),
    sem override. Token: `GITHUB_TOKEN` em `config/.env`. No noturno nada é publicado. `feedback sync`
    relê o estado de cada issue (aberta/fechada · concluída/não será feita) e grava `feedback.synced` —
