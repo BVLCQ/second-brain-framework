@@ -53,5 +53,10 @@ def cli(args, brain) -> None:
             os.execv(str(py), [str(py), str(FRAMEWORK / "brain"), "tui"])
         raise util.BrainError("o TUI precisa do Textual (extra opcional): rode `./brain tui --setup` "
                               "(cria .venv-tui com versões e hashes travados)", code=3)
-    from .app import run
+    try:
+        from .app import run
+    except ModuleNotFoundError as exc:
+        # venv parcial (instalação interrompida): textual existe, dependência dele não.
+        raise util.BrainError(f"dependência do TUI ausente ({exc.name}): rode `./brain tui --setup` "
+                              "para completar a instalação em .venv-tui", code=3) from exc
     run(inst)

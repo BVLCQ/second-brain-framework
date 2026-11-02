@@ -2188,7 +2188,19 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             await pilot.press("ctrl+s")
             await self.settle_new_action(app, pilot)
             b = next(x for x in self.state(app).actions.values() if x.title == "Com número")
-            self.assertEqual(b.deliverable, f"{proj}.1")
+            self.assertEqual(b.deliverable, f"{proj}.{n}")
+
+    async def test_busy_resets_when_worker_raises(self):
+        """Exceção no meio do _exec não pode prender o busy (o _watch pararia de reler o vault)."""
+        app = self.app()
+        with contextlib.redirect_stdout(io.StringIO()):
+            async with app.run_test(size=(140, 44)) as pilot:
+                with mock.patch.object(bridge, "run_brain", side_effect=RuntimeError("boom")):
+                    with self.assertRaises(RuntimeError):
+                        await app._exec([["status"]], False, None)
+                await pilot.pause(0.1)
+                self.assertEqual(app.busy, "")
+                self.assertFalse(app._quit_armed)
 
 
 class CoverageTest(unittest.TestCase):
@@ -2246,6 +2258,35 @@ class CliTest(unittest.TestCase):
         r = subprocess.run([sys.executable, str(ROOT / "brain"), "tui"], capture_output=True, text=True, env=env)
         self.assertEqual(r.returncode, 3)
         self.assertIn("--setup", r.stderr)
+
+    def test_tui_partial_venv_points_to_setup(self):
+        # venv parcial: textual presente, dependência dele não → BrainError com dica, não traceback
+        if not HAVE_TEXTUAL:
+            self.skipTest("textual não instalado (./brain tui --setup)")
+        import subprocess
+        import textwrap
+        code = textwrap.dedent(f"""
+            import argparse, os, sys
+            class Block:
+                def find_spec(self, name, path=None, target=None):
+                    if name == "typing_extensions":
+                        raise ModuleNotFoundError("No module named 'typing_extensions'", name="typing_extensions")
+                    return None
+            sys.meta_path.insert(0, Block())
+            sys.path.insert(0, {str(ROOT)!r})
+            os.environ["BRAIN_TUI_REEXEC"] = "1"  # hermético: nunca re-exec
+            from unittest import mock
+            from brainlib import tui as tui_pkg, util
+            try:
+                tui_pkg.cli(argparse.Namespace(setup=False), mock.Mock())
+            except util.BrainError as e:
+                assert "--setup" in str(e), e
+            else:
+                raise SystemExit("BrainError not raised")
+        """)
+        r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True,
+                           cwd=str(ROOT), env={**os.environ, "BRAIN_NOW": "2026-10-09T10:00:00-03:00"})
+        self.assertEqual(r.returncode, 0, r.stderr)
 
 
 if __name__ == "__main__":
