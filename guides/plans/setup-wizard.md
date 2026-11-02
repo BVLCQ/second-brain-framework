@@ -60,9 +60,50 @@ superfícies (CLI primeiro, UI depois).
 | 8 | Portas: outbox/publish | destinatários allow · destinos | `[outbound]` `[publish]` | formato |
 | 9 | Porta: oppdrive | pasta-raiz · ferramentas MCP | `[oppdrive]` | pasta existe; ferramentas nomeadas |
 | 10 | Fontes | menu por kind (gcal/gmail/slack/drive/jira/github) · lembrete: leitura é MCP do AGENTE — conector liga no agente, não aqui | `watch.toml` (via `watch add`) | `watch list` + 1º pull no `/update` |
-| 11 | Memória | `none` **ou** `hindsight` (URL) | `[memory]` + `memory setup` (bancos) | `memory status` |
+| 11 | Memória | modo: `none` · `embed` · `full` (ver § abaixo) | `[memory]` + `memory setup` | por modo (ver § abaixo) |
 | 12 | Runner/agente | auto/claude/cursor/agy/… · modelo · allow de leitura | `[runner]` | rodada ⚡ ou noturno seco |
 | 13 | Fechamento | render + painel · doctor · oferecer `/init` | — | doctor filtrado |
+
+### Passo 11 — Memória em três modos
+
+A memória é o único passo com **modos de armazenagem diferentes**, não só
+liga/desliga. Os modos seguem o plano interno da memória (Hindsight com LLM,
+Fases 0–7, com as emendas R1–R9 da revisão): o wizard não inventa os modos,
+ele configura os que existem.
+
+| Modo | O que é | Bancos | LLM | Sai da máquina? | Chaves | Existe hoje? |
+|---|---|---|---|---|---|---|
+| `none` | sem Hindsight; `/ask` usa índice → artefato → RAW | — | — | não | nenhuma | ✓ |
+| `embed` | só embeddings/chunks: os dois bancos de hoje, retain em modo chunks, sem consolidação nem observações (`NO_LLM_CONFIG`); embeddings locais (LM Studio) | `brain-mem` + `brain-raw` | nenhum | **não** | nenhuma | ✓ |
+| `full` | banco único com **extração de fatos** do RAW (contexto de identidades do ledger), observações consolidadas e mental models por GOAL/PROJ/pessoa | `brain-mem` (único) | por operação (extração/consolidação num modelo barato, mental models num maior) | **sim — texto do vault vai à API do LLM** | 1 chave de API no `.env` | depende do plano da memória (Fases 3–5) |
+
+Perguntas e validação por modo:
+
+- **`none`**: nada a perguntar. Válida: tudo funciona (doctor sem memória).
+- **`embed`**: URL do servidor (+ onde rodam os embeddings). Grava
+  `[memory] engine/url/banks` → `memory setup` cria os dois bancos em modo
+  chunks → `memory status` + um `memory sync` seco. Zero chave, zero egress —
+  pode rodar até no noturno sem gate.
+- **`full`**: tudo do `embed` **mais** o que o plano chama de gates da seção 4:
+  1. **Gate de política (é porta de saída de dados).** O wizard pergunta
+     literalmente se o dono aceita que texto do RAW (reuniões, Slack,
+     documentos) vá para a API do LLM configurada, só para extração,
+     consolidação e mental models. Sem "ok" explícito, o modo nem é oferecido
+     como gravável; com "ok", a exceção entra na seção Segurança da AGENTS.md
+     (diff proposto, aplicado com o mesmo "ok"). Mesmo regime de
+     backup/feedback: porta, com gate e evento.
+  2. **Chave de API** no `.env` (mascarada, 0600, valida na hora) — provider e
+     chave por operação, conforme o que o Hindsight da versão pinada suportar.
+  3. **Teto de gasto mensal** (`monthly_budget_usd`, sugestão 40): o doctor
+     avisa acima do teto; `memory cost` projeta o mês pelo medido.
+  - Validação antes de gastar: `GET /banks/<banco>/health/llm` por operação +
+     `dry-run-extract` numa amostra de chunks reais; rebuild **só** com banco
+     v2 paralelo e custo medido ≤ 2× a premissa. Rollback documentado:
+     `extract = false` + `rebuild` volta ao modo `embed`.
+- **Feature-detect, não promessa:** o wizard só lista `full` se o `[memory]`
+  da instância suportar as chaves novas (`extract`, `cloud_llm` — Fase 4 do
+  plano). Enquanto o plano não aterrissa, o passo mostra `full` como
+  "indisponível — depende do plano da memória" e segue com `embed`.
 
 ## Fases
 
@@ -81,6 +122,9 @@ da Fase 1. Nada é codado antes do dono aprovar o roteiro vivido.
   fallback headless) e ganha um gravador de `.env` mascarado e validado.
 - `./brain setup` (interativo), `--only foco,backup` (re-visitar passos),
   `--yes` (não-interativo, default sensato — para teste/script).
+- Passo memória com os três modos da § acima: `embed` grava direto; `full`
+  feature-detecta as chaves novas do `[memory]`, exige o gate de política com
+  "ok" explícito (evento no ledger) e a chave validada antes de gravar.
 - Cobertura de superfícies: setup é comando do DONO → precisa constar no painel
   (aba/checklist) e na TUI, ou entrar nos conjuntos de justificação dos testes
   `DashboardAssetTests` / `CoverageTest` — decidir na hora do PR.
@@ -146,9 +190,20 @@ real mora em outro clone/vault (`BRAIN_VAULT`)? Assumido abaixo: instância real
     --window <janela>` por fonte; os CONECTORES ligam no agente (Hermes:
     manage_connections; claude: config dele). Valida: `./brain watch list` e,
     no primeiro `/update`, `doctor` mostrando `✓ fonte <key>`.
-11. **Memória** — se o servidor Hindsight estiver de pé: `[memory] engine =
-    "hindsight"` → `./brain memory setup` (cria os bancos) → `./brain memory
-    status`. Senão fica `none` — tudo funciona sem.
+11. **Memória** — três caminhos (ver §"Passo 11"):
+    - `none`: nada a fazer; o cérebro funciona sem.
+    - `embed` (o modo de hoje): subir o Hindsight (`services/compose.yaml`),
+      `[memory] engine = "hindsight"` → `./brain memory setup` (cria os dois
+      bancos em modo chunks) → `./brain memory status`. Zero chave, nada sai
+      da máquina.
+    - `full` (com chave de API — extração, observações, mental models):
+      **depende do plano da memória (Fases 3–5), ainda não aterrissado no
+      código.** O mockup registra hoje, no papel, as três decisões que o
+      wizard vai perguntar: (1) o gate de política — texto do RAW vai para a
+      API do LLM, só para extração/consolidação/mental models? (exige "ok" +
+      exceção na AGENTS.md); (2) a chave no `.env`; (3) o teto mensal
+      (sugestão US$ 40, aviso no doctor). Quando o plano aterrissar, o passo
+      valida com `health/llm` + `dry-run-extract` antes de qualquer rebuild.
 12. **Runner** — `[runner] agent = "claude"|"agy"|…` (+ `model`/`effort` se
     quiser). Valida: uma ação ⚡ na TUI ou `./brain nightly --skip-agent` seco.
 13. **Fechamento** — `./brain render --open` (painel) · `./brain doctor`
@@ -170,6 +225,12 @@ as notas viram a spec final da Fase 1.
 - **Nightly sem runner**: agendar sem `[runner]` gera noturno pela metade — o
   passo 4 adverte e aponta o passo 12.
 - **Serve**: mudança de allowlist exige restart do processo (poço conhecido).
+- **Memória `full` é egress**: texto do vault (reuniões, Slack, documentos) vai
+  à API do LLM — gate de política inegociável, exceção na AGENTS.md, teto de
+  gasto no doctor. O wizard nunca grava `full` sem o "ok" literal.
+- **Container Hindsight ≠ versão pinada** (emenda R5 do plano da memória): a
+  validação do modo `full` confere a versão real em execução (ideal: pin por
+  digest) e a flag do `dry-run-extract` antes de prometer as operações.
 - **Demo vs real**: NUNCA auto-arquivar vault; passo 0 sempre confirma.
 
 ## Critérios de aceite
@@ -178,7 +239,9 @@ as notas viram a spec final da Fase 1.
   errado, notas de ajuste escritas, dono aprova a spec.
 - **Fase 1:** máquina nova do zero → `./brain setup` interativo termina com o
   mesmo estado do mockup; `--only` e `--yes` funcionam; segredo nunca em
-  tela/log; testes verdes (inclusive cobertura de superfícies).
+  tela/log; memória `embed` configurável e `full` corretamente bloqueado (ou
+  oferecido com gate) conforme o código suporte; testes verdes (inclusive
+  cobertura de superfícies).
 - **Fase 2:** todo passo do motor navegável na TUI, mesmo apply, zero lógica
   duplicada (só casca).
 - **Fase 3:** checklist no painel bate com o doctor da CLI; formulário só com
@@ -195,3 +258,7 @@ as notas viram a spec final da Fase 1.
    fallback). ✓?
 4. Fase 0 nesta máquina = instância REAL (demo arquivado), não vault paralelo. ✓?
 5. Nome do comando: `./brain setup`. ✓?
+6. Memória em três modos no wizard — `none` · `embed` (chunks, RAW + MEM, zero
+   chave, nada sai) · `full` (chave de API, extração + mental models) — com
+   `full` tratado como porta de saída de dados: "ok" explícito, exceção na
+   AGENTS.md, teto de gasto, e feature-detect até o plano da memória aterrissar. ✓?
