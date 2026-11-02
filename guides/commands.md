@@ -973,8 +973,9 @@ recusado — complete o existente ou use `--force`.
 Superfícies: painel HTML (aba **Sugestões** — `n` registra e publica, `p` retry, `s` sincroniza; pela ponte do
 `brain serve` executa de verdade), TUI (painel do **log (6) › aba Feedback** — `n` formulário, `p`
 publica o pendente, `T` todas) e chat (`/feedback`). Os formulários do painel e da TUI cobrem os
-campos da CLI: tipo, título, descrição, contexto (`--context`), publicar agora ou depois
-(`--no-push`) e título repetido (aviso + criar mesmo assim = `--force`); `pushed`/`failed`
+campos da CLI: tipo, título, descrição e publicar agora ou depois
+(`--no-push`); título repetido (aviso + criar mesmo assim = `--force`). Sem campo de contexto, de
+propósito: refs do vault (TASK/PROC/OPP) não saem para o issue público. `pushed`/`failed`
 (recuperação manual) ficam no terminal.
 
 ---

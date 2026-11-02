@@ -193,15 +193,26 @@ class FeedbackFlowTests(unittest.TestCase):
 
     # ── render do issue + dobra do estado ──────────────────────────────────
     def test_issue_render(self):
-        feedback.add(self.brain, "bug", "Dashboard quebra", "StackTrace tal", context=["TASK-0001", "PROC-0002"])
+        feedback.add(self.brain, "bug", "Dashboard quebra", "StackTrace tal")
         f = self.brain.state.feedbacks["FB-0001"]
         self.assertEqual(feedback.issue_title(f), "[bug] Dashboard quebra")
         body = feedback.issue_body(f)
         self.assertIn("🐞 bug", body)
         self.assertIn("## Descrição\nStackTrace tal", body)
-        self.assertIn("- TASK-0001", body)
-        self.assertIn("- PROC-0002", body)
         self.assertIn("`FB-0001`", body)
+
+    def test_issue_nao_carrega_refs_do_vault_nem_de_evento_antigo(self):
+        """O issue é público: refs de contexto (TASK/PROC/OPP) nunca saem — nem de evento antigo que
+        ainda traga `context` no data (o campo não existe mais; o dado fica no ledger, não no issue)."""
+        self.brain.record_one({"type": "feedback.added", "by": "owner",
+                               "data": {"kind": "bug", "title": "Antigo com refs",
+                                        "body": "b", "context": ["TASK-0001", "OPP-0002"]}})
+        f = self.brain.state.feedbacks["FB-0001"]
+        self.assertFalse(hasattr(f, "context"))
+        body = feedback.issue_body(f)
+        self.assertNotIn("TASK-", body)
+        self.assertNotIn("OPP-", body)
+        self.assertNotIn("## Contexto", body)
 
     def test_estado_reconstroi_do_ledger(self):
         feedback.add(self.brain, "sugestao", "Primeira")

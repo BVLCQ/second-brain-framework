@@ -315,7 +315,6 @@ class Feedback:
     kind: str                      # sugestao | bug
     title: str
     body: str = ""
-    context: list[str] = field(default_factory=list)      # refs: TASK-…, PROC-…, OPP-…
     status: str = "pendente"       # pendente | criado | falhou
     number: int | None = None      # nº do issue no GitHub
     url: str = ""
@@ -631,7 +630,7 @@ def apply(st: State, ev: dict) -> None:
     elif t.startswith("feedback."):
         if t == "feedback.added":
             st.feedbacks[eid] = Feedback(eid, data["kind"], data["title"], data.get("body", ""),
-                                         list(data.get("context", [])), source=ev.get("source", ""),
+                                         source=ev.get("source", ""),
                                          prov=ev.get("prov", ""), by=ev.get("by", ""), added=when)
         f = st.feedbacks[eid]
         if t == "feedback.pushed":

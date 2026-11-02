@@ -731,8 +731,6 @@ def d_fb(store, it) -> Doc:
     doc = Doc().h(f"{f.id} · {tag} do cérebro", (f" · {f.status}", DIM)).blank().p(f.title)
     if f.body:
         doc.sec("Descrição").p(f.body)
-    if f.context:
-        doc.sec("Contexto").p(" · ".join(f.context))
     issue = "— ainda não publicada"
     if f.url:
         estado = {("open", ""): "aberta", ("closed", "completed"): "fechada · concluída",

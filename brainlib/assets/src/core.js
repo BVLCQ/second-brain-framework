@@ -398,7 +398,6 @@ V.feedback = () => {
     chip(f.status === "criado" ? "em-dia" : f.status === "falhou" ? "em-risco" : "info", f.status) +
     (f.status === "criado" && f.url ? ' · <a href="' + esc(f.url) + '" target="_blank" rel="noopener">issue #' + f.number + "</a>" : "") +
     issueChip(f) +
-    (f.context && f.context.length ? ' <span class="muted">· ' + esc(f.context.join(" ")) + "</span>" : "") +
     (f.added ? ' <span class="muted">· ' + fmtD(f.added) + "</span>" : "") +
     (f.status !== "criado" ? ' · <button class="btn tiny" data-fb="' + esc(f.id) + '" title="criar a issue no GitHub">p publicar</button>' : "") +
     "</header>" + (f.body ? '<div class="msg">' + esc(f.body) + "</div>" : "") +

@@ -297,7 +297,7 @@ class ModelBuilder:
                         "link": s.link, "date": _iso(s.date)} for s in st.shares.values()],
             "plan_changes": [{**c, "date": _iso(c["date"])} for c in st.plan_changes],
             "plan_warnings": plan.warnings,
-            "feedback": [{"id": f.id, "kind": f.kind, "title": f.title, "body": f.body, "context": f.context,
+            "feedback": [{"id": f.id, "kind": f.kind, "title": f.title, "body": f.body,
                           "status": f.status,
                           "number": f.number, "url": f.url, "issue_state": f.issue_state,
                           "issue_reason": f.issue_reason, "error": f.error, "added": _iso(f.added),

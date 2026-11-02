@@ -15,7 +15,7 @@ description: "Registra sugestão ou bug do próprio cérebro e cria a issue no r
 
 ```
 ./brain feedback add "Título curto e claro" --kind sugestao|bug \
-  --body "O que acontece, onde, como reproduzir" --context TASK-…,PROC-… --by owner
+  --body "O que acontece, onde, como reproduzir" --by owner
 ```
 
 `--by owner` quando o dono pediu; `--by agent --source chat` quando você observou. O `add` já

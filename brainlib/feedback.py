@@ -16,7 +16,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from . import config, ids, schema, util
+from . import config, schema, util
 from .cli import _fact_opts, _out
 from .core import Brain
 
@@ -34,10 +34,10 @@ def issue_title(f) -> str:
 
 
 def issue_body(f) -> str:
+    """O issue é público: só tipo, descrição e o id do FB — nada do vault sai (nem refs a TASK/PROC/OPP,
+    que o leitor público não resolve e são dado do dono)."""
     lines = [f"**Tipo:** {'💡 sugestão' if f.kind == 'sugestao' else '🐞 bug'}", "",
              "## Descrição", f.body or f.title, ""]
-    if f.context:
-        lines += ["## Contexto", *[f"- {c}" for c in f.context], ""]
     lines += ["---", f"`{f.id}` · registrado pelo Segundo Cérebro (`brain feedback`)"]
     return "\n".join(lines)
 
@@ -111,11 +111,13 @@ def issue_state(inst: config.Instance, repo: str, number: int) -> dict:
 
 # ── fluxo da entidade ────────────────────────────────────────────────────────
 
-def add(brain: Brain, kind: str, title: str, body: str = "", context: list[str] | None = None,
+def add(brain: Brain, kind: str, title: str, body: str = "",
         by: str = "owner", prov: str = "declarado", source: str = "chat", date: str | None = None,
         force: bool = False) -> dict:
-    """Grava `feedback.added` (FB-#### pendente). Título igual ao de um FB existente exige --force."""
-    context = [ids.normalize(c) for c in (context or [])]
+    """Grava `feedback.added` (FB-#### pendente). Título igual ao de um FB existente exige --force.
+
+    Sem campo de contexto de propósito: o issue é público e refs do vault (TASK/PROC/OPP) não saem
+    da máquina — nem o leitor as resolve, nem são dado que deva vazar."""
     key = (kind, " ".join(util.fold(title).split()))
     dup = next((f.id for f in brain.state.feedbacks.values()
                 if (f.kind, " ".join(util.fold(f.title).split())) == key), None)
@@ -123,8 +125,7 @@ def add(brain: Brain, kind: str, title: str, body: str = "", context: list[str] 
         raise util.BrainError(f"já existe {dup} com o mesmo título e tipo — acrescente detalhe ao existente "
                               f"(`brain feedback show {dup}`) ou use --force", code=4)
     return brain.record_one({"type": "feedback.added", "by": by, "prov": prov, "source": source or "chat",
-                             "date": date, "data": {"kind": kind, "title": title, "body": body,
-                                                    "context": context}})
+                             "date": date, "data": {"kind": kind, "title": title, "body": body}})
 
 
 def push(brain: Brain, fid: str) -> dict:
@@ -215,8 +216,7 @@ def _need(brain: Brain, fid: str):
 def cli(args, brain: Brain) -> None:
     c = args.fbcmd
     if c == "add":
-        ctx = [x for part in (args.context or []) for x in util.split_csv(part)]
-        ev = add(brain, args.kind, args.title, args.body or "", ctx, args.by,
+        ev = add(brain, args.kind, args.title, args.body or "", args.by,
                  args.prov or ("declarado" if args.by == "owner" else "observado"),
                  args.source or "", args.date, args.force)
         f = brain.state.feedbacks[ev["id"]]
@@ -248,7 +248,7 @@ def cli(args, brain: Brain) -> None:
         print(f"✓ {len(events)} mudança(s) de estado registrada(s)" if events else "= nada mudou")
     elif c == "show":
         f = _need(brain, args.id)
-        _out(args, {"id": f.id, "kind": f.kind, "title": f.title, "body": f.body, "context": f.context,
+        _out(args, {"id": f.id, "kind": f.kind, "title": f.title, "body": f.body,
                     "status": f.status, "number": f.number, "url": f.url, "added": f.added,
                     "issue_title": issue_title(f), "issue_body": issue_body(f)},
              f"{f.id} · {f.status}" + (f" · {f.url}" if f.url else "") + "\n\n"
@@ -267,7 +267,6 @@ def add_parsers(sub) -> None:
     x.add_argument("title")
     x.add_argument("--kind", choices=list(KINDS), required=True, help="sugestao | bug")
     x.add_argument("--body", help="descrição completa: o que, onde, como reproduzir")
-    x.add_argument("--context", action="append", help="refs: TASK-…, PROC-…, OPP-… (vírgula ou repetido)")
     x.add_argument("--no-push", action="store_true", help="só registra (FB-#### pendente); `brain feedback push` depois")
     x.add_argument("--force", action="store_true", help="registra mesmo com título igual ao de um FB existente")
     _fact_opts(x)

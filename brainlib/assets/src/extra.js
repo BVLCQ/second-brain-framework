@@ -375,18 +375,17 @@ function feedbackForm(){
       {k: "kind", label: "Tipo", options: [["sugestao", "💡 sugestão"], ["bug", "🐞 bug"]], value: "sugestao"},
       {k: "title", label: "Título", value: "", ph: "curto e claro"},
       {k: "body", label: "Descrição", value: "", ta: true, rows: 5, ph: "o que, onde, como reproduzir"},
-      {k: "context", label: "Contexto", value: "", ph: "TASK-####, PROC-####, OPP-#### (vírgula)"},
       {k: "pub", label: "Publicar", options: [["agora", "agora — cria a issue já"], ["depois", "depois — só registra (p publica)"]], value: "agora"},
       {k: "force", label: "Título repetido — criar mesmo assim", options: [["nao", "não"], ["sim", "sim (--force)"]], value: "nao"}],
     note: v => { const f = (window.BRAIN.M.feedback || []).find(x => x.kind === v.kind &&
         x.title.trim().toLowerCase() === v.title.trim().toLowerCase());
       return (f && v.force !== "sim") ? "⚠ mesmo título e tipo de " + f.id + " — acrescente detalhe ao existente ou marque “criar mesmo assim”" : ""; },
     preview: v => v.title ? "brain feedback add " + q(v.title) + " --kind " + v.kind +
-      (v.body ? " --body " + q(v.body) : "") + (v.context ? " --context " + q(v.context) : "") +
+      (v.body ? " --body " + q(v.body) : "") +
       (v.pub === "depois" ? " --no-push" : "") + (v.force === "sim" ? " --force" : "") + " --by owner" : null,
     run: (v, m) => { const n = Math.max(0, ...(m.feedback || []).map(x => +x.id.slice(3))) + 1;
       (m.feedback = m.feedback || []).unshift({id: "FB-" + String(n).padStart(4, "0"), kind: v.kind,
-        title: v.title, body: v.body || null, context: v.context ? v.context.split(/[,;]\s*/).filter(Boolean) : [],
+        title: v.title, body: v.body || null,
         status: "pendente", number: null, url: null, error: null, added: m.today}); }});
 }
 function pubAction(act, id0){
