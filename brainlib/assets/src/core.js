@@ -398,12 +398,13 @@ V.feedback = () => {
     chip(f.status === "criado" ? "em-dia" : f.status === "falhou" ? "em-risco" : "info", f.status) +
     (f.status === "criado" && f.url ? ' · <a href="' + esc(f.url) + '" target="_blank" rel="noopener">issue #' + f.number + "</a>" : "") +
     issueChip(f) +
+    (f.context && f.context.length ? ' <span class="muted">· ' + esc(f.context.join(" ")) + "</span>" : "") +
     (f.added ? ' <span class="muted">· ' + fmtD(f.added) + "</span>" : "") +
     (f.status !== "criado" ? ' · <button class="btn tiny" data-fb="' + esc(f.id) + '" title="criar a issue no GitHub">p publicar</button>' : "") +
     "</header>" + (f.body ? '<div class="msg">' + esc(f.body) + "</div>" : "") +
     (f.status === "falhou" && f.error ? '<div class="msg muted">' + esc(f.error) + "</div>" : "") + "</div>";
   const pend = M.feedback.filter(f => f.status !== "criado"), done = M.feedback.filter(f => f.status === "criado");
-  const doneTitle = done.length ? 'Já no GitHub · ' + done.length + ' <button class="btn tiny" data-fbsync title="relê o estado dos issues no GitHub">s sincronizar</button>' : "Já no GitHub · 0";
+  const doneTitle = 'Já no GitHub · ' + done.length + ' <button class="btn tiny" data-fbsync title="relê o estado dos issues no GitHub">s sincronizar</button>';
   return '<div class="pagehead"><div><h1>Sugestões e bugs</h1><p class="sub">Porta 7 — cada registro vira uma issue pública no repo do framework. O texto não carrega nada seu: nomes, e-mails e caminhos ficam fora.</p></div></div>' +
     panel("Pendente de publicar · " + pend.length, pend.map(row).join("") || empty("nada pendente — n para sugerir ou reportar"), ' style="margin-top:14px"') +
     panel(doneTitle, done.map(row).join("") || empty("—"), ' style="margin-top:14px"');

@@ -374,12 +374,20 @@ function feedbackForm(){
     fields: [
       {k: "kind", label: "Tipo", options: [["sugestao", "💡 sugestão"], ["bug", "🐞 bug"]], value: "sugestao"},
       {k: "title", label: "Título", value: "", ph: "curto e claro"},
-      {k: "body", label: "Descrição", value: "", ta: true, rows: 5, ph: "o que, onde, como reproduzir"}],
+      {k: "body", label: "Descrição", value: "", ta: true, rows: 5, ph: "o que, onde, como reproduzir"},
+      {k: "context", label: "Contexto", value: "", ph: "TASK-####, PROC-####, OPP-#### (vírgula)"},
+      {k: "pub", label: "Publicar", options: [["agora", "agora — cria a issue já"], ["depois", "depois — só registra (p publica)"]], value: "agora"},
+      {k: "force", label: "Título repetido — criar mesmo assim", options: [["nao", "não"], ["sim", "sim (--force)"]], value: "nao"}],
+    note: v => { const f = (window.BRAIN.M.feedback || []).find(x => x.kind === v.kind &&
+        x.title.trim().toLowerCase() === v.title.trim().toLowerCase());
+      return (f && v.force !== "sim") ? "⚠ mesmo título e tipo de " + f.id + " — acrescente detalhe ao existente ou marque “criar mesmo assim”" : ""; },
     preview: v => v.title ? "brain feedback add " + q(v.title) + " --kind " + v.kind +
-      (v.body ? " --body " + q(v.body) : "") + " --by owner" : null,
+      (v.body ? " --body " + q(v.body) : "") + (v.context ? " --context " + q(v.context) : "") +
+      (v.pub === "depois" ? " --no-push" : "") + (v.force === "sim" ? " --force" : "") + " --by owner" : null,
     run: (v, m) => { const n = Math.max(0, ...(m.feedback || []).map(x => +x.id.slice(3))) + 1;
       (m.feedback = m.feedback || []).unshift({id: "FB-" + String(n).padStart(4, "0"), kind: v.kind,
-        title: v.title, body: v.body || null, status: "pendente", number: null, url: null, error: null, added: m.today}); }});
+        title: v.title, body: v.body || null, context: v.context ? v.context.split(/[,;]\s*/).filter(Boolean) : [],
+        status: "pendente", number: null, url: null, error: null, added: m.today}); }});
 }
 function pubAction(act, id0){
   if (act === "cancel") { formDialog({title: "Cancelar " + id0, fields: [{k: "reason", label: "Motivo", value: ""}],
@@ -767,11 +775,13 @@ function formDialog(o){          // {title, sub, fields[{k,label,type,value,opti
   ov.innerHTML = '<div class="palette"><div class="pin"><b>' + esc(o.title) + "</b>" + (o.gate ? ' <span class="gatebadge">gate — precisa do seu ok literal</span>' : "") + '</div>' +
     '<div class="pal-confirm open" style="display:block;border-top:0;padding:14px 16px;max-height:70vh;overflow:auto">' +
     (o.sub ? '<p class="note-s" style="margin:0 0 10px">' + esc(o.sub) + "</p>" : "") + f +
+    '<div class="note-s" data-note style="margin:0 0 6px"></div>' +
     '<div class="cline" data-preview style="min-height:34px"></div>' +
     '<div class="row"><span class="note-s">mesma linha que a TUI roda</span><button class="btn ghost" data-x>cancelar</button><button class="btn primary" data-ok>' + (o.gate ? "aprovar (ok)" : "executar") + "</button></div></div></div>";
   document.body.appendChild(ov); dlgOpen = true;
   const vals = () => { const v = {}; ov.querySelectorAll("[data-k]").forEach(el => v[el.dataset.k] = el.value); return v; };
-  const paint = () => { const p = ov.querySelector("[data-preview]"); const c = o.preview(vals()); p.textContent = c ? "$ " + c : "$ (preencha os campos)"; };
+  const paint = () => { const p = ov.querySelector("[data-preview]"); const c = o.preview(vals()); p.textContent = c ? "$ " + c : "$ (preencha os campos)";
+    const n = ov.querySelector("[data-note]"); if (n) n.textContent = o.note ? (o.note(vals()) || "") : ""; };
   ov.querySelectorAll("[data-k]").forEach(el => el.addEventListener("input", paint));
   ov.querySelectorAll("select[data-k]").forEach(el => el.addEventListener("change", paint));
   paint();

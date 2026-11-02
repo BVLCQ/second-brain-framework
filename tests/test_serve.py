@@ -159,6 +159,18 @@ class ServeTests(unittest.TestCase):
         body3 = self._cmd(f"brain feedback push {f.id}", 200)                 # sem GITHUB_TOKEN: o CLI recusa
         self.assertFalse(json.loads(body3)["ok"])
 
+    def test_feedback_pela_ponte_leva_contexto_e_o_payload_mostra(self):
+        """Paridade de campos no painel: --context passa pela ponte e volta no /api/data."""
+        body = self._cmd('brain feedback add "Contexto pelo serve" --kind bug '
+                         '--context "TASK-0001, PROC-0002" --no-push --by owner', 200)
+        self.assertTrue(json.loads(body)["ok"], body)
+        f = next(x for x in Brain(self.inst).state.feedbacks.values() if x.title == "Contexto pelo serve")
+        self.assertEqual(f.context, ["TASK-0001", "PROC-0002"])
+        self.assertEqual(f.status, "pendente")                              # --no-push: só registrou
+        _, body2 = self._req("/api/data", token=self.token)
+        row = next(x for x in json.loads(body2)["model"]["feedback"] if x["id"] == f.id)
+        self.assertEqual(row["context"], ["TASK-0001", "PROC-0002"])
+
     # ── headers de segurança / framing / origem ───────────────────────────
     def test_painel_nao_e_embebivel(self):
         """Clickjacking: um site qualquer não pode iframar o painel vivo e clicar por você."""

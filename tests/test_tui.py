@@ -1250,6 +1250,44 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             await self.settle(app, pilot)
             self.assertIn("sync pulado", self.log_text(app))
 
+    async def test_feedback_form_tem_os_campos_da_cli_contexto_no_push_e_force(self):
+        """Paridade com a CLI: --context entra como refs, "depois" vira --no-push, título repetido
+        do mesmo tipo avisa no formulário e só passa com "criar mesmo assim" (--force)."""
+        app = self.app()
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause(0.4)
+            await pilot.press("4", "]", "]", "]", "]", "]")          # painel 4 › aba Feedback
+            await self.settle(app, pilot)
+            await pilot.press("n")
+            await pilot.pause(0.2)
+            await self.fill(pilot, title="Grafico de horas", context="TASK-0001, PROC-0002")
+            app.screen.query_one("#f_pub").value = "depois"
+            await pilot.pause(0.15)
+            await pilot.press("ctrl+s")
+            await self.settle(app, pilot)
+            log = self.log_text(app)
+            self.assertIn("--context", log)
+            self.assertIn("--no-push", log)
+            self.assertNotIn("issue criada", log)                    # --no-push: só registrou
+            f = self.state(app).feedbacks["FB-0001"]
+            self.assertEqual(f.context, ["TASK-0001", "PROC-0002"])
+            self.assertEqual(f.status, "pendente")
+            # mesmo título e tipo: o formulário avisa antes de gravar (o mesmo guard do CLI)
+            await pilot.press("n")
+            await pilot.pause(0.2)
+            await self.fill(pilot, title="Grafico de horas")
+            await pilot.press("ctrl+s")
+            await pilot.pause(0.2)
+            self.assertIn("mesmo título e tipo de FB-0001", self.text_of(app.screen.query_one("#err")))
+            self.assertNotIn("FB-0002", self.state(app).feedbacks)
+            # "criar mesmo assim" = --force
+            app.screen.query_one("#f_force").value = "sim"
+            await pilot.pause(0.15)
+            await pilot.press("ctrl+s")
+            await self.settle(app, pilot)
+            self.assertIn("--force", self.log_text(app))
+            self.assertIn("FB-0002", self.state(app).feedbacks)
+
     async def test_focus_approve_then_apply_ics(self):
         app = self.app()
         async with app.run_test(size=(140, 44)) as pilot:
