@@ -1,15 +1,23 @@
 """Utilidades sem dependência: tempo, texto, arquivos."""
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
 import re
 import tempfile
+import threading
 import unicodedata
+from collections.abc import Iterator
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
+
+try:
+    import fcntl
+except ImportError:  # pragma: no cover — Windows não é alvo (cron/launchd)
+    fcntl = None
 
 _TZ_NAME = "America/Sao_Paulo"
 
@@ -116,6 +124,38 @@ def read_json(path: Path, default):
 
 def write_json(path: Path, data) -> None:
     atomic_write(path, json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+
+
+_held_locks = threading.local()          # caminhos já travados nesta thread (re-entrância do flock)
+
+
+@contextlib.contextmanager
+def locked_state(path: Path) -> Iterator[None]:
+    """Trava cross-processo (flock em `<path>.lock`) para leitura-modificação-escrita de JSON de estado —
+    dois `brain` concorrentes (TUI + noturno, snapshot + repos) não se pisam.
+
+    Re-entrante na thread: `repos pull` segura o estado e chama `snapshot.take`, que também trava."""
+    key = str(path)
+    held = getattr(_held_locks, "paths", None)
+    if held is None:
+        held = _held_locks.paths = set()
+    if key in held:
+        yield
+        return
+    lock_path = path.with_suffix(path.suffix + ".lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(lock_path, "w") as fh:
+        if fcntl:
+            fcntl.flock(fh, fcntl.LOCK_EX)
+        try:
+            held.add(key)
+            try:
+                yield
+            finally:
+                held.discard(key)
+        finally:
+            if fcntl:
+                fcntl.flock(fh, fcntl.LOCK_UN)
 
 
 _DUR_RE = re.compile(r"^\s*(?:(\d+)\s*d)?\s*(?:(\d+)\s*h)?\s*(?:(\d+)\s*(?:m|min)?)?\s*$", re.I)

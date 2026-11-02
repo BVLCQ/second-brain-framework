@@ -220,32 +220,33 @@ def _pull_repo(brain, key: str, root: Path, repo: Path, do_fetch: bool, full: bo
             fetched = "sim"
         except util.BrainError as e:
             fetched, row["warning"] = "falhou (dados locais)", f"fetch falhou: {e}"
-    prev = [] if full else (util.read_json(inst.state_file, {}).get(_slot(key, name)) or {}).get("tips", [])
-    tips = _tips(repo)
-    if tips and tips == prev:
-        snapshot._pulled(brain, key, name, False)
-        return row
-    old = [p for p in prev if _exists(repo, p)]
-    if not tips:
-        commits, overview, how = [], None, "repo sem commits"
-    elif old:
-        commits, overview, how = _commits(repo, tips, old), None, "desde o último pull"
-    else:                                   # primeira leitura, --full, ou as pontas antigas sumiram (force-push)
-        why = "--full" if full else ("primeira leitura" if not prev else "pontas antigas sumiram (force-push?)")
-        commits, overview, how = _commits(repo, tips, None), _overview(repo, _main_ref(repo)), f"{why} — repositório inteiro"
-        row["full"] = True
-    if commits or overview is not None:
-        shown = commits if overview is not None else commits[:MAX_COMMITS]
-        files = {c["sha"]: _files(repo, c["sha"]) for c in shown}
-        res = snapshot.take(brain, key, render(name, repo, commits, how, fetched, files, overview),
-                            prefix=PREFIX, item=name, name=name, with_key=False)
-        row["new"] = len(shown)
-        row["snapshot"] = inst.rel(res["path"]) if res.get("changed") else None
-    else:
-        snapshot._pulled(brain, key, name, False)
-    state = util.read_json(inst.state_file, {})
-    state[_slot(key, name)] = {"tips": tips, "at": util.iso_now()}
-    util.write_json(inst.state_file, state)
+    with util.locked_state(inst.state_file):   # tips antigas e novas sob a mesma trava do snapshot
+        prev = [] if full else (util.read_json(inst.state_file, {}).get(_slot(key, name)) or {}).get("tips", [])
+        tips = _tips(repo)
+        if tips and tips == prev:
+            snapshot._pulled(brain, key, name, False)
+            return row
+        old = [p for p in prev if _exists(repo, p)]
+        if not tips:
+            commits, overview, how = [], None, "repo sem commits"
+        elif old:
+            commits, overview, how = _commits(repo, tips, old), None, "desde o último pull"
+        else:                                   # primeira leitura, --full, ou as pontas antigas sumiram (force-push)
+            why = "--full" if full else ("primeira leitura" if not prev else "pontas antigas sumiram (force-push?)")
+            commits, overview, how = _commits(repo, tips, None), _overview(repo, _main_ref(repo)), f"{why} — repositório inteiro"
+            row["full"] = True
+        if commits or overview is not None:
+            shown = commits if overview is not None else commits[:MAX_COMMITS]
+            files = {c["sha"]: _files(repo, c["sha"]) for c in shown}
+            res = snapshot.take(brain, key, render(name, repo, commits, how, fetched, files, overview),
+                                prefix=PREFIX, item=name, name=name, with_key=False)
+            row["new"] = len(shown)
+            row["snapshot"] = inst.rel(res["path"]) if res.get("changed") else None
+        else:
+            snapshot._pulled(brain, key, name, False)
+        state = util.read_json(inst.state_file, {})
+        state[_slot(key, name)] = {"tips": tips, "at": util.iso_now()}
+        util.write_json(inst.state_file, state)
     return row
 
 

@@ -68,6 +68,14 @@ def take(brain, key: str, content: str, prefix: str | None = None, ext: str = "m
     if not EXT_RE.match(ext or ""):
         # a extensão entra crua no nome do arquivo: `md/../../x` escaparia da inbox
         raise util.BrainError(f"--ext inválida: {ext!r} (só letras e números, ex.: md, json, txt)", code=2)
+    # .state.json é leitura-modificação-escrita: sob trava, para dois brain concorrentes não se pisarem
+    with util.locked_state(inst.state_file):
+        return _take_locked(brain, key, content, prefix, ext, item, rev, name, with_key)
+
+
+def _take_locked(brain, key: str, content: str, prefix: str | None, ext: str,
+                 item: str | None, rev: str | None, name: str | None, with_key: bool) -> dict:
+    inst = brain.inst
     state = util.read_json(inst.state_file, {})
     slot = _slot(key, item)
     prev = state.get(slot) if isinstance(state.get(slot), dict) else {}

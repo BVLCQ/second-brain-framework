@@ -83,6 +83,32 @@ class UtilTests(unittest.TestCase):
     def test_today_frozen(self):
         self.assertEqual(util.today(), date(2026, 10, 9))
 
+    def test_locked_state_serializes_and_reenters(self):
+        import threading
+        import time
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / "state.json"
+            util.write_json(p, {"n": 0})
+
+            def bump():                       # leitura-modificação-escrita concorrente
+                for _ in range(40):
+                    with util.locked_state(p):
+                        st = util.read_json(p, {})
+                        time.sleep(0.0002)   # sem a trava, a interleave perde incrementos
+                        st["n"] += 1
+                        util.write_json(p, st)
+
+            threads = [threading.Thread(target=bump) for _ in range(4)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+            self.assertEqual(util.read_json(p, {})["n"], 160)
+            with util.locked_state(p):        # re-entrância na mesma thread não trava
+                with util.locked_state(p):
+                    util.write_json(p, {"n": 161})
+            self.assertEqual(util.read_json(p, {})["n"], 161)
+
 
 class PlanningTests(unittest.TestCase):
     def test_template_has_no_fake_tree(self):
