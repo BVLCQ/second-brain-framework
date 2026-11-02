@@ -2289,5 +2289,24 @@ class CliTest(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
 
 
+class StoreLocateTest(unittest.TestCase):
+    """locate() não pode explodir com status fora dos grupos de aba (drift de schema)."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name) / "inst"
+        with contextlib.redirect_stdout(io.StringIO()):
+            demo_mod.cli(argparse.Namespace(dir=str(self.root), open=False))
+
+    def test_status_fora_dos_grupos_cai_na_aba_resto(self):
+        from brainlib.tui.store import OPP_TABS, Store
+        st = Store(config.load(self.root))
+        st.by_opp["OPP-9999"] = {"id": "OPP-9999", "status": "bogus"}
+        self.assertEqual(st.locate("OPP-9999"), (1, 3, len(OPP_TABS) - 1))
+        known = next(o for o in st.by_opp.values() if o["status"] in OPP_TABS[0])
+        self.assertEqual(st.locate(known["id"]), (1, 3, 0))
+
+
 if __name__ == "__main__":
     unittest.main()

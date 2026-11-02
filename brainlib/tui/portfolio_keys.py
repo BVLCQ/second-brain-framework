@@ -197,7 +197,11 @@ class PortfolioKeys:
         if not pb:
             self.log_line(f"{p['id']} não tem playbook ligado (tecla l, tipo playbook).", "yellow")
             return
-        self.open_doc(p["id"], next(n for n, d in enumerate(p["docs"]) if d["ref"] == pb["ref"]))
+        n = next((n for n, d in enumerate(p["docs"]) if d["ref"] == pb["ref"]), None)
+        if n is None:      # playbook aponta pra um ref que saiu da lista de docs: o CLI não deixa, mas drift não derruba a tecla
+            self.log_line(f"{p['id']}: o playbook {pb['ref']} não está mais na lista de docs do processo.", "yellow")
+            return
+        self.open_doc(p["id"], n)
 
     def f_opp_from_proc(self) -> None:
         p = self.cur().data
@@ -449,7 +453,8 @@ class PortfolioKeys:
         if ref.startswith(("http://", "https://")):
             url = ref
         elif watch.drive_doc_id(ref) == ref and "/" not in ref:
-            url = f"https://docs.google.com/document/d/{ref}/edit"
+            # id cru do Drive: não sabemos se é Doc, Sheet ou Slide — o link genérico redireciona pro app certo
+            url = f"https://drive.google.com/file/d/{ref}/view"
         else:
             from .. import rawsort
             path = rawsort.resolve(self.inst, ref) if ref.startswith("RAW/") else self.inst.vault / ref

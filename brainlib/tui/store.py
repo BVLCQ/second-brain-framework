@@ -663,7 +663,8 @@ class Store:
         """Onde um id aparece: (face, painel, aba). Usado nos links do detalhe, na busca e na paleta."""
         if node in self.by_opp:
             status = self.by_opp[node]["status"]
-            return (1, 3, next(i for i, g in enumerate(OPP_TABS) if status in g))
+            # fora dos grupos nomeados (status novo/exótico) cai na última aba, que é o "resto" por design
+            return (1, 3, next((i for i, g in enumerate(OPP_TABS) if status in g), len(OPP_TABS) - 1))
         if node in self.by_proc:
             return (1, 2, 0)
         loc = self._locate_exec(node)
