@@ -246,11 +246,10 @@ def serve(inst, port: int = 8787, open_browser: bool = False) -> int:
     httpd = ThreadingHTTPServer(("127.0.0.1", port), _Handler)
     httpd.daemon_threads = True
     inst.logs.mkdir(parents=True, exist_ok=True)
-    live_url_file(inst).write_text(json.dumps({"url": url, "port": port, "pid": os.getpid()}), encoding="utf-8")
-    try:
-        os.chmod(live_url_file(inst), 0o600)
-    except OSError:
-        pass
+    # 0600 já na criação: o arquivo carrega o token da ponte — write_text+chmod deixaria uma janela legível
+    fd = os.open(live_url_file(inst), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write(json.dumps({"url": url, "port": port, "pid": os.getpid()}))
     print(f"✓ ponte CLI no ar (Ctrl+C encerra)\n  {url}\n  file:// continua retrato: comandos só copiam")
     if open_browser:
         webbrowser.open(url)
