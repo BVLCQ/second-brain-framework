@@ -8,7 +8,7 @@ o push.
 Este documento **consolida e substitui** o plano anterior de memória (Fases 0–7 com as
 emendas R1–R9 da revisão independente). O núcleo auditado não muda: roteamento por
 camadas, JSONL como verdade com projeção SQLite derivada, medição antes de mudar,
-gates de política separados de engenharia, rollback por fase. A novidade é o
+pré-requisitos explícitos por setup, rollback por fase. A novidade é o
 reordenamento em **dois setups completos e independentes**:
 
 1. **`embed`** — sem LLM em qualquer operação (retain, consolidação, mental models).
@@ -18,12 +18,14 @@ reordenamento em **dois setups completos e independentes**:
    inteiro.
 2. **`full`** — tudo do `embed` **mais** as camadas de LLM: extração de fatos do RAW
    com identidades do ledger, observações consolidadas e mental models por GOAL/PROJ/
-   pessoa. Custo medido ~US$ 20/mês (cenário B), teto de aviso no doctor.
+   pessoa. Custo medido ~US$ 20/mês (cenário B), com **medidor mensal** de uso — sem
+   teto nem bloqueio (decisão 3).
 
 **`embed` é prefixo estrito de `full`**: a escada de commits é uma só; o `full` começa
 exatamente onde o `embed` termina. Subir de `embed` para `full` não joga fora nenhum
 commit, nenhum dado e nenhuma configuração — só acrescenta as camadas de LLM (com os
-gates da seção 4.3) e recria o banco em modo de extração. O vocabulário é o mesmo do
+pré-requisitos da seção 4.3) e recria o banco em modo de extração. Descer de volta é
+igualmente primeira classe (seção 4.5) — não é um-ou-outro. O vocabulário é o mesmo do
 passo 11 do setup assistido (`none` · `embed` · `full`).
 
 ---
@@ -33,7 +35,7 @@ passo 11 do setup assistido (`none` · `embed` · `full`).
 | | Hoje (dois bancos, chunks) | Setup `embed` | Setup `full` |
 |---|---|---|---|
 | LLM em qualquer operação | nenhum | nenhum | Haiku 5.5 (retain, consolidação), Sonnet 5.5 (mental models) |
-| Sai da máquina? | não | **não** | sim — texto do vault à API (gate de política) |
+| Sai da máquina? | não | **não** | sim — texto do vault à API **com a chave do dono** (seção 4.3) |
 | Custo de API | US$ 0 | **US$ 0** | ~US$ 20,50/mês (~US$ 246/ano) |
 | Chaves no `.env` | nenhuma | nenhuma | 1 (provider de LLM) |
 | Verdade das entidades | `events.jsonl` | `events.jsonl` (sem mudança) | `events.jsonl` (sem mudança) |
@@ -44,12 +46,13 @@ passo 11 do setup assistido (`none` · `embed` · `full`).
 | "O que está atrasado com X?" | vetor (erra) | ledger, exato | idem |
 | "O que foi dito de passagem?" | vetor, sem data | vetor + BM25 pt + reranker local + datas | idem + fatos extraídos |
 | "Por que achamos que X importa?" | não responde | dossiê determinístico (estado + evidência) na hora da resposta | mental model vivo, regenerado |
-| Requer decisão de política | não | não | sim (seção 4.3) |
+| Pré-requisito além do `embed` | — | nenhum | chave própria do dono no `.env` (seção 4.3) |
 
-**Recomendação:** rodar `embed` como o setup padrão da instância; ligar `full` quando o
-dono aprovar o gate de política e o custo — o diagnóstico, a medição e todo o
-substrato são os mesmos. Instâncias cuja política de dados proíba egress ficam no
-`embed` para sempre, e isso está bem: as metas da Fase 0 são definidas por setup.
+**Escolha do dono, nos dois sentidos (decisão 1).** `embed` e `full` são caminhos de
+primeira classe: começar por qualquer um, subir para `full` quando quiser e **voltar**
+para `embed` quando quiser — não é um-ou-outro. Como `embed` é prefixo estrito, subir
+não joga fora nada; descer é configuração + rebuild (seção 4.5). As metas da Fase 0 são
+por setup, então qualquer escolha é um sistema completo.
 
 ---
 
@@ -214,18 +217,28 @@ em lote, mental models regenerados por GOAL/PROJ/pessoa com o estado do ledger c
 deterministicamente, e as pernas de fatos/mental model no roteador. Cenário de custo B:
 ~US$ 20,50/mês (seção 4.4), dois terços disso nos mental models.
 
-### 4.3 Gates do `full` (nada das Fases 6–9 roda sem eles; o `embed` não tem gate)
+### 4.3 Pré-requisitos do `full` (o `embed` não tem nenhum)
 
-1. **Política de dados.** O vault não sai da máquina, salvo pelas portas. Extrair com
-   modelo de nuvem manda texto do RAW à API do LLM. Exige: "ok" explícito do dono;
-   confirmação de que a política vigente permite esse conteúdo nessa API; linha nova
-   na seção **Segurança** da AGENTS.md: "Exceção: a camada de memória (Hindsight)
-   envia texto do vault à API de LLM configurada em `[memory].llm`, só para extração,
-   consolidação e mental models, quando `[memory].cloud_llm = true`."
-2. **Chave.** No `config/.env` (0600), nunca no compose; o compose lê com `env_file`.
-   O agente só confere que existe.
-3. **Teto de gasto.** `monthly_budget_usd` (sugestão 40 = 2× o esperado): alerta no
-   `brain doctor`; limite mensal no console do provider.
+Decisão 2 do dono: o gate não é "egress sim ou não" — é **chave aprovada + nada público**.
+
+1. **Chave do dono, provider livre.** O modo `full` só fala com a API configurada pelo
+   dono — Anthropic, OpenAI-compatível, outro — com a chave dele em `config/.env`
+   (0600), nunca no repo nem no compose (o compose lê com `env_file`). Enviar texto do
+   vault à própria API escolhida pelo dono é permitido por definição. LLM local
+   (LM Studio etc.) também é opção do dono, sem gate — nota histórica do compose: o
+   extrator local pequeno foi testado e aposentado (mais fraco que os autores, lento);
+   se for local, que seja capaz.
+2. **Nenhum dado do dono público.** Essa é a invariante. Já vigente pela porta 5:
+   `upstream scan` + hook `pre-push` barram qualquer coisa do dono no repo público. O
+   plano não acrescenta superfície: bancos no volume do Hindsight, índice no `FRESH/`
+   (cego pro git), chave no `.env`, exemplos genéricos no `template/`.
+3. **AGENTS.md registra, não pede permissão.** A linha na seção Segurança ("a camada
+   de memória envia texto do vault à API de LLM configurada, quando
+   `[memory].cloud_llm = true`") documenta o comportamento da instância e entra com o
+   "ok" de quem liga o modo. Sem verificação de política corporativa no caminho.
+4. **Sem teto de gasto (decisão 3).** Custo é responsabilidade do dono. `brain memory
+   cost` é medidor mensal de tokens e US$ (Fase 10); ninguém é bloqueado nem assediado
+   por alerta.
 
 ### 4.4 Custos
 
@@ -244,9 +257,12 @@ tabela `llm-requests` na primeira semana (`brain memory cost`).
 
 ### 4.5 Trocar de setup
 
-- **`embed` → `full`:** resolver os gates (4.3) → Fase 6 (compatibilidade, sem gastar)
-  → Fase 7 (banco `brain-mem-v2` com extração, paralelo) → Fase 8 (mental models) →
-  Fase 9 (pernas do roteador). Nenhum commit do `embed` é revertido.
+Primeira classe nos dois sentidos (decisão 1): não é um-ou-outro — o dono sobe e
+desce de setup quando quiser.
+
+- **`embed` → `full`:** resolver os pré-requisitos (4.3) → Fase 6 (compatibilidade,
+  sem gastar) → Fase 7 (banco `brain-mem-v2` com extração, paralelo) → Fase 8 (mental
+  models) → Fase 9 (pernas do roteador). Nenhum commit do `embed` é revertido.
 - **`full` → `embed`:** `[memory] extract = false`, `cloud_llm = false`,
   `mental_models = false` + `brain memory rebuild` (volta a chunks enriquecidos);
   mental models ficam órfãos no Hindsight (inofensivos) ou o banco é recriado; a
@@ -423,9 +439,6 @@ brain query sql "SELECT …"           # ro, uma instrução, ≤ 500 linhas
 `--person` resolve alias pela tabela `aliases`. Skills `/ask`, `/person`, `/project`,
 `/brief` passam a preferir `brain query` para estado.
 
-1.5 Opcional, baixa prioridade: campo `h` encadeado por evento (integridade criptográfica
-do ledger), só com "ok" do dono.
-
 **Testes.** Rebuild do zero = incremental após N escritas; concorrência real
 intercalada de dois processos → zero `stale`, `last_seq` = máximo (R1); `is_overdue`
 recalculado em outro dia; FTS acento/caixa/AND→OR/peso/`fts_terms` (R2); `query sql`
@@ -502,7 +515,7 @@ raw_awaiting_dump = "degraded"     # embed: envia com contexto degradado (3.6)
 recall_cutoff = 0.62               # corte sem reranker (hook) — calibrar na Fase 0
 # camadas de LLM — setup full (Fases 6–9); embed = false
 extract = false
-cloud_llm = false
+cloud_llm = false                  # true = o dono ativou o envio à própria API (seção 4.3)
 mental_models = false
 ```
 
@@ -536,7 +549,7 @@ RAW **sem artefato** (ainda sem `/dump`): regra decidida agora (R7-embed) — ap
 processar, o contexto muda, o `sha` muda e o documento reenvia com identidade plena.
 Reprocessar é grátis no `embed` (embedding local) — por isso a política é "envia já,
 enriquece depois" (no `full` é o contrário: esperar, para não pagar extração sem
-âncora — seção 7.4).
+âncora — Fase 7).
 
 3.7 **Banco** (`setup`): `retain_extraction_mode = "chunks"` (sem LLM),
 `enable_auto_consolidation = false`, `enable_observations = false` (nada na fila de
@@ -592,8 +605,8 @@ fundidas com deduplicação.
 `jina-mlx` servido no host (Metal; verificar na 0.10.3 se o provider roda no container
 ou aponta para endpoint do host — parte do smoke 3.0). Aprovar **só se p95 < 400 ms
 com 30 candidatos**. Reranker de nuvem (`cohere`, `zeroentropy`) é **exclusivo do
-`full`** (manda pergunta e candidatos para fora — mesmo gate da seção 4.3). Se nenhum
-passar: `rrf` e corte semântico 0,62.
+`full`** (manda pergunta e candidatos para fora — mesma regra da seção 4.3: chave do
+dono). Se nenhum passar: `rrf` e corte semântico 0,62.
 
 4.3 **Saída por rota** (cada linha cita a fonte): ledger → até 3 linhas `lines`
 `⟶ ledger/<ID>`; literal → 1–2 trechos de chunk (≤ 400 caracteres) `⟶ <document_id>,
@@ -645,7 +658,7 @@ resolvido.
 
 **Pronto quando.** `contexto` e `decisao` da Fase 0 nas metas do `embed`
 (direcional: `contexto` +5, `decisao` +10); `/project` e `/person` usando.
-**Setup `embed` completo aqui** (commit 12 fecha docs — Fase 10).
+**Setup `embed` completo aqui** (commit 11 fecha docs — Fase 10).
 
 **Rollback.** Comando novo, nada a reverter.
 
@@ -693,7 +706,8 @@ originais ligados para citação.
 
 **Passos.**
 - Config: `extract = true`, `cloud_llm = true` (o CLI **recusa** `extract` sem
-  `cloud_llm`); `raw_awaiting_dump = "hold"` — no `full`, RAW sem artefato **não é
+  `cloud_llm` — o dono ativou o envio à própria API, seção 4.3);
+  `raw_awaiting_dump = "hold"` — no `full`, RAW sem artefato **não é
   enviado**: nenhum fato nasce sem identidade resolvida (contraste com 3.6: no `full`,
   reextração custa dinheiro; `memory status` mostra quantos esperam `/dump`, e o
   limiar de backlog que abre conversa fica em > 20 arquivos).
@@ -757,8 +771,9 @@ nota do dono ≥ 4; custo dos models ±30% dos US$ 13,50. **Rollback:**
 **Passos.** `BRAIN_RECALL_ROUTE=full`: mantém ledger (≤ 3 linhas) e literal (1–2
 trechos) e acrescenta **fatos** (≤ 3, `⟶ <document_id>, <data>`) e **mental model**
 (1 item, ~400 caracteres + id + data da versão). Teto continua **5 itens**; corte
-pelos scores do reranker quando aprovado (nuvem permitida neste setup, mesma ordem de
-gate). Vocabulário do classificador idêntico ao do `embed` (mesmo `route.py`).
+pelos scores do reranker quando aprovado (nuvem permitida neste setup — chave do
+dono, seção 4.3). Vocabulário do classificador idêntico ao do `embed` (mesmo
+`route.py`).
 
 **Testes.** Orçamento de 5 itens com as quatro pernas; model não injetado quando
 velho além do aceitável; tudo da Fase 4 continua valendo (lento degrada, fora cai).
@@ -769,9 +784,11 @@ velho além do aceitável; tudo da Fase 4 continua valendo (lento degrada, fora 
 
 ### Fase 10 — Operação, documentação e constituição · por setup
 
-1. **`brain memory cost [--days 7]`**: `GET /llm-requests/stats`, agrupa por
-   operação/modelo, aplica `[memory.prices]`, projeta o mês; `embed` reporta US$ 0 e
-   conta chunks. `doctor` avisa acima de `monthly_budget_usd`.
+1. **`brain memory cost`** — **medidor mensal** (decisão 3): `GET /llm-requests/stats`,
+   agrupa por operação/modelo, aplica `[memory.prices]`, mostra o mês corrente (tokens
+   + US$) e projeta o fechamento; `embed` reporta US$ 0 e conta chunks. **Sem teto,
+   sem bloqueio** — responsabilidade do dono; o `doctor` mostra o gasto do mês como
+   informação, não como aviso.
 2. **`brain memory status`**: banco único, fila, documentos aguardando `/dump` (no
    `full`), mental models desatualizados (no `full`).
 3. **`idle_unload.py`**: lista de bancos única; no `embed` o LM Studio só carrega o
@@ -782,11 +799,12 @@ velho além do aceitável; tudo da Fase 4 continua valendo (lento degrada, fora 
    `embed`: `extract=false` + rebuild; e o aviso de versão auditada do Hindsight).
 6. **Setup assistido:** atualizar a tabela de modos do passo 11 — `embed` passa a ser
    "banco único enriquecido (datas, tags, entidades), sem LLM" (não mais "os dois
-   bancos de hoje").
+   bancos de hoje"); a pergunta do modo `full` vira registro da escolha (chave do
+   dono), não gate de política corporativa.
 7. **AGENTS.md** (diff proposto, aplicado com "ok"): seção Memória por setup; zonas
    `FRESH/_index/` (derivado, `brain index`) e `vault/eval/` (curado: agente propõe,
    dono aprova); `/ask` roteado por tipo com `brain query` para estado; **no `full`
-   apenas**: a exceção de Segurança da seção 4.3.
+   apenas**: a linha de Segurança da seção 4.3 (registro do comportamento).
 8. `./brain upstream scan` + proposta de commit ao dono (porta 5), generalizando
    exemplos.
 
@@ -808,26 +826,27 @@ velho além do aceitável; tudo da Fase 4 continua valendo (lento degrada, fora 
 | 9 | `memoria: reranker local jina-mlx (gate p95) ou corte calibrado` | 4 | `embed` |
 | 10 | `memoria: dossiê determinístico (brain memory dossier)` | 5 | `embed` |
 | 11 | `memoria: status/doctor/noturno embed + docs (guides/memory.md, setup assistido, AGENTS zonas)` | 10 | **`embed` pronto** |
-| 12 | `memoria: LLM por operação no compose, dry-run, gate cloud_llm` (+ digest, R5) | 6 | `full` |
+| 12 | `memoria: LLM por operação no compose, dry-run, chave do dono (cloud_llm)` (+ digest, R5) | 6 | `full` |
 | 13 | `memoria: extração da fonte no banco único (contexto, entidades resolvidas, DEC/WIN) — v2` | 7 | `full` |
 | 14 | `memoria: mental models por goal, projeto e pessoa` | 8 | `full` |
 | 15 | `hook: pernas de fatos e mental model (BRAIN_RECALL_ROUTE=full)` | 9 | `full` |
-| 16 | `memoria: custo, noturno full e documentação (AGENTS: exceção de segurança)` | 10 | **`full` pronto** |
+| 16 | `memoria: medidor mensal de custo, noturno full e documentação (AGENTS: registro de segurança)` | 10 | **`full` pronto** |
 
 Commits 1–11: sem chave, sem egress, US$ 0 — **setup `embed` completo**. Do 12 em
-diante: só depois dos gates da seção 4.3.
+diante: só depois dos pré-requisitos da seção 4.3 (chave do dono).
 
 ## 7. O que não muda
 
-- `events.jsonl`: formato, regras de escrita, IDs, gates, noturno (exceto o campo `h`
-  opcional da Fase 1).
+- `events.jsonl`: formato, regras de escrita, IDs, gates, noturno — **formato fechado
+  por decisão do dono** (campo `h` encadeado: **nunca**).
 - O pipeline do `/dump` e o PROCESSED: continuam a fonte da leitura humana, da
   citação, do `/share` e do FRESH.
 - "Não consta" continua resposta válida; memória continua pista.
 - Embeddings locais (`bge-m3`), recall sem LLM no caminho da consulta, MCP
   somente-leitura.
-- Nenhuma porta nova para o mundo exterior — o egress do `full` é a exceção de
-  Segurança aprovada uma vez (seção 4.3), como a porta 6.
+- Nenhuma porta nova para o mundo exterior — o egress do `full` vai só à API com a
+  chave do dono e é registrada na AGENTS.md (seção 4.3); a invariante "nada do dono
+  no repo público" continua com a porta 5.
 
 ## 8. Ganhos esperados e metas por setup (Fase 0; direcionais até ~25/tipo — R4)
 
@@ -842,11 +861,11 @@ diante: só depois dos gates da seção 4.3.
 | Abstenção (`nada`) | ~0 (hoje injeta sempre) | ≥ 80% | ≥ 80% |
 | Itens injetados/mensagem · precisão | ~8 · baixa | ≤ 5 · ≥ 60% | ≤ 5 · ≥ 60% |
 | `brain search` com 10× volume | lento (relê tudo) | < 50 ms | < 50 ms |
-| Custo de API | US$ 0 | **US$ 0** | ~US$ 20,50/mês, teto 40 |
+| Custo de API | US$ 0 | **US$ 0** | ~US$ 20,50/mês (medidor mensal, sem teto) |
 
 Ganhos estruturais comuns: identidade consistente (aliases do ledger no banco e no
 classificador), recuperação temporal real (datas do mundo), CLI/MCP/TUI que escalam
-(índice em vez de refold), custo previsível e medido por setup.
+(índice em vez de refold), custo visível e medido por setup.
 
 ## 9. Riscos e mitigação
 
@@ -859,9 +878,9 @@ classificador), recuperação temporal real (datas do mundo), CLI/MCP/TUI que es
 | Banco único mistura níveis de abstração | ambos | Tags + tipagem + roteador; **critério de saída por escrito (R9.3):** se `detalhe`/`literal` mostrar contaminação, separar chunks de evidência em banco próprio (as tags tornam o split barato) |
 | `jina-mlx` não existe como provider/estoura latência | `embed` | Gate p95 < 400 ms; senão `rrf` + corte 0,62 calibrado |
 | Sonnet 5.5 recusa `tool_choice` forçado do reflect | `full` | Fase 6: versão nova, PR upstream ou Haiku sem thinking (confirmado no código) |
-| Política proíbe egress | `full` | Fases 0–5 entregam o setup `embed` completo; `cloud_llm=false` recusa `extract` |
+| Dono não quer egress | qualquer | Fases 0–5 entregam o setup `embed` completo; `cloud_llm=false` recusa `extract` |
 | Extração inventa/troca nomes | `full` | Contexto com IDs, entidades explícitas, "não inventar", amostra de 50 na Fase 7 |
-| Custo acima do previsto | `full` | Medição na Fase 6, teto no doctor, Batch no rebuild, `delta` + intervalo nos models |
+| Custo acima do previsto | `full` | Medição na Fase 6, medidor mensal, Batch no rebuild, `delta` + intervalo nos models |
 | Rechurn de contexto reenvia em cascata | `embed` grátis · `full` custa | R8: estimar do ledger, conferir na 1ª semana; aliases principais no prompt, completos em `/aliases` |
 | RAW sem artefato: `embed` envia sem identidade / `full` acumula backlog | ambos | Regra decidida (3.6 / Fase 7): degradado após 7 dias vs. hold + limiar 20 abre conversa |
 | Índice velho mente sobre atraso | comum | Recalculado na leitura; `stale` cai na dobra |
@@ -876,19 +895,22 @@ classificador), recuperação temporal real (datas do mundo), CLI/MCP/TUI que es
 
 ---
 
-## Decisões do dono (não re-litigar)
+## Decisões do dono (registradas — não re-litigar)
 
-1. Setup inicial da instância: **`embed` agora, `full` depois dos gates** (recomendado
-   — bifurcação só no commit 12), ou `full` direto? ✓?
-2. Gate de política do `full` (texto do RAW à API do LLM; exceção na AGENTS.md):
-   aceita, adia ou recusa? ✓?
-3. Cenário de custo B (~US$ 20,50/mês; teto de aviso US$ 40 no doctor + limite no
-   console): aceita? ✓?
-4. Testar reranker local `jina-mlx` no host (aprovado só se p95 < 400 ms @ 30
-   candidatos)? ✓?
-5. RAW sem artefato: `embed` envia com contexto degradado após 7 dias;
-   `full` retém até o `/dump` (limiar 20 abre conversa). Confirma? ✓?
-6. Eval: agente propõe ~60 perguntas (com tipo `nada`), dono revisa e aprova — zona
-   curada `vault/eval/`, exemplo genérico no `template/`. Confirma? ✓?
-7. Campo `h` encadeado no ledger (integridade criptográfica, muda o formato do
-   evento): fazer agora (baixa prioridade), deixar para depois, ou nunca? ✓?
+1. **Setup é escolha livre, nos dois sentidos.** `embed` e `full` são caminhos de
+   primeira classe; começar por qualquer um, subir para `full` e voltar para `embed`
+   quando quiser. Não é um-ou-outro (§4.5).
+2. **`full` = chave do dono + nada público.** Dados só vão à API configurada com a
+   chave aprovada do dono (provider livre, `.env`, nunca no repo). LLM local: sem
+   gate. A invariante é **nenhum dado do dono público** (porta 5). A linha da
+   AGENTS.md registra o comportamento; sem gate de política corporativa (§4.3).
+3. **Sem teto de gasto.** Custo é responsabilidade do dono. `brain memory cost` vira
+   medidor mensal (tokens + US$ por operação/modelo); ninguém é bloqueado por gasto
+   (§4.3, Fase 10).
+4. **Reranker local `jina-mlx`: testar** — aprovado só se p95 < 400 ms @ 30
+   candidatos (Fase 4.2).
+5. **RAW sem artefato: como desenhado** — `embed` envia com contexto degradado após
+   7 dias; `full` retém até o `/dump`; limiar 20 abre conversa (3.6, Fase 7).
+6. **Eval: confirmado** — ~60 perguntas com tipo `nada`, dono revisa e aprova; zona
+   curada `vault/eval/`, exemplo genérico no `template/` (Fase 0).
+7. **Campo `h` encadeado no ledger: nunca.** O formato do evento é fechado (§7).
