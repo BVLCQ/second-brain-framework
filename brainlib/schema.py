@@ -147,6 +147,8 @@ def _plan_node(plan, node: str, field: str) -> None:
 
 
 def _action_or_node(state, plan, ref: str, field: str) -> None:
+    # blocked_by/unblocks aceitam TASK-#### ou nó do PLANNING (GOAL-#/PROJ-#.#): nó é referência declarativa —
+    # o cálculo de bloqueio (state.blocked, kanban, foco) só considera AÇÃO aberta; a view mostra o resto
     if ACTION_ID.match(ref):
         _need(ref in state.actions, f"{field}: ação {ref} não existe")
     else:

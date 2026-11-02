@@ -259,13 +259,19 @@ async def run_agent(inst, argv: list[str], on_line: Callable[[str], None], info:
 
 
 def record_run(inst, info: RunInfo, argv: list[str], prompt: str) -> None:
-    """Uma linha por rodada em vault/logs/agent-runs.jsonl: id, argv SEM o prompt, sessão, código, negações e ASKs abertos."""
+    """Uma linha por rodada em vault/logs/agent-runs.jsonl: id, argv SEM o prompt, sessão, código, negações e ASKs abertos.
+
+    Exceção deliberada à regra "o TUI só escreve chamando ./brain": é um log de observabilidade da própria
+    ponte (zona logs/, sem dado de entidade) — não há o que registrar pelo ledger."""
     try:
         from ..core import Brain
         info.asks = [q.id for q in Brain(inst).state.questions.values() if info.id and q.run == info.id]
     except Exception:  # noqa: BLE001 — registro de rodada nunca derruba o TUI
         pass
-    shown = ["<prompt>" if prompt and prompt in a else a for a in argv]
+    # comando próprio ([runner].command) pode repartir o prompt em vários argv (shlex): além do argumento
+    # inteiro, token longo do prompt também é redigido — num log, redigir a mais é seguro; a menos, não
+    toks = {t for t in prompt.split() if len(t) > 4} if prompt else set()
+    shown = ["<prompt>" if (prompt and prompt in a) or a in toks else a for a in argv]
     inst.logs.mkdir(parents=True, exist_ok=True)
     row = {"id": info.id, "ts": util.iso_now(), "argv": shown, "session_id": info.session_id, "rc": info.rc,
            "denials": info.denials, "asks": info.asks, "resumed_from": info.resumed_from or None}

@@ -216,9 +216,13 @@ class Pages:
                     bits.append(util.fmt_duration(a["effort_min"]))
                 if a["project"]:
                     bits.append(self.proj(f, a["project"]))
-                if a["blocked_by"]:
-                    bits.append("⛔ " + ", ".join(
-                        f"{b} ({self.actions[b]['owner_name']})" for b in a["blocked_by"] if b in self.actions))
+                # ⏳ nó do PLANNING em blocked_by é aceito no cadastro como referência, mas não entra no cálculo
+                # de bloqueio (só ação aberta bloqueia) — aparece aqui para não ser invisível
+                plan_refs = [b for b in a["blocked_by_all"] if b not in self.actions]
+                if a["blocked_by"] or plan_refs:
+                    parts = [f"{b} ({self.actions[b]['owner_name']})" for b in a["blocked_by"]]
+                    parts += [f"{b} (PLANNING)" for b in plan_refs]
+                    bits.append("⛔ " + ", ".join(parts))
                 if a["priority"] == "alta":
                     bits.append("prioridade alta")
                 out.append(" · ".join(bits))

@@ -179,6 +179,19 @@ class AgentRunTest(unittest.TestCase):
             self.assertEqual(row["argv"], ["claude", "-p", "<prompt>", "--resume", "sess-0"])
             self.assertEqual((row["id"], row["session_id"], row["asks"], len(row["denials"])), ("run-7", "sess-1", ["ASK-0001"], 1))
 
+    def test_record_run_redacts_prompt_split_across_argv(self):
+        """Comando próprio ([runner].command) com shlex pode repartir o prompt em vários argv."""
+        import json
+        with tempfile.TemporaryDirectory() as tmp, contextlib.redirect_stdout(io.StringIO()):
+            root = Path(tmp) / "inst"
+            demo_mod.cli(argparse.Namespace(dir=str(root), open=False))
+            inst = config.load(root)
+            info = bridge.RunInfo(id="run-8")
+            argv = ["meu-agente", "--flag", "grande", "revisão", "-x"]      # 'grande'/'revisão' saem do prompt
+            bridge.record_run(inst, info, argv, "relatório grande da revisão trimestral")
+            row = json.loads((inst.logs / "agent-runs.jsonl").read_text(encoding="utf-8").splitlines()[-1])
+            self.assertEqual(row["argv"], ["meu-agente", "--flag", "<prompt>", "<prompt>", "-x"])
+
 
 @unittest.skipUnless(HAVE_TEXTUAL, "textual não instalado (./brain tui --setup)")
 class DetailTest(unittest.TestCase):

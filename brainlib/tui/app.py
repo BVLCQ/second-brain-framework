@@ -1581,6 +1581,8 @@ class BrainApp(AskKeys, FeedbackKeys, PortfolioKeys, App):
         pre = pre or {}
 
         def restore() -> None:
+            # escrita direta deliberada: é o rollback da edição que o próprio dono fez no editor (não dado de
+            # entidade novo) — relê o arquivo e recusa se ele andou de novo, para não pisar terceiros
             now = path.read_text(encoding="utf-8") if path.exists() else ""
             if now != after:                      # outro processo mexeu depois do editor: não sobrescreve às cegas
                 self.log_line("goals.md mudou de novo fora do TUI: não desfiz a edição; confira e registre com E (gate)", "red")
