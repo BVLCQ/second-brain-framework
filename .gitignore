@@ -7,6 +7,7 @@ config/.env
 config/brain.toml
 config/watch.toml
 config/.state.json
+config/*.state.json.lock
 config/.memory-state.json
 
 # ═══ Inovação local: scripts nascidos na instância (graduam p/ upstream) ═══
