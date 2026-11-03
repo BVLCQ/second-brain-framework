@@ -215,14 +215,24 @@ perguntas de outras sessões:
 claude mcp add segundo-cerebro -- ~/brain/brain mcp
 ```
 
-## 8. Checklist final
+## 8. Checklist final — feche com o wizard
 
 ```bash
 python -m unittest tests.test_brain | tail -3   # OK
+./brain setup                                    # wizard: identidade, rotina, comando brain,
+                                                 # TUI, noturno, memória (embed/full), portas
 ./brain doctor --online                          # verde, memória incluída
 ./brain render --open                            # painel abre
 ./brain memory recall "qualquer coisa"           # responde (mesmo que vazio)
 ```
+
+O wizard (`guides/setup.md`) é idempotente e deriva o estado de cada passo do
+`doctor` — rode-o ao final para o dono responder o que falta (identidade, modo de
+memória, portas). Passos mecânicos você pode fechar com `./brain setup --yes
+--only comando,tui,noturno` e validar com `./brain doctor`. Modo `full` de memória
+(extração com a chave do dono): **sempre** o dono digita o "ok" no terminal dele —
+nunca aceite o gate por ele. Memória via OrbStack/compose em vez do daemon local:
+`services/compose.yaml` (+ `compose.full.yaml` no full) — `guides/memory.md`.
 
 ## Problemas comuns
 

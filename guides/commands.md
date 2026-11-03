@@ -34,6 +34,7 @@ comandos, use o cockpit de terminal (`brain tui`); o guia interativo está em [`
 21. [Serviços desta máquina](#21-serviços-desta-máquina-fora-do-cli)
 22. [Receitas rápidas](#22-receitas-rápidas)
 23. [Portfólio](#23-portfólio--area--process--opportunity--doc) — `area` · `process` · `opportunity` · `doc`
+24. [Setup assistido](#24-setup-assistido--setup) — `setup`
 24. [Migração](#24-migração--migrate-ids) — `migrate ids`
 
 ---
@@ -985,12 +986,16 @@ propósito: refs do vault (TASK/PROC/OPP) não saem para o issue público. `push
 A memória (Hindsight) é um **índice** do vault em mão única. O vault é a verdade:
 se o servidor cair ou for apagado, `rebuild` reconstrói tudo.
 
+A memória tem **dois setups** (`embed` sem LLM · `full` com extração de fatos pela
+chave do dono — `guides/memory.md`), escolha livre e reversível.
+
 | Subcomando | Uso |
 |---|---|
-| `setup` | cria/atualiza os bancos `brain-mem` e `brain-raw` |
+| `setup [--mode none\|embed\|full]` | grava as chaves do modo (se `--mode`) e cria os bancos: embed = `brain-mem` + `brain-raw` em chunks; full = banco único com extração |
 | `sync [--limit N] [--dry-run]` | envia o que mudou (incremental). O noturno roda sozinho |
-| `rebuild [--limit N] [--dry-run]` | apaga os dois bancos e reenvia tudo |
-| `status` | estado dos bancos e pendências |
+| `rebuild [--limit N] [--dry-run]` | apaga os bancos do modo (e dos outros, se existirem) e reenvia tudo |
+| `status` | modo, bancos, pendências, fila e RAW retidos (full) |
+| `cost [--json]` | medidor mensal de LLM (embed: US$ 0; full: tokens + US$ por operação/modelo) — sem teto, só informação |
 | `recall CONSULTA [--bank mem\|raw] [--tags a,b]` | busca semântica. Padrão `mem` (fatos); `raw` = texto original |
 | `reflect CONSULTA [--bank] [--tags]` | resposta sintetizada pelo LLM a partir das memórias |
 
@@ -1002,6 +1007,8 @@ brain memory recall "política de dados" --bank raw
 brain memory recall "prazos" --tags proj:PROJ-1,pessoa:marina-demo
 brain memory reflect "como está o projeto de churn?"
 brain memory rebuild
+brain memory setup --mode full      # troca de setup (full exige chave no .env + "ok" no wizard)
+brain memory cost
 ```
 Tags disponíveis: `tipo:<reuniao|documento|…|pessoa|planejamento|perfil|raw>`,
 `proj:PROJ-#`, `pessoa:<id>`, `ext:<pdf|md|…>`.
@@ -1200,3 +1207,20 @@ Mapa de processos (`PROC-####`) e oportunidades/iniciativas (`OPP-####`) por ár
 
 Só IDs que **existem** entram no mapa. `logs/` não é migrado. Com o Hindsight ligado, rode `brain memory rebuild` depois. Em instância
 já nos nomes novos, o comando diz "nada a migrar". Peça ao agente para mostrar o relatório do dry-run antes do `--apply`.
+
+
+## 24. Setup assistido — `setup`
+
+Wizard idempotente da instância: instancia, identidade, rotina, **comando `brain` no
+PATH**, foco (ics/google com OAuth inline), noturno, TUI, **memória none/embed/full**,
+portas opcionais, fontes, runner e fechamento (render + doctor). Status de cada passo
+deriva do `doctor` — re-executar pula o pronto. `--only id1,id2` re-visita; `--yes`
+roda não-interativo (caminho das IAs; o modo `full` segue exigindo o "ok" literal).
+O passo memória sobe o Hindsight pelo compose (OrbStack), detecta o LM Studio e valida
+com `health/llm` no full. Guia: `guides/setup.md`; bootstrap: `install.sh` na raiz.
+
+```bash
+brain setup                       # interativo
+brain setup --only memoria        # re-visitar um passo
+brain setup --yes --mode embed    # não-interativo (agente/CI)
+```

@@ -51,6 +51,26 @@ experimentar no navegador com dados fictícios, é `guides/tui-mockup.html`.
 
 ## Instalação
 
+O caminho rápido (máquina nova):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/BVLCQ/second-brain-framework/main/install.sh | sh -
+```
+
+ou, dentro do clone:
+
+```bash
+sh install.sh          # clona se preciso, confere o Python, abre o wizard
+```
+
+O wizard `./brain setup` pergunta tudo (identidade, rotina, memória `none`/`embed`/
+`full`, TUI, noturno, portas), valida na hora e é **re-executável** — o estado de cada
+passo deriva do `doctor`. Instalação assistida por IA: `./brain setup --yes` +
+`./brain doctor` em loop (receita executável em `setup.md`). Guias:
+`guides/setup.md` (wizard) · `guides/memory.md` (memória em dois setups).
+
+Modo script/headless (sem perguntas):
+
 ```bash
 git clone <este-repo> ~/brain && cd ~/brain
 mise install                 # Python 3.12 (ou qualquer 3.11+ já presente)
