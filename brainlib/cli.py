@@ -775,6 +775,11 @@ def cmd_tui(args, b) -> None:
     tui.cli(args, b)
 
 
+def cmd_setup(args, b) -> None:
+    from . import setup
+    setup.cli(args, b)
+
+
 def cmd_serve(args, b) -> None:
     from . import serve
     raise SystemExit(serve.serve(b.inst, port=args.port, open_browser=args.open))
@@ -1349,6 +1354,13 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("tui", help="cockpit de terminal (Textual, extra opcional): painéis, teclas contextuais e log da CLI")
     p.add_argument("--setup", action="store_true", help="cria a venv .venv-tui com as dependências travadas por hash")
     p.set_defaults(fn=cmd_tui)
+
+    p = sub.add_parser("setup", help="setup assistido (idempotente): instância, rotina, comando brain, "
+                                     "memória none/embed/full, TUI, noturno, portas — guides/setup.md")
+    p.add_argument("--only", help="re-visitar só estes passos (ids separados por vírgula)")
+    p.add_argument("--yes", action="store_true", help="não-interativo com defaults (caminho das IAs)")
+    p.add_argument("--mode", choices=["none", "embed", "full"], help="modo do passo memória (full exige o ok literal)")
+    p.set_defaults(fn=cmd_setup)
     p = sub.add_parser("serve", help="ponte CLI do painel: 127.0.0.1 + token — o HTML executa as mesmas linhas do TUI")
     p.add_argument("--port", type=int, default=8787, help="porta local (padrão 8787)")
     p.add_argument("--open", action="store_true", help="abre o painel no navegador com o token na URL")

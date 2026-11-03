@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """Autorização OAuth do Google — roda UMA vez (interativa) e imprime o refresh token.
 
+Fallback headless do `brain setup` (passo foco): o wizard absorveu este fluxo
+(`brainlib/setup.google_refresh_token`) e grava direto no config/.env; este script
+permanece para rodar fora do wizard (SSH, máquina remota) — aqui o token é impresso
+no terminal para você colar.
+
 Uso (na raiz da instância):
   python3 scripts/google_auth.py
 
@@ -16,60 +21,11 @@ Cole em config/.env: GOOGLE_REFRESH_TOKEN=<valor>. Guia: guides/google-oauth.md
 """
 from __future__ import annotations
 
-import html
-import json
-import secrets
-import shutil
-import subprocess
 import sys
-import threading
-import time
-import urllib.parse
-import urllib.request
-from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from brainlib import config  # noqa: E402
-
-SCOPES = ("https://www.googleapis.com/auth/calendar.events.owned "
-          "https://www.googleapis.com/auth/drive.file")
-PORT = 8917
-
-
-class _Handler(BaseHTTPRequestHandler):
-    code: str | None = None
-    denied: str | None = None
-    expected_state: str = ""
-
-    def do_GET(self):  # noqa: N802 — nome da stdlib
-        qs = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
-        code = (qs.get("code") or [None])[0]
-        err = (qs.get("error") or [None])[0]
-        # `state` confere que o código veio do redirect DESTE pedido: outra aba/processo batendo na porta
-        # (favicon, varredura, página maliciosa com ?code=…) não consome a espera nem injeta um código alheio
-        same = secrets.compare_digest((qs.get("state") or [""])[0], _Handler.expected_state)
-        ok = bool(code) and same
-        if ok:
-            _Handler.code = code
-        elif same and err:
-            _Handler.denied = err
-        self.send_response(200 if ok else 400)
-        self.send_header("Content-Type", "text/html; charset=utf-8")
-        self.end_headers()
-        msg = ("<h2>✓ Autorizado — pode fechar esta aba e voltar ao terminal.</h2>" if ok
-               else f"<h2>✗ Não autorizado ({html.escape(str(err or 'pedido sem código/state válido'))}) — rode de novo.</h2>")
-        self.wfile.write(msg.encode())
-
-    def log_message(self, format, *args):  # noqa: A002 — assinatura da stdlib
-        pass
-
-
-def _serve_until_code(server: HTTPServer) -> None:
-    server.timeout = 1
-    deadline = time.time() + 600
-    while not (_Handler.code or _Handler.denied) and time.time() < deadline:
-        server.handle_request()
+from brainlib import config, setup  # noqa: E402
 
 
 def main() -> None:
@@ -78,38 +34,7 @@ def main() -> None:
     client_id, client_secret = env.get("GOOGLE_CLIENT_ID"), env.get("GOOGLE_CLIENT_SECRET")
     if not client_id or not client_secret:
         sys.exit("ERRO: GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET ausentes em config/.env — veja guides/google-oauth.md")
-    redirect = f"http://localhost:{PORT}"
-    _Handler.expected_state = secrets.token_urlsafe(24)
-    auth_url = "https://accounts.google.com/o/oauth2/v2/auth?" + urllib.parse.urlencode({
-        "response_type": "code", "client_id": client_id, "redirect_uri": redirect, "scope": SCOPES,
-        "access_type": "offline", "prompt": "consent",
-        "state": _Handler.expected_state})
-    print("Abrindo o navegador (escopos: calendar.events.owned + drive.file)…")
-    print(f"Se não abrir: {auth_url}\n")
-    # Linux: xdg-open primeiro (`open` pode existir e não ser o launcher). macOS: cai em `open`.
-    opener = shutil.which("xdg-open") or shutil.which("open")
-    if opener:
-        subprocess.run([opener, auth_url], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    else:
-        print("(não achei xdg-open/open — cole a URL acima no navegador)")
-    server = HTTPServer(("127.0.0.1", PORT), _Handler)
-    threading.Thread(target=_serve_until_code, args=(server,), daemon=True).start()
-    for _ in range(600):
-        if _Handler.code or _Handler.denied:
-            break
-        time.sleep(1)
-    server.server_close()
-    if not _Handler.code:
-        sys.exit("ERRO: nenhum código recebido (timeout/abortado) — rode de novo")
-    data = urllib.parse.urlencode({"code": _Handler.code, "client_id": client_id, "client_secret": client_secret,
-                                   "redirect_uri": redirect, "grant_type": "authorization_code"}).encode()
-    req = urllib.request.Request("https://oauth2.googleapis.com/token", data=data, method="POST",
-                                 headers={"Content-Type": "application/x-www-form-urlencoded"})
-    with urllib.request.urlopen(req, timeout=30) as r:
-        tok = json.loads(r.read().decode())
-    refresh = tok.get("refresh_token")
-    if not refresh:
-        sys.exit("ERRO: o Google não devolveu refresh_token — rode de novo (prompt=consent garante)")
+    refresh = setup.google_refresh_token(client_id, client_secret, open_browser=True)
     print("\n=== COLE NO config/.env ===")
     print(f"GOOGLE_REFRESH_TOKEN={refresh}")
     print("(este terminal não grava nada; guarde em local seguro)")

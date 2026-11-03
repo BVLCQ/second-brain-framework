@@ -296,22 +296,23 @@ class IdleUnloadTests(_Base):
 
 class GoogleAuthStateTests(_Base):
     def test_callback_without_matching_state_is_ignored(self):
-        mod = _load_script("google_auth_t", ROOT / "scripts" / "google_auth.py")
-        mod._Handler.code, mod._Handler.expected_state = None, "s3cr3t"
-        server = HTTPServer(("127.0.0.1", 0), mod._Handler)
+        from brainlib import setup as setup_mod          # fluxo absorvido do script (que agora é casca)
+        h = setup_mod._OAuthHandler
+        h.code, h.denied, h.expected_state = None, None, "s3cr3t"
+        server = HTTPServer(("127.0.0.1", 0), h)
         self.addCleanup(server.server_close)
         port = server.server_address[1]
-        t = threading.Thread(target=mod._serve_until_code, args=(server,), daemon=True)
+        t = threading.Thread(target=setup_mod._pump, args=(server, 5), daemon=True)
         t.start()
         for q in ("code=ATACANTE", "code=ATACANTE&state=errado", "x=1"):
             try:
                 urllib.request.urlopen(f"http://127.0.0.1:{port}/?{q}", timeout=5)
             except urllib.error.HTTPError as e:
                 self.assertEqual(e.code, 400)
-        self.assertIsNone(mod._Handler.code)
+        self.assertIsNone(h.code)
         urllib.request.urlopen(f"http://127.0.0.1:{port}/?code=BOM&state=s3cr3t", timeout=5).read()
         t.join(5)
-        self.assertEqual(mod._Handler.code, "BOM")
+        self.assertEqual(h.code, "BOM")
 
 
 # ── upstream: o hook pre-push ───────────────────────────────────────────────
