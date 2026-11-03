@@ -133,7 +133,7 @@ class StepStatusTests(unittest.TestCase):
     def test_demo_instance_warns(self):
         with tempfile.TemporaryDirectory() as td:
             b = _brain(Path(td))
-            b.inst.cfg["owner"]["name"] = "Você (demo)"
+            b.inst.cfg["owner"]["name"] = "Ada (demo)"
             self.assertEqual(setup._st_instancia(b), "warn")
 
     def test_memoria_done_when_hindsight(self):
