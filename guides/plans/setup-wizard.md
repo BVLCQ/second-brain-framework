@@ -84,22 +84,22 @@ Perguntas e validação por modo:
   `[memory] engine/url/banks` → `memory setup` cria os dois bancos em modo
   chunks → `memory status` + um `memory sync` seco. Zero chave, zero egress —
   pode rodar até no noturno sem gate.
-- **`full`**: tudo do `embed` **mais** o que o plano chama de gates da seção 4:
-  1. **Gate de política (é porta de saída de dados).** O wizard pergunta
-     literalmente se o dono aceita que texto do RAW (reuniões, Slack,
-     documentos) vá para a API do LLM configurada, só para extração,
-     consolidação e mental models. Sem "ok" explícito, o modo nem é oferecido
-     como gravável; com "ok", a exceção entra na seção Segurança da AGENTS.md
-     (diff proposto, aplicado com o mesmo "ok"). Mesmo regime de
-     backup/feedback: porta, com gate e evento.
-  2. **Chave de API** no `.env` (mascarada, 0600, valida na hora) — provider e
-     chave por operação, conforme o que o Hindsight da versão pinada suportar.
-  3. **Teto de gasto mensal** (`monthly_budget_usd`, sugestão 40): o doctor
-     avisa acima do teto; `memory cost` projeta o mês pelo medido.
-  - Validação antes de gastar: `GET /banks/<banco>/health/llm` por operação +
-     `dry-run-extract` numa amostra de chunks reais; rebuild **só** com banco
-     v2 paralelo e custo medido ≤ 2× a premissa. Rollback documentado:
-     `extract = false` + `rebuild` volta ao modo `embed`.
+- **`full`**: tudo do `embed` **mais** os pré-requisitos da seção 4.3 do plano
+  da memória (decisões 2 e 3 do dono, registradas):
+  1. **Chave do dono + nada público (é porta de saída de dados).** O wizard
+     pede o "ok" literal (texto do RAW vai à API de LLM configurada pelo dono,
+     para extração, consolidação e mental models) e a **chave no `.env`**
+     (mascarada, 0600, provider livre — nunca no repo/compose). A invariante é
+     *nenhum dado do dono público* (porta 5); a AGENTS.md **registra** o
+     comportamento (`cloud_llm = true`), sem gate de política corporativa.
+  2. **Medidor mensal, sem teto (decisão 3).** `brain memory cost` mostra
+     tokens + US$ por operação/modelo; o doctor exibe o gasto do mês como
+     informação — nunca alerta, nunca bloqueio.
+  - Validação antes de gastar: `POST /banks/<banco>/health/llm` por operação +
+     `dry-run-extract` numa amostra; o CLI recusa `extract` sem `cloud_llm` e o
+     modo `full` sem chave no `.env`. Rollback documentado: `setup --mode
+     embed` + `rebuild` volta ao modo `embed` (§4.5 do plano — primeira classe
+     nos dois sentidos).
 - **Feature-detect, não promessa:** o wizard só lista `full` se o `[memory]`
   da instância suportar as chaves novas (`extract`, `cloud_llm` — Fase 4 do
   plano). Enquanto o plano não aterrissa, o passo mostra `full` como
@@ -197,13 +197,11 @@ real mora em outro clone/vault (`BRAIN_VAULT`)? Assumido abaixo: instância real
       bancos em modo chunks) → `./brain memory status`. Zero chave, nada sai
       da máquina.
     - `full` (com chave de API — extração, observações, mental models):
-      **depende do plano da memória (Fases 3–5), ainda não aterrissado no
-      código.** O mockup registra hoje, no papel, as três decisões que o
-      wizard vai perguntar: (1) o gate de política — texto do RAW vai para a
-      API do LLM, só para extração/consolidação/mental models? (exige "ok" +
-      exceção na AGENTS.md); (2) a chave no `.env`; (3) o teto mensal
-      (sugestão US$ 40, aviso no doctor). Quando o plano aterrissar, o passo
-      valida com `health/llm` + `dry-run-extract` antes de qualquer rebuild.
+      **aterrissado no código** (brainlib/memory.py, modos embed/full; mental
+      models = Fase 8 do plano). O passo pergunta: (1) o "ok" literal do dono;
+      (2) a chave no `.env` (mascarada, 0600); (3) provider/modelo por
+      operação. Valida com `health/llm` + `dry-run-extract` antes de confiar;
+      o medidor mensal entra no doctor como informação (sem teto).
 12. **Runner** — `[runner] agent = "claude"|"agy"|…` (+ `model`/`effort` se
     quiser). Valida: uma ação ⚡ na TUI ou `./brain nightly --skip-agent` seco.
 13. **Fechamento** — `./brain render --open` (painel) · `./brain doctor`
@@ -261,4 +259,7 @@ as notas viram a spec final da Fase 1.
 6. Memória em três modos no wizard — `none` · `embed` (chunks, RAW + MEM, zero
    chave, nada sai) · `full` (chave de API, extração + mental models) — com
    `full` tratado como porta de saída de dados: "ok" explícito, exceção na
-   AGENTS.md, teto de gasto, e feature-detect até o plano da memória aterrissar. ✓?
+   AGENTS.md, teto de gasto, e feature-detect até o plano da memória aterrissar. ✓
+   → **Ruled pelas decisões 2–3 do plano da memória** (ab9fdfd): gate = chave do
+   dono + nada público (registro na AGENTS.md, sem política corporativa) e
+   medidor mensal SEM teto. Fase 1 (CLI) aterrissada no commit bc11a9e.
