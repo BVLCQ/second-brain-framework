@@ -3,35 +3,72 @@
 O vault é a verdade. Hindsight é um índice que outra IA (e o `/ask`) usam
 para achar mais rápido. Se o servidor cair, nada se perde.
 
-## Dois bancos
+## Dois setups (escolha livre, reversível)
 
-| Banco (`config/brain.toml`) | Conteúdo | Extração |
+| | `embed` | `full` |
 |---|---|---|
-| `brain-raw` | arquivos do RAW como estão (texto e binários até `max_file_mb`) | `chunks` — sem interpretação |
-| `brain-mem` | artefatos do PROCESSED + uma página por ação/decisão/entrega/pessoa + PLANNING/PROFILE | `chunks` — páginas como estão |
+| Bancos | 2 (`brain-mem` + `brain-raw`), chunks | **1** (`bank`, default `brain-mem`) com extração de fatos |
+| LLM em operação | nenhum | extração + consolidação (modelo barato); mental models (Fase 8, ainda não aterrissado) |
+| Sai da máquina? | **não** | sim — texto do vault à API de LLM **com a chave do dono** (`config/.env`) |
+| Chaves no `.env` | nenhuma | 1 (provider de LLM) |
+| Custo de API | US$ 0 | medido por `brain memory cost` (medidor mensal, sem teto — decisão do dono) |
+| RAW sem `/dump` | entra como está | **hold**: fica retido até o artefato existir (`raw_awaiting_dump = "hold"`) |
 
-`document_id` = caminho no vault (ou `ledger/TASK-####`). Toda lembrança aponta
-para algo que você pode abrir.
+Config (`config/brain.toml` `[memory]`) — o modo é derivado: `engine = "none"` → `none`;
+`engine = "hindsight"` + `extract = false` → `embed`; `extract = true` (exige `cloud_llm = true`)
+→ `full`. O atalho `brain memory setup --mode none|embed|full` grava as chaves do modo e
+cria os bancos na sequência. O CLI **recusa** `extract` sem `cloud_llm`, e o modo `full`
+sem chave `HINDSIGHT_API_*_API_KEY` no `.env`.
 
-Os dois bancos são disjuntos de propósito: `brain-raw` responde "o que foi dito"
-(a letra da ata); `brain-mem` responde "o que concluímos + estado atual" (a página
-`ledger/DEC-####` traz ID, dono, projeto e se a decisão foi substituída).
+### O que muda no `full`
 
-**Por que `chunks` nos dois.** Tudo que entra no `brain-mem` já foi escrito por
-quem é melhor que o extrator: o agente (artefatos do `/dump`, com proveniência) ou
-o CLI (páginas de entidade renderizadas do ledger). Re-extrair com um LLM local
-pequeno só perde ou corrompe informação, e a busca (embeddings) não depende dele.
-O `setup` aplica nos dois bancos `retain_extraction_mode=chunks`, `enable_auto_consolidation=false` e
-`enable_observations=false`: o retain não chama o LLM, o sync é rápido e nada fica na fila de
-consolidação. O custo é perder as observações cruzadas geradas pela consolidação — nenhum comando consome
-`reflect`, e `/ask` e o hook ancoram em `recall` por `document_id`. Por isso os
-avisos ligados ao LLM (`gave_up`, `failed_consolidation`, consolidação presa) ficam
-raros. **Reversível:** voltar a `concise` = `patch_config` do `mem_bank` +
-`./brain memory rebuild`; se um dia importar, use um extrator de verdade (nuvem, se a
-política de chaves permitir), não um modelo local pequeno.
+- Todo documento viaja com um bloco **CONTEXTO** (caminho, data do mundo, pessoas com id e
+  grafias, projetos) derivado do ledger — a extração usa só esses nomes/IDs, nunca inventa.
+- **Data do mundo** em todo RAW (ordem: artefato do `/dump` → carimbo no nome → cabeçalho
+  `capturado:`/`criada:` → mês da pasta `RAW/<ano>/<mês>/`).
+- Entidades anexadas por casamento de alias no texto (metadado `entities`).
+- `connectors/` e `github/` do RAW **nunca** vão ao banco (`exclude_types`) — nos dois modos.
+- Deleção sombra: documento que sai do corpus (tipo excluído, arquivo removido) sai do banco.
+- Observações e consolidação ligadas: a fila do `memory status` volta a ter vida.
 
-Ao atualizar uma instância existente: `./brain memory setup` (reaplica o modo) e
-`./brain memory rebuild`.
+### Os dois bancos do `embed`
+
+`brain-raw` = arquivos do RAW como estão (texto e binários até `max_file_mb`), `chunks` sem
+interpretação — responde "o que foi dito". `brain-mem` = artefatos do PROCESSED + uma página
+por ação/decisão/entrega/pessoa + PLANNING/PROFILE, também em `chunks`: quem escreveu é melhor
+que o extrator (o agente com proveniência, o CLI renderizando o ledger). `document_id` = caminho
+no vault (ou `ledger/TASK-####`): toda lembrança aponta para algo que você pode abrir.
+
+## Subir o servidor (OrbStack)
+
+```bash
+# embed (sem LLM): só o bge-m3 do LM Studio precisa estar disponível
+docker compose -f services/compose.yaml up -d
+
+# full (LLM do dono): as chaves moram no config/.env — o compose lê pelo --env-file
+docker compose --env-file config/.env \
+  -f services/compose.yaml -f services/compose.full.yaml up -d
+```
+
+A imagem é pinada **por digest** (emenda R5: tag pode ser reempurrada). Atualizar = trocar o
+digest no `services/compose.yaml` e re-auditar. O container alcança o LM Studio do Mac por
+`host.docker.internal:1234`.
+
+### Alternativa sem Docker: daemon local
+
+```bash
+uv tool install hindsight-embed          # daemon + PostgreSQL embutido (pg0)
+export HINDSIGHT_API_EMBEDDINGS_PROVIDER=openai
+export HINDSIGHT_API_EMBEDDINGS_OPENAI_BASE_URL=http://localhost:1234/v1
+export HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL=text-embedding-bge-m3
+export HINDSIGHT_API_EMBEDDINGS_OPENAI_API_KEY=lm-studio   # placeholder; o LM Studio ignora
+export HINDSIGHT_API_RERANKER_PROVIDER=rrf
+export HINDSIGHT_API_SKIP_LLM_VERIFICATION=true            # modo embed
+hindsight-embed configure && hindsight-embed daemon status
+curl localhost:8888/health
+```
+
+Se o servidor exigir token: `HINDSIGHT_API_TOKEN` no `config/.env`.
 
 ## Embeddings: o que carregar na memória
 
@@ -46,79 +83,55 @@ Sem LLM no caminho, o único modelo que importa é o de embeddings. O padrão do
 | `bge-m3` local (`local`, CPU do container) | 20/24 | 0,91 | ~4,4 GB | 400 ms |
 | `bge-m3` no LM Studio (GGUF) | 20/24 | 0,90 | ~635 MB | ~76 ms |
 
-Recomendado: **`bge-m3` servido pelo LM Studio** (melhor qualidade com o menor RAM; 1024 dims). Sem o
-LM Studio, `multilingual-e5-small` via `HINDSIGHT_API_EMBEDDINGS_PROVIDER=onnx` perde pouco, mas
-tem 384 dims (exige recriar os bancos) e limite de 512 tokens (o chunk padrão de 3000 caracteres
+Recomendado: **`bge-m3` servido pelo LM Studio** (melhor qualidade com o menor RAM; 1024 dims).
+Sem o LM Studio, `multilingual-e5-small` via `HINDSIGHT_API_EMBEDDINGS_PROVIDER=onnx` perde pouco,
+mas tem 384 dims (exige recriar os bancos) e limite de 512 tokens (o chunk padrão de 3000 caracteres
 passa disso — reduza `retain_chunk_size`). Não carregue um LLM no LM Studio só para o Hindsight.
-
-## Subir o servidor
-
-### Recomendado: daemon local, sem Docker (LM Studio)
-
-A receita completa e verificável está no **`setup.md`** (seção 4). Resumo:
-
-```bash
-uv tool install hindsight-embed          # daemon + PostgreSQL embutido (pg0)
-export HINDSIGHT_API_EMBEDDINGS_PROVIDER=openai
-export HINDSIGHT_API_EMBEDDINGS_OPENAI_BASE_URL=http://localhost:1234/v1
-export HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL=text-embedding-bge-m3
-export HINDSIGHT_API_EMBEDDINGS_OPENAI_API_KEY=lm-studio   # placeholder; o LM Studio ignora
-export HINDSIGHT_API_RERANKER_PROVIDER=rrf
-export HINDSIGHT_API_SKIP_LLM_VERIFICATION=true            # sem LLM carregado ao subir
-hindsight-embed configure
-hindsight-embed daemon status             # sobe na primeira chamada
-curl localhost:8888/health
-```
-
-Os bancos usam `chunks`, então o servidor não chama LLM: só o `bge-m3` fica carregado no
-LM Studio, e o conteúdo do vault não sai da máquina. Se você reativar `concise`, configure
-também `HINDSIGHT_API_LLM_*` (LM Studio ou nuvem) e remova o `SKIP_LLM_VERIFICATION`.
-
-### Alternativa: API Service (Docker) com nuvem
-
-Para uma instância que pode sair da máquina, siga o
-[Hindsight](https://github.com/vectorize-io/hindsight) (Docker ou binário) e
-configure lá o provedor de nuvem (Fireworks, OpenAI, Anthropic…). URL padrão:
-`http://localhost:8888`.
-
-Se o servidor exigir token: `HINDSIGHT_API_TOKEN` no `config/.env`.
 
 ## Ligar nesta instância
 
-```
-# config/brain.toml
-[memory]
-engine = "hindsight"
-url = "http://localhost:8888"
+```bash
+brain memory setup --mode embed     # ou full (exige chave no .env) — grava [memory] e cria os bancos
+brain memory sync                   # incremental; --limit 50 --dry-run disponível
+brain memory status                 # modo, pendências, fila, RAW retidos (full)
+brain memory recall "quem decidiu o ponto novo?"
+brain memory cost                   # medidor mensal (embed: US$ 0; full: tokens + US$ por operação)
 ```
 
-```
-./brain memory setup
-./brain memory sync          # incremental; pode --limit 50 --dry-run
-./brain memory status
-./brain memory recall "quem decidiu o ponto novo?"
+Modo `full` antes do primeiro `sync` grande: valide sem gastar —
+
+```bash
+curl -s -X POST localhost:8888/v1/default/banks/brain-mem/health/llm   # por operação
+curl -s -X POST localhost:8888/v1/default/banks/brain-mem/memories/dry-run-extract \
+  -H 'Content-Type: application/json' -d '{"content":"ata de exemplo","context":"CONTEXTO"}'
 ```
 
 O retain do Hindsight é assíncrono: o `sync` guarda o `operation_id` de cada documento em
 `config/.memory-state.json` (`_ops`) e, no sync seguinte, consulta o servidor — documento cujo retain
-falhou (ex.: timeout do LLM) sai do estado e é reenviado (até 3 vezes; depois `doctor` avisa).
-`brain memory status` / `brain doctor --online` também avisam de retains falhos sem retain posterior
-bem-sucedido e de operações em `processing` há mais de 2h.
+falhou sai do estado e é reenviado (até 3 vezes; depois `doctor` avisa). `brain memory status` /
+`brain doctor --online` também avisam de retains falhos e de operações em `processing` há mais de 2h,
+e mostram a **fila** de cada banco (`fila: vazia — LLM livre` = não pese a máquina agora).
+`--json` traz os números em `queue`.
 
-`brain memory status` mostra ainda a **fila** de cada banco (retain/consolidação rodando ou na fila,
-memórias aguardando consolidação). `fila: vazia — LLM livre` = o Hindsight não está usando o LLM nem
-o embedding; `ocupada` = não descarregue os modelos nem pese a máquina agora. Memórias que desistiram
-da consolidação (`failed_consolidation`) viram aviso. `--json` traz os números em `queue`.
+O noturno chama `sync` sozinho. Após um `/dump` pesado, rode `brain memory sync` no mesmo dia.
+`rebuild` apaga os bancos do modo atual (e os dos outros modos, se existirem) e reconstrói —
+use quando trocar de modo, mudar o mission ou suspeitar de lixo.
 
-O noturno chama `sync` sozinho. Após um `/dump` pesado, rode `./brain memory
-sync` para o índice ficar fresco no mesmo dia. `rebuild` apaga os dois bancos
-e reconstrói — use quando mudar o mission ou suspeitar de lixo.
+## Trocar de modo (primeira classe nos dois sentidos)
+
+- **`none` → `embed`/`full`**: `brain memory setup --mode …` + `sync`.
+- **`embed` → `full`**: chaves no `.env` → subir o compose com o override →
+  `brain memory setup --mode full` → `brain memory rebuild` (banco único com extração).
+  Nenhum dado do vault se perde — tudo deriva do vault.
+- **`full` → `embed`**: `brain memory setup --mode embed` → `brain memory rebuild`.
+  O hook de recall volta aos dois bancos (o padrão já é `brain-mem,brain-raw`).
 
 ## O que NÃO vai
 
-- inbox (ainda não processada)
+- inbox (ainda não processada) · `config/.env`
+- `connectors/` e `github/` do RAW (espelho estruturado já no ledger; diff de código é ruído)
 - arquivos maiores que `max_file_mb` (aparecem no doctor como "grandes")
-- `config/.env` (nem está no vault)
+- No `full`: RAW sem artefato (hold até o `/dump`; `memory status` mostra quantos esperam)
 
 ## Sem Hindsight
 

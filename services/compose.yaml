@@ -1,11 +1,14 @@
-# Serviços locais do Segundo Cérebro (OrbStack / Docker).
-#   docker compose -f services/compose.yaml up -d
+# Serviços locais do Segundo Cérebro (OrbStack / Docker — o `docker` do OrbStack serve).
+#   docker compose -f services/compose.yaml up -d                                    ← modo embed (sem LLM)
+#   docker compose -f services/compose.yaml -f services/compose.full.yaml up -d      ← modo full (LLM do dono)
 # O LM Studio roda no Mac (Metal); o container o alcança por host.docker.internal.
 name: segundo-cerebro
 
 services:
   hindsight:
-    image: ghcr.io/vectorize-io/hindsight:0.10.3
+    # Pin por digest (emenda R5 do plano da memória: tag pode ser reempurrada; digest não).
+    # Tag correspondente: 0.10.3
+    image: ghcr.io/vectorize-io/hindsight@sha256:5b6ef2b892703f0e82c448786349c88db60f06d8c9190432b68af00ce6dc45e3
     container_name: hindsight
     restart: unless-stopped
     ports:
@@ -17,11 +20,9 @@ services:
       HINDSIGHT_API_LLM_MODEL: qwen/qwen3-4b-2507
       HINDSIGHT_API_LLM_API_KEY: lm-studio   # placeholder; o LM Studio ignora
       HINDSIGHT_API_LLM_OUTPUT_LANGUAGE: Brazilian Portuguese (pt-BR)
-      # Os bancos usam chunks, sem consolidação nem observações (brainlib/memory.py NO_LLM_CONFIG): o LLM abaixo
-      # não é chamado — pode ficar descarregado no LM Studio. Só o bge-m3 (embeddings, ~635 MB) precisa estar disponível.
-      # O tuning que continha o qwen3-4b na consolidação (batch 3, orçamentos 256/1024/128, concorrência 4,
-      # timeout 300) foi aposentado — está no git history se a extração por LLM voltar.
-      # Sem consolidação/extração o LLM não é usado: não verifica nem carrega o modelo ao subir.
+      # Modo embed: os bancos usam chunks, sem consolidação nem observações (brainlib/memory.py NO_LLM_CONFIG):
+      # o LLM abaixo não é chamado — pode ficar descarregado no LM Studio. Só o bge-m3 (embeddings, ~635 MB)
+      # precisa estar disponível. O tuning que continha o qwen3-4b na consolidação está no git history.
       HINDSIGHT_API_SKIP_LLM_VERIFICATION: "true"
       # Id fixo do worker. O padrão é o hostname (= id do container, muda a cada recreate) e o
       # worker só recupera, ao subir, as operações que ele mesmo tinha pego — com id novo, a

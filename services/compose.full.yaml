@@ -1,0 +1,27 @@
+# Override do modo full (LLM do dono) — soma ao services/compose.yaml:
+#   docker compose --env-file config/.env \
+#     -f services/compose.yaml -f services/compose.full.yaml up -d
+#
+# Tudo que é segredo mora no config/.env (0600, cego pro git): o `--env-file` alimenta a
+# interpolação ${…} abaixo — nenhum valor de chave passa por este arquivo. Sem a variável
+# no .env, vale o fallback (lmstudio local, o mesmo do embed).
+# Pré-requisitos do modo full (plano da memória §4.3): chave do dono + nada público.
+services:
+  hindsight:
+    environment:
+      # Identidade do LLM default (a chave de verdade vem do config/.env):
+      HINDSIGHT_API_LLM_PROVIDER: ${HINDSIGHT_API_LLM_PROVIDER:-lmstudio}
+      HINDSIGHT_API_LLM_BASE_URL: ${HINDSIGHT_API_LLM_BASE_URL:-http://host.docker.internal:1234/v1}
+      HINDSIGHT_API_LLM_MODEL: ${HINDSIGHT_API_LLM_MODEL:-qwen/qwen3-4b-2507}
+      HINDSIGHT_API_LLM_API_KEY: ${HINDSIGHT_API_LLM_API_KEY:-lm-studio}
+      # No full o LLM É usado (extração/consolidação): a verificação ao subir volta a valer —
+      # servidor mal configurado deve falhar na hora, não no primeiro retain.
+      HINDSIGHT_API_SKIP_LLM_VERIFICATION: ${HINDSIGHT_API_SKIP_LLM_VERIFICATION:-false}
+      # dry-run-extract da validação (POST /banks/<banco>/memories/dry-run-extract).
+      HINDSIGHT_API_ENABLE_DRY_RUN_EXTRACT: "true"
+      # Modelo por operação (defaults comentados — defina no config/.env, não aqui):
+      #   HINDSIGHT_API_RETAIN_LLM_MODEL=…                (extração — modelo barato)
+      #   HINDSIGHT_API_RETAIN_LLM_MAX_CONCURRENT=3       (rate limit apertado)
+      #   HINDSIGHT_API_CONSOLIDATION_LLM_MODEL=…         (consolidação — barato)
+      #   HINDSIGHT_API_MENTAL_MODEL_REFRESH_LLM_MODEL=…  (mental models — maior; Fase 8)
+      # Provider/base_url/api_key POR OPERAÇÃO (…_RETAIN_LLM_API_KEY etc.) também vão no .env.
