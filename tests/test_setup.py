@@ -218,5 +218,47 @@ def argparse_namespace():
     return argparse.Namespace(only="", yes=False, mode=None)
 
 
+class DoctorRulerTests(unittest.TestCase):
+    """O doctor é a régua da instalação (plano setup-wizard, princípio 7)."""
+
+    def _checks(self, b, path_cmd=None, framework=None):
+        from brainlib import doctor
+        import unittest.mock as mock
+        with mock.patch.object(setup, "brain_command_status", return_value=path_cmd), \
+                mock.patch.object(setup, "FRAMEWORK", framework or Path("/nonexistent-fw")):
+            return doctor.checks(b)
+
+    def test_full_without_key_is_error(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            config.set_keys(b.inst, "memory", {"engine": "hindsight", "extract": True, "cloud_llm": True,
+                                               "raw_awaiting_dump": "hold"})
+            b.inst = config.load(b.inst.root)
+            got = [c for c in self._checks(b) if c["title"] == "memória"]
+            self.assertTrue(any(c["level"] == "error" and "chave de LLM" in c["detail"] for c in got))
+
+    def test_full_with_key_no_error(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            (b.inst.env_file).write_text("HINDSIGHT_API_LLM_API_KEY=sk-demo\n", encoding="utf-8")
+            config.set_keys(b.inst, "memory", {"engine": "hindsight", "extract": True, "cloud_llm": True,
+                                               "raw_awaiting_dump": "hold"})
+            b.inst = config.load(b.inst.root)
+            got = [c for c in self._checks(b) if c["title"] == "memória" and "chave de LLM" in c["detail"]]
+            self.assertEqual(got, [])
+
+    def test_command_and_tui_ruler(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            checks = self._checks(b, path_cmd="/x/bin/brain", framework=Path(td))
+            got = {c["title"]: c for c in checks}
+            self.assertEqual(got["comando"]["level"], "ok")
+            self.assertEqual(got["tui"]["level"], "warn")     # framework falso não tem .venv-tui
+            checks2 = self._checks(b, path_cmd=None, framework=Path(td))
+            got2 = {c["title"]: c for c in checks2}
+            self.assertEqual(got2["comando"]["level"], "warn")
+            self.assertEqual(got2["tui"]["level"], "warn")
+
+
 if __name__ == "__main__":
     unittest.main()

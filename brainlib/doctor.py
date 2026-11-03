@@ -98,6 +98,26 @@ def checks(brain, online: bool = False) -> list[dict]:
         from . import memory
         status = memory.status(brain, online=online)
         out.append(_c(status["level"], "memória", status["detail"]))
+        if status.get("mode") == "full":
+            # régua do full: chave presente; gasto do mês como INFORMAÇÃO (sem teto — decisão do dono)
+            if not any(k.startswith("HINDSIGHT_API") and k.endswith("API_KEY") and v for k, v in env.items()):
+                out.append(_c("error", "memória", "modo full sem chave de LLM no config/.env — "
+                                             "`brain setup --only memoria` ou volte ao embed (guides/memory.md)"))
+            elif online:
+                try:
+                    c = memory.cost(brain)
+                    out.append(_c("ok", "memória", f"gasto do mês ({c['month']}): {c['detail']} — brain memory cost"))
+                except util.BrainError as e:
+                    out.append(_c("warn", "memória", f"medidor indisponível: {e}"))
+    # ── régua da instalação (guides/setup.md): o doctor valida o que o setup montou ──
+    from . import setup as _setup
+    cmd = _setup.brain_command_status(inst.root)
+    out.append(_c("ok", "comando", f"`brain` no PATH ({cmd})") if cmd else
+               _c("warn", "comando", "`brain` não está no PATH — `brain setup --only comando` "
+                                     "(ou chame ./brain a partir da raiz)"))
+    tui_py = _setup.FRAMEWORK / ".venv-tui" / "bin" / "python"
+    if not tui_py.exists():
+        out.append(_c("warn", "tui", "TUI não instalada (extra opcional) — `brain setup --only tui`"))
     raw = inst.vault / "RAW"
     big = [p for p in raw.rglob("*") if p.is_file() and p.stat().st_size > 50 * 2**20] if raw.exists() else []
     if big:
