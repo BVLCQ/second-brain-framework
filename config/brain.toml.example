@@ -67,11 +67,20 @@ tools = []
 repo = "BVLCQ/second-brain-framework"
 
 [memory]
-engine = "none"                 # "hindsight" quando o servidor estiver no ar (bancos em chunks: retain sem LLM)
+# Modos (guides/memory.md): none · embed (dois bancos de chunks, zero LLM, nada sai da máquina)
+# · full (banco único com extração de fatos, observações e mental models — envia texto do vault
+# à API de LLM com a CHAVE DO DONO no config/.env; exige cloud_llm = true).
+engine = "none"                 # "hindsight" quando o servidor estiver no ar
 url = "http://localhost:8888"
-raw_bank = "brain-raw"
-mem_bank = "brain-mem"
+raw_bank = "brain-raw"          # modo embed: banco do texto original
+mem_bank = "brain-mem"          # embed: banco do conhecimento · full: legado (usa `bank`)
+bank = "brain-mem"              # modo full: banco único
 max_file_mb = 25
+extract = false                 # full: extração de fatos do RAW com contexto do ledger
+cloud_llm = false               # true = o dono ativou o envio à própria API (plano da memória §4.3)
+mental_models = false           # Fase 8 do plano — ainda não aterrissado
+raw_awaiting_dump = "degraded"  # embed: entra com contexto degradado · full: "hold" (espera o /dump)
+exclude_types = ["connectors", "github"]   # tipos do RAW que nunca vão ao banco
 
 [runner]
 agent = "auto"                  # auto | cursor | claude | codex | agy | gemini | none

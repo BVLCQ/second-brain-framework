@@ -1239,12 +1239,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("memory", help="camada de memória (Hindsight), alimentada pelo vault")
     ms = p.add_subparsers(dest="mcmd", required=True)
-    for name in ("setup", "sync", "rebuild", "status"):
+    for name in ("setup", "sync", "rebuild", "status", "cost"):
         x = ms.add_parser(name)
         x.add_argument("--json", action="store_true")
         if name in ("sync", "rebuild"):
             x.add_argument("--limit", type=int)
             x.add_argument("--dry-run", action="store_true")
+        if name == "setup":
+            x.add_argument("--mode", choices=["none", "embed", "full"],
+                           help="grava as chaves do modo antes de criar os bancos (guides/memory.md)")
     for name in ("recall", "reflect"):
         x = ms.add_parser(name)
         x.add_argument("query")

@@ -912,7 +912,7 @@ class DashboardAssetTests(unittest.TestCase):
     NOT_IN_PANEL = {      # ciclo de vida do framework e config: terminal/TUI (o painel é de uso diário)
         "demo", "tui", "serve", "migrate ids", "update", "upstream hook", "upstream scan", "backup", "mcp",
         "nightly", "schedule", "validate", "sync", "memory setup", "memory rebuild", "memory sync",
-        "memory status", "agent allow", "watch add", "watch edit", "watch remove", "doc link", "doc unlink",
+        "memory status", "memory cost", "agent allow", "watch add", "watch edit", "watch remove", "doc link", "doc unlink",
         "note edit",                                     # precisa do caminho do arquivo na inbox — terminal/TUI
     }
     DYNAMIC = {"memory recall", "memory reflect",       # formulário do TUI monta; o painel busca no índice
@@ -1055,6 +1055,12 @@ class FakeHindsight(memory.Hindsight):
         self.calls = 0
         self.clock = 0
         self.bank_stats: dict[str, dict] = {}   # bank → campos extras de /stats (pending_consolidation…)
+        self.configs: dict[str, dict] = {}      # bank → último patch_config (setup por modo)
+        self.bank_bodies: dict[str, dict] = {}  # bank → último put_bank
+        self.items: list[dict] = []             # itens de retain completos (context/metadata)
+        self.deleted: list[str] = []            # "bank:doc" apagados (deleção sombra)
+        self.deleted_banks: list[str] = []
+        self.stats_payload: dict = {}           # payload de /llm-requests/stats
 
     def _add(self, bank: str, doc: str, status: str = "processing", op_type: str = "retain") -> str:
         self.clock += 1
@@ -1067,12 +1073,32 @@ class FakeHindsight(memory.Hindsight):
     def health(self):
         return {"status": "healthy"}
 
+    def put_bank(self, bank, body):
+        self.bank_bodies[bank] = body
+        return {"success": True}
+
+    def patch_config(self, bank, updates):
+        self.configs[bank] = dict(updates.get("updates") or updates)
+        return {"success": True}
+
+    def delete_bank(self, bank):
+        self.deleted_banks.append(bank)
+        return {"success": True}
+
+    def delete_document(self, bank, doc_id):
+        self.deleted.append(f"{bank}:{doc_id}")
+        return {"success": True}
+
+    def llm_stats(self, bank):
+        return dict(self.stats_payload)
+
     def stats(self, bank):
         return {"bank_id": bank, **self.bank_stats.get(bank, {})}
 
     def retain(self, bank, items, async_=True):
         self.calls += 1
         self.sent.append((bank, items[0]["document_id"]))
+        self.items.append(items[0])
         return {"success": True, "bank_id": bank, "items_count": 1, "async": True,
                 "operation_id": self._add(bank, items[0]["document_id"])}
 
@@ -1107,6 +1133,7 @@ class MemorySyncTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as td:
             b = _brain(Path(td))
+            b.inst.cfg["memory"]["engine"] = "hindsight"      # modo embed (default das chaves novas)
             hs = Rec()
             memory.setup(b, hs=hs)
             self.assertEqual(len(hs.cfg), 2)

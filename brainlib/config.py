@@ -40,10 +40,19 @@ DEFAULTS: dict = {
     "memory": {
         "engine": "none",                  # "hindsight" quando o servidor estiver no ar
         "url": "http://localhost:8888",
-        "raw_bank": "brain-raw",
-        "mem_bank": "brain-mem",
+        "raw_bank": "brain-raw",           # modo embed: banco do texto original
+        "mem_bank": "brain-mem",           # embed: banco do conhecimento · full: banco único
+        "bank": "brain-mem",               # modo full: banco único (mem_bank/raw_bank legados)
         "max_file_mb": 25,
         "timeout_s": 120,
+        # modos (guides/memory.md): embed = dois bancos de chunks, zero LLM, zero egress.
+        # full = banco único com extração de fatos, observações e (futuro) mental models.
+        "extract": False,                  # full: extração de fatos do RAW com contexto do ledger
+        "cloud_llm": False,                # true = o dono ativou o envio à própria API (chave no .env)
+        "mental_models": False,            # Fase 8 do plano da memória — ainda não aterrissado
+        "raw_awaiting_dump": "degraded",   # embed: "degraded" · full: "hold" (nada nasce sem identidade)
+        "exclude_types": ["connectors", "github"],   # tipos do RAW que não vão ao banco (§3.2 do plano)
+        "entity_types": {"pessoa": "PERSON", "projeto": "PROJECT", "area": "ORG"},
     },
     "runner": {"agent": "auto", "command": "", "prompt": "/update", "timeout_min": 45,
                "allow": []},              # ferramentas MCP de LEITURA do agente headless (noturno e TUI)
@@ -249,6 +258,69 @@ def _array_span(text: str, start: int) -> int:
                 return i + 1
         i += 1
     raise util.BrainError("config/brain.toml: array de permissões sem fechamento", code=5)
+
+
+def _toml_value(v) -> str:
+    """Serializa um valor escalar/lista/dict raso como TOML válido."""
+    import json
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, (int, float)):
+        return str(v)
+    if isinstance(v, list):
+        return json.dumps(v, ensure_ascii=False)
+    if isinstance(v, dict):
+        return json.dumps(v, ensure_ascii=False)          # TOML inline table — JSON é válido aqui
+    return json.dumps(str(v), ensure_ascii=False)
+
+
+def set_keys(inst, section: str, updates: dict, path_name: str = "brain.toml") -> list[str]:
+    """Upsert de chaves escalares em `[section]` (brain.toml por padrão), preservando
+    comentários e o resto do arquivo. Valida o TOML inteiro antes de gravar.
+    Devolve as chaves efetivamente mudadas (valor novo ≠ atual)."""
+    import re
+    path = inst.config_dir / path_name
+    text = path.read_text(encoding="utf-8") if path.exists() else ""
+    cur = tomllib.loads(text) if text.strip() else {}
+    changed: list[str] = []
+    for key, val in updates.items():
+        if (cur.get(section) or {}).get(key) == val:
+            continue
+        changed.append(key)
+        line = f"{key} = {_toml_value(val)}"
+        head = re.search(rf"^\[{re.escape(section)}\]\s*(#.*)?$", text, re.M)
+        if head is None:
+            add = (f"\n\n[{section}]\n" if text.strip() else f"[{section}]\n") + line + "\n"
+            text = text.rstrip("\n") + add
+            continue
+        nxt = re.search(r"^\[", text[head.end():], re.M)
+        end = head.end() + nxt.start() if nxt else len(text)
+        body = text[head.end():end]
+        km = re.search(rf"^{re.escape(key)}\s*=", body, re.M)
+        if km is None:
+            text = text[:head.end()] + f"\n{line}" + text[head.end():]
+        else:
+            at = head.end() + km.end()
+            if text[at:].lstrip().startswith("[") and not text[at:].lstrip().startswith("[["):
+                close = _array_span(text, text.index("[", at))       # valor lista (mesmo multilinha): troca inteira
+                text = text[:head.end() + km.start()] + line + text[close:]
+            else:
+                tail = text[at:]
+                if "\n" in tail:
+                    text = text[:head.end() + km.start()] + line + tail[tail.index("\n"):]
+                else:
+                    text = text[:head.end() + km.start()] + line + "\n"
+    if not changed:
+        return changed
+    try:
+        tomllib.loads(text)
+    except tomllib.TOMLDecodeError as e:
+        raise util.BrainError(f"a mudança deixaria o {path_name} inválido ({e}); nada foi gravado", code=5) from e
+    path.parent.mkdir(parents=True, exist_ok=True)
+    mode = path.stat().st_mode & 0o777 if path.exists() else 0o644
+    util.atomic_write(path, text if text.endswith("\n") else text + "\n")
+    os.chmod(path, mode)
+    return changed
 
 
 def add_allow(inst, rule: str, scope: str = "tui") -> tuple[str, bool]:
