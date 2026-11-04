@@ -16,6 +16,7 @@ import os
 import sys
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
 URL = os.environ.get("BRAIN_HINDSIGHT_URL", "http://127.0.0.1:8888").rstrip("/")
 BANKS = [b for b in os.environ.get("BRAIN_RECALL_BANKS", "brain-mem,brain-raw").split(",") if b]
@@ -46,6 +47,25 @@ def main():
         return
     prompt = (json.load(sys.stdin).get("prompt") or "").strip()
     if len(prompt) < MIN_PROMPT_CHARS:
+        return
+    # Fase 2 do plano da memória: rota ledger-only. Pergunta de ESTADO (ID, prazo, atraso,
+    # quem deve, título de projeto) responde o índice SQLite em modo leitura — sem vetor, sem
+    # LLM, ≤3 linhas; TODO O RESTO silencia (o silêncio é a melhoria). Sem índice: silencia.
+    if os.environ.get("BRAIN_RECALL_ROUTE") == "ledger":
+        try:
+            root = str(Path(__file__).resolve().parents[2])
+            if root not in sys.path:
+                sys.path.insert(0, root)
+            from brainlib import route
+            lines = route.ledger_lines(prompt)
+        except Exception:  # noqa: BLE001 — hook nunca quebra a conversa
+            lines = []
+        if lines:
+            context = ("Estado do Segundo Cérebro (ledger, leitura exata) — confira no livro-razão com "
+                       "`brain query entity <ID>`. Ignore se não for pertinente.\n" + "\n".join(
+                           f"- {ln}" for ln in lines))
+            print(json.dumps({"hookSpecificOutput": {"hookEventName": "UserPromptSubmit",
+                                                     "additionalContext": context}}, ensure_ascii=False))
         return
     query = prompt[:2000]
     items, seen = [], set()

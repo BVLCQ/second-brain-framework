@@ -137,3 +137,14 @@ use quando trocar de modo, mudar o mission ou suspeitar de lixo.
 
 `engine = "none"` (padrão). `/ask` usa `./brain search` → artefato → RAW.
 O MCP somente-leitura (`./brain mcp`) também funciona sem memória.
+
+## Hook de recall (Claude Code)
+
+O hook `services/hooks/recall_context.py` anexa contexto à mensagem. Variáveis:
+
+- `BRAIN_RECALL_ROUTE=ledger` — **rota ledger-only (Fase 2 do plano)**: pergunta de estado
+  (ID, prazo, atraso, quem deve, título de projeto) injeta até 3 linhas exatas do índice
+  SQLite (`⟶ ledger/<ID>`); todo o resto **silencia**. Zero LLM, zero vetor.
+- `BRAIN_RECALL_OFF=1` — desliga tudo.
+- Demais variáveis (`BRAIN_RECALL_MIN_SCORE`, `BRAIN_RECALL_MAX`, bancos) valem para o
+  caminho vetorial clássico, que segue o padrão sem a rota ligada.
