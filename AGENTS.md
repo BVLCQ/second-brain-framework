@@ -330,13 +330,21 @@ apontar, trate como pista e confirme no arquivo.
 
 ## Memória para IA (Hindsight)
 
-Camada auxiliar, mão única: o vault alimenta dois bancos (`brain-raw` =
-texto original; `brain-mem` = fatos extraídos). O vault continua a verdade.
-`brain memory rebuild` apaga os bancos e reconstrói. Sem servidor, o motor
-é `none` e `/ask` usa índice → artefato → RAW. Guia: `guides/memory.md`.
+Camada auxiliar, mão única: o vault alimenta o banco e o vault continua a verdade.
+`brain memory rebuild` apaga e reconstrói. **Dois setups** (`brain memory setup
+--mode …`, escolha livre e reversível): `embed` = dois bancos de chunks (`brain-raw`
+texto original, `brain-mem` conhecimento), **zero LLM, zero chave, nada sai da
+máquina**; `full` = banco único com extração de fatos, observações e mental models
+(aterrissando) — envia texto do vault à API de LLM **com a chave do dono**
+(`cloud_llm = true`), medida por `brain memory cost` (medidor mensal, sem teto).
+Sem servidor, o motor é `none` e `/ask` usa índice → artefato → RAW. Guias:
+`guides/memory.md` (setups) e `guides/plans/memory-setups.md` (plano com as decisões).
 
 ## Segurança
 
+- **Registro de egresso da memória (modo full):** a camada de memória envia texto
+  do vault à API de LLM configurada pelo dono, quando `[memory].cloud_llm = true`
+  (chave no `config/.env`; nada público — a invariante da porta 5 continua).
 - Segredos **nunca** aparecem no chat, em log, em artefato ou em view. Não
   leia `.env` além de checar existência/permissão; nunca imprima seu conteúdo.
 - `config/watch.toml` define o universo observável — fonte não listada não é
@@ -410,7 +418,7 @@ Nestes casos: pare, explique o dilema ao dono em ≤5 linhas, proponha 2 caminho
 `/outbox` → `commands/outbox/SKILL.md` · `/share` → `commands/share/SKILL.md` ·
 `/publish` → `commands/publish/SKILL.md` · `/process` → `commands/process/SKILL.md` ·
 `/opportunity` → `commands/opportunity/SKILL.md` ·
-`/feedback` → `commands/feedback/SKILL.md`
+`/feedback` → `commands/feedback/SKILL.md` · `/setup` → `commands/setup/SKILL.md`
 
 Ao receber um comando, leia a skill correspondente ANTES de agir. Variantes
 naturais ("meu dia", "atualiza tudo", "manda pro Caio-demo") mapeiam para a skill
