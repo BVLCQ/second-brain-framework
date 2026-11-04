@@ -62,6 +62,8 @@ CREATE TABLE IF NOT EXISTS processes(id TEXT PRIMARY KEY, title TEXT, area TEXT,
 CREATE TABLE IF NOT EXISTS opportunities(id TEXT PRIMARY KEY, title TEXT, area TEXT, status TEXT,
   ice REAL, ice_suggested INTEGER, data TEXT);
 CREATE TABLE IF NOT EXISTS questions(id TEXT PRIMARY KEY, text TEXT, status TEXT, kind TEXT);
+CREATE TABLE IF NOT EXISTS feedbacks(id TEXT PRIMARY KEY, kind TEXT, title TEXT, status TEXT,
+  number INTEGER, url TEXT, issue_state TEXT, source TEXT, prov TEXT);
 CREATE TABLE IF NOT EXISTS proposals(id TEXT PRIMARY KEY, kind TEXT, status TEXT, target TEXT);
 CREATE TABLE IF NOT EXISTS planning(id TEXT PRIMARY KEY, kind TEXT, parent TEXT, title TEXT,
   status TEXT, due TEXT, done TEXT, weight REAL, progress REAL);
@@ -126,7 +128,7 @@ def _materialize_entities(con: sqlite3.Connection, brain) -> None:
     plan = brain.plan
     cur = con.cursor()
     for t in ("actions", "decisions", "deliveries", "people", "aliases", "artifacts", "processes",
-              "opportunities", "questions", "proposals", "planning", "edges"):
+              "opportunities", "questions", "feedbacks", "proposals", "planning", "edges"):
         cur.execute(f"DELETE FROM {t}")
     today = util.today()
     for a in st.actions.values():
@@ -187,6 +189,9 @@ def _materialize_entities(con: sqlite3.Connection, brain) -> None:
             cur.execute("INSERT OR IGNORE INTO edges VALUES (?,?,?)", (o.id, "opp_area", o.area))
     for q in st.questions.values():
         cur.execute("INSERT OR REPLACE INTO questions VALUES (?,?,?,?)", (q.id, q.text, q.status, q.kind))
+    for f in st.feedbacks.values():
+        cur.execute("INSERT OR REPLACE INTO feedbacks VALUES (?,?,?,?,?,?,?,?,?)", (
+            f.id, f.kind, f.title, f.status, f.number, f.url, f.issue_state, f.source, f.prov))
     for p in st.proposals.values():
         cur.execute("INSERT OR REPLACE INTO proposals VALUES (?,?,?,?)", (p.id, p.kind, p.status, p.target))
     # PLANNING: progresso = peso dos feitos ÷ peso dos não cancelados
@@ -214,25 +219,32 @@ def _fts_entity_rows(brain) -> list[tuple]:
     st, plan = brain.state, brain.plan
     rows = []
     for a in st.actions.values():
-        rows.append(("ação", a.id, a.title, " ".join(filter(None, [a.how, a.outcome, a.origin])),
+        rows.append(("ação", a.id, a.title,
+                     " ".join(filter(None, [st.person_name(a.owner), a.how, a.outcome, a.origin,
+                                            (plan.projects[a.project].title if a.project in plan.projects else "")])),
                      _dt(a.due) or _dt(a.opened), None))
     for d in st.decisions.values():
-        rows.append(("decisão", d.id, d.title, " ".join([d.context, d.rationale]), _dt(d.date), None))
+        names = " ".join(st.person_name(p) for p in d.decided_by)
+        rows.append(("decisão", d.id, d.title, " ".join([names, d.context, d.rationale]), _dt(d.date), None))
     for e in st.deliveries.values():
         rows.append(("entrega", e.id, e.title, " ".join([e.result, e.evidence, e.impact]), _dt(e.date), None))
     for p in st.people.values():
-        rows.append(("pessoa", p.id, p.name, " ".join([*p.aliases, getattr(p, "role", "")]), None, None))
+        rows.append(("pessoa", p.id, p.name,
+                     " ".join([*p.aliases, getattr(p, "role", ""), getattr(p, "relation", ""),
+                               getattr(p, "email", "")]), None, None))
     for g in plan.goals.values():
         rows.append(("goal", g.id, g.title, g.meta.get("por quê", ""), None, None))
     for pr in plan.projects.values():
         rows.append(("projeto", pr.id, pr.title, " ".join(d.title for d in plan.deliverables.values()
                                                           if d.project_id == pr.id), None, None))
     for pr in st.processes.values():
-        rows.append(("processo", pr.id, pr.title, " ".join([pr.io, *pr.pains, *pr.tools]), None, None))
+        rows.append(("processo", pr.id, pr.title, " ".join([pr.io, *pr.pains, *pr.tools, *pr.notes]), None, None))
     for o in st.opportunities.values():
-        rows.append(("oportunidade", o.id, o.title, " ".join([o.problem, o.suggestion, o.gain]), None, None))
+        rows.append(("oportunidade", o.id, o.title, " ".join([o.problem, o.suggestion, o.gain, *o.notes]), None, None))
     for art in st.artifacts.values():
         rows.append(("artefato", art.id, art.title, art.summary, _dt(art.date), art.id))
+    for f in st.feedbacks.values():
+        rows.append(("feedback", f.id, f.title, f.kind, _dt(f.added), None))
     # NOTA: notas avulsas NÃO entram aqui — são entidade de arquivo (sem evento), o search as
     # mergulha ao vivo (search._note_hits) para não ficarem velhas entre updates.
     return rows
@@ -298,6 +310,7 @@ def update(brain) -> dict:
         con = sqlite3.connect(path, timeout=BUSY_TIMEOUT_MS / 1000)
         try:
             con.execute(f"PRAGMA busy_timeout={BUSY_TIMEOUT_MS}")
+            con.execute("PRAGMA journal_mode=WAL")       # persistente: leitor ro não trava o escritor
             con.executescript(SCHEMA)
             meta = {k: v for k, v in con.execute("SELECT key, value FROM meta")}
             size = ledger.stat().st_size if ledger.exists() else 0
@@ -494,7 +507,7 @@ def query_person(con, ref: str) -> dict | None:
 
 
 ENTITY_TABLES = {"TASK": "actions", "DEC": "decisions", "WIN": "deliveries", "PROC": "processes",
-                 "OPP": "opportunities", "FB": "questions", "ASK": "questions"}
+                 "OPP": "opportunities", "FB": "feedbacks", "PROP": "proposals", "ASK": "questions"}
 PLANNING_KINDS = ("GOAL", "PROJ")
 
 
@@ -508,9 +521,17 @@ def query_entity(con, eid: str) -> dict | None:
         table = "planning"
     else:
         table = ENTITY_TABLES.get(pfx)
-        if not table:
-            return None
-        row = con.execute(f"SELECT * FROM {table} WHERE id = ?", (eid.upper(),)).fetchone()
+        if table:
+            row = con.execute(f"SELECT * FROM {table} WHERE id = ?", (eid.upper(),)).fetchone()
+        else:
+            row = None                                       # MSG/PUB/FOCUS…: sem tabela própria
+    if not row and table not in ("planning",):
+        # MSG/PUB/FOCUS e afins não têm tabela própria: a ficha mínima vem do próprio evento
+        ev = con.execute("SELECT type, ts, date, by, prov, source FROM events WHERE id = ? "
+                         "ORDER BY seq DESC LIMIT 1", (eid.upper(),)).fetchone()
+        if ev:
+            return {"entity": eid.upper(), "found": True, "type": ev[0], "ts": ev[1], "date": ev[2],
+                    "by": ev[3], "prov": ev[4], "source": ev[5], "note": "entidade sem tabela própria — último evento"}
     if not row:
         return {"entity": eid.upper(), "found": False}
     cols = [c[1] for c in con.execute(f"PRAGMA table_info({table})")]

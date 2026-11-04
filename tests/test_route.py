@@ -56,10 +56,33 @@ class ClassifyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             b = _brain(Path(td))
             db = index.db_path(b.inst)
-            self.assertEqual(route.classify("como está a TASK-0146?", db)["route"], "ledger")
-            self.assertEqual(route.classify("o que aconteceu com A-146?", db)["ids"], ["TASK-0146"])
-            self.assertEqual(route.classify("e o G1?", db)["ids"], ["GOAL-1"])
-            self.assertEqual(route.classify("p3.2 está feito?", db)["ids"], ["PROJ-3.2"])
+            late = b._ids["late"]                      # ex.: TASK-0002 (o CLI numera)
+            legacy = f"A-{int(late.split('-')[1])}"    # grafia antiga da MESMA entidade
+            self.assertEqual(route.classify(f"como está a {late}?", db)["route"], "ledger")
+            self.assertEqual(route.classify(f"o que aconteceu com {legacy}?", db)["ids"], [late])
+            self.assertEqual(route.classify("e o G1?", db)["ids"], ["GOAL-1"])   # existe no PLANNING
+            # inexistente não vira rota (silêncio — não inventa memória)
+            self.assertIsNone(route.classify("como está a TASK-9999?", db)["route"])
+
+    def test_bare_short_id_needs_existence(self):
+        """F6: 'P1 é prioridade alta' não roteia; GOAL-1 existente (G1) roteia."""
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            db = index.db_path(b.inst)
+            self.assertIsNone(route.classify("P1 é prioridade alta no Jira", db)["route"])
+            self.assertIsNone(route.classify("R2 do plano foi feito?", db)["route"])
+            self.assertEqual(route.classify("e o G1?", db)["ids"], ["GOAL-1"])   # existe → roteia
+
+    def test_short_id_only_prompt_reaches_hook(self):
+        """'TASK-####?' tem <12 chars — a perna ledger despacha antes do corte."""
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            env = {"BRAIN_RECALL_ROUTE": "ledger", "BRAIN_HOME": td,
+                   "BRAIN_NOW": "2026-10-09T10:00:00-03:00", **os.environ}
+            r = subprocess.run([sys.executable, str(ROOT / "services" / "hooks" / "recall_context.py")],
+                               input=json.dumps({"prompt": f"{b._ids['late']}?"}),
+                               capture_output=True, text=True, cwd=ROOT, env=env, timeout=30)
+            self.assertIn(f"ledger/{b._ids['late']}", r.stdout)
 
     def test_state_vocabulary_pt_es(self):
         with tempfile.TemporaryDirectory() as td:

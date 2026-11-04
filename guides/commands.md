@@ -34,9 +34,9 @@ comandos, use o cockpit de terminal (`brain tui`); o guia interativo está em [`
 21. [Serviços desta máquina](#21-serviços-desta-máquina-fora-do-cli)
 22. [Receitas rápidas](#22-receitas-rápidas)
 23. [Portfólio](#23-portfólio--area--process--opportunity--doc) — `area` · `process` · `opportunity` · `doc`
-24. [Setup assistido](#24-setup-assistido--setup) — `setup`
-25. [Índice e consultas estruturadas](#25-índice-e-consultas-estruturadas--index--query) — `index` · `query`
 24. [Migração](#24-migração--migrate-ids) — `migrate ids`
+25. [Setup assistido](#25-setup-assistido--setup) — `setup`
+26. [Índice e consultas estruturadas](#26-índice-e-consultas-estruturadas--index--query) — `index` · `query`
 
 ---
 
@@ -1210,7 +1210,7 @@ Só IDs que **existem** entram no mapa. `logs/` não é migrado. Com o Hindsight
 já nos nomes novos, o comando diz "nada a migrar". Peça ao agente para mostrar o relatório do dry-run antes do `--apply`.
 
 
-## 24. Setup assistido — `setup`
+## 25. Setup assistido — `setup`
 
 Wizard idempotente da instância: instancia, identidade, rotina, **comando `brain` no
 PATH**, foco (ics/google com OAuth inline), noturno, TUI, **memória none/embed/full**,
@@ -1226,7 +1226,7 @@ brain setup --only memoria        # re-visitar um passo
 brain setup --yes --mode embed    # não-interativo (agente/CI)
 ```
 
-## 25. Índice e consultas estruturadas — `index` · `query`
+## 26. Índice e consultas estruturadas — `index` · `query`
 
 Projeção SQLite do ledger em `FRESH/_index/brain.sqlite` (Fase 1 do plano da memória):
 consultas de **estado** (prazo, atraso, quem deve) e busca por palavra deixam de refazer

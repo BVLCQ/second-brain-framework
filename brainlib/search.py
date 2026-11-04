@@ -43,9 +43,10 @@ def search(brain, query: str, limit: int = 20) -> list[dict]:
     if hits is not None:
         live = _note_hits(brain, terms, limit, any_term=all(h.get("match") == "parcial" for h in hits) and bool(hits))
         seen = {h["id"] for h in hits}
-        merged = hits + [h for h in live if h["id"] not in seen]
+        merged = hits + [dict(h, score=h["score"] / 1000.0) for h in live if h["id"] not in seen]
         if not merged and len(terms) > 1:               # índice e notas mudos: parcial nas notas
-            merged = [dict(h, match="parcial") for h in _note_hits(brain, terms, limit, any_term=True)]
+            merged = [dict(h, score=h["score"] / 1000.0, match="parcial")
+                      for h in _note_hits(brain, terms, limit, any_term=True)]
         merged.sort(key=lambda h: -h["score"])
         return merged[:limit]
     m = model.build(brain)

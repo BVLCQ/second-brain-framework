@@ -46,11 +46,10 @@ def main():
     if os.environ.get("BRAIN_RECALL_OFF") == "1":
         return
     prompt = (json.load(sys.stdin).get("prompt") or "").strip()
-    if len(prompt) < MIN_PROMPT_CHARS:
-        return
     # Fase 2 do plano da memória: rota ledger-only. Pergunta de ESTADO (ID, prazo, atraso,
     # quem deve, título de projeto) responde o índice SQLite em modo leitura — sem vetor, sem
     # LLM, ≤3 linhas; TODO O RESTO silencia (o silêncio é a melhoria). Sem índice: silencia.
+    # (antes do corte MIN_PROMPT_CHARS: "TASK-0146?" tem 10 chars e é estado puro)
     if os.environ.get("BRAIN_RECALL_ROUTE") == "ledger":
         try:
             root = str(Path(__file__).resolve().parents[2])

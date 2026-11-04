@@ -146,5 +146,8 @@ O hook `services/hooks/recall_context.py` anexa contexto à mensagem. Variáveis
   (ID, prazo, atraso, quem deve, título de projeto) injeta até 3 linhas exatas do índice
   SQLite (`⟶ ledger/<ID>`); todo o resto **silencia**. Zero LLM, zero vetor.
 - `BRAIN_RECALL_OFF=1` — desliga tudo.
+- A rota ledger acha o índice pelo `BRAIN_HOME` ou subindo do diretório corrente até achar
+  `vault/FRESH/_index/brain.sqlite` — rode o hook da raiz da instância (o hook instalado
+  pelo repo já roda de lá) ou exporte `BRAIN_HOME`; sem achar, silencia.
 - Demais variáveis (`BRAIN_RECALL_MIN_SCORE`, `BRAIN_RECALL_MAX`, bancos) valem para o
   caminho vetorial clássico, que segue o padrão sem a rota ligada.

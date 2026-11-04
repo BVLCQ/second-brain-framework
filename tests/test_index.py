@@ -26,7 +26,8 @@ def _inst(tmp: Path) -> config.Instance:
     (tmp / "vault" / "FRESH").mkdir(parents=True)
     (tmp / "vault" / "reports").mkdir(parents=True)
     (tmp / "config" / "brain.toml").write_text(
-        '[owner]\nid = "eu"\nname = "Dona"\n\n[memory]\nengine = "none"\n', encoding="utf-8")
+        '[owner]\nid = "eu"\nname = "Dona"\n\n[outbound]\nallow = ["marina-demo"]\n\n'
+        '[memory]\nengine = "none"\n', encoding="utf-8")
     (tmp / "vault" / "PLANNING" / "goals.md").write_text(
         "# PLANNING\n\n## GOAL-1 — Meta\n- status: ativo\n- horizonte: 2026-12-31\n- por quê: teste\n\n"
         "### PROJ-1 — Projeto\n- status: ativo\n- dono: eu\n"
@@ -50,7 +51,24 @@ def _brain(tmp: Path) -> Brain:
     nolater = b.record_one({"type": "action.opened", "by": "agent", "date": "2026-10-02",
                             "prov": "observado", "source": "chat",
                             "data": {"title": "Tarefa sem prazo", "owner": "eu"}})
-    b._ids_teste = {"late": late["id"], "nolater": nolater["id"]}    # o CLI numera; guardamos o que mintou
+    fb = b.record_one({"type": "feedback.added", "by": "agent", "date": "2026-10-03",
+                       "prov": "observado", "source": "chat",
+                       "data": {"kind": "sugestao", "title": "zzquuxtoken no painel", "body": "corpo"}})
+    prop = b.record_one({"type": "proposal.opened", "by": "agent", "date": "2026-10-03",
+                         "prov": "observado", "source": "chat",
+                         "data": {"kind": "atualizar-acao", "summary": "dar prazo à tarefa",
+                                  "target": nolater["id"]}})
+    b.record_one({"type": "area.added", "id": "producao", "by": "owner",
+                  "data": {"name": "Produção"}})
+    proc = b.record_one({"type": "process.added", "by": "owner", "date": "2026-10-01",
+                         "data": {"title": "Fornada", "area": "producao", "io": "massa → pão"}})
+    b.record_one({"type": "process.updated", "id": proc["id"], "by": "owner", "date": "2026-10-02",
+                  "data": {"note": "notazzz do processo"}})
+    msg = b.record_one({"type": "message.drafted", "by": "agent", "date": "2026-10-03",
+                        "prov": "observado", "source": "chat",
+                        "data": {"to": "marina-demo", "text": "rascunho zzmsgtoken", "channel": "slack"}})
+    b._ids_teste = {"late": late["id"], "nolater": nolater["id"], "fb": fb["id"],
+                    "prop": prop["id"], "proc": proc["id"], "msg": msg["id"]}
     return b
 
 
@@ -142,8 +160,8 @@ class QueryTests(unittest.TestCase):
         with self._con() as con:
             rows = {r["class"]: r["n"] for r in
                     index.query_sql(con, "SELECT class, COUNT(*) n FROM events GROUP BY class")}
-            self.assertEqual(rows.get("dono"), 3)          # 2 person.added + 1 decision.made, by owner
-            self.assertEqual(rows.get("fato"), 2)          # 2 action.opened, by agent
+            self.assertEqual(rows.get("dono"), 6)          # 2 person + decision + area + process added/updated
+            self.assertEqual(rows.get("fato"), 5)          # 2 action + fb + prop + msg, by agent
 
 
 class FtsTests(unittest.TestCase):
@@ -182,6 +200,58 @@ class FtsTests(unittest.TestCase):
         self.assertIsNone(index.search_index(self.b, "alvenaria"))
         hits = search.search(self.b, "alvenaria")          # caminho antigo (refold) continua valendo
         self.assertTrue(any(h["id"] == self.b._ids_teste["late"] for h in hits))
+
+
+class ReviewFixTests(unittest.TestCase):
+    """Regressões do revisor independente (F1-F6)."""
+
+    def test_fb_and_prop_entities_found(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            index.update(b)
+            with index.connect(index.db_path(b.inst), ro=True) as con:
+                fb = index.query_entity(con, b._ids_teste["fb"])
+                self.assertTrue(fb["found"], fb)
+                self.assertEqual(fb["title"], "zzquuxtoken no painel")
+                pr = index.query_entity(con, b._ids_teste["prop"])
+                self.assertTrue(pr["found"])
+                self.assertEqual(pr["kind"], "atualizar-acao")
+
+    def test_entity_without_table_falls_back_to_event(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            index.update(b)
+            with index.connect(index.db_path(b.inst), ro=True) as con:
+                m = index.query_entity(con, b._ids_teste["msg"])
+                self.assertTrue(m["found"])
+                self.assertEqual(m["type"], "message.drafted")
+
+    def test_wal_enabled(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            index.update(b)
+            with index.connect(index.db_path(b.inst), ro=True) as con:
+                mode = con.execute("PRAGMA journal_mode").fetchone()[0]
+            self.assertEqual(mode.lower(), "wal")
+
+    def test_search_parity_process_notes(self):
+        """F3: campo que o search antigo cobria continua achável COM índice."""
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            hits = search.search(b, "notazzz")
+            self.assertTrue(any(h["id"] == b._ids_teste["proc"] for h in hits),
+                            f"nota de processo perdida com índice: {hits}")
+
+    def test_title_weighted_above_body(self):
+        """F5: bm25 3× no TÍTULO — hit de título ranqueia acima de hit só-no-corpo."""
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            hits = index.search_index(b, "alvenaria")
+            self.assertTrue(hits)
+            by_title = [h for h in hits if "alvenaria" in util.fold(h["title"])]
+            by_body = [h for h in hits if "alvenaria" not in util.fold(h["title"])]
+            if by_title and by_body:
+                self.assertLessEqual(by_title[0]["score"], by_body[0]["score"])  # score negativo = melhor
 
 
 class ConcurrencyTests(unittest.TestCase):

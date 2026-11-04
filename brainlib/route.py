@@ -25,7 +25,7 @@ STATE_WORDS = re.compile(
     r"vencid\w*|plazo\w*|pendiente\w*|atrasad\w*|abiert\w*|cerrad\w*|progreso)\b", re.I)
 
 # ID novo ou antigo (A-0146, D-3, G1, P3.2) — o ids.normalize traduz na hora
-ID_TOKEN = re.compile(r"\b([A-Za-z]{1,8})-?(\d+(?:\.\d+)?)\b")
+ID_TOKEN = re.compile(r"\b([A-Za-z]{1,8})(-?)(\d+(?:\.\d+)?)\b")
 NORMAL_ID = re.compile(r"^(TASK|DEC|WIN|PROP|MSG|PUB|FOCUS|PROC|OPP|ASK|FB|GOAL|PROJ)-\d+(\.\d+)?$")
 
 
@@ -46,21 +46,26 @@ def classify(question: str, db: Path | None = None) -> dict:
     """{'route': 'ledger'|None, 'ids': [...], 'people': [...], 'why': str}"""
     out: dict = {"route": None, "ids": [], "people": [], "why": ""}
     q = util.fold(question)
+    short = len(question.split()) <= 5
     seen_ids: set[str] = set()
-    for pre, num in ID_TOKEN.findall(question):
+    for pre, dash, num in ID_TOKEN.findall(question):
         u = pre.upper()
-        if len(u) == 1 and u in "GP":                          # G1 · P3.2: sem traço
-            raw = f"{u}{num}"
-        else:                                                  # TASK-0146 · A-0146: com traço
-            raw = f"{u}-{num}"
+        bare_short = len(u) == 1 and not dash                  # G1 · P1 · R2: costuma ser prioridade do Jira
+        if bare_short and not (STATE_WORDS.search(question) or short):
+            continue                                           # frase longa sem vocabulário de estado: ruído
+        raw = f"{u}{num}" if len(u) == 1 and u in "GP" else f"{u}-{num}"
         cand = ids.normalize(raw)
         if isinstance(cand, str) and NORMAL_ID.match(cand) and cand not in seen_ids:
             seen_ids.add(cand)
             out["ids"].append(cand)
     if out["ids"]:
-        out["route"] = "ledger"
-        out["why"] = "ID de entidade na pergunta"
-        return out
+        db0 = db or _find_db()
+        if db0 is not None and _ids_exist(out["ids"], db0) is not None:
+            out["ids"] = _ids_exist(out["ids"], db0)      # P1/R2 do Jira etc. não viram rota
+        if out["ids"]:
+            out["route"] = "ledger"
+            out["why"] = "ID de entidade na pergunta"
+            return out
     if STATE_WORDS.search(question):
         out["route"] = "ledger"
         out["why"] = "vocabulário de estado/tempo"
@@ -98,6 +103,36 @@ def classify(question: str, db: Path | None = None) -> dict:
     if out["ids"] or out["people"]:
         out["route"] = "ledger"
     return out
+
+
+_EXIST_TABLES = ("actions", "decisions", "deliveries", "processes", "opportunities",
+                 "feedbacks", "proposals", "questions", "planning")
+
+
+def _ids_exist(ids: list[str], db: Path) -> list[str] | None:
+    """Filtra IDs que existem no índice. None = índice ilegível (mantém os IDs como estavam)."""
+    import sqlite3 as _s
+    try:
+        con = _s.connect(f"file:{db}?mode=ro", uri=True, timeout=2)
+        con.execute("PRAGMA busy_timeout=2000")
+        con.execute("PRAGMA query_only=1")
+        with con:
+            keep = []
+            for eid in ids:
+                pre = re.match(r"^[A-Z]+", eid).group(0)
+                tbl = {"TASK": "actions", "DEC": "decisions", "WIN": "deliveries", "PROC": "processes",
+                       "OPP": "opportunities", "FB": "feedbacks", "PROP": "proposals",
+                       "ASK": "questions", "GOAL": "planning", "PROJ": "planning"}.get(pre)
+                if tbl is None or con.execute(f"SELECT 1 FROM {tbl} WHERE id = ?", (eid,)).fetchone():
+                    keep.append(eid)
+        return keep
+    except _s.Error:
+        return None
+    finally:
+        try:
+            con.close()
+        except Exception:                                    # noqa: BLE001
+            pass
 
 
 def _fmt(row: dict, fields: list[str]) -> str:
