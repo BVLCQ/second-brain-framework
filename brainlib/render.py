@@ -84,6 +84,11 @@ def render_all(brain, do_harvest: bool = True) -> dict:
     written = sum(util.atomic_write(path, text) for path, text in pages.files.items())
     removed = _cleanup(brain.inst.fresh, set(pages.files))
     harvest_mod.save_state(brain.inst.fresh, todo_checks, record_status)
+    try:
+        from . import index as _idx
+        _idx.update(brain)               # Fase 1: views e índice saem juntos (best-effort)
+    except Exception:                    # noqa: BLE001 — índice é acelerador, não verdade
+        pass
     return {"harvested": [f"{e['type']} {e.get('id', '')}" for e in harvested], "written": written,
             "total": len(pages.files), "removed": removed, "dashboard": str(dashboard),
             "portfolio": str(pf_html),
