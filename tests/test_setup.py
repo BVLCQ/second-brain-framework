@@ -154,13 +154,13 @@ class RunTests(unittest.TestCase):
     def test_only_rotina_writes_config(self):
         with tempfile.TemporaryDirectory() as td:
             b = _brain(Path(td))
-            ui = ScriptedUI(["America/Sao_Paulo", "08:00", "17:30", ""])
+            ui = ScriptedUI(["America/Sao_Paulo", "08:00", "17:30"])
             # roda direto o passo com a UI roteirizada (run() imprime a tabela; o passo é o que importa)
             setup._run_rotina(b, ui)
             b.inst = config.load(b.inst.root)
             self.assertEqual(b.inst.cfg["work"]["start"], "08:00")
             self.assertEqual(b.inst.cfg["work"]["end"], "17:30")
-            self.assertEqual(b.inst.cfg["work"]["lunch"], "")
+            self.assertEqual(b.inst.cfg["work"]["lunch"], "12:00-13:00")   # não se pergunta; default intacto
 
     def test_identidade_registers_owner(self):
         with tempfile.TemporaryDirectory() as td:
