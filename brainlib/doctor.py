@@ -114,6 +114,15 @@ def checks(brain, online: bool = False) -> list[dict]:
                     out.append(_c("warn", "memória", f"medidor indisponível: {e}"))
     # ── régua da instalação (guides/setup.md): o doctor valida o que o setup montou ──
     from . import setup as _setup
+    from . import index as _index_mod
+    idx = _index_mod.status(brain)
+    if idx.get("ok"):
+        out.append(_c("ok", "índice", f"SQLite em dia · {idx['events']} eventos (FRESH/_index)"))
+    elif "ausente" in idx["detail"]:
+        out.append(_c("warn", "índice", "projeção SQLite ausente — `brain index rebuild` acelera "
+                                      "`brain search`/`query` (sem ela, tudo continua funcionando)"))
+    else:
+        out.append(_c("warn", "índice", f"{idx['detail']} — rode `brain index update`"))
     cmd = _setup.brain_command_status(inst.root)
     out.append(_c("ok", "comando", f"`brain` no PATH ({cmd})") if cmd else
                _c("warn", "comando", "`brain` não está no PATH — `brain setup --only comando` "

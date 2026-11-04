@@ -655,6 +655,56 @@ def cmd_search(args, b: Brain) -> None:
     _out(args, hits, text or "não consta")
 
 
+def cmd_query(args, b: Brain) -> None:
+    from . import index
+    path = index.db_path(b.inst)
+    if not path.exists():
+        index.update(b)                                   # primeira consulta constroi o índice
+    if not path.exists():
+        raise util.BrainError("índice indisponível — rode `brain index rebuild`", code=3)
+    with index.connect(path, ro=True) as con:
+        if args.qcmd == "actions":
+            rows = index.query_actions(con, open=not args.all, overdue=args.overdue,
+                                       due_within=args.due_within, person=args.person,
+                                       project=args.project, blocked=args.blocked,
+                                       limit=args.limit, **{"list": args.list})
+        elif args.qcmd == "decisions":
+            rows = index.query_decisions(con, project=args.project, person=args.person,
+                                         since=args.since, active=args.active)
+        elif args.qcmd == "person":
+            rows = [p for p in filter(None, (index.query_person(con, ref) for ref in [args.ref]))]
+        elif args.qcmd == "entity":
+            rows = [r for r in filter(None, (index.query_entity(con, e) for e in [args.ref]))]
+            if rows and not rows[0].get("found"):
+                _out(args, rows[0], f"não consta: {args.ref}")
+                return
+        else:
+            rows = index.query_sql(con, args.stmt)
+    if args.json:
+        print(json.dumps(rows, ensure_ascii=False, indent=2))
+        return
+    if not rows:
+        print("não consta")
+        return
+    default_fields = {"actions": "id,title,owner,list,due,status", "decisions": "id,title,date,status",
+                      "person": "id,name,role,actions_open,actions_overdue", "entity": None}.get(args.qcmd)
+    fields = [f.strip() for f in (getattr(args, "fields", "") or "").split(",") if f.strip()]
+    for r in rows:
+        keys = fields or (default_fields and default_fields.split(",")) or [k for k in r if k not in ("data", "aliases", "entity", "found")]
+        print(" · ".join(str(r.get(k)) if r.get(k) is not None else "-" for k in keys))
+
+
+def cmd_index(args, brain) -> None:
+    from . import index
+    if args.icmd == "rebuild":
+        st = index.rebuild(brain)
+    else:
+        st = index.update(brain) if args.icmd == "update" else index.status(brain)
+    lvl = "✓" if st.get("ok") else "⚠"
+    print(f"{lvl} índice: {st['detail']}"
+          + (f" · {st['events']} eventos · last_seq {st.get('last_seq')}" if st.get("ok") else ""))
+
+
 def cmd_render(args, b: Brain) -> None:
     from . import render
     report = render.render_all(b, do_harvest=not args.no_harvest)
@@ -1069,6 +1119,43 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--limit", type=int, default=20)
     p.add_argument("--json", action="store_true")
     p.set_defaults(fn=cmd_search)
+
+    p = sub.add_parser("query", help="consultas estruturadas pelo índice SQLite (estado: prazo, atraso, quem deve)")
+    qs = p.add_subparsers(dest="qcmd", required=True)
+    x = qs.add_parser("actions")
+    x.add_argument("--all", action="store_true", help="inclui fechadas/descartadas")
+    x.add_argument("--overdue", action="store_true")
+    x.add_argument("--due-within", type=int, dest="due_within")
+    x.add_argument("--person", help="id ou alias (tabela aliases)")
+    x.add_argument("--project")
+    x.add_argument("--list", choices=["mine", "waiting", "watching"])
+    x.add_argument("--blocked", action="store_true")
+    x.add_argument("--fields", help="ex.: id,title,due,owner")
+    x.add_argument("--limit", type=int, default=50)
+    x.add_argument("--json", action="store_true")
+    x = qs.add_parser("decisions")
+    x.add_argument("--project")
+    x.add_argument("--person")
+    x.add_argument("--since")
+    x.add_argument("--active", action="store_true")
+    x.add_argument("--json", action="store_true")
+    x = qs.add_parser("person")
+    x.add_argument("ref", help="id ou alias")
+    x.add_argument("--json", action="store_true")
+    x = qs.add_parser("entity")
+    x.add_argument("ref", help="TASK/DEC/WIN/PROC/OPP/GOAL/PROJ (+ prefixos antigos)")
+    x.add_argument("--json", action="store_true")
+    x = qs.add_parser("sql", help="SELECT somente-leitura, ≤500 linhas")
+    x.add_argument("stmt")
+    x.add_argument("--json", action="store_true")
+    p.set_defaults(fn=cmd_query)
+
+    p = sub.add_parser("index", help="projeção SQLite do ledger (FRESH/_index — derivada, rebuild a qualquer momento)")
+    isub = p.add_subparsers(dest="icmd", required=True)
+    isub.add_parser("rebuild")
+    isub.add_parser("update")
+    isub.add_parser("status")
+    p.set_defaults(fn=cmd_index)
 
     p = sub.add_parser("render", help="colhe edições do dono e regenera TODAS as views (sem LLM)")
     p.add_argument("--no-harvest", action="store_true")

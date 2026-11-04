@@ -35,6 +35,7 @@ comandos, use o cockpit de terminal (`brain tui`); o guia interativo está em [`
 22. [Receitas rápidas](#22-receitas-rápidas)
 23. [Portfólio](#23-portfólio--area--process--opportunity--doc) — `area` · `process` · `opportunity` · `doc`
 24. [Setup assistido](#24-setup-assistido--setup) — `setup`
+25. [Índice e consultas estruturadas](#25-índice-e-consultas-estruturadas--index--query) — `index` · `query`
 24. [Migração](#24-migração--migrate-ids) — `migrate ids`
 
 ---
@@ -1223,4 +1224,31 @@ com `health/llm` no full. Guia: `guides/setup.md`; bootstrap: `install.sh` na ra
 brain setup                       # interativo
 brain setup --only memoria        # re-visitar um passo
 brain setup --yes --mode embed    # não-interativo (agente/CI)
+```
+
+## 25. Índice e consultas estruturadas — `index` · `query`
+
+Projeção SQLite do ledger em `FRESH/_index/brain.sqlite` (Fase 1 do plano da memória):
+consultas de **estado** (prazo, atraso, quem deve) e busca por palavra deixam de refazer
+a dobra do ledger. Derivada — `brain index rebuild` refaz a qualquer momento; sem ela,
+`brain search` cai no caminho antigo e tudo segue funcionando. O `record` e o `render`
+atualizam o índice sozinhos (best-effort); o doctor avisa se atrasar.
+
+| Comando | Uso |
+|---|---|
+| `brain index rebuild\|update\|status` | ciclo de vida da projeção |
+| `brain query actions [--overdue] [--due-within 7] [--person id-ou-alias] [--project PROJ-3] [--list mine] [--blocked] [--all] [--fields id,title,due]` | ações por estado exato |
+| `brain query decisions [--project] [--person] [--since AAAA-MM-DD] [--active]` | decisões |
+| `brain query person <id\|alias>` | ficha + pendências da pessoa |
+| `brain query entity <TASK/DEC/WIN/PROC/OPP/GOAL/PROJ-#>` | ficha da entidade |
+| `brain query sql "SELECT …"` | SELECT somente-leitura, ≤500 linhas (recusa escrita) |
+
+O MCP somente-leitura ganhou a ferramenta `brain_query` (entity/person/actions/sql) —
+mesmo índice, `mode=ro`. `--json` em tudo.
+
+```bash
+brain query actions --overdue --fields id,title,due,owner
+brain query person marina        # alias vale (tabela aliases)
+brain query entity TASK-0146
+brain query sql "SELECT status, COUNT(*) n FROM opportunities GROUP BY status"
 ```

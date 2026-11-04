@@ -51,6 +51,11 @@ TOOLS = [
      _schema({"status": S, "area": S})),
     ("brain_read", "Lê um arquivo de texto do vault (caminho relativo ao vault: PROCESSED/…, PLANNING/…, RAW/…).",
      _schema({"path": S}, ["path"])),
+    ("brain_query", "Consultas estruturadas pelo índice SQLite (estado exato: prazo, atraso, quem deve): "
+                    "entity (TASK/DEC/WIN/PROC/OPP/GOAL/PROJ), person (id ou alias), actions (filtros), "
+                    "ou sql (SELECT somente-leitura, ≤500 linhas).",
+     _schema({"entity": S, "person": S, "sql": S,
+              "open": {"type": "boolean"}, "overdue": {"type": "boolean"}, "project": S})),
 ]
 
 
@@ -162,6 +167,30 @@ def _read(brain, args) -> dict:
     return {"path": rel, "truncated": len(text) > 60000, "text": text[:60000]}
 
 
+def _query_index(brain, args: dict) -> object:
+    from . import index
+    path = index.db_path(brain.inst)
+    if not path.exists():
+        try:
+            index.update(brain)
+        except Exception as e:                       # noqa: BLE001 — MCP segue só-leitura e sem travar
+            return {"erro": f"índice indisponível: {e} — rode `brain index rebuild`"}
+    if not path.exists():
+        return {"erro": "índice ausente — rode `brain index rebuild`"}
+    with index.connect(path, ro=True) as con:
+        if args.get("entity"):
+            return index.query_entity(con, ids.normalize(args["entity"])) or {"resultado": "não consta"}
+        if args.get("person"):
+            return index.query_person(con, args["person"]) or {"resultado": "não consta"}
+        if args.get("sql"):
+            try:
+                return index.query_sql(con, args["sql"])
+            except Exception as e:                   # noqa: BLE001
+                return {"erro": str(e)}
+        return index.query_actions(con, open=bool(args.get("open", True)),
+                                   overdue=bool(args.get("overdue")), project=args.get("project") or None)[:100]
+
+
 def call_tool(name: str, args: dict) -> object:
     args = {k: (ids.normalize(v) if k in ("id", "project") else v) for k, v in args.items()}   # nomes antigos valem
     brain = Brain()
@@ -169,6 +198,8 @@ def call_tool(name: str, args: dict) -> object:
         return _read(brain, args)
     if name == "brain_search":
         return search.search(brain, args.get("query", ""), int(args.get("limit") or 20)) or {"resultado": "não consta"}
+    if name == "brain_query":
+        return _query_index(brain, args)
     m = model.build(brain)
     if name == "brain_overview":
         return _overview(m, args)

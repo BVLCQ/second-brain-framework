@@ -2275,7 +2275,9 @@ class CoverageTest(unittest.TestCase):
         "action not-dup",     # julgamento do agente sobre um par de candidatas; o dono decide pela proposta
         "feedback pushed", "feedback failed",   # recuperação manual (o push morreu depois de criar) — agente/terminal
     }
-    NOT_IN_TUI = {"demo", "tui", "migrate ids", "serve", "memory cost", "setup"}   # migração única no terminal; serve é a ponte do painel HTML; custo = doctor/CLI; setup = Fase 2 do plano (face própria na TUI)
+    NOT_IN_TUI = {"demo", "tui", "migrate ids", "serve", "memory cost", "setup",
+                  "query actions", "query decisions", "query person", "query entity", "query sql",
+                  "index rebuild", "index update", "index status"}   # query/index = ferramenta do agente + doctor   # migração única no terminal; serve é a ponte do painel HTML; custo = doctor/CLI; setup = Fase 2 do plano (face própria na TUI)
     DYNAMIC = {"memory recall", "memory reflect"}      # o formulário "Memória: perguntar" monta o subcomando
 
     def test_every_cli_subcommand_is_accounted_for(self):

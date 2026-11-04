@@ -914,6 +914,8 @@ class DashboardAssetTests(unittest.TestCase):
         "nightly", "schedule", "validate", "sync", "memory setup", "memory rebuild", "memory sync",
         "memory status", "memory cost", "agent allow", "watch add", "watch edit", "watch remove", "doc link", "doc unlink",
         "note edit", "setup",                          # wizard do dono: terminal primeiro (TUI/painel = Fases 2–3 do plano)
+        "query actions", "query decisions", "query person", "query entity", "query sql",   # ferramenta do agente/MCP (brain_query)
+        "index rebuild", "index update", "index status",          # ciclo de vida: terminal (doctor avisa)
     }
     DYNAMIC = {"memory recall", "memory reflect",       # formulário do TUI monta; o painel busca no índice
                "decision supersede"}                     # o painel emite `decision add … --supersedes` (tecla S)

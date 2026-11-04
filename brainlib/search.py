@@ -21,10 +21,33 @@ def _score(terms: list[str], title: str, body: str = "", any_term: bool = False)
     return base + 1000 * len(matched) if any_term else base      # OR: sobreposição de termos manda
 
 
+def _note_hits(brain, terms: list[str], limit: int, any_term: bool) -> list[dict]:
+    """Notas avulsas ao vivo (inbox + RAW): entidade de arquivo, sem evento no ledger —
+    o índice SQLite não as cobre entre updates."""
+    out = []
+    for n in notes.scan(brain.inst):
+        sc = _score(terms, f"{n.link or ''} {n.title}", n.text, any_term)
+        if sc:
+            out.append({"kind": "nota", "id": n.link or Path(n.path).name, "title": n.title,
+                        "date": (n.created or "")[:10], "path": n.path, "score": sc})
+    out.sort(key=lambda h: (-h["score"], h.get("date") or ""))
+    return out[:limit]
+
+
 def search(brain, query: str, limit: int = 20) -> list[dict]:
     terms = [t for t in util.fold(query).split() if len(t) > 1]
     if not terms:
         return []
+    from . import index
+    hits = index.search_index(brain, query, limit)      # índice SQLite (FTS5) quando existe
+    if hits is not None:
+        live = _note_hits(brain, terms, limit, any_term=all(h.get("match") == "parcial" for h in hits) and bool(hits))
+        seen = {h["id"] for h in hits}
+        merged = hits + [h for h in live if h["id"] not in seen]
+        if not merged and len(terms) > 1:               # índice e notas mudos: parcial nas notas
+            merged = [dict(h, match="parcial") for h in _note_hits(brain, terms, limit, any_term=True)]
+        merged.sort(key=lambda h: -h["score"])
+        return merged[:limit]
     m = model.build(brain)
     cands: list[tuple] = []
 

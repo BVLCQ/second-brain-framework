@@ -176,7 +176,16 @@ class Brain:
             self._flush(new)
         self._state = working
         self._plan = plan
+        self._index_update()                     # best-effort: erro no índice nunca falha a escrita
         return new
+
+    def _index_update(self) -> None:
+        """Projeção SQLite (Fase 1 do plano da memória) — derivada, fora do lock do ledger."""
+        try:
+            from . import index
+            index.update(self)
+        except Exception:                        # noqa: BLE001 — índice é acelerador, não verdade
+            pass
 
     def sweep_proposals(self) -> list[dict]:
         """Encerra (`proposal.superseded`, aceita/rejeitada) as propostas que o dono já resolveu por fora do painel."""
