@@ -338,7 +338,14 @@ def _run_instancia(brain, ui) -> None:
             archived = inst.vault.with_name(f"{inst.vault.name}-demo-{stamp}-{n}")
             n += 1
         inst.vault.rename(archived)
-        ui.say(f"demo arquivado em {archived.name}")
+        # o config também é do demo (dono "Você (demo)", portas fictícias): arquiva junto para o
+        # init semear do zero. O .env NÃO vai — segredo do dono, independe do demo.
+        (archived / "config-do-demo").mkdir(exist_ok=True)
+        for name in ("brain.toml", "watch.toml"):
+            src = inst.config_dir / name
+            if src.exists():
+                src.rename(archived / "config-do-demo" / name)
+        ui.say(f"demo arquivado em {archived.name} (+ config do demo)")
     if not (inst.config_dir / "brain.toml").exists() or "(demo)" in inst.cfg["owner"]["name"]:
         owner_id = ui.ask("Seu id (slug, ex.: brian)", util.slugify(inst.cfg["owner"]["id"], 32))
         owner_name = ui.ask("Seu nome", owner_id)
@@ -371,12 +378,11 @@ def _run_rotina(brain, ui) -> None:
     tz = ui.ask("Fuso (ex.: America/Sao_Paulo)", cfg["timezone"])
     start = ui.ask("Início do expediente", cfg["work"]["start"])
     end = ui.ask("Fim do expediente", cfg["work"]["end"])
-    lunch = ui.ask("Almoço (HH:MM-HH:MM, vazio desliga)", cfg["work"]["lunch"])
     config.set_keys(brain.inst, "owner", {"timezone": tz})
-    config.set_keys(brain.inst, "work", {"start": start, "end": end, "lunch": lunch})
+    config.set_keys(brain.inst, "work", {"start": start, "end": end})
     brain.inst = config.load(brain.inst.root)
     brain.reload()
-    ui.say(f"✓ rotina: {tz} · {start}–{end}" + (f" · almoço {lunch}" if lunch else ""))
+    ui.say(f"✓ rotina: {tz} · {start}–{end} (almoço e detalhes finos: config/brain.toml [work])")
 
 
 def _st_comando(brain) -> str:

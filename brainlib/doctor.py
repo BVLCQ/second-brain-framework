@@ -58,7 +58,10 @@ def checks(brain, online: bool = False) -> list[dict]:
         lvl = "ok" if night["ok"] and age < 30 else "warn"
         out.append(_c(lvl, "noturno", f"última execução há {age:.0f}h" + ("" if night["ok"] else " — com falhas")))
     else:
-        out.append(_c("warn", "noturno", "nunca rodou — `./brain schedule install` agenda o cron"))
+        from . import setup as _setup
+        hint = ("agendado — primeira execução ainda não aconteceu" if _setup.nightly_installed()
+                else "nunca rodou — `brain setup --only noturno` (ou `./brain schedule install`)")
+        out.append(_c("warn", "noturno", hint))
     for c in st.connectors.values():
         if c.consecutive_failures >= 2:
             out.append(_c("error", f"fonte {c.key}", f"{c.consecutive_failures} falhas seguidas — último erro: "

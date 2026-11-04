@@ -16,6 +16,8 @@ scripts/local/
 # Cópias do vault (backup local, backup pré-migração de IDs) — conteúdo do dono
 brain-backup-*.zip
 brain-pre-ids-migration-*.zip
+# Vault demo arquivado pelo setup (brain setup, passo instancia) — conteúdo do dono
+vault-demo-*/
 
 # Sistema
 .DS_Store
