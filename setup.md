@@ -163,9 +163,9 @@ ou crie um LaunchAgent que rode `hindsight-embed daemon status` no login.
 ### 4.4 Prova em português
 
 ```bash
-hindsight-embed memory retain brain-mem "Decidimos congelar a compra do forno até o orçamento, na reunião com a Marina-demo"
+hindsight-embed memory retain brain "Decidimos congelar a compra do forno até o orçamento, na reunião com a Marina-demo"
 sleep 90    # a extração é assíncrona
-hindsight-embed memory recall brain-mem "o que foi decidido sobre o forno?"
+hindsight-embed memory recall brain "o que foi decidido sobre o forno?"
 ```
 
 Esperado: a resposta cita o fato. Se o recall em pt-BR vier fraco, confira se os

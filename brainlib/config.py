@@ -40,9 +40,9 @@ DEFAULTS: dict = {
     "memory": {
         "engine": "none",                  # "hindsight" quando o servidor estiver no ar
         "url": "http://localhost:8888",
-        "raw_bank": "brain-raw",           # modo embed: banco do texto original
-        "mem_bank": "brain-mem",           # embed: banco do conhecimento · full: banco único
-        "bank": "brain-mem",               # modo full: banco único (mem_bank/raw_bank legados)
+        "bank": "brain",                   # banco único nos dois modos (decisão 8 do dono)
+        "mem_bank": "brain-mem",           # legado dos dois bancos antigos — rebuild apaga do servidor
+        "raw_bank": "brain-raw",           # legado — idem
         "max_file_mb": 25,
         "timeout_s": 120,
         # modos (guides/memory.md): embed = dois bancos de chunks, zero LLM, zero egress.

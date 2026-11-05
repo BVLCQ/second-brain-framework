@@ -6,7 +6,7 @@ nada relevante — sai em silêncio: o hook nunca atrasa nem bloqueia uma mensag
 
 Ajustes por variável de ambiente (opcionais):
   BRAIN_HINDSIGHT_URL      padrão http://127.0.0.1:8888
-  BRAIN_RECALL_BANKS       padrão brain-mem,brain-raw
+  BRAIN_RECALL_BANKS       padrão brain
   BRAIN_RECALL_MIN_SCORE   similaridade semântica mínima (bge-m3), padrão 0.55
   BRAIN_RECALL_MAX         máximo de itens injetados, padrão 8
   BRAIN_RECALL_OFF=1       desliga o hook
@@ -19,7 +19,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 URL = os.environ.get("BRAIN_HINDSIGHT_URL", "http://127.0.0.1:8888").rstrip("/")
-BANKS = [b for b in os.environ.get("BRAIN_RECALL_BANKS", "brain-mem,brain-raw").split(",") if b]
+BANKS = [b for b in os.environ.get("BRAIN_RECALL_BANKS", "brain").split(",") if b]
 MIN_SCORE = float(os.environ.get("BRAIN_RECALL_MIN_SCORE", "0.55"))
 MAX_ITEMS = int(os.environ.get("BRAIN_RECALL_MAX", "8"))
 TIMEOUT_S = 2.0

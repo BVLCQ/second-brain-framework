@@ -1105,6 +1105,7 @@ class FakeHindsight(memory.Hindsight):
 
     def delete_bank(self, bank):
         self.deleted_banks.append(bank)
+        self.bank_bodies.pop(bank, None)
         return {"success": True}
 
     def delete_document(self, bank, doc_id):
@@ -1116,6 +1117,9 @@ class FakeHindsight(memory.Hindsight):
 
     def stats(self, bank):
         return {"bank_id": bank, **self.bank_stats.get(bank, {})}
+
+    def banks(self):
+        return {"banks": [{"bank_id": b} for b in self.bank_bodies]}
 
     def retain(self, bank, items, async_=True):
         self.calls += 1
@@ -1131,7 +1135,7 @@ class FakeHindsight(memory.Hindsight):
     def operations(self, bank, status, page=100, max_pages=20):
         return [dict(o) for o in self.ops.values() if o["bank"] == bank and o["status"] == status]
 
-    def finish(self, doc: str, status: str, bank: str = "brain-mem"):
+    def finish(self, doc: str, status: str, bank: str = "brain"):
         for o in self.ops.values():
             if o["bank"] == bank and o["document_id"] == doc and o["status"] == "processing":
                 o["status"] = status
@@ -1142,7 +1146,7 @@ class MemorySyncTests(unittest.TestCase):
         b = _brain(Path(td))
         return b, FakeHindsight()
 
-    def test_setup_keeps_both_banks_llm_free(self):
+    def test_setup_single_bank_llm_free(self):
         class Rec:
             def __init__(self):
                 self.cfg = {}
@@ -1158,11 +1162,10 @@ class MemorySyncTests(unittest.TestCase):
             b.inst.cfg["memory"]["engine"] = "hindsight"      # modo embed (default das chaves novas)
             hs = Rec()
             memory.setup(b, hs=hs)
-            self.assertEqual(len(hs.cfg), 2)
+            self.assertEqual(list(hs.cfg), ["brain"])                  # banco único (decisão 8)
             for cfg in hs.cfg.values():
                 self.assertEqual(cfg, {"retain_extraction_mode": "chunks", "enable_auto_consolidation": False,
                                        "enable_observations": False})
-            self.assertEqual(len(hs.cfg), 2)
 
     def test_sync_records_operation_ids(self):
         with tempfile.TemporaryDirectory() as td:
@@ -1184,7 +1187,7 @@ class MemorySyncTests(unittest.TestCase):
             hs.sent.clear()
             res = memory.sync(b, hs=hs)
             self.assertEqual(res["resent"], ["mem:PLANNING/goals.md"])
-            self.assertEqual(hs.sent, [("brain-mem", "PLANNING/goals.md")])
+            self.assertEqual(hs.sent, [("brain", "PLANNING/goals.md")])
             self.assertEqual(res["remaining"], 0)
             # o reenvio ainda em andamento não dispara novo reenvio
             hs.sent.clear()
@@ -1198,20 +1201,20 @@ class MemorySyncTests(unittest.TestCase):
             memory.sync(b, hs=hs)
             for o in hs.ops.values():
                 o["status"] = "completed"
-            hs._add("brain-mem", "PLANNING/goals.md", "failed")   # falha mais nova que o retain concluído
-            hs._add("brain-mem", "profile-velho.md", "failed")    # documento fora do estado: ignorado
+            hs._add("brain", "PLANNING/goals.md", "failed")   # falha mais nova que o retain concluído
+            hs._add("brain", "profile-velho.md", "failed")    # documento fora do estado: ignorado
             state = util.read_json(memory._state_path(b), {})
             state.pop(memory.OPS_KEY)
             util.write_json(memory._state_path(b), state)
             hs.sent.clear()
             res = memory.sync(b, hs=hs)
             self.assertEqual(res["resent"], ["mem:PLANNING/goals.md"])
-            self.assertEqual(hs.sent, [("brain-mem", "PLANNING/goals.md")])
+            self.assertEqual(hs.sent, [("brain", "PLANNING/goals.md")])
 
     def test_old_failure_superseded_by_later_success_is_ignored(self):
         with tempfile.TemporaryDirectory() as td:
             b, hs = self._setup(td)
-            hs._add("brain-mem", "PLANNING/goals.md", "failed")
+            hs._add("brain", "PLANNING/goals.md", "failed")
             memory.sync(b, hs=hs)
             for o in hs.ops.values():
                 o["status"] = "completed" if o["status"] == "processing" else o["status"]
@@ -1249,16 +1252,16 @@ class MemorySyncTests(unittest.TestCase):
                 o["status"] = "completed"
             self.assertEqual(memory.status(b, online=True, hs=hs)["level"], "ok")
             # falha no servidor, ainda sem ter passado por um sync
-            hs._add("brain-mem", "PLANNING/goals.md", "failed")
+            hs._add("brain", "PLANNING/goals.md", "failed")
             s = memory.status(b, online=True, hs=hs)
             self.assertEqual(s["level"], "warn")
             self.assertIn("mem:PLANNING/goals.md", s["detail"])
             # operação parada em processing há mais de 2h (BRAIN_NOW = 2026-10-09T10:00-03:00 = 13:00Z)
-            hs.ops[hs._add("brain-raw", "RAW/x.md", "processing")]["updated_at"] = "2026-10-09T10:30:00+00:00"
+            hs.ops[hs._add("brain", "RAW/x.md", "processing")]["updated_at"] = "2026-10-09T10:30:00+00:00"
             s = memory.status(b, online=True, hs=hs)
             self.assertEqual(len(s["problems"]["stuck"]), 1)
             self.assertIn("processamento há mais de 2h", s["detail"])
-            hs.ops[hs._add("brain-raw", "RAW/y.md", "processing")]["updated_at"] = "2026-10-09T12:30:00+00:00"
+            hs.ops[hs._add("brain", "RAW/y.md", "processing")]["updated_at"] = "2026-10-09T12:30:00+00:00"
             self.assertEqual(len(memory.status(b, online=True, hs=hs)["problems"]["stuck"]), 1)
 
     def test_status_shows_queue(self):
@@ -1270,19 +1273,19 @@ class MemorySyncTests(unittest.TestCase):
                 o["status"] = "completed"
             s = memory.status(b, online=True, hs=hs)
             self.assertIn("fila: vazia — LLM livre", s["queue_text"])
-            hs._add("brain-mem", None, "processing", "consolidation")
-            hs._add("brain-mem", None, "pending", "consolidation")
-            hs._add("brain-raw", "RAW/x.md", "pending")
-            hs.bank_stats["brain-mem"] = {"pending_consolidation": 12, "failed_consolidation": 3}
+            hs._add("brain", None, "processing", "consolidation")
+            hs._add("brain", None, "pending", "consolidation")
+            hs._add("brain", "RAW/x.md", "pending")
+            hs.bank_stats["brain"] = {"pending_consolidation": 12, "failed_consolidation": 3}
             s = memory.status(b, online=True, hs=hs)
-            self.assertEqual(s["queue"]["brain-mem"]["ops"]["consolidation"], {"processing": 1, "pending": 1})
+            self.assertEqual(s["queue"]["brain"]["ops"]["consolidation"], {"processing": 1, "pending": 1})
             self.assertIn("fila: ocupada", s["queue_text"])
             self.assertIn("consolidation 1 rodando + 1 na fila", s["queue_text"])
             self.assertIn("12 memórias aguardando consolidação", s["queue_text"])
-            self.assertIn("brain-raw: retain 1 na fila", s["queue_text"])
+            self.assertIn("retain 1 na fila", s["queue_text"])
             # consolidação que desistiu vira aviso
             self.assertEqual(s["level"], "warn")
-            self.assertIn("brain-mem 3", s["detail"])
+            self.assertIn("brain 3", s["detail"])
 
     def test_backlog_without_consolidation_op_is_not_busy(self):
         with tempfile.TemporaryDirectory() as td:
@@ -1291,10 +1294,10 @@ class MemorySyncTests(unittest.TestCase):
             memory.sync(b, hs=hs)
             for o in hs.ops.values():
                 o["status"] = "completed"
-            hs.bank_stats["brain-mem"] = {"pending_consolidation": 136}     # consolidação desligada: backlog parado
+            hs.bank_stats["brain"] = {"pending_consolidation": 136}     # consolidação desligada: backlog parado
             s = memory.status(b, online=True, hs=hs)
             self.assertIn("fila: vazia — LLM livre", s["queue_text"])
-            self.assertEqual(s["queue"]["brain-mem"]["pending_consolidation"], 0)
+            self.assertEqual(s["queue"]["brain"]["pending_consolidation"], 0)
 
     def test_doctor_warns_offline_from_recorded_failures(self):
         with tempfile.TemporaryDirectory() as td:

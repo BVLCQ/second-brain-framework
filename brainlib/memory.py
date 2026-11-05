@@ -1,16 +1,17 @@
 """Camada de memória para IA — Hindsight, alimentado SÓ pelo vault (mão única) e reconstruível.
 
-Dois setups (guides/memory.md · guides/plans/memory-setups.md), escolha livre e reversível:
+Dois setups (guides/memory.md · guides/plans/memory-setups.md), escolha livre e reversível,
+com BANCO ÚNICO `brain` nos dois modos (decisão 8 do dono, 2026-11-05):
 
-  embed · sem LLM em qualquer operação — dois bancos (config [memory]):
-    mem_bank · artefatos do PROCESSED + entidades do ledger + PLANNING/PROFILE (chunks)
-    raw_bank · arquivos do RAW como estão (chunks) — sem interpretação
-  full · banco único com extração de fatos (chave do dono no .env, cloud_llm = true):
-    retain em modo custom com contexto de identidades do ledger, observações e
-    consolidação ligadas; RAW sem artefato fica retido até o /dump (raw_awaiting_dump = "hold").
+  embed · sem LLM em qualquer operação — chunks do vault (conhecimento + RAW) no `bank`,
+    sem consolidação nem observações (NO_LLM_CONFIG)
+  full · extração de fatos (chave do dono no .env, cloud_llm = true): retain em modo custom
+    com contexto de identidades do ledger, observações e consolidação ligadas; RAW sem
+    artefato fica retido até o /dump (raw_awaiting_dump = "hold").
 
 document_id = caminho no vault (ou ledger/<ID>): toda lembrança aponta para algo citável.
-O vault é a verdade; `brain memory rebuild` apaga os bancos e reconstrói do zero.
+O vault é a verdade; `brain memory rebuild` apaga o banco e reconstrói do zero. Os nomes
+legados de dois bancos (mem_bank/raw_bank) não são lidos: o rebuild os apaga do servidor.
 """
 from __future__ import annotations
 
@@ -109,6 +110,9 @@ class Hindsight:
 
     def health(self) -> dict:
         return self._req("GET", "/health")
+
+    def banks(self) -> dict:
+        return self._req("GET", "/v1/default/banks")
 
     def put_bank(self, bank: str, body: dict) -> dict:
         return self._req("PUT", self._bank(bank), body)
@@ -295,7 +299,7 @@ def documents(brain) -> list[dict]:
         if text is None and not (ext in RAW_FILES and size <= max_bytes):
             continue
         tags = ["tipo:raw", f"ext:{ext[1:]}"] + ([f"artefato:{art.id}"] if art else [])
-        d = {"bank": "mem" if single else "raw", "id": rel, "date": _raw_date(path, rel, st), "tags": tags, "art": art}
+        d = {"bank": "mem", "id": rel, "date": _raw_date(path, rel, st), "tags": tags, "art": art}
         if text is not None:
             d["text"] = text
         else:
@@ -393,8 +397,9 @@ def pending(brain) -> list[dict]:
 
 
 def setup(brain, hs: Hindsight | None = None, mode_: str | None = None) -> list[str]:
-    """Cria/configura os bancos do modo vigente (ou do modo pedido). embed = dois bancos de
-    chunks (zero LLM); full = banco único com extração custom + observações."""
+    """Cria/configura o banco único do modo vigente (ou do modo pedido). embed = chunks
+    (zero LLM); full = extração custom + observações. Banco único nos dois modos (decisão 8)
+    — mem_bank/raw_bank são legados, apagados do servidor pelo rebuild."""
     hs = hs or client(brain)
     mem = brain.inst.cfg["memory"]
     m = mode_ or validate(mem)
@@ -406,14 +411,12 @@ def setup(brain, hs: Hindsight | None = None, mode_: str | None = None) -> list[
                                   "mission": MEM_MISSION.format(owner=brain.inst.cfg["owner"]["name"]),
                                   "retain_mission": RETAIN_MISSION, "observations_mission": OBS_MISSION})
         hs.patch_config(mem["bank"], FULL_CONFIG)
-        return [mem["bank"]]
-    hs.put_bank(mem["mem_bank"], {"name": "Segundo Cérebro — conhecimento", "mission": MEM_MISSION.format(owner=brain.inst.cfg["owner"]["name"]),
-                                  "retain_mission": RETAIN_MISSION, "observations_mission": OBS_MISSION})
-    hs.patch_config(mem["mem_bank"], NO_LLM_CONFIG)
-    hs.put_bank(mem["raw_bank"], {"name": "Segundo Cérebro — RAW (texto original)",
-                                  "mission": "Arquivo bruto do vault: texto original, sem interpretação."})
-    hs.patch_config(mem["raw_bank"], NO_LLM_CONFIG)
-    return [mem["mem_bank"], mem["raw_bank"]]
+    else:
+        hs.put_bank(mem["bank"], {"name": "Segundo Cérebro — conhecimento (chunks)",
+                                  "mission": MEM_MISSION.format(owner=brain.inst.cfg["owner"]["name"]),
+                                  "retain_mission": RETAIN_MISSION})
+        hs.patch_config(mem["bank"], NO_LLM_CONFIG)
+    return [mem["bank"]]
 
 
 def _op_ids(res: dict) -> list[str]:
@@ -426,10 +429,7 @@ def _op_ids(res: dict) -> list[str]:
 
 
 def _banks(brain) -> dict[str, str]:
-    mem = brain.inst.cfg["memory"]
-    if mode(mem) == "full":
-        return {"mem": mem["bank"]}                 # banco único: RAW e conhecimento no mesmo lugar
-    return {"mem": mem["mem_bank"], "raw": mem["raw_bank"]}
+    return {"mem": brain.inst.cfg["memory"]["bank"]}   # banco único (decisão 8): embed e full
 
 
 def _shadow_delete(brain, hs, state: dict) -> list[str]:
@@ -540,7 +540,8 @@ def sync(brain, limit: int | None = None, dry_run: bool = False, hs: Hindsight |
     for d in todo:
         meta = {"document_id": d["id"], "tags": d["tags"], "metadata": {"vault_path": d["id"]}}
         if d.get("entities"):
-            meta["metadata"]["entities"] = d["entities"]
+            # 1.2.0: valores do metadata de retain precisam ser strings — entities viaja como JSON
+            meta["metadata"]["entities"] = json.dumps(d["entities"], ensure_ascii=False)
         if d.get("date"):
             meta["timestamp"] = f"{d['date']}T12:00:00"
         try:
@@ -671,6 +672,11 @@ def status(brain, online: bool = False, hs: Hindsight | None = None) -> dict:
             hs = hs or client(brain)
             hs.health()
             detail += " · servidor no ar"
+            legacy = sorted({b.get("bank_id") for b in hs.banks().get("banks", [])}
+                            & {mem["mem_bank"], mem["raw_bank"]} - {mem["bank"]})
+            if legacy:
+                detail += (f" · ⚠ bancos legados no servidor ({', '.join(legacy)})"
+                           " — brain memory rebuild consolida no banco único")
         problems = op_problems(brain, hs if online else None)
         q = queue(brain, hs) if online else None
     except util.BrainError as e:
@@ -795,7 +801,7 @@ def cli(args, brain) -> None:
             print("  " + s["queue_text"])
     elif c in ("recall", "reflect"):
         hs = client(brain)
-        bank = mem["mem_bank"] if args.bank == "mem" else mem["raw_bank"]
+        bank = mem["bank"]   # banco único (decisão 8) — --bank é legado, aceito e ignorado
         tags = util.split_csv(args.tags) or None
         res = (hs.recall if c == "recall" else hs.reflect)(bank, args.query, tags)
         if args.json:

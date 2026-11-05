@@ -765,12 +765,13 @@ vale: gere outro e peça de novo. A porta só aceita arquivo **dentro** de
 O vault continua sendo a verdade. O Hindsight é um índice opcional, mão
 única: o vault alimenta, o índice não escreve de volta.
 
-Dois bancos:
+Banco único (`bank`, default `brain` — decisão 8; os antigos `brain-raw`/`brain-mem`
+são consolidados nele pelo `memory rebuild`):
 
-| Banco | Conteúdo | Como indexa |
+| Público | Conteúdo | Como indexa |
 |---|---|---|
-| `brain-raw` | arquivos do RAW (texto e PDF/Office até o tamanho máximo), fora da inbox | pedaços, sem interpretar |
-| `brain-mem` | artefatos do PROCESSED, uma página por ação/decisão/entrega/pessoa, PLANNING e PROFILE | fatos duráveis |
+| RAW | arquivos do RAW (texto e PDF/Office até o tamanho máximo), fora da inbox | pedaços, sem interpretar |
+| conhecimento | artefatos do PROCESSED, uma página por ação/decisão/entrega/pessoa, PLANNING e PROFILE | fatos duráveis |
 
 Cada lembrança aponta para um caminho (`PROCESSED/…` ou `ledger/TASK-0001`).
 
@@ -931,8 +932,7 @@ destinations = []               # "slack:#canal", "drive:<folder-id>"
 [memory]
 engine = "none"                 # "hindsight"
 url = "http://localhost:8888"
-raw_bank = "brain-raw"
-mem_bank = "brain-mem"
+bank = "brain"                  # banco único (embed e full)
 max_file_mb = 25
 timeout_s = 120
 

@@ -7,7 +7,7 @@ para achar mais rápido. Se o servidor cair, nada se perde.
 
 | | `embed` | `full` |
 |---|---|---|
-| Bancos | 2 (`brain-mem` + `brain-raw`), chunks | **1** (`bank`, default `brain-mem`) com extração de fatos |
+| Banco | **1** (`bank`, default `brain`), chunks | **1** (`bank`, default `brain`) com extração de fatos |
 | LLM em operação | nenhum | extração + consolidação (modelo barato); mental models (Fase 8, ainda não aterrissado) |
 | Sai da máquina? | **não** | sim — texto do vault à API de LLM **com a chave do dono** (`config/.env`) |
 | Chaves no `.env` | nenhuma | 1 (provider de LLM) |
@@ -31,12 +31,14 @@ sem chave `HINDSIGHT_API_*_API_KEY` no `.env`.
 - Deleção sombra: documento que sai do corpus (tipo excluído, arquivo removido) sai do banco.
 - Observações e consolidação ligadas: a fila do `memory status` volta a ter vida.
 
-### Os dois bancos do `embed`
+### O banco único do `embed` (decisão 8)
 
-`brain-raw` = arquivos do RAW como estão (texto e binários até `max_file_mb`), `chunks` sem
-interpretação — responde "o que foi dito". `brain-mem` = artefatos do PROCESSED + uma página
-por ação/decisão/entrega/pessoa + PLANNING/PROFILE, também em `chunks`: quem escreveu é melhor
-que o extrator (o agente com proveniência, o CLI renderizando o ledger). `document_id` = caminho
+Desde a decisão 8 do dono (2026-11-05), os dois bancos antigos viraram **um**: `bank`
+(default `brain`) recebe tudo em `chunks`, sem interpretação — os arquivos do RAW como
+estão (texto e binários até `max_file_mb`) e o conhecimento curado (artefatos do
+PROCESSED + uma página por ação/decisão/entrega/pessoa + PLANNING/PROFILE): quem escreveu
+é melhor que o extrator (o agente com proveniência, o CLI renderizando o ledger).
+`document_id` = caminho
 no vault (ou `ledger/TASK-####`): toda lembrança aponta para algo que você pode abrir.
 
 ## Subir o servidor (OrbStack)
@@ -125,8 +127,8 @@ brain memory cost                   # medidor mensal (embed: US$ 0; full: tokens
 Modo `full` antes do primeiro `sync` grande: valide sem gastar —
 
 ```bash
-curl -s -X POST localhost:8888/v1/default/banks/brain-mem/health/llm   # por operação
-curl -s -X POST localhost:8888/v1/default/banks/brain-mem/memories/dry-run-extract \
+curl -s -X POST localhost:8888/v1/default/banks/brain/health/llm   # por operação
+curl -s -X POST localhost:8888/v1/default/banks/brain/memories/dry-run-extract \
   -H 'Content-Type: application/json' -d '{"content":"ata de exemplo","context":"CONTEXTO"}'
 ```
 
@@ -148,7 +150,7 @@ use quando trocar de modo, mudar o mission ou suspeitar de lixo.
   `brain memory setup --mode full` → `brain memory rebuild` (banco único com extração).
   Nenhum dado do vault se perde — tudo deriva do vault.
 - **`full` → `embed`**: `brain memory setup --mode embed` → `brain memory rebuild`.
-  O hook de recall volta aos dois bancos (o padrão já é `brain-mem,brain-raw`).
+  O hook de recall continua no banco único (o padrão do `BRAIN_RECALL_BANKS` é `brain`).
 
 ## O que NÃO vai
 

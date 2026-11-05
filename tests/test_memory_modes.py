@@ -1,6 +1,7 @@
 """Modos de memória embed/full (plano guides/plans/memory-setups.md) — stdlib unittest, sem rede."""
 from __future__ import annotations
 
+import json
 import os
 import sys
 import tempfile
@@ -79,21 +80,21 @@ class ModeTests(unittest.TestCase):
 
 
 class SetupByModeTests(unittest.TestCase):
-    def test_embed_setup_keeps_both_banks_chunks(self):
+    def test_embed_setup_single_bank_chunks(self):
         with tempfile.TemporaryDirectory() as td:
             b = _brain(Path(td))
             hs = FakeHindsight()
             banks = memory.setup(b, hs)
-            self.assertEqual(banks, ["brain-mem", "brain-raw"])
-            self.assertEqual(hs.configs["brain-mem"], memory.NO_LLM_CONFIG)
+            self.assertEqual(banks, ["brain"])                      # banco único (decisão 8)
+            self.assertEqual(hs.configs["brain"], memory.NO_LLM_CONFIG)
 
     def test_full_setup_single_bank_custom_extraction(self):
         with tempfile.TemporaryDirectory() as td:
             b = _brain(Path(td), mem_extra='[memory]\nextract = true\ncloud_llm = true\nraw_awaiting_dump = "hold"')
             hs = FakeHindsight()
             banks = memory.setup(b, hs)
-            self.assertEqual(banks, ["brain-mem"])
-            cfg = hs.configs["brain-mem"]
+            self.assertEqual(banks, ["brain"])
+            cfg = hs.configs["brain"]
             self.assertEqual(cfg["retain_extraction_mode"], "custom")
             self.assertEqual(cfg["retain_custom_instructions"], memory.EXTRACT_INSTRUCTIONS)
             self.assertTrue(cfg["enable_observations"])
@@ -180,7 +181,7 @@ class FullDocumentsTests(unittest.TestCase):
             item = next(i for i in hs.items if i["document_id"] == "RAW/2026/10/meetings/ata-x.md")
             self.assertTrue(item["context"].startswith("CONTEXTO\n"))
             self.assertIn("marina-demo", item["context"])
-            ents = item["metadata"]["entities"]
+            ents = json.loads(item["metadata"]["entities"])   # 1.2.0: metadata só aceita strings
             self.assertTrue(any(e["id"] == "marina-demo" and e["type"] == "PERSON" for e in ents))
             self.assertEqual(item["timestamp"], "2026-10-08T12:00:00")
 
@@ -201,7 +202,7 @@ class ShadowDeleteTests(unittest.TestCase):
             config.set_keys(b.inst, "memory", {"exclude_types": ["connectors", "github"]})
             b.inst = config.load(b.inst.root); b.reload()
             res = memory.sync(b, hs=hs)
-            self.assertIn("brain-raw:RAW/2026/10/connectors/espelho.md", hs.deleted)
+            self.assertIn("brain:RAW/2026/10/connectors/espelho.md", hs.deleted)
             self.assertEqual(res["sent"], 0)
 
 

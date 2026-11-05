@@ -23,7 +23,7 @@ Ajustes por variável de ambiente (opcionais, no plist):
   BRAIN_IDLE_MAX_MIN       teto do tempo adaptado, padrão 60
   BRAIN_IDLE_KEEP          identificadores que nunca descarregam, separados por vírgula
   BRAIN_HINDSIGHT_URL      padrão http://127.0.0.1:8888
-  BRAIN_RECALL_BANKS       bancos a checar, padrão brain-mem,brain-raw
+  BRAIN_RECALL_BANKS       bancos a checar, padrão brain
   BRAIN_IDLE_UNLOAD_OFF=1  desliga (ou ~/.brain-watchdog-off pausa tudo)
 
 Uso: idle_unload.py <arquivo-de-estado> [--dry-run]
@@ -38,7 +38,7 @@ from pathlib import Path
 
 LMS = os.environ.get("BRAIN_LMS") or str(Path.home() / ".lmstudio/bin/lms")
 URL = os.environ.get("BRAIN_HINDSIGHT_URL", "http://127.0.0.1:8888").rstrip("/")
-BANKS = [b for b in os.environ.get("BRAIN_RECALL_BANKS", "brain-mem,brain-raw").split(",") if b]
+BANKS = [b for b in os.environ.get("BRAIN_RECALL_BANKS", "brain").split(",") if b]
 BASE_S = {"llm": float(os.environ.get("BRAIN_IDLE_LLM_MIN", "5")) * 60,
           "embedding": float(os.environ.get("BRAIN_IDLE_EMBED_MIN", "15")) * 60}
 MAX_S = float(os.environ.get("BRAIN_IDLE_MAX_MIN", "60")) * 60

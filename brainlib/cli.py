@@ -1361,7 +1361,8 @@ def build_parser() -> argparse.ArgumentParser:
     for name in ("recall", "reflect"):
         x = ms.add_parser(name)
         x.add_argument("query")
-        x.add_argument("--bank", choices=["mem", "raw"], default="mem")
+        x.add_argument("--bank", choices=["mem", "raw"], default="mem",
+                       help="legado: banco único desde a decisão 8 — aceito e ignorado")
         x.add_argument("--tags")
         x.add_argument("--json", action="store_true")
     p.set_defaults(fn=cmd_memory)

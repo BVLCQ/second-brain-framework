@@ -72,9 +72,9 @@ repo = "BVLCQ/second-brain-framework"
 # à API de LLM com a CHAVE DO DONO no config/.env; exige cloud_llm = true).
 engine = "none"                 # "hindsight" quando o servidor estiver no ar
 url = "http://localhost:8888"
-raw_bank = "brain-raw"          # modo embed: banco do texto original
-mem_bank = "brain-mem"          # embed: banco do conhecimento · full: legado (usa `bank`)
-bank = "brain-mem"              # modo full: banco único
+bank = "brain"                  # banco único nos dois modos, embed e full (decisão 8)
+# raw_bank/mem_bank (brain-raw/brain-mem) são legados dos dois bancos antigos do embed:
+# nada lê — `brain memory rebuild` os apaga do servidor ao consolidar no `bank`
 max_file_mb = 25
 extract = false                 # full: extração de fatos do RAW com contexto do ledger
 cloud_llm = false               # true = o dono ativou o envio à própria API (plano da memória §4.3)
