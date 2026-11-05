@@ -196,6 +196,34 @@ brain memory harness verify                           # banco existe? recall pin
 Usuários do `f7ecb0e` para cá: nada quebra sem esses passos — mas o doctor mostra
 ⚠ bancos legados no servidor até o `rebuild`, e ⚠ servidor antigo até o bump.
 
+## Mental models · `full` (Fase 8)
+
+Páginas vivas por tema ("onde estamos com X?"), regeneradas pelo Hindsight a partir dos
+fatos — o complemento com LLM do dossiê determinístico da Fase 5. **Exige o modo full +
+`mental_models = true`** (o refresh usa a sua chave; valide o custo com `brain memory cost`):
+
+```bash
+brain memory models sync              # cria mm-goal-# · mm-proj-# · mm-pessoa-<id> (ativos + top pessoas)
+brain memory models refresh [id…]     # pede o refresh (sem ids = todos)
+brain memory models list · show mm-proj-1
+```
+
+Cada model nasce com o **estado do ledger colado** na pergunta-fonte (status/progresso),
+tags da entidade (`goal:`/`proj:`/`pessoa:` — só lê o que é dela) e refresh **delta** com
+intervalo mínimo de 24 h. Projetos que fecham saem sozinhos no próximo `sync`. Model de
+pessoa é pista **[memória]** — o `/ask` confirma no artefato antes de afirmar (R9.4).
+
+## Eval — conjunto-ouro (Fase 0)
+
+```bash
+cp template/eval/memory-gold.example.jsonl vault/eval/memory-gold.jsonl   # cure ~60 perguntas
+brain memory eval                                                       # roda contra roteador + banco
+brain memory eval --route off --save vault/eval/runs/baseline.json      # só o vetor, baseline salvo
+```
+
+Métricas por tipo (recall@k, MRR, citação, itens injetados, abstenção nas `nada`, tokens
+aproximados) — determinísticas, sem LLM no julgamento. R4: direcional até ~25 por tipo.
+
 ## O que NÃO vai
 
 - inbox (ainda não processada) · `config/.env`

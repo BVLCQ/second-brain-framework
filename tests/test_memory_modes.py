@@ -386,6 +386,61 @@ class DossierTests(unittest.TestCase):
             self.assertTrue(d["decisions"])
 
 
+class MentalModelsTests(unittest.TestCase):
+    """Fase 8: catálogo do PLANNING + pessoas; sync cria/limpa; full-only."""
+
+    def _full(self, td):
+        b = _brain(Path(td))
+        b.record_one({"type": "decision.made", "by": "owner", "date": "2026-10-01", "source": "chat",
+                      "data": {"title": "Congelar o forno-demo", "decided_by": ["marina-demo"],
+                               "project": "PROJ-1"}})
+        index.update(b)
+        config.set_keys(b.inst, "memory", {"extract": True, "cloud_llm": True,
+                                           "raw_awaiting_dump": "hold", "mental_models": True})
+        b.inst = config.load(b.inst.root)
+        b.reload()
+        return b
+
+    def test_catalog_from_planning_and_people(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = self._full(td)
+            cat = {m["id"]: m for m in memory._mm_catalog(b)}
+            self.assertIn("mm-goal-1", cat)                      # GOAL-1 ativo
+            self.assertIn("mm-proj-1", cat)                      # PROJ-1 ativo
+            self.assertIn("mm-pessoa-marina-demo", cat)          # pessoa com vínculos
+            self.assertEqual(cat["mm-proj-1"]["tags"], ["proj:PROJ-1"])
+            self.assertIn("progresso", cat["mm-goal-1"]["source_query"])   # estado do ledger colado
+
+    def test_sync_creates_and_removes_orphans(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = self._full(td)
+            hs = FakeHindsight()
+            hs.mms["mm-proj-99"] = {"id": "mm-proj-99", "name": "velho"}     # projeto fechado
+            res = memory.models_sync(b, hs)
+            self.assertIn("mm-goal-1", res["created"])
+            self.assertEqual(res["removed"], ["mm-proj-99"])
+            self.assertIn("mm-proj-1", hs.mms)
+            self.assertNotIn("mm-proj-99", hs.mms)
+            # idempotente: de novo, tudo mantido
+            res2 = memory.models_sync(b, hs)
+            self.assertEqual(res2["created"], [])
+            self.assertEqual(res2["removed"], [])
+
+    def test_sync_refused_in_embed_and_without_flag(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))                                 # embed
+            with self.assertRaises(util.BrainError) as cm:
+                memory.models_sync(b, FakeHindsight())
+            self.assertIn("full", str(cm.exception))
+            with tempfile.TemporaryDirectory() as td2:
+                b2 = self._full(td2)
+                config.set_keys(b2.inst, "memory", {"mental_models": False})
+                b2.inst = config.load(b2.inst.root); b2.reload()
+                with self.assertRaises(util.BrainError) as cm2:
+                    memory.models_sync(b2, FakeHindsight())
+                self.assertIn("mental_models", str(cm2.exception))
+
+
 class FreshnessTests(unittest.TestCase):
     """Fresnness do servidor (plano memory-harness-wizard.md §4.4): informação, nunca bloqueio."""
 

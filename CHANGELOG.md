@@ -4,6 +4,25 @@ O que mudou em cada versão, em linguagem humana. Para atualizar: `brain update`
 (ou `brain setup --only comando` se o `brain` ainda não estiver no PATH).
 Mantido pelo dono do framework a cada remessa — veja `guides/commands.md` § upstream.
 
+## 2.7.0 — 2026-11-05
+
+- **Dossiê determinístico — `brain memory dossier <ID|alias>` (Fase 5)** — a página
+  "onde estamos com X?" montada na hora da leitura: ficha viva do índice, decisões e
+  entregas ligadas, e os melhores trechos da memória com as tags da entidade — todo
+  parágrafo com fonte, nada pré-computado, nunca velho. Funciona até com a memória
+  desligada (ficha + DEC/WIN). O `/person` e o `/project` ganham a "Leitura atual", e o
+  `/ask` usa o dossiê quando a rota detecta a entidade. **Setup `embed` completo.**
+- **Mental models (Fase 8, modo full)** — `brain memory models sync|refresh|list|show`:
+  páginas vivas por goal, projeto e pessoa, criadas com o estado do ledger colado na
+  pergunta-fonte, tags da entidade e refresh delta com intervalo mínimo de 24h; projetos
+  que fecham saem sozinhos no próximo sync. Exige `full` + `mental_models = true` (o
+  refresh usa a sua chave — meça com `brain memory cost`). Contrato validado ao vivo na
+  1.2.0; o refresh completo se valida na instância real, com a chave.
+- **Eval do conjunto-ouro (Fase 0)** — `brain memory eval`: roda ~60 perguntas curadas
+  (`vault/eval/memory-gold.jsonl`, exemplo genérico no `template/`) contra roteador e
+  banco, com recall@k, MRR, citação, itens injetados, abstenção e tokens por tipo —
+  determinístico, sem LLM no julgamento. O agente propõe as perguntas; você revisa.
+
 ## 2.6.0 — 2026-11-05
 
 - **O hook de recall do Claude Code ficou cirúrgico (Fase 4 do plano)** — cada mensagem

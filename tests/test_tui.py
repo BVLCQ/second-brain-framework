@@ -2303,7 +2303,7 @@ class CoverageTest(unittest.TestCase):
     }
     NOT_IN_TUI = {"demo", "tui", "migrate ids", "serve", "memory cost", "memory harness", "setup",
                   "query actions", "query decisions", "query person", "query entity", "query sql",
-                  "index rebuild", "index update", "index status", "route"}   # query/index/route = ferramenta do agente + doctor   # migração única no terminal; serve é a ponte do painel HTML; custo = doctor/CLI; setup = Fase 2 do plano (face própria na TUI)
+                  "index rebuild", "index update", "index status", "route", "memory dossier", "memory models", "memory eval"}   # query/index/route/dossier = ferramenta do agente + doctor   # migração única no terminal; serve é a ponte do painel HTML; custo = doctor/CLI; setup = Fase 2 do plano (face própria na TUI)
     DYNAMIC = {"memory recall", "memory reflect"}      # o formulário "Memória: perguntar" monta o subcomando
 
     def test_every_cli_subcommand_is_accounted_for(self):

@@ -1,0 +1,16 @@
+# Exemplo do conjunto-ouro do eval de memória (Fase 0 do plano guides/plans/memory-setups.md).
+# Copie para vault/eval/memory-gold.jsonl (zona curada do dono, FORA do git), troque os
+# IDs/documentos pelos reais da sua instância e complete ~60 perguntas nesta proporção:
+#   estado 12 · contexto 12 · decisao 8 · detalhe 12 · literal 8 · conclusao 8 · nada 6
+# O agente propõe; o dono revisa e aprova (decisão 6). "expect_*" vazios + type "nada" =
+# a resposta correta é NÃO CONSTA (abstenção).
+{"id": "q01", "q": "o que está atrasado com a Marina-demo?", "type": "estado", "lang": "pt", "expect_ids": ["TASK-0031"], "expect_docs": []}
+{"id": "q02", "q": "qual o status do projeto de reformar a galeria?", "type": "estado", "lang": "pt", "expect_ids": ["PROJ-3"], "expect_docs": []}
+{"id": "q03", "q": "o que sabemos sobre a padaria-demo?", "type": "contexto", "lang": "pt", "expect_ids": [], "expect_docs": ["RAW/2026/10/meetings/ata-kickoff.md"]}
+{"id": "q04", "q": "por que decidimos congelar a compra do forno?", "type": "decisao", "lang": "pt", "expect_ids": ["DEC-0002"], "expect_docs": ["ledger/DEC-0002"]}
+{"id": "q05", "q": "o que o Heitor-demo comentou de passagem sobre fermentação?", "type": "detalhe", "lang": "pt", "expect_ids": [], "expect_docs": ["RAW/2026/10/meetings/ata-entrevista.md"]}
+{"id": "q06", "q": "o que exatamente foi dito sobre o contrato de aluguel?", "type": "literal", "lang": "pt", "expect_ids": [], "expect_docs": ["RAW/2026/10/documents/contrato-notas.md"]}
+{"id": "q07", "q": "por que achamos que o segundo ponto importa?", "type": "conclusao", "lang": "pt", "expect_ids": [], "expect_docs": ["PLANNING/goals.md"]}
+{"id": "q08", "q": "o que decidimos sobre o franqueamento da Marina-demo?", "type": "nada", "lang": "pt", "expect_ids": [], "expect_docs": []}
+{"id": "q09", "q": "qué tareas están vencidas?", "type": "estado", "lang": "es", "expect_ids": [], "expect_docs": []}
+{"id": "q10", "q": "como está o PROC-99?", "type": "nada", "lang": "pt", "expect_ids": [], "expect_docs": []}

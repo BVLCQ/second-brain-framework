@@ -174,6 +174,21 @@ class Hindsight:
         """Valida o LLM por operação sem gastar retain (porta do modo full)."""
         return self._req("POST", self._bank(bank) + "/health/llm", {})
 
+    def mental_models(self, bank: str) -> dict:
+        return self._req("GET", self._bank(bank) + "/mental-models")
+
+    def mental_model(self, bank: str, mid: str) -> dict:
+        return self._req("GET", self._bank(bank) + "/mental-models/" + urllib.parse.quote(mid))
+
+    def create_mental_model(self, bank: str, body: dict) -> dict:
+        return self._req("POST", self._bank(bank) + "/mental-models", body)
+
+    def refresh_mental_model(self, bank: str, mid: str) -> dict:
+        return self._req("POST", self._bank(bank) + "/mental-models/" + urllib.parse.quote(mid) + "/refresh", {})
+
+    def delete_mental_model(self, bank: str, mid: str) -> dict:
+        return self._req("DELETE", self._bank(bank) + "/mental-models/" + urllib.parse.quote(mid))
+
     def llm_stats(self, bank: str) -> dict:
         return self._req("GET", self._bank(bank) + "/llm-requests/stats")
 
@@ -854,11 +869,91 @@ def _apply_mode(brain, new_mode: str) -> None:
     print(f"✓ [memory] modo {new_mode}" + (f" ({', '.join(changed)})" if changed else " (já estava)"))
 
 
+# ── Fase 8 — mental models · `full` (chave do dono; LLM no refresh) ────────────
+MM_TRIGGER = {"mode": "delta", "refresh_after_consolidation": False, "min_refresh_interval_seconds": 24 * 3600}
+
+
+def _mm_catalog(brain) -> list[dict]:
+    """Catálogo do PLANNING + pessoas com mais vínculos: mm-goal-# · mm-proj-# · mm-pessoa-<id>."""
+    import sqlite3
+    from . import index as _index
+    db = _index.db_path(brain.inst)
+    out: list[dict] = []
+    if not db.exists():
+        return out
+    con = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=2)
+    try:
+        con.execute("PRAGMA busy_timeout=2000")
+        con.execute("PRAGMA query_only=1")
+        with con:
+            for pid, title, status, progress in con.execute(
+                    "SELECT id, title, status, progress FROM planning WHERE kind IN ('goal','project') "
+                    "AND status = 'ativo' ORDER BY kind DESC, id"):
+                kind = "goal" if pid.startswith("GOAL") else "project"
+                pct = f"{(progress or 0):.0%}"
+                mm_kind = "goal" if kind == "goal" else "proj"
+                out.append({
+                    "id": f"mm-{mm_kind}-{pid.split('-')[1]}",
+                    "name": f"{title} — leitura atual",
+                    "entity": pid, "kind": kind,
+                    "source_query": (f"Onde estamos com {title}? Estado do ledger: {status}, progresso {pct}. "
+                                     "Quais decisões, entregas e fatos recentes sustentam esse estado, e o que "
+                                     "parece bloqueado? Responda em português do Brasil citando datas."),
+                    "tags": [f"goal:{pid}" if kind == "goal" else f"proj:{pid}"]})
+            for pid, name, links in con.execute(
+                    "SELECT p.id, p.name, COUNT(*) c FROM edges e JOIN people p ON p.id = e.dst "
+                    "WHERE e.rel IN ('owner','decided_by','person') GROUP BY p.id, p.name ORDER BY c DESC LIMIT 6"):
+                out.append({
+                    "id": f"mm-pessoa-{pid.lower()}", "name": f"{name} — leitura atual",
+                    "entity": pid, "kind": "person",
+                    "source_query": (f"Onde estamos com {name}? O que essa pessoa decidiu, entregou e combinou "
+                                     "recentemente, e o que ficou no ar? Responda em português do Brasil citando datas."),
+                    "tags": [f"pessoa:{pid}"]})
+    finally:
+        con.close()
+    return out
+
+
+def models_sync(brain, hs: Hindsight | None = None) -> dict:
+    """Cria os mental models do catálogo que faltam e apaga os mm-* fora do catálogo
+    (projetos fechados saem — Fase 8). Exige full + mental_models = true."""
+    mem = brain.inst.cfg["memory"]
+    if mode(mem) != "full":
+        raise util.BrainError("mental models exigem o modo full (extração com a chave do dono) — "
+                              "`brain memory setup --mode full` (plano da memória, Fase 8)", code=4)
+    if not mem.get("mental_models"):
+        raise util.BrainError("[memory] mental_models = false — o dono liga (mental_models = true) depois de "
+                              "validar o custo com `brain memory cost` (Fase 8; refresh usa LLM)", code=4)
+    hs = hs or client(brain)
+    bank = mem["bank"]
+    catalog = _mm_catalog(brain)
+    want = {m["id"]: m for m in catalog}
+    existing = {m.get("id") for m in hs.mental_models(bank).get("items", [])}
+    created, skipped, removed = [], [], []
+    for mid, m in want.items():
+        if mid in existing:
+            skipped.append(mid)
+            continue
+        try:
+            hs.create_mental_model(bank, {"id": mid, "name": m["name"], "source_query": m["source_query"],
+                                          "tags": m["tags"], "trigger": dict(MM_TRIGGER)})
+            created.append(mid)
+        except util.BrainError as e:
+            if "409" not in str(e):
+                raise
+            skipped.append(mid)                       # já existia (corrida concorrente)
+    for mid in sorted(existing - set(want)):
+        if mid.startswith("mm-"):
+            hs.delete_mental_model(bank, mid)
+            removed.append(mid)
+    return {"created": created, "kept": skipped, "removed": removed, "catalog": len(catalog)}
+
+
 def cli(args, brain) -> None:
     c = args.mcmd
     mem = brain.inst.cfg["memory"]
     # --mode é justamente o que liga o engine: setup com --mode passa mesmo com engine = "none"
-    if mem["engine"] != "hindsight" and c not in ("status", "cost", "dossier") \
+    if mem["engine"] != "hindsight" and c not in ("status", "cost", "dossier", "eval") \
             and not (c == "setup" and getattr(args, "mode", None)):
         raise util.BrainError("memória desligada: ponha [memory] engine = \"hindsight\" no config/brain.toml "
                               "depois de subir o servidor (guides/memory.md)", code=1)
@@ -868,6 +963,46 @@ def cli(args, brain) -> None:
             brain.reload()
         banks = setup(brain)
         print(f"✓ bancos prontos ({mode(brain.inst.cfg['memory'])}): {', '.join(banks)}")
+    elif c == "eval":
+        from . import memory_eval
+        memory_eval.cli(args, brain)
+    elif c == "models":
+        mcmd = getattr(args, "mmcmd", "")
+        if mcmd == "sync":
+            res = models_sync(brain)
+            print(f"✓ mental models: {res['created'] and len(res['created']) or 0} criados · "
+                  f"{len(res['kept'])} mantidos · {len(res['removed'])} removidos (catálogo: {res['catalog']})")
+            for mid in res["created"]:
+                print(f"  + {mid}")
+            for mid in res["removed"]:
+                print(f"  - {mid}")
+        elif mcmd == "refresh":
+            hs = client(brain)
+            bank = mem["bank"]
+            ids = args.ids or [m.get("id") for m in hs.mental_models(bank).get("items", []) if m.get("id")]
+            for mid in ids:
+                hs.refresh_mental_model(bank, mid)
+                print(f"✓ refresh pedido: {mid}")
+        elif mcmd == "list":
+            items = client(brain).mental_models(mem["bank"]).get("items", [])
+            if args.json:
+                print(json.dumps(items, ensure_ascii=False, indent=2))
+            elif not items:
+                print("nenhum mental model — brain memory models sync")
+            for m in items:
+                when = (m.get("last_refreshed_at") or "")[:10] or "—"
+                print(f"- {m.get('id')} · {m.get('name')} · atualizado {when}"
+                      + (" ⚠ última tentativa falhou" if m.get("last_refresh_failed_at") else ""))
+        elif mcmd == "show":
+            mm = client(brain).mental_model(mem["bank"], args.mid)
+            if args.json:
+                print(json.dumps(mm, ensure_ascii=False, indent=2))
+            else:
+                print(f"# {mm.get('id')} · {mm.get('name')}")
+                print(f"atualizado {(mm.get('last_refreshed_at') or '—')[:10]}"
+                      + (" ⚠ falhou" if mm.get("last_refresh_failed_at") else ""))
+                print()
+                print(mm.get("content") or "(sem conteúdo ainda — rode brain memory models refresh)")
     elif c == "dossier":
         from . import dossier as _dossier
         d = _dossier.build(brain, args.ref)

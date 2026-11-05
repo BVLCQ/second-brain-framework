@@ -938,6 +938,8 @@ class DashboardAssetTests(unittest.TestCase):
         "index rebuild", "index update", "index status",          # ciclo de vida: terminal (doctor avisa)
         "route",                                               # ferramenta do agente/hook (Fase 4.5)
         "memory dossier",                                      # agente//ask — montado na leitura (Fase 5)
+        "memory models",                                       # Fase 8: full-only, CLI do dono/agente
+        "memory eval",                                         # Fase 0: harness do conjunto-ouro
     }
     DYNAMIC = {"memory recall", "memory reflect",       # formulário do TUI monta; o painel busca no índice
                "decision supersede"}                     # o painel emite `decision add … --supersedes` (tecla S)
@@ -1086,6 +1088,7 @@ class FakeHindsight(memory.Hindsight):
         self.deleted_banks: list[str] = []
         self.stats_payload: dict = {}           # payload de /llm-requests/stats
         self.server_version = "1.2.0"          # /version (fresnness)
+        self.mms: dict[str, dict] = {}          # mental models (Fase 8)
 
     def _add(self, bank: str, doc: str, status: str = "processing", op_type: str = "retain") -> str:
         self.clock += 1
@@ -1134,6 +1137,29 @@ class FakeHindsight(memory.Hindsight):
 
     def put_alias(self, bank, alias, canonical):
         self.aliases = getattr(self, "aliases", []) + [(bank, alias, canonical)]
+        return {"success": True}
+
+    def mental_models(self, bank):
+        return {"items": [dict(m, bank_id=bank) for m in self.mms.values()]}
+
+    def mental_model(self, bank, mid):
+        if mid not in self.mms:
+            raise util.BrainError(f"Hindsight GET mental-models/{mid} → 404", code=2)
+        return dict(self.mms[mid])
+
+    def create_mental_model(self, bank, body):
+        mid = body.get("id")
+        if mid in self.mms:
+            raise util.BrainError(f"Hindsight POST mental-models → 409: já existe", code=2)
+        self.mms[mid] = dict(body)
+        return {"mental_model_id": mid, "operation_id": f"op-mm-{len(self.mms)}"}
+
+    def refresh_mental_model(self, bank, mid):
+        self.mm_refreshed = getattr(self, "mm_refreshed", []) + [mid]
+        return {"success": True}
+
+    def delete_mental_model(self, bank, mid):
+        self.mms.pop(mid, None)
         return {"success": True}
 
     def retain(self, bank, items, async_=True):

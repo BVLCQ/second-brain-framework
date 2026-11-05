@@ -753,6 +753,12 @@ clara; `sha(texto+contexto)` muda com alias novo.
 **Objetivo.** Uma página viva por tema importante que responda "onde estamos com X" e
 "por que Y importa", regenerada dos fatos e do ledger.
 
+*Auditado na 1.2.0 (2026-11-05): a API é `POST/GET /banks/{b}/mental-models` com id
+custom (`mm-goal-1`…), `tags` que filtram a fonte (all_strict) e `trigger`
+{mode: delta, min_refresh_interval_seconds} — contrato validado ao vivo (create 200,
+duplicado 409, refresh/delete 200); o refresh em si exige LLM da chave do dono, validação
+completa fica para a instância real.*
+
 **Passos.** Catálogo gerado do PLANNING + edges do SQLite (todo GOAL ativo →
 `mm-goal-#`; todo PROJ ativo → `mm-proj-#`; ~6 pessoas com mais vínculos em 60 dias →
 `mm-pessoa-<id>`); `source_query` por tipo em pt-BR **com o estado do ledger colado
