@@ -867,6 +867,36 @@ def cli(args, brain) -> None:
         print(("✓ " if s["level"] == "ok" else "⚠ ") + s["detail"])
         if s.get("queue_text"):
             print("  " + s["queue_text"])
+    elif c == "harness":
+        from . import harness
+        hcmd = getattr(args, "hcmd", "")
+        if hcmd == "install":
+            clis = [a for a in args.agents if a in harness.AGENTS]
+            if "hermes" in args.agents:
+                r = harness.wire_hermes(brain)
+                print(f"✓ config do Hermes: {r['config']} (local_external → {mem['url']}, banco {mem['harness_bank']})")
+                print(("✓ memory.provider hindsight gravado" if r.get("cli")
+                       else "⚠ " + (r.get("hint") or "rode: hermes config set memory.provider hindsight")))
+                if r.get("plugin_recipe"):
+                    print("⚠ plugin do Hindsight ausente — rode você mesmo (pede confirmação interativa): "
+                          "hermes plugins install hindsight — e ative na PRÓXIMA sessão do Hermes")
+            if clis:
+                for r in harness.install(brain, clis):
+                    label = harness.AGENTS.get(r["agent"], r["agent"])
+                    print(f"✓ {label} cablado (instalador oficial → {mem['url']}, banco {mem['harness_bank']})"
+                          if r["ok"] else f"✗ {label}: {r['hint']}")
+        elif hcmd == "verify":
+            v = harness.verify(brain, client(brain))
+            if args.json:
+                print(json.dumps(v, ensure_ascii=False, indent=2))
+            else:
+                print(("✓ " if (v["bank_exists"] and v["ping"]) else "⚠ ")
+                      + f"banco {v['bank']} " + ("existe" if v["bank_exists"] else "NÃO existe no servidor")
+                      + " · recall ping " + ("ok" if v["ping"] else "sem resposta")
+                      + ((f" · config Hermes {'ok' if v['hermes_config'] else 'desapontada'}")
+                         if "hermes" in v["harnesses"] else "")
+                      + ((f" · coding-agent.json {'ok' if v['coding_agent'] else 'desapontado'}")
+                         if any(a in harness.AGENTS for a in v["harnesses"]) else ""))
     elif c in ("recall", "reflect"):
         hs = client(brain)
         bank = mem["bank"]   # banco único (decisão 8) — --bank é legado, aceito e ignorado

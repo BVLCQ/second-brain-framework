@@ -73,6 +73,8 @@ repo = "BVLCQ/second-brain-framework"
 engine = "none"                 # "hindsight" quando o servidor estiver no ar
 url = "http://localhost:8888"
 bank = "brain"                  # banco único nos dois modos, embed e full (decisão 8)
+harness_bank = "hermes"         # banco dos agentes de código (fora do memory rebuild)
+harnesses = []                  # cablados pelo wizard/CLI: claude-code, cursor-cli, codex, hermes
 # raw_bank/mem_bank (brain-raw/brain-mem) são legados dos dois bancos antigos do embed:
 # nada lê — `brain memory rebuild` os apaga do servidor ao consolidar no `bank`
 max_file_mb = 25

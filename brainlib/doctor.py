@@ -106,6 +106,17 @@ def checks(brain, online: bool = False) -> list[dict]:
                 pass
         status = memory.status(brain, online=online)
         out.append(_c(status["level"], "memória", status["detail"]))
+        harnesses = cfg["memory"].get("harnesses") or []
+        if harnesses and online:
+            try:
+                from . import harness as _harness
+                ids = {b.get("bank_id") for b in memory.client(brain).banks().get("banks", [])}
+                bank = cfg["memory"]["harness_bank"]
+                if bank not in ids:
+                    out.append(_c("warn", "memória", f"banco dos harnesses '{bank}' não existe no servidor "
+                                 f"({', '.join(harnesses)}) — `brain memory harness verify`"))
+            except util.BrainError as e:
+                out.append(_c("warn", "memória", f"harnesses: {e}"))
         if status.get("mode") == "full":
             # régua do full: chave presente; gasto do mês como INFORMAÇÃO (sem teto — decisão do dono)
             if not any(k.startswith("HINDSIGHT_API") and k.endswith("API_KEY") and v for k, v in env.items()):

@@ -43,6 +43,8 @@ DEFAULTS: dict = {
         "bank": "brain",                   # banco único nos dois modos (decisão 8 do dono)
         "mem_bank": "brain-mem",           # legado dos dois bancos antigos — rebuild apaga do servidor
         "raw_bank": "brain-raw",           # legado — idem
+        "harness_bank": "hermes",          # banco dos agentes (plano memory-harness-wizard.md) — fora do rebuild
+        "harnesses": [],                   # cablados: claude-code · cursor-cli · codex · hermes
         "max_file_mb": 25,
         "timeout_s": 120,
         # modos (guides/memory.md): embed = dois bancos de chunks, zero LLM, zero egress.
