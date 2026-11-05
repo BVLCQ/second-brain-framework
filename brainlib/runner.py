@@ -123,6 +123,13 @@ def nightly(brain, skip_agent: bool = False) -> dict:
         step("backup", lambda: backup.run(brain))
     brain.reload()
     step("render final", lambda: render.summary(render.render_all(brain)).splitlines()[0])
+    try:
+        from . import upstream as _up
+        c = _up.check_update(brain.inst, force=False)   # renova o cache de versão/atualização (painel/TUI/doctor)
+        if (c.get("behind") or 0) > 0:
+            steps["atualização"] = f"{c['behind']} commits disponíveis — brain update"
+    except Exception:                                   # noqa: BLE001 — sem rede no noturno é normal
+        pass
     brain.record_one({"type": "run.completed", "id": "nightly", "by": "system", "data": {"ok": ok, "steps": steps}})
     print(("✓" if ok else "⚠") + " noturno: " + " · ".join(f"{k}: {v}" for k, v in steps.items()))
     return {"ok": ok, "steps": steps}

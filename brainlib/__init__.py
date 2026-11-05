@@ -13,4 +13,4 @@ if sys.version_info < (3, 11):  # tomllib, dataclass slots etc.
         "Python 3.11+ e chame ./brain com ele." % (sys.version_info[0], sys.version_info[1])
     )
 
-__version__ = "2.0.0"
+__version__ = "2.1.0"

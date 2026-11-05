@@ -54,6 +54,12 @@ def view_model(brain) -> dict:
     m = model.build(brain)
     m["health"] = doctor.checks(brain)
     m["notes"] = _notes(brain.inst.fresh)
+    from . import upstream as _up                              # versão + aviso de atualização (cache, sem rede)
+    from . import __version__ as _ver
+    c = _up.read_check_cache(brain.inst)
+    m["update"] = {"version": _ver, "behind": c.get("behind"), "ahead": c.get("ahead"),
+                   "remote_version": c.get("remote_version"), "checked_at": c.get("checked_at"),
+                   "news": c.get("news", [])[:12], "checked": bool(c)}
     return m
 
 

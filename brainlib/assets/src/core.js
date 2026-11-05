@@ -5,6 +5,7 @@
 // normalização: o portfolio.html injeta só o recorte do portfólio — e instâncias antigas podem
 // não ter todas as chaves. Nenhuma leitura do painel pode ver undefined (boot OU refresh do serve).
 function normalizeBrain(m){
+  m.update = m.update || {version:"?", news:[]};
   m.counts = m.counts || {}; m.questions = m.questions || []; m.proposals = m.proposals || [];
   m.outbox = m.outbox || []; m.health = m.health || []; m.deliveries = m.deliveries || [];
   m.feedback = m.feedback || [];
@@ -708,4 +709,35 @@ if (qi) {
 }
 window.addEventListener("hashchange", route);
 route();
+})();
+
+
+// ── versão + atualização (canto inferior direito; dados vêm do cache do render) ──
+(function(){
+  const u = M.update || {};
+  const b = document.getElementById("verbadge");
+  if(!b) return;
+  const behind = (u.behind || 0) > 0;
+  const semNovidade = () => u.checked
+    ? ["Tudo em dia por aqui. A lista completa mora no CHANGELOG.md do repositório."]
+    : ["Ainda não verificamos se há atualizações — o noturno ou o comando `update --check` fazem isso."];
+  const openNews = () => {
+    const news = (u.news && u.news.length) ? u.news : semNovidade();
+    document.getElementById("newslist").innerHTML =
+      news.map(n => '<div class="ni">' + esc(n) + "</div>").join("");
+    document.getElementById("newstitle").textContent = behind ? "Atualização disponível" : "Novidades da versão";
+    document.getElementById("newshow").textContent = behind
+      ? "v" + (u.version || "?") + " → v" + (u.remote_version || "?") + " · atualize com o comando `update`"
+      : "v" + (u.version || "?") + (u.checked_at ? " · verificado " + String(u.checked_at).slice(0, 10) : "");
+    document.getElementById("newsback").hidden = false;
+  };
+  b.textContent = "v" + (u.version || "?") + (behind ? " · atualização" : "");
+  if(behind) b.classList.add("hasupd");
+  b.title = behind ? "atualização disponível (" + u.behind + " commits) — comando `update`"
+                   : "Segundo Cérebro v" + (u.version || "?") + " — em dia";
+  b.addEventListener("click", openNews);
+  document.getElementById("newsclose").addEventListener("click", () => document.getElementById("newsback").hidden = true);
+  const back = document.getElementById("newsback");
+  back.addEventListener("click", e => { if(e.target === back) back.hidden = true; });
+  document.addEventListener("keydown", e => { if(e.key === "Escape") back.hidden = true; });
 })();

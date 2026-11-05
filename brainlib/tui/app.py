@@ -615,10 +615,23 @@ class BrainApp(AskKeys, FeedbackKeys, PortfolioKeys, App):
                        ("r", "resposta ao agente" if self.pending_reply else "render"), ("q", "sair")):
             if k not in local:                     # a tecla de contexto vence: não anuncia o global que ela esconde
                 hint(right, k, lab, "cyan")
+        ver = self._version_badge()
+        right.append(Text("  " + ver[0], ver[1]))
         self.query_one("#hints", Static).update(left)
         g = self.query_one("#globals", Static)
         g.update(right)
         g.styles.width = right.cell_len + 1
+
+    def _version_badge(self) -> tuple[str, str]:
+        """(texto, estilo) — versão local + aviso de atualização (cache, sem rede)."""
+        from .. import __version__ as ver, upstream
+        try:
+            c = upstream.read_check_cache(self.inst)
+            if (c.get("behind") or 0) > 0:
+                return f"v{ver} · atualização ({c['behind']})", "bold yellow"
+        except Exception:                              # noqa: BLE001 — badge nunca derruba a TUI
+            pass
+        return f"v{ver}", "dim"
 
     # ── log ────────────────────────────────────────────────────────────────
     def log_line(self, text: str, style: str = "") -> None:

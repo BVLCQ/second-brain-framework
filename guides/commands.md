@@ -1252,3 +1252,17 @@ brain query person marina        # alias vale (tabela aliases)
 brain query entity TASK-0146
 brain query sql "SELECT status, COUNT(*) n FROM opportunities GROUP BY status"
 ```
+
+### Versão, aviso de atualização e novidades
+
+O painel (canto inferior direito) e a TUI (barra inferior) mostram a versão — `v2.1.0` —
+e, quando o noturno ou `brain update --check` encontrarem novidades no upstream, o aviso
+**⚡ atualização** com as mudanças a um clique (painel) ou na barra (TUI). O `doctor`
+ganha a linha `framework: em dia (v…)` / `atualização disponível`.
+
+- A verificação é barata e cacheada (≤1×/dia, `FRESH/.update-check.json`); render/painel
+  **nunca** vão à rede — só leem o cache.
+- `brain update` puxa e imprime as **novidades** da versão que chegou (CHANGELOG.md).
+- **Ritual de release (dono/agente):** toda remessa com mudança visível ao usuário bumpa
+  `brainlib/__init__.py` (`__version__`) e ganha uma seção em `CHANGELOG.md`, em
+  linguagem humana — é o que o usuário vê no painel ao atualizar.

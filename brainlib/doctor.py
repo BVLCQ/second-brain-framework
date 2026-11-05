@@ -137,6 +137,14 @@ def checks(brain, online: bool = False) -> list[dict]:
         out.append(_c("ok", "arquivos grandes", f"{len(big)} arquivos > 50 MB no RAW ({mb:.0f} MB) — "
                                                 "fora do backup e da memória por padrão"))
     out.extend(upstream.doctor_checks(inst))
+    from . import __version__ as _ver
+    c = upstream.read_check_cache(inst)
+    if c and (c.get("behind") or 0) > 0:
+        out.append(_c("warn", "framework", f"atualização disponível (v{_ver} → v{c.get('remote_version', '?')}, "
+                                         f"{c['behind']} commits) — `brain update` (novidades: {len(c.get('news', []))})"))
+    elif c:
+        out.append(_c("ok", "framework", f"em dia (v{_ver}, verificado "
+                                         + str(c.get("checked_at", ""))[:10] + ")"))
     return out
 
 

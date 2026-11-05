@@ -121,6 +121,118 @@ def _version(root: Path) -> str:
     return m.group(1) if m else "?"
 
 
+# ── novidades (CHANGELOG.md) e verificação de atualização com cache ─────────
+CHECK_CACHE = ".update-check.json"       # em FRESH/ (derivado): último resultado da verificação
+CHECK_MAX_AGE_H = 24
+
+
+def _vkey(v: str) -> tuple:
+    out = []
+    for p in str(v or "").split("."):
+        try:
+            out.append(int(p))
+        except ValueError:
+            break                                          # "?" ou sufixo: ordena antes de tudo numérico
+    return tuple(out) or (0,)
+
+
+def parse_changelog(text: str) -> list[tuple[str, str, list[str]]]:
+    """CHANGELOG.md → [(versão, data, [bullets])], do mais novo para o mais antigo."""
+    out: list[tuple[str, str, list[str]]] = []
+    cur: tuple[str, str, list[str]] | None = None
+    for ln in text.splitlines():
+        m = re.match(r"^##\s+(\d[\w.]*)(?:\s*[—–-]\s*(.+))?$", ln.strip())
+        if m:
+            cur = (m.group(1), (m.group(2) or "").strip(), [])
+            out.append(cur)
+            continue
+        if cur is not None and ln.strip().startswith(("-", "*")):
+            cur[2].append(ln.strip().lstrip("-* ").strip())
+    return out
+
+
+def news_between(text: str, from_v: str, to_v: str | None = None) -> list[str]:
+    """Bullets das versões em (from_v, to_v] — as novidades de quem vinha de from_v."""
+    lo, hi = _vkey(from_v), (_vkey(to_v) if to_v else (1 << 30,))
+    out: list[str] = []
+    for v, _date, bullets in parse_changelog(text):
+        if lo < _vkey(v) <= hi:
+            out += bullets
+    return out
+
+
+def read_check_cache(inst) -> dict:
+    """Última verificação (sem rede). {} = nunca verificificado."""
+    from . import util as _u
+    p = inst.fresh / CHECK_CACHE
+    if not p.exists():
+        return {}
+    try:
+        return _u.read_json(p, {})
+    except Exception:                                  # noqa: BLE001 — cache corrompido = sem cache
+        return {}
+
+
+def check_update(inst, force: bool = False) -> dict:
+    """Verifica o upstream (git fetch, ≤1×/dia a menos que force) e grava o cache em FRESH/.
+
+    Sem rede / sem git: devolve o cache antigo marcado `stale=True` — nunca falha,
+    nunca bloqueia (superfícies só LÊEM o cache; a rede fica aqui e no noturno).
+    """
+    from . import util as _u
+    local_version = _version(inst.root)                # do DISCO: pós-atualização o módulo importado está velho
+    cache = read_check_cache(inst)
+    ts = cache.get("checked_at")
+    fresh = False
+    if ts:
+        try:
+            fresh = (_u.now() - _u.parse_dt(ts)).total_seconds() < CHECK_MAX_AGE_H * 3600
+        except Exception:                              # noqa: BLE001
+            fresh = False
+    if fresh and not force:
+        return cache
+    root = inst.root
+    out = {"version": local_version, "checked_at": _u.now().isoformat(timespec="seconds")}
+    try:
+        remote, branch, ref = _prepare(inst, None, None)
+        _git(root, "fetch", "--quiet", remote, branch, check=True)
+        ahead, behind = _ahead_behind(root, ref)          # (só-HEAD, só-remote) = (ahead, behind)
+        out.update(remote=remote, branch=branch, behind=behind, ahead=ahead,
+                   incoming=[ln for ln in _lines(_git(root, "log", "--format=%h %s", f"HEAD..{ref}"))][:20],
+                   remote_version=_version_at(root, ref), error="")
+        changelog_remote = _file_at(root, ref, "CHANGELOG.md")
+        if changelog_remote and out["remote_version"] != "?":
+            out["news"] = news_between(changelog_remote, local_version, out["remote_version"])
+        else:
+            out["news"] = []
+    except Exception as e:                              # noqa: BLE001 — offline é estado normal
+        out.update(behind=cache.get("behind"), ahead=cache.get("ahead"),
+                   incoming=cache.get("incoming", []), remote_version=cache.get("remote_version", "?"),
+                   news=cache.get("news", []), error=str(e)[:200])
+    try:
+        inst.fresh.mkdir(parents=True, exist_ok=True)
+        _u.write_json(inst.fresh / CHECK_CACHE, out)
+    except OSError:
+        pass
+    return out
+
+
+def _file_at(root: Path, ref: str, path: str) -> str | None:
+    try:
+        r = _git(root, "show", f"{ref}:{path}")
+        return r.stdout if r.returncode == 0 else None
+    except Exception:                                   # noqa: BLE001
+        return None
+
+
+def _version_at(root: Path, ref: str) -> str:
+    text = _file_at(root, ref, "brainlib/__init__.py")
+    if not text:
+        return "?"
+    m = re.search(r'__version__\s*=\s*"([^"]+)"', text)
+    return m.group(1) if m else "?"
+
+
 # ── semeadura (compartilhada com `brain init`) ──────────────────────────────
 def seed_template(inst: config.Instance) -> list[str]:
     """Copia de template/ para o vault o que ainda não existe. Nunca sobrescreve."""
@@ -176,6 +288,12 @@ def update(inst: config.Instance, check: bool = False, rebase: bool = False,
                                   f"se o autostash não reaplicou:\n{(r.stderr or r.stdout).strip()}", 4)
         res["updated"] = True
         res["version_after"] = _version(root)
+        try:
+            chlog = (root / "CHANGELOG.md").read_text(encoding="utf-8")
+            res["news"] = news_between(chlog, res["version_before"], res["version_after"])
+        except OSError:
+            res["news"] = []
+        check_update(inst, force=True)                  # re-basa o cache pós-atualização
         incoming_tpl = [f for f in res.get("incoming_files", []) if f.startswith("template/")]
         res["seeded"] = seed_template(inst)
         res["template_diverged"] = [f"vault/{f[len('template/'):]}" for f in incoming_tpl
@@ -205,6 +323,15 @@ def _print_update(res: dict) -> None:
         if len(res["incoming"]) > 15:
             print(f"  … e mais {len(res['incoming']) - 15}")
         print("  arquivos por área: " + " · ".join(f"{k} {v}" for k, v in sorted(res["areas"].items())))
+    news = res.get("news") or []
+    if news:
+        head = "Novidades disponíveis (rode `brain update` para instalar):" if res.get("checked_only") \
+            else "Novidades desta atualização:"
+        print(f"\n{head}")
+        for n in news[:10]:
+            print(f"  ✓ {n}")
+        if len(news) > 10:
+            print(f"  … e mais {len(news) - 10} (CHANGELOG.md)")
     if res.get("updated"):
         va = res.get("version_after", "?")
         print(f"✓ framework atualizado (brain {res['version_before']}" + (f" → {va}" if va != res["version_before"] else "") + ")")
@@ -668,7 +795,12 @@ def doctor_checks(inst: config.Instance) -> list[dict]:
 
 # ── entrada do CLI ──────────────────────────────────────────────────────────
 def cli_update(args, _b) -> None:
-    res = update(config.load(), check=args.check, rebase=args.rebase, remote=args.remote, branch=args.branch)
+    inst = config.load()
+    if args.check:                                     # verifica (com cache de 24h) ANTES de decidir
+        check_update(inst, force=False)
+    res = update(inst, check=args.check, rebase=args.rebase, remote=args.remote, branch=args.branch)
+    if args.check and res.get("behind") and not res.get("news"):
+        res["news"] = check_update(inst, force=True).get("news", [])
     if args.json:
         print(json.dumps(res, ensure_ascii=False, indent=2))
     else:
