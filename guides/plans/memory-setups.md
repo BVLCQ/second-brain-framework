@@ -80,11 +80,12 @@ por setup, então qualquer escolha é um sistema completo.
 - **Volume extraível:** ~3,0 MB em 16 dias (`meetings` 1,63 MB + `documents` 0,79 +
   `notes` 0,19 + `slack` 0,10) → teto de ~1.900 chunks/mês. `connectors/` e `github/`
   não entram (espelho estruturado já no ledger; diff de código é ruído).
-- **Discrepância de versão (confirmada ao vivo):** o compose fixa `hindsight:0.10.3`,
-  o container em execução é `0.10.1-slim`. Todo "confirmado no código" vale para a
-  versão que estava rodando na leitura — qualquer fase que dependa de recurso novo do
-  Hindsight começa pelo passo 0: recriar o container **por digest** e re-auditar
-  (disciplina R5, generalizada).
+- **Premissa corrigida (2026-11-05):** o container `0.10.1-slim` que rodava em :8888
+  **não era do cérebro** — era o serviço pessoal do dono (`~/hindsight-service`, banco
+  `hermes`); o compose do cérebro nunca subiu naquela máquina (colisão de
+  `container_name`/portas com o serviço pessoal — decisão 10). A disciplina R5 segue
+  de pé com alvo novo: **1.2.0 por digest** (decisão 9). Todo "confirmado no código"
+  vale para a versão auditada no passo 0 de cada fase.
 
 ## 2. Princípios
 
@@ -476,8 +477,8 @@ ausente → hook silencia sem erro.
 
 ### Fase 3 — Banco único enriquecido, sem LLM · `embed`
 
-**Objetivo.** Trocar os dois bancos de chunks por **um** banco enriquecido
-deterministicamente: só a fonte (RAW dos tipos da seção 3.2) + docs `ledger/DEC-*` e
+**Objetivo.** O banco único já é real (decisão 8: `[memory] bank = "brain"` vale
+para os dois modos); esta fase o torna **enriquecido** deterministicamente: só a fonte (RAW dos tipos da seção 3.2) + docs `ledger/DEC-*` e
 `ledger/WIN-*`, com data do mundo, tags do ledger, entidades por alias e aliases do
 banco. Sem LLM em qualquer passo.
 
@@ -499,15 +500,16 @@ smoke de compatibilidade contra o container real de cada recurso usado: `tags` n
 recall, entidades explícitas no item de retain **em modo chunks** (metadado — sem
 resolver no servidor), `/aliases`, `bm25_language`, `retain_chunk_size`,
 `/documents/{id}/reprocess`, deleção de documento. Registrar a versão auditada em
-`meta` do banco e em `guides/memory.md`. (Hoje o compose fixa 0.10.3 e o container
-rodando é 0.10.1-slim — confirmado.)
+`meta` do banco e em `guides/memory.md`. **Alvo: 1.2.0-slim por digest (decisão 9)** —
+o 1.x valida config com erro alto (chave morta para de ser silêncio), então o
+re-audit das chaves do `NO_LLM_CONFIG`/`FULL_CONFIG` é obrigatório, não cortesia.
 
 3.1 **Configuração**:
 ```toml
 [memory]
 engine = "hindsight"
 url = "http://localhost:8888"
-bank = "brain-mem"                 # banco único; raw_bank/mem_bank legados: lidos por 1 versão, doctor avisa
+bank = "brain"                     # banco único nos DOIS modos (decisão 8); raw_bank/mem_bank legados: lidos 1 versão, doctor avisa
 max_file_mb = 25
 exclude_types = ["connectors", "github"]
 entity_types = { pessoa = "PERSON", projeto = "PROJECT", area = "ORG" }
@@ -667,8 +669,8 @@ resolvido.
 ### Fase 6 — Compatibilidade com o provider (antes de gastar num rebuild) · `full`
 
 **Objetivo.** Provar cada operação com o modelo escolhido, numa amostra, antes de
-reconstruir o banco. Achados do provider `anthropic` na 0.10.3 (re-auditar na imagem
-nova — passo 0):
+reconstruir o banco. Achados do provider `anthropic` na 0.10.3 (histórico; re-auditar
+na 1.2.0 — passo 0):
 
 | Ponto | Situação | Efeito |
 |---|---|---|
@@ -678,10 +680,11 @@ nova — passo 0):
 | Batch API | suportado | rebuild com −50% |
 | **reflect/mental models** | força `tool_choice` nomeado | **Sonnet 5.5 recusa com 400** — bloqueante do cenário B |
 
-Caminhos, em ordem: (1) versão mais nova do Hindsight que traduza `named`→`auto`;
-(2) issue/PR upstream (tradução pequena no `anthropic_llm.py`); (3) enquanto isso,
-mental models com **Haiku 5.5 e `thinking` desligado** (`…_MENTAL_MODEL_REFRESH_LLM_EXTRA_BODY={"thinking":{"type":"disabled"},"output_config":{"effort":"high"}}`)
-— cenário A nos models (~−US$ 13/mês).
+**Resolvido upstream (decisão 9):** a regressão #5738 — `tool_choice` forçado quebra
+reflect no Sonnet/Opus desde a 0.10.2 — foi fixada na **1.1.0** (todo tool call passa
+a ir por response schema, sem `tool_choice` nativo; na 1.2.0 é o caminho universal).
+O caminho (1) é o único: (2) PR upstream e (3) workaround Haiku ficam como histórico,
+sem execução. O cenário B (Sonnet nos mental models) volta a ser o alvo da Fase 8.
 
 **Passos.** Compose com `env_file: ../config/.env` só no serviço `hindsight`;
 `HINDSIGHT_API_<OP>_LLM_*` por operação (retain/consolidation = Haiku high;
@@ -914,3 +917,23 @@ classificador), recuperação temporal real (datas do mundo), CLI/MCP/TUI que es
 6. **Eval: confirmado** — ~60 perguntas com tipo `nada`, dono revisa e aprova; zona
    curada `vault/eval/`, exemplo genérico no `template/` (Fase 0).
 7. **Campo `h` encadeado no ledger: nunca.** O formato do evento é fechado (§7).
+8. **Um banco só, chamado `brain`, nos dois modos** (2026-11-05). O `embed` abandona o
+   modelo de dois bancos: `[memory] bank = "brain"` vale para `embed` e `full`;
+   `mem_bank`/`raw_bank` viram legados (lidos 1 versão, doctor avisa). Migração de
+   instâncias com `brain-raw`/`brain-mem`: trocar a config + `brain memory rebuild`
+   (bancos são derivados do vault; no `embed`, custo US$ 0 — só re-embed local).
+9. **Hindsight 1.2.0 por digest** (2026-11-05). O pin 0.10.3 carregava a regressão
+   upstream #5738 (fixada na 1.1.0) e nenhum dos ganhos que este plano usa (mental
+   models endurecidos, datas no fuso do conteúdo, schema-por-resposta universal).
+   O compose fixa `1.2.0-slim` por digest; re-audit de config obrigatório (1.x falha
+   alto em chave morta). Migrações Alembic são forward-only: export/backup antes;
+   rollback = restaurar o export ou `rebuild` (bancos derivados).
+10. **Colisão de nome/porta é precondição** (2026-11-05). Máquina que já roda outro
+    Hindsight no :8888 (ex.: o serviço pessoal do Hermes do dono): **adotar** o
+    servidor existente (`[memory].url` aponta pra ele; o banco `brain` nasce lá) ou
+    sobrepor as portas por env no compose. Nunca dois containers reclamando
+    `container_name: hindsight`/8888 na mesma máquina.
+11. **O serviço único também serve os harnesses** (2026-11-05). O mesmo servidor
+    hospeda `brain` (derivado do vault) e `hermes` (memória dos agentes: Claude
+    Code/Cursor/Codex/Hermes). Banco de agente nunca é tocado pelo `memory rebuild`
+    nem vira fato do vault. Design completo: `guides/plans/memory-harness-wizard.md`.
