@@ -1,7 +1,9 @@
 """Harnesses de código no servidor do cérebro (plano memory-harness-wizard.md) — stdlib unittest, sem rede."""
 from __future__ import annotations
 
+import contextlib
 import importlib.util as _ilu
+import io
 import json
 import os
 import subprocess
@@ -139,6 +141,36 @@ class VerifyTests(unittest.TestCase):
             v = harness.verify(b, FakeHindsight(), home=Path(td))
             self.assertFalse(v["bank_exists"])
             self.assertFalse(v["ping"])
+
+
+class VerifyCliTests(unittest.TestCase):
+    """`brain memory harness verify` pelo parser real — regressão: o subparser não tinha --json
+    e o comando quebrava com AttributeError ao ler args.json."""
+
+    _V = {"bank": "hermes", "bank_exists": True, "ping": True, "hermes_config": False,
+          "coding_agent": True, "harnesses": ["claude-code"]}
+
+    def _run(self, argv):
+        from brainlib.cli import build_parser
+        args = build_parser().parse_args(["memory", "harness", "verify", *argv])
+        out = io.StringIO()
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td) / "inst")
+            with mock.patch.object(harness, "verify", return_value=dict(self._V)), \
+                 mock.patch.object(memory, "client", return_value=FakeHindsight()), \
+                 contextlib.redirect_stdout(out):
+                memory.cli(args, b)
+        return out.getvalue()
+
+    def test_verify_without_json_prints_summary(self):
+        text = self._run([])
+        self.assertIn("banco hermes existe", text)
+        self.assertIn("recall ping ok", text)
+
+    def test_verify_json_flag_is_accepted_and_prints_json(self):
+        data = json.loads(self._run(["--json"]))
+        self.assertEqual(data["bank"], "hermes")
+        self.assertTrue(data["ping"])
 
 
 class DetectTests(unittest.TestCase):

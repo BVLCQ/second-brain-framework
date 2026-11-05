@@ -1362,7 +1362,8 @@ def build_parser() -> argparse.ArgumentParser:
     hsub = x.add_subparsers(dest="hcmd", required=True)
     xi = hsub.add_parser("install", help="cabla harnesses no servidor do cérebro (guides/plans/memory-harness-wizard.md)")
     xi.add_argument("agents", nargs="+", choices=["claude-code", "cursor-cli", "codex", "hermes"])
-    hsub.add_parser("verify", help="banco dos agentes, recall ping e configs")
+    xv = hsub.add_parser("verify", help="banco dos agentes, recall ping e configs")
+    xv.add_argument("--json", action="store_true")
     for name in ("recall", "reflect"):
         x = ms.add_parser(name)
         x.add_argument("query")
