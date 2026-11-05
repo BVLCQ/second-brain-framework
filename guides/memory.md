@@ -50,9 +50,33 @@ docker compose --env-file config/.env \
   -f services/compose.yaml -f services/compose.full.yaml up -d
 ```
 
-A imagem é pinada **por digest** (emenda R5: tag pode ser reempurrada). Atualizar = trocar o
-digest no `services/compose.yaml` e re-auditar. O container alcança o LM Studio do Mac por
-`host.docker.internal:1234`.
+A imagem é pinada **por digest** (emenda R5: tag pode ser reempurrada). O container alcança o
+LM Studio do Mac por `host.docker.internal:1234`.
+
+**Ordem de boot na 1.2.0:** o servidor valida o endpoint de embeddings na inicialização —
+**suba o LM Studio (com o modelo carregado) antes do `up -d`**, senão o container morre na hora
+(o 0.10.x não fazia essa checagem). O modelo de LLM pode continuar descarregado no modo embed.
+
+**Máquina com outro Hindsight no :8888** (decisão 10): não suba dois containers com o mesmo
+nome/porta — **adopte** o servidor existente (`[memory].url` aponta pra ele; o banco do cérebro
+nasce lá) ou sobreponha as portas: `HINDSIGHT_API_PORT=8891 HINDSIGHT_UI_PORT=9991 docker compose … up -d`.
+
+### Atualizar o Hindsight de versão
+
+Migrações de schema (Alembic) rodam no boot e são **forward-only** — apontou código antigo pra um
+banco já migrado, só restaurando backup. Por isso:
+
+1. `hindsight-admin export-bank <banco>` por banco (seguro até sem export no `embed` — bancos são
+   derivados do vault e `brain memory rebuild` reconstrói; no `full` o export evita re-pagar extração);
+2. troque o digest no `services/compose.yaml` (resolva o digest da tag: `docker buildx imagetools
+   inspect ghcr.io/vectorize-io/hindsight:<tag>-slim`);
+3. `up -d` — o boot migra sozinho;
+4. **re-audit R5**: a 1.x valida config com erro alto (chave morta para de ser silêncio) e o
+   `metadata` de retain só aceita **strings** (o brain serializa `entities` como JSON) — confira
+   o smoke do release no CHANGELOG antes de subir em produção.
+
+O `brain doctor` avisa quando o servidor está em versão antiga (comparação com `releases/latest`,
+cache ≤1×/dia — informação, nunca bloqueio).
 
 ### Alternativa sem Docker: daemon local
 

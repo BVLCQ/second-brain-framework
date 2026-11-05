@@ -7,13 +7,18 @@ name: segundo-cerebro
 services:
   hindsight:
     # Pin por digest (emenda R5 do plano da memória: tag pode ser reempurrada; digest não).
-    # Tag correspondente: 0.10.3
-    image: ghcr.io/vectorize-io/hindsight@sha256:5b6ef2b892703f0e82c448786349c88db60f06d8c9190432b68af00ce6dc45e3
+    # Tag correspondente: 1.2.0-slim — fixa a regressão upstream #5738 (tool_choice forçado
+    # quebrava reflect no Sonnet/Opus desde a 0.10.2; resolvida na 1.1.0) e traz os mental
+    # models endurecidos, datas no fuso do conteúdo e schema-por-resposta universal.
+    image: ghcr.io/vectorize-io/hindsight@sha256:c7d494c309fde53d07e79158be08d7a61f3f309b23cc417c7e4b0b8fc8adc77a
     container_name: hindsight
     restart: unless-stopped
+    # Colisão de nome/porta (decisão 10 do plano da memória): máquina que já roda outro
+    # Hindsight no :8888 deve ADOTAR o servidor existente ([memory].url aponta pra ele) ou
+    # sobrepor as portas abaixo por env — nunca dois containers reclamando "hindsight"/8888.
     ports:
-      - "127.0.0.1:8888:8888"   # API (o brain usa http://localhost:8888)
-      - "127.0.0.1:9999:9999"   # UI
+      - "127.0.0.1:${HINDSIGHT_API_PORT:-8888}:8888"   # API (o brain usa [memory].url)
+      - "127.0.0.1:${HINDSIGHT_UI_PORT:-9999}:9999"    # UI
     environment:
       HINDSIGHT_API_LLM_PROVIDER: lmstudio
       HINDSIGHT_API_LLM_BASE_URL: http://host.docker.internal:1234/v1
