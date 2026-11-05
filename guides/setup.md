@@ -39,6 +39,9 @@ Os três terminam no mesmo lugar: `./brain doctor` verde (no máximo ⚠ normais
 - **`embed`** — banco único de chunks (`brain`), **zero LLM, zero chave, nada sai da
   máquina**. O wizard sobe o Hindsight pelo compose (OrbStack), avisa se o LM Studio/bge-m3
   não está no ar, cria o banco e roda um sync de validação (`--limit 3`).
+- **Harnesses (sub-passo)** — com a memória ligada, o wizard oferece cablar os agentes
+  de código detectados (Claude Code, Cursor, Codex, Hermes) no mesmo servidor, no banco
+  próprio dos agentes (`hermes`) — fora do `memory rebuild`. Opt-in por pergunta.
 - **`full`** — banco único com extração de fatos: **porta de saída de dados**. Exige o
   **"ok" literal** ("texto do vault vai à API de LLM com a sua chave"), a chave no
   `.env` (mascarada, 0600), o compose com `--env-file config/.env`, e o `health/llm`

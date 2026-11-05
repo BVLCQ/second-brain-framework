@@ -74,8 +74,14 @@ ele configura os que existem.
 | Modo | O que é | Bancos | LLM | Sai da máquina? | Chaves | Existe hoje? |
 |---|---|---|---|---|---|---|
 | `none` | sem Hindsight; `/ask` usa índice → artefato → RAW | — | — | não | nenhuma | ✓ |
-| `embed` | só embeddings/chunks: os dois bancos de hoje, retain em modo chunks, sem consolidação nem observações (`NO_LLM_CONFIG`); embeddings locais (LM Studio) | `brain-mem` + `brain-raw` | nenhum | **não** | nenhuma | ✓ |
-| `full` | banco único com **extração de fatos** do RAW (contexto de identidades do ledger), observações consolidadas e mental models por GOAL/PROJ/pessoa | `brain-mem` (único) | por operação (extração/consolidação num modelo barato, mental models num maior) | **sim — texto do vault vai à API do LLM** | 1 chave de API no `.env` | depende do plano da memória (Fases 3–5) |
+| `embed` | só embeddings/chunks: retain em modo chunks, sem consolidação nem observações (`NO_LLM_CONFIG`); embeddings locais (LM Studio) | `brain` (único, decisão 8) | nenhum | **não** | nenhuma | ✓ |
+| `full` | banco único com **extração de fatos** do RAW (contexto de identidades do ledger), observações consolidadas e mental models por GOAL/PROJ/pessoa (Fase 8 do plano da memória) | `brain` (único) | por operação (extração/consolidação num modelo barato, mental models num maior) | **sim — texto do vault vai à API do LLM** | 1 chave de API no `.env` | ✓ (mental models ainda não) |
+
+**Sub-passo Harnesses (desde a v2.4.0, plano memory-harness-wizard.md):** com a memória ligada,
+o wizard pergunta quais agentes de código detectados cablar no MESMO servidor — Claude Code,
+Cursor CLI, Codex (instalador oficial self-hosted) e Hermes (config local_external) — no banco
+`harness_bank` (default `hermes`), separado por construção do `brain` e nunca tocado pelo
+`memory rebuild`. CLI equivalente: `brain memory harness install …` · `harness verify`.
 
 Perguntas e validação por modo:
 

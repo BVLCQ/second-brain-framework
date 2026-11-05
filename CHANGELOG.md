@@ -4,6 +4,32 @@ O que mudou em cada versão, em linguagem humana. Para atualizar: `brain update`
 (ou `brain setup --only comando` se o `brain` ainda não estiver no PATH).
 Mantido pelo dono do framework a cada remessa — veja `guides/commands.md` § upstream.
 
+## 2.4.0 — 2026-11-05
+
+- **Memória em banco único (`brain`)** — os dois bancos antigos do modo `embed`
+  (`brain-raw` + `brain-mem`) viraram **um**, nos dois modos. Quem já usava roda
+  `brain memory rebuild` e pronto: os bancos legados são apagados do servidor e o
+  vault é reenviado (no `embed`, custo US$ 0). O doctor avisa enquanto houver bancos
+  legados vivos no servidor.
+- **Hindsight 1.2.0** — o servidor subiu de versão (pin por digest no compose). Entre
+  outras: conserta a regressão que travava o reflect no Sonnet/Opus (mental models
+  voltam a ser viáveis) e passa a validar o endpoint de embeddings no boot — **suba o
+  LM Studio antes do `docker compose up -d`**. Máquina que já roda outro Hindsight no
+  :8888 adota o servidor existente ou sobrepõe as portas por env (`HINDSIGHT_API_PORT`).
+- **O servidor agora também guarda a memória dos seus agentes de código** —
+  `brain memory harness install claude-code | cursor-cli | codex | hermes`: Claude
+  Code, Cursor e Codex são cablados pelo instalador oficial apontados ao servidor do
+  cérebro, o Hermes ganha a config local_external escrita pra você (o plugin em si
+  pede confirmação interativa — o comando imprime a linha que falta). Memória dos
+  agentes mora no banco próprio `hermes`, nunca tocada pelo `memory rebuild` e com
+  proveniência por repo/harness. O wizard pergunta tudo isso no passo Memória, e o
+  `brain memory harness verify` confere (banco, recall ping, configs).
+- **Fresnness** — o `brain doctor --online` compara a versão do servidor com a última
+  publicada lá fora (≤1×/dia, offline tolerado) e avisa quando há atualização —
+  informação, nunca bloqueio. O caminho de atualização completo está no
+  `guides/memory.md` (§ *Atualizar o Hindsight de versão* e § *Migração de instâncias
+  antigas*).
+
 ## 2.3.0 — 2026-11-05
 
 - **Promover oportunidade em qualquer nível** — `brain opportunity promote` ganhou `--level

@@ -997,20 +997,23 @@ chave do dono — `guides/memory.md`), escolha livre e reversível.
 
 | Subcomando | Uso |
 |---|---|
-| `setup [--mode none\|embed\|full]` | grava as chaves do modo (se `--mode`) e cria os bancos: embed = `brain-mem` + `brain-raw` em chunks; full = banco único com extração |
+| `setup [--mode none\|embed\|full]` | grava as chaves do modo (se `--mode`) e cria o banco único `brain` (embed = chunks; full = extração — decisão 8) |
 | `sync [--limit N] [--dry-run]` | envia o que mudou (incremental). O noturno roda sozinho |
 | `rebuild [--limit N] [--dry-run]` | apaga os bancos do modo (e dos outros, se existirem) e reenvia tudo |
 | `status` | modo, bancos, pendências, fila e RAW retidos (full) |
 | `cost [--json]` | medidor mensal de LLM (embed: US$ 0; full: tokens + US$ por operação/modelo) — sem teto, só informação |
-| `recall CONSULTA [--bank mem\|raw] [--tags a,b]` | busca semântica. Padrão `mem` (fatos); `raw` = texto original |
-| `reflect CONSULTA [--bank] [--tags]` | resposta sintetizada pelo LLM a partir das memórias |
+| `recall CONSULTA [--tags a,b]` | busca semântica no banco único (`--bank` é legado, ignorado) |
+| `reflect CONSULTA [--tags]` | resposta sintetizada pelo LLM a partir das memórias |
+| `harness install AGENTE…` | cabla agentes de código no servidor do cérebro: `claude-code` · `cursor-cli` · `codex` (instalador oficial) · `hermes` (config local_external) — banco próprio `harness_bank`, fora do `rebuild` |
+| `harness verify` | banco dos agentes existe? recall ping? configs apontam pra cá? |
 
 ```bash
 brain memory sync
 brain memory sync --dry-run
 brain memory recall "o que foi decidido sobre o forno?"
-brain memory recall "política de dados" --bank raw
 brain memory recall "prazos" --tags proj:PROJ-1,pessoa:marina-demo
+brain memory harness install claude-code cursor-cli   # memória dos agentes no mesmo servidor
+brain memory harness verify
 brain memory reflect "como está o projeto de churn?"
 brain memory rebuild
 brain memory setup --mode full      # troca de setup (full exige chave no .env + "ok" no wizard)

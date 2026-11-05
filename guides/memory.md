@@ -152,6 +152,46 @@ use quando trocar de modo, mudar o mission ou suspeitar de lixo.
 - **`full` → `embed`**: `brain memory setup --mode embed` → `brain memory rebuild`.
   O hook de recall continua no banco único (o padrão do `BRAIN_RECALL_BANKS` é `brain`).
 
+## Harnesses de código no mesmo servidor
+
+O servidor do cérebro também guarda a **memória dos agentes de código** (Claude Code,
+Cursor CLI, Codex, Hermes) — no banco próprio `harness_bank` (default `hermes`),
+separado **por construção** do `brain`: `memory rebuild` só toca o que o `[memory]`
+nomeia, e memória de conversa de agente nunca vira fato do vault.
+
+```bash
+brain memory harness install claude-code cursor-cli   # instalador oficial, self-hosted → [memory].url
+brain memory harness install hermes                   # config local_external + receita do plugin (TTY)
+brain memory harness verify                           # banco existe? recall ping? configs apontam pra cá?
+```
+
+- Claude Code / Cursor / Codex: o installer oficial escreve os hooks/MCP/skill e o
+  `~/.hindsight/coding-agent.json` ganha `bankId = "hermes"` com **proveniência**
+  (`retainTags: project/harness`) — todo documento carrega de onde veio. Remova o
+  `bankId` para voltar ao padrão por-repo do upstream (`coding-agent::<repo>`).
+- O hook de leitura do cérebro segue registrado em modo ledger-only
+  (`BRAIN_RECALL_ROUTE=ledger`): oficial = memória semântica, nosso = fatos exatos do ledger.
+- Hermes: o plugin pede consentimento interativo — o comando imprime a linha que falta
+  (`hermes plugins install hindsight`) e a ativação vale na **próxima** sessão.
+- O sub-passo "Harnesses" do `brain setup --only memoria` faz tudo isso perguntando;
+  o doctor avisa se o banco dos agentes sumir do servidor.
+
+## Migração de instâncias antigas (0.10.x · dois bancos · sem harnesses)
+
+1. **Atualize o servidor** — `guides/memory.md` § *Atualizar o Hindsight de versão*
+   (export dos bancos → digest 1.2.0 no compose → `up -d` → re-audit). No `embed` o
+   export é opcional (bancos são derivados do vault); no `full` ele evita re-pagar extração.
+2. **Consolide os bancos** — o `[memory]` dos dois bancos (`brain-raw`/`brain-mem`) virou
+   um: `bank = "brain"`. Rode `brain memory rebuild` — ele **apaga os bancos legados do
+   servidor** e reenvia o vault no banco único (embed: custo US$ 0, re-embed local).
+3. **Escolha o setup** — `brain setup --only memoria`: `embed` (chunks, US$ 0, sem chave)
+   ou `full` (extração com a sua chave; o wizard pede o "ok" literal do gate de saída).
+   Trocar depois é o mesmo comando — nos dois sentidos.
+4. **Harnesses (opcional)** — `brain memory harness install …` ou o sub-passo do wizard.
+
+Usuários do `f7ecb0e` para cá: nada quebra sem esses passos — mas o doctor mostra
+⚠ bancos legados no servidor até o `rebuild`, e ⚠ servidor antigo até o bump.
+
 ## O que NÃO vai
 
 - inbox (ainda não processada) · `config/.env`
