@@ -542,9 +542,12 @@ ledger (arestas artefato↔pessoa/projeto). Recall filtrado ("só PROJ-3") e dos
 (Fase 5) usam as tags.
 
 3.6 **Entidades e aliases determinísticos.** Pessoas/projetos do contexto do artefato
-viram `entities` explícitas no item de retain (nome canônico + tipo de `entity_types`)
-— **anexadas por casamento de alias no texto, sem resolução no servidor**. Aliases do
-ledger sincronizados em `/aliases` no `setup` e a cada `person.added`/`person.updated`.
+viram `entities` explícitas no item de retain — **anexadas por casamento de alias no
+texto, sem resolução no servidor**. *Auditado na 1.2.0 (2026-11-05):* a entidade do
+item é top-level com campo **`text`** (o `name` antigo devolve 422), aceita em modo
+chunks e alimenta o grafo de entidades do servidor; aliases do ledger vão ao banco no
+`setup` por `POST /aliases {alias, canonical}` (409 = já registrado). RAW degradado
+(sem `/dump`) entra **sem entidades** (R7-embed).
 RAW **sem artefato** (ainda sem `/dump`): regra decidida agora (R7-embed) — após
 `degraded_after_days` (sugestão 7), entra com contexto degradado (tags `tipo:` e
 `sem-artefato:1`, data do nome do arquivo, **sem entidades**). Quando o `/dump`
@@ -555,9 +558,9 @@ enriquece depois" (no `full` é o contrário: esperar, para não pagar extraçã
 
 3.7 **Banco** (`setup`): `retain_extraction_mode = "chunks"` (sem LLM),
 `enable_auto_consolidation = false`, `enable_observations = false` (nada na fila de
-consolidação — `pending_consolidation` sempre 0), BM25 `portuguese`,
-`retain_chunk_size` decidido pela Fase 0 (2.000 × 3.000 — menor cita melhor, maior
-dá mais contexto; nota R9.2: o stemmer pt degrada levemente o lexical em es).
+consolidação — `pending_consolidation` sempre 0). *Auditado na 1.2.0 (2026-11-05):*
+**não existe chave `bm25_language`** (PATCH devolve "Unknown configuration fields") —
+o analisador de texto fica no default do servidor; `retain_chunk_size` decide a Fase 0.
 
 3.8 **Sync incremental.** `sha` do item = `sha(texto + contexto)`; mudança de contexto
 (alias novo, artefato reprocessado) reenvia (`/documents/{id}/reprocess` quando o texto

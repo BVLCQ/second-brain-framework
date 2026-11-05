@@ -82,6 +82,7 @@ extract = false                 # full: extração de fatos do RAW com contexto 
 cloud_llm = false               # true = o dono ativou o envio à própria API (plano da memória §4.3)
 mental_models = false           # Fase 8 do plano — ainda não aterrissado
 raw_awaiting_dump = "degraded"  # embed: entra com contexto degradado · full: "hold" (espera o /dump)
+degraded_after_days = 7          # embed: RAW sem /dump espera N dias antes de entrar degradado
 exclude_types = ["connectors", "github"]   # tipos do RAW que nunca vão ao banco
 
 [runner]

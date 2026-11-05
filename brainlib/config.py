@@ -53,6 +53,7 @@ DEFAULTS: dict = {
         "cloud_llm": False,                # true = o dono ativou o envio à própria API (chave no .env)
         "mental_models": False,            # Fase 8 do plano da memória — ainda não aterrissado
         "raw_awaiting_dump": "degraded",   # embed: "degraded" · full: "hold" (nada nasce sem identidade)
+        "degraded_after_days": 7,          # embed: RAW sem /dump entra degradado após N dias (0 = envia já)
         "exclude_types": ["connectors", "github"],   # tipos do RAW que não vão ao banco (§3.2 do plano)
         "entity_types": {"pessoa": "PERSON", "projeto": "PROJECT", "area": "ORG"},
     },

@@ -528,7 +528,7 @@ def _harness_step(brain, ui) -> None:
     """Sub-passo Harnesses (plano memory-harness-wizard.md §4.1): o servidor do cérebro
     também guarda a memória dos agentes de código, em banco próprio (fora do rebuild)."""
     from . import harness, memory as _memory
-    if not ui.interactive:
+    if not getattr(ui, "interactive", False):
         return                                   # cablar é opt-in do dono — sem pergunta, sem ação
     det = harness.detect()
     opts = [k for k, on in det.items() if on]

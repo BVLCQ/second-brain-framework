@@ -34,11 +34,15 @@ sem chave `HINDSIGHT_API_*_API_KEY` no `.env`.
 ### O banco único do `embed` (decisão 8)
 
 Desde a decisão 8 do dono (2026-11-05), os dois bancos antigos viraram **um**: `bank`
-(default `brain`) recebe tudo em `chunks`, sem interpretação — os arquivos do RAW como
-estão (texto e binários até `max_file_mb`) e o conhecimento curado (artefatos do
-PROCESSED + uma página por ação/decisão/entrega/pessoa + PLANNING/PROFILE): quem escreveu
-é melhor que o extrator (o agente com proveniência, o CLI renderizando o ledger).
-`document_id` = caminho
+(default `brain`). O corpus (§3.2 do plano, Fase 3): **RAW** como está (texto e binários
+até `max_file_mb`) + **docs curtos `ledger/DEC` e `ledger/WIN`** (narrativa curada para
+perguntas de contexto) — tudo em `chunks` com **tags do ledger** (`pessoa:` `proj:`
+`goal:` `sem-artefato:1`), **data do mundo** e **entidades por alias** (top-level,
+grafo do servidor). FICA FORA do vetor: PROCESSED (o FTS5 do índice cobre busca por
+palavra), páginas de ação/pessoa (o SQLite responde estado) e PLANNING/PROFILE.
+RAW **sem** `/dump`: espera `degraded_after_days` (7) e entra **degradado** (tag
+`sem-artefato:1`, sem entidades); quando o `/dump` processa, a identidade muda, o sha
+muda e o documento reenvia com identidade plena. `document_id` = caminho
 no vault (ou `ledger/TASK-####`): toda lembrança aponta para algo que você pode abrir.
 
 ## Subir o servidor (OrbStack)

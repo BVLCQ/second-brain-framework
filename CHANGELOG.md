@@ -4,6 +4,27 @@ O que mudou em cada versão, em linguagem humana. Para atualizar: `brain update`
 (ou `brain setup --only comando` se o `brain` ainda não estiver no PATH).
 Mantido pelo dono do framework a cada remessa — veja `guides/commands.md` § upstream.
 
+## 2.5.0 — 2026-11-05
+
+- **O banco de memória emagrou e ficou mais inteligente (Fase 3 do plano)** — o que
+  entra no Hindsight agora é o que memória semântica resolve: **o RAW como está** (a
+  letra exata) + **decisões e entregas como documentos curtos** (`ledger/DEC`, com
+  projeto e quem decidiu). Artefatos do PROCESSED, páginas de ação/pessoa e
+  PLANNING/PROFILE **saem do vetor** — busca por palavra já é do índice SQLite/FTS5,
+  estado já é do `brain query`, e nada fica velho entre syncs.
+- **Cada documento nasce com identidade** — tags do ledger (`pessoa:`, `proj:`,
+  `goal:`, `sem-artefato:1`), **data do mundo** e **entidades por alias** (top-level,
+  alimentando o grafo do servidor); os aliases das pessoas são registrados no banco no
+  `memory setup`. O sha do documento cobre texto + identidade: alias novo ou `/dump`
+  reprocessado ⇒ o documento reenvia sozinho com a identidade nova.
+- **RAW sem `/dump` espera** — no `embed`, arquivo arquivado sem processamento espera
+  7 dias (`degraded_after_days`) e então entra **degradado** (tag `sem-artefato:1`,
+  sem entidades) — melhor ter a letra exata indexada do que não ter; quando o `/dump`
+  processa, ele é reenviado com identidade plena.
+- **Ao atualizar**: o próximo `memory sync` faz a limpeza por deleção sombra (os docs
+  que saíram do corpus são apagados do banco) e reenvia os RAW com as tags novas —
+  custo US$ 0 no embed. Não precisa de `rebuild`.
+
 ## 2.4.0 — 2026-11-05
 
 - **Memória em banco único (`brain`)** — os dois bancos antigos do modo `embed`

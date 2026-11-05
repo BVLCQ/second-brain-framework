@@ -3,8 +3,9 @@
 Dois setups (guides/memory.md · guides/plans/memory-setups.md), escolha livre e reversível,
 com BANCO ÚNICO `brain` nos dois modos (decisão 8 do dono, 2026-11-05):
 
-  embed · sem LLM em qualquer operação — chunks do vault (conhecimento + RAW) no `bank`,
-    sem consolidação nem observações (NO_LLM_CONFIG)
+  embed · sem LLM em qualquer operação — chunks no `bank`: RAW (a letra exata) +
+    docs curtos ledger/DEC e ledger/WIN (§3.2 do plano; PROCESSED/ações/pessoas ficam
+    no SQLite/FTS5), sem consolidação nem observações (NO_LLM_CONFIG)
   full · extração de fatos (chave do dono no .env, cloud_llm = true): retain em modo custom
     com contexto de identidades do ledger, observações e consolidação ligadas; RAW sem
     artefato fica retido até o /dump (raw_awaiting_dump = "hold").
@@ -116,6 +117,10 @@ class Hindsight:
 
     def version(self) -> dict:
         return self._req("GET", "/version")
+
+    def put_alias(self, bank: str, alias: str, canonical: str) -> dict:
+        """Registra alias de pessoa no banco (1.2.0: POST /aliases)."""
+        return self._req("POST", self._bank(bank) + "/aliases", {"alias": alias, "canonical": canonical})
 
     def put_bank(self, bank: str, body: dict) -> dict:
         return self._req("PUT", self._bank(bank), body)
@@ -249,39 +254,44 @@ def _identity_block(art, ppl_idx, projs_idx, text_fold: str) -> tuple[str, list[
             continue
         aliases = ", ".join(a for a in p["folds"][:MAX_CONTEXT_ALIASES]) or "—"
         lines.append(f"- pessoa: {p['name']} (id {p['id']}; grafias: {aliases})")
-        entities.append({"name": p["name"], "type": "PERSON", "id": p["id"]})
+        entities.append({"text": p["name"], "type": "PERSON", "id": p["id"]})
     for pr in projs_idx:
         if pr["id"] in project_ids or any(f and f in text_fold for f in pr["folds"]):
             lines.append(f"- projeto: {pr['name']} ({pr['id']})")
-            entities.append({"name": pr["name"], "type": "PROJECT", "id": pr["id"]})
+            entities.append({"text": pr["name"], "type": "PROJECT", "id": pr["id"]})
     return ("\n".join(lines) or "—"), entities
 
 
+def _goal_tags(brain, project_ids) -> list[str]:
+    """goal:<GOAL-#> dos projetos citados (árvore do PLANNING)."""
+    out: list[str] = []
+    for pid in project_ids or []:
+        pr = brain.plan.projects.get(pid)
+        if pr and pr.goal_id and f"goal:{pr.goal_id}" not in out:
+            out.append(f"goal:{pr.goal_id}")
+    return out
+
+
 def documents(brain) -> list[dict]:
+    """Corpus do banco único (§3.2 do plano — vale para os dois setups).
+
+    Vai: RAW dos tipos permitidos (a letra exata; binários até max_file_mb) + docs
+    curtos `ledger/DEC` e `ledger/WIN`. FICA FORA do vetor: PROCESSED (o FTS5 do
+    índice cobre busca por palavra), páginas de ação/pessoa (o SQLite responde
+    estado), PLANNING/PROFILE (pequenos, sempre verdade), connectors/github, inbox.
+    Embed: RAW sem artefato entra DEGRADADO após `degraded_after_days` (R7-embed) —
+    tags `sem-artefato:1`, sem entidades; o /dump muda identidade ⇒ sha muda ⇒ reenvia.
+    Full: RAW sem artefato fica retido (raw_awaiting_dump = "hold")."""
     inst, st = brain.inst, brain.state
     mem_cfg = inst.cfg["memory"]
     m = validate(mem_cfg)
     single = m == "full"
     exclude = set(mem_cfg.get("exclude_types") or [])
     hold = single and mem_cfg.get("raw_awaiting_dump") == "hold"
+    degraded_after = int(mem_cfg.get("degraded_after_days") or 0)
     max_bytes = mem_cfg["max_file_mb"] * 2**20
-    ppl_idx, projs_idx = (_alias_index(brain) if single else ([], []))
+    ppl_idx, projs_idx = _alias_index(brain)        # entidades por alias nos DOIS modos (Fase 3.6)
     docs: list[dict] = []
-    art_by_path = st.artifacts
-    for path in sorted(inst.processed.glob("[0-9][0-9][0-9][0-9]/[0-9][0-9]/*.md")):
-        rel = inst.rel(path)
-        art = art_by_path.get(rel)
-        text = path.read_text(encoding="utf-8", errors="replace")
-        tags = ["tipo:" + (art.kind if art else "artefato")]
-        if art:
-            tags += [f"proj:{p}" for p in art.projects] + [f"pessoa:{p}" for p in art.people]
-        docs.append({"bank": "mem", "id": rel, "text": text,
-                     "date": art.date.isoformat() if art and art.date else None, "tags": tags, "art": art})
-    for rel in ("PLANNING/goals.md", "PLANNING/log.md", "PROFILE/profile.md"):
-        p = inst.vault / rel
-        if p.exists():
-            docs.append({"bank": "mem", "id": rel, "text": p.read_text(encoding="utf-8"), "date": None,
-                         "tags": ["tipo:planejamento" if rel.startswith("PLANNING") else "tipo:perfil"], "art": None})
     for doc_id, text, date, tags in _entity_docs(brain):
         docs.append({"bank": "mem", "id": doc_id, "text": text, "date": date, "tags": tags, "art": None})
     raw = inst.vault / "RAW"
@@ -294,15 +304,25 @@ def documents(brain) -> list[dict]:
             continue
         art_id = st.raw_index.get(rel)
         art = st.artifacts.get(art_id) if art_id else None
-        if hold and art is None:
-            continue        # full + hold: RAW sem /dump não nasce sem identidade (Fase 7)
+        if art is None:
+            if hold:
+                continue    # full + hold: RAW sem /dump não nasce sem identidade (Fase 7)
+            now = util.now()
+            age_days = (now - datetime.fromtimestamp(path.stat().st_mtime, tz=now.tzinfo)).days
+            if degraded_after and age_days < degraded_after:
+                continue    # embed: espera o /dump; após N dias entra degradado (R7-embed)
         ext = path.suffix.lower()
         size = path.stat().st_size
         text = path.read_text(encoding="utf-8", errors="replace") if ext in RAW_TEXT and size <= max_bytes else None
         if text is None and not (ext in RAW_FILES and size <= max_bytes):
             continue
-        tags = ["tipo:raw", f"ext:{ext[1:]}"] + ([f"artefato:{art.id}"] if art else [])
-        d = {"bank": "mem", "id": rel, "date": _raw_date(path, rel, st), "tags": tags, "art": art}
+        tags = (["tipo:raw", f"ext:{ext[1:]}"]
+                + ([f"artefato:{art.id}"] if art else ["sem-artefato:1"])
+                + [f"pessoa:{p}" for p in (art.people if art else [])]
+                + [f"proj:{p}" for p in (art.projects if art else [])]
+                + _goal_tags(brain, art.projects if art else []))
+        d = {"bank": "mem", "id": rel, "date": _raw_date(path, rel, st), "tags": tags, "art": art,
+             "degraded": art is None}
         if text is not None:
             d["text"] = text
         else:
@@ -311,15 +331,22 @@ def documents(brain) -> list[dict]:
             d["sha"] = f"{size}:{int(path.stat().st_mtime)}"
         docs.append(d)
     for d in docs:
-        d.setdefault("sha", util.sha(d.get("text", "")))
-        if single:
+        if not d.get("degraded"):                       # RAW sem /dump: entra SEM entidades (R7-embed)
             block, entities = _identity_block(d.get("art"), ppl_idx, projs_idx, _fold(d.get("text", "")))
+            if entities:
+                # top-level nos DOIS modos: 1.2.0 aceita em chunks e alimenta o grafo de entidades
+                d["entities"] = entities
+        if single:
             head = f"{d['id']}"
             if d.get("date"):
                 head += f" · data: {d['date']}"
             d["context"] = f"CONTEXTO\n{head}\n{block}"
-            if entities:
-                d["entities"] = entities
+        # Fase 3.8: o sha cobre texto + identidade (tags/entidades/contexto) — mudou o
+        # contexto (artefato reprocessado, alias novo), o documento reenvia.
+        base = d.get("sha") or util.sha(d.get("text", ""))
+        d["sha"] = util.sha("|".join([base, ",".join(sorted(d["tags"])),
+                                      json.dumps(d.get("entities") or [], ensure_ascii=False),
+                                      d.get("context") or ""]))
     return docs
 
 
@@ -345,21 +372,10 @@ def awaiting_dump(brain) -> list[str]:
 
 
 def _entity_docs(brain) -> list[tuple[str, str, str, list[str]]]:
-    """(doc_id, texto, data, tags) — uma página por ação/decisão/entrega/pessoa/projeto."""
+    """(doc_id, texto, data, tags) — decisões e entregas como documentos curtos (§3.2/3.4).
+    Ações e pessoas FICAM FORA do vetor: estado é do SQLite; pessoas viram entidades e tags."""
     m = model.build(brain)
     out = []
-    for a in m["actions"]:
-        lines = [f"Ação {a['id']} — {a['title']}",
-                 f"Dono: {a['owner_name']} · lista: {a['list']} · estado: {a['status']}"
-                 + (f" · prazo: {a['due']}" if a["due"] else "")
-                 + (f" · projeto: {a['project']} {a['project_title']}" if a["project"] else ""),
-                 f"Origem: {a['source_label']} [{a['prov']}]", "Histórico:"]
-        lines += [f"- {h['date']} {h['type']}: {h['note']} ({h['by']})" for h in a["history"]]
-        if a["outcome"]:
-            lines.append(f"Resultado: {a['outcome']}")
-        tags = ["tipo:acao", f"lista:{a['list']}", f"pessoa:{a['owner']}"] + \
-            ([f"proj:{a['project']}"] if a["project"] else [])
-        out.append((f"ledger/{a['id']}", "\n".join(lines), a["closed"] or a["opened"], tags))
     for d in m["decisions"]:
         lines = [f"Decisão {d['id']} ({d['date']}) — {d['title']}",
                  f"Decidido por: {', '.join(d['decided_by_names'])} · estado: {d['status']}"
@@ -371,17 +387,16 @@ def _entity_docs(brain) -> list[tuple[str, str, str, list[str]]]:
         if d["superseded_by"]:
             lines.append(f"Substituída por {d['superseded_by']}")
         lines.append(f"Fonte: {d['source_label']} — {d['source']} [{d['prov']}]")
-        tags = ["tipo:decisao"] + [f"pessoa:{p}" for p in d["decided_by"]] + \
-            ([f"proj:{d['project']}"] if d["project"] else [])
+        tags = (["tipo:decisao"] + [f"pessoa:{p}" for p in d["decided_by"]]
+                + ([f"proj:{d['project']}"] if d["project"] else [])
+                + _goal_tags(brain, [d["project"]] if d["project"] else []))
         out.append((f"ledger/{d['id']}", "\n".join(lines), d["date"], tags))
     for e in m["deliveries"]:
         text = (f"Entrega {e['id']} ({e['date']}) — {e['title']}\nResultado: {e['result']}"
                 + (f"\nImpacto: {e['impact']}" if e["impact"] else "") + f"\nFonte: {e['source_label']} [{e['prov']}]")
-        out.append((f"ledger/{e['id']}", text, e["date"], ["tipo:entrega"] + ([f"proj:{e['project']}"] if e["project"] else [])))
-    for p in m["people"]:
-        text = (f"Pessoa: {p['name']} (id {p['id']}) · aliases: {', '.join(p['aliases']) or '—'}\n"
-                f"Papel: {p['role'] or '—'} · relação: {p['relation'] or '—'} · e-mail: {p['email'] or '—'}")
-        out.append((f"ledger/person/{p['id']}", text, None, ["tipo:pessoa", f"pessoa:{p['id']}"]))
+        out.append((f"ledger/{e['id']}", text, e["date"],
+                    ["tipo:entrega"] + ([f"proj:{e['project']}"] if e["project"] else [])
+                    + _goal_tags(brain, [e["project"]] if e["project"] else [])))
     return out
 
 
@@ -419,7 +434,18 @@ def setup(brain, hs: Hindsight | None = None, mode_: str | None = None) -> list[
                                   "mission": MEM_MISSION.format(owner=brain.inst.cfg["owner"]["name"]),
                                   "retain_mission": RETAIN_MISSION})
         hs.patch_config(mem["bank"], NO_LLM_CONFIG)
+    _sync_aliases(brain, hs, mem["bank"])
     return [mem["bank"]]
+
+
+def _sync_aliases(brain, hs: Hindsight, bank: str) -> None:
+    """Aliases do ledger no banco (Fase 3.6; 1.2.0: POST /aliases). 409 = já registrado."""
+    for p in brain.state.people.values():
+        for a in p.aliases:
+            try:
+                hs.put_alias(bank, a, p.name)
+            except util.BrainError:
+                pass
 
 
 def _op_ids(res: dict) -> list[str]:
@@ -543,8 +569,8 @@ def sync(brain, limit: int | None = None, dry_run: bool = False, hs: Hindsight |
     for d in todo:
         meta = {"document_id": d["id"], "tags": d["tags"], "metadata": {"vault_path": d["id"]}}
         if d.get("entities"):
-            # 1.2.0: valores do metadata de retain precisam ser strings — entities viaja como JSON
-            meta["metadata"]["entities"] = json.dumps(d["entities"], ensure_ascii=False)
+            # 1.2.0: entidade top-level com campo `text` — alimenta o grafo (validado em chunks e full)
+            meta["entities"] = d["entities"]
         if d.get("date"):
             meta["timestamp"] = f"{d['date']}T12:00:00"
         try:

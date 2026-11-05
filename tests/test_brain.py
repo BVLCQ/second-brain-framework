@@ -1129,6 +1129,10 @@ class FakeHindsight(memory.Hindsight):
         self.recall_calls = getattr(self, "recall_calls", []) + [(bank, query)]
         return {"results": []}
 
+    def put_alias(self, bank, alias, canonical):
+        self.aliases = getattr(self, "aliases", []) + [(bank, alias, canonical)]
+        return {"success": True}
+
     def retain(self, bank, items, async_=True):
         self.calls += 1
         self.sent.append((bank, items[0]["document_id"]))
@@ -1152,6 +1156,8 @@ class FakeHindsight(memory.Hindsight):
 class MemorySyncTests(unittest.TestCase):
     def _setup(self, td):
         b = _brain(Path(td))
+        b.record_one({"type": "decision.made", "by": "owner", "date": "2026-10-01", "source": "chat",
+                      "data": {"title": "Decisão de teste", "decided_by": ["eu"]}})   # corpus §3.2: DEC vai ao banco
         return b, FakeHindsight()
 
     def test_setup_single_bank_llm_free(self):
@@ -1164,6 +1170,9 @@ class MemorySyncTests(unittest.TestCase):
 
             def patch_config(self, bank, cfg):
                 self.cfg[bank] = cfg
+
+            def put_alias(self, bank, alias, canonical):
+                pass
 
         with tempfile.TemporaryDirectory() as td:
             b = _brain(Path(td))
@@ -1182,20 +1191,20 @@ class MemorySyncTests(unittest.TestCase):
             self.assertGreater(res["sent"], 0)
             self.assertEqual(res["remaining"], 0)
             state = util.read_json(memory._state_path(b), {})
-            self.assertTrue(state[memory.OPS_KEY]["mem"]["PLANNING/goals.md"]["ids"])
+            self.assertTrue(state[memory.OPS_KEY]["mem"]["ledger/DEC-0001"]["ids"])
 
     def test_failed_async_retain_is_resent(self):
         with tempfile.TemporaryDirectory() as td:
             b, hs = self._setup(td)
             memory.sync(b, hs=hs)
-            hs.finish("PLANNING/goals.md", "failed")
+            hs.finish("ledger/DEC-0001", "failed")
             for o in hs.ops.values():
                 if o["status"] == "processing":
                     o["status"] = "completed"
             hs.sent.clear()
             res = memory.sync(b, hs=hs)
-            self.assertEqual(res["resent"], ["mem:PLANNING/goals.md"])
-            self.assertEqual(hs.sent, [("brain", "PLANNING/goals.md")])
+            self.assertEqual(res["resent"], ["mem:ledger/DEC-0001"])
+            self.assertEqual(hs.sent, [("brain", "ledger/DEC-0001")])
             self.assertEqual(res["remaining"], 0)
             # o reenvio ainda em andamento não dispara novo reenvio
             hs.sent.clear()
@@ -1209,20 +1218,20 @@ class MemorySyncTests(unittest.TestCase):
             memory.sync(b, hs=hs)
             for o in hs.ops.values():
                 o["status"] = "completed"
-            hs._add("brain", "PLANNING/goals.md", "failed")   # falha mais nova que o retain concluído
+            hs._add("brain", "ledger/DEC-0001", "failed")   # falha mais nova que o retain concluído
             hs._add("brain", "profile-velho.md", "failed")    # documento fora do estado: ignorado
             state = util.read_json(memory._state_path(b), {})
             state.pop(memory.OPS_KEY)
             util.write_json(memory._state_path(b), state)
             hs.sent.clear()
             res = memory.sync(b, hs=hs)
-            self.assertEqual(res["resent"], ["mem:PLANNING/goals.md"])
-            self.assertEqual(hs.sent, [("brain", "PLANNING/goals.md")])
+            self.assertEqual(res["resent"], ["mem:ledger/DEC-0001"])
+            self.assertEqual(hs.sent, [("brain", "ledger/DEC-0001")])
 
     def test_old_failure_superseded_by_later_success_is_ignored(self):
         with tempfile.TemporaryDirectory() as td:
             b, hs = self._setup(td)
-            hs._add("brain", "PLANNING/goals.md", "failed")
+            hs._add("brain", "ledger/DEC-0001", "failed")
             memory.sync(b, hs=hs)
             for o in hs.ops.values():
                 o["status"] = "completed" if o["status"] == "processing" else o["status"]
@@ -1236,13 +1245,13 @@ class MemorySyncTests(unittest.TestCase):
             b, hs = self._setup(td)
             memory.sync(b, hs=hs)
             for _ in range(memory.MAX_TRIES):
-                hs.finish("PLANNING/goals.md", "failed")
-                self.assertEqual(memory.sync(b, hs=hs)["resent"], ["mem:PLANNING/goals.md"])
-            hs.finish("PLANNING/goals.md", "failed")
+                hs.finish("ledger/DEC-0001", "failed")
+                self.assertEqual(memory.sync(b, hs=hs)["resent"], ["mem:ledger/DEC-0001"])
+            hs.finish("ledger/DEC-0001", "failed")
             res = memory.sync(b, hs=hs)
             self.assertEqual(res["resent"], [])
-            self.assertEqual(res["gave_up"], ["mem:PLANNING/goals.md"])
-            self.assertEqual(memory.op_problems(b)["gave_up"], ["mem:PLANNING/goals.md"])
+            self.assertEqual(res["gave_up"], ["mem:ledger/DEC-0001"])
+            self.assertEqual(memory.op_problems(b)["gave_up"], ["mem:ledger/DEC-0001"])
 
     def test_dry_run_does_not_touch_server(self):
         with tempfile.TemporaryDirectory() as td:
@@ -1260,10 +1269,10 @@ class MemorySyncTests(unittest.TestCase):
                 o["status"] = "completed"
             self.assertEqual(memory.status(b, online=True, hs=hs)["level"], "ok")
             # falha no servidor, ainda sem ter passado por um sync
-            hs._add("brain", "PLANNING/goals.md", "failed")
+            hs._add("brain", "ledger/DEC-0001", "failed")
             s = memory.status(b, online=True, hs=hs)
             self.assertEqual(s["level"], "warn")
-            self.assertIn("mem:PLANNING/goals.md", s["detail"])
+            self.assertIn("mem:ledger/DEC-0001", s["detail"])
             # operação parada em processing há mais de 2h (BRAIN_NOW = 2026-10-09T10:00-03:00 = 13:00Z)
             hs.ops[hs._add("brain", "RAW/x.md", "processing")]["updated_at"] = "2026-10-09T10:30:00+00:00"
             s = memory.status(b, online=True, hs=hs)
@@ -1312,7 +1321,7 @@ class MemorySyncTests(unittest.TestCase):
             b, hs = self._setup(td)
             b.inst.cfg["memory"]["engine"] = "hindsight"
             memory.sync(b, hs=hs)
-            hs.finish("PLANNING/goals.md", "failed")
+            hs.finish("ledger/DEC-0001", "failed")
             state = util.read_json(memory._state_path(b), {})
             memory.reconcile(b, hs, state)
             util.write_json(memory._state_path(b), state)

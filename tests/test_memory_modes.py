@@ -135,12 +135,18 @@ class FullDocumentsTests(unittest.TestCase):
             self.assertIn("pessoa: Marina-demo (id marina-demo", d["context"])
             self.assertTrue(any(e["id"] == "marina-demo" for e in d["entities"]))
 
-    def test_embed_sends_raw_without_artifact(self):
+    def test_embed_raw_without_artifact_waits_then_degrades(self):
         with tempfile.TemporaryDirectory() as td:
             b = _brain(Path(td))
-            _raw(b, "RAW/2026/10/meetings/ata-x.md")
+            p = _raw(b, "RAW/2026/10/meetings/ata-x.md")
             ids = {d["id"] for d in memory.documents(b)}
-            self.assertIn("RAW/2026/10/meetings/ata-x.md", ids)
+            self.assertNotIn("RAW/2026/10/meetings/ata-x.md", ids)          # fresco: espera o /dump
+            old = util.parse_dt("2026-09-28T00:00:00-03:00").timestamp()      # 11 dias antes do BRAIN_NOW
+            os.utime(p, (old, old))                                         # entra degradado
+            docs = {d["id"]: d for d in memory.documents(b)}
+            d = docs["RAW/2026/10/meetings/ata-x.md"]
+            self.assertIn("sem-artefato:1", d["tags"])
+            self.assertNotIn("entities", d)                                 # sem identidade ainda
             self.assertEqual(memory.awaiting_dump(b), [])                   # hold é regra do full
 
     def test_exclude_types_never_go(self):
@@ -181,8 +187,8 @@ class FullDocumentsTests(unittest.TestCase):
             item = next(i for i in hs.items if i["document_id"] == "RAW/2026/10/meetings/ata-x.md")
             self.assertTrue(item["context"].startswith("CONTEXTO\n"))
             self.assertIn("marina-demo", item["context"])
-            ents = json.loads(item["metadata"]["entities"])   # 1.2.0: metadata só aceita strings
-            self.assertTrue(any(e["id"] == "marina-demo" and e["type"] == "PERSON" for e in ents))
+            ents = item["entities"]                          # 1.2.0: entidade top-level com `text`
+            self.assertTrue(any(e["id"] == "marina-demo" and e["type"] == "PERSON" and e["text"] for e in ents))
             self.assertEqual(item["timestamp"], "2026-10-08T12:00:00")
 
 
@@ -191,6 +197,8 @@ class ShadowDeleteTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             b = _brain(Path(td))
             p = _raw(b, "RAW/2026/10/connectors/espelho.md")               # connectors NÃO é excluído aqui…
+            old = util.parse_dt("2026-09-27T00:00:00-03:00").timestamp()      # antes do BRAIN_NOW congelado
+            os.utime(p, (old, old))                                         # sem /dump: só entra degradado
             (b.inst.cfg["memory"])  # noqa: B018 — modo embed, exclude_types padrão aplica no documents()
             hs = FakeHindsight()
             # primeiro sync com exclusão desligada (como se o doc tivesse ido antes da regra)
@@ -238,6 +246,68 @@ class CostTests(unittest.TestCase):
             b = Brain(config.load(td))
             c = memory.cost(b, FakeHindsight())
             self.assertEqual(c["mode"], "none")
+
+
+class CorpusTests(unittest.TestCase):
+    """§3.2/3.4: RAW + DEC/WIN vão; PROCESSED, ações, pessoas e PLANNING/PROFILE ficam de fora."""
+
+    def _rich(self, td):
+        b = _brain(Path(td))
+        _raw(b, "RAW/2026/10/meetings/ata-x.md", "ata com a Marina-demo sobre o forno")
+        p = b.inst.vault / "PROCESSED/2026/10/ata-x.md"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("artefato de teste", encoding="utf-8")
+        b.record_one({"type": "artifact.added", "id": "PROCESSED/2026/10/ata-x.md", "by": "agent",
+                      "prov": "observado", "source": "RAW/2026/10/meetings/ata-x.md", "date": "2026-10-08",
+                      "data": {"kind": "reuniao", "title": "Ata X", "raw": "RAW/2026/10/meetings/ata-x.md",
+                               "people": ["marina-demo"], "projects": ["PROJ-1"], "summary": ""}})
+        b.record_one({"type": "action.opened", "by": "owner",
+                      "data": {"title": "Ligar pro forno", "owner": "eu", "effort_min": 30}})
+        b.record_one({"type": "decision.made", "by": "owner", "date": "2026-10-01", "source": "chat",
+                      "data": {"title": "Congelar o forno-demo", "decided_by": ["eu"], "project": "PROJ-1"}})
+        b.record_one({"type": "delivery.recorded", "by": "owner", "date": "2026-10-02", "source": "chat",
+                      "data": {"title": "Forno instalado", "result": "ok"}})
+        return b
+
+    def test_only_raw_and_dec_win_go(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = self._rich(td)
+            ids = {d["id"] for d in memory.documents(b)}
+            self.assertIn("RAW/2026/10/meetings/ata-x.md", ids)
+            self.assertIn("ledger/DEC-0001", ids)
+            self.assertIn("ledger/WIN-0001", ids)
+            for out_id in ("PROCESSED/2026/10/ata-x.md", "PLANNING/goals.md", "PROFILE/profile.md",
+                           "ledger/TASK-0001", "ledger/person/eu"):
+                self.assertNotIn(out_id, ids)
+
+    def test_goal_tag_from_planning_tree(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = self._rich(td)
+            d = next(d for d in memory.documents(b) if d["id"] == "RAW/2026/10/meetings/ata-x.md")
+            self.assertIn("proj:PROJ-1", d["tags"])
+            self.assertIn("goal:GOAL-1", d["tags"])                        # PROJ-1 pertence ao GOAL-1
+            dec = next(d for d in memory.documents(b) if d["id"] == "ledger/DEC-0001")
+            self.assertIn("goal:GOAL-1", dec["tags"])
+
+    def test_reprocessed_artifact_resends(self):
+        """Fase 3.8: identidade mudou (alias novo no CONTEXTO do full) ⇒ sha muda ⇒ reenvia."""
+        with tempfile.TemporaryDirectory() as td:
+            b = self._rich(td)
+            config.set_keys(b.inst, "memory", {"extract": True, "cloud_llm": True, "raw_awaiting_dump": "hold"})
+            b.inst = config.load(b.inst.root); b.reload()
+            before = next(d for d in memory.documents(b) if d["id"] == "RAW/2026/10/meetings/ata-x.md")["sha"]
+            b.record_one({"type": "person.updated", "id": "marina-demo", "by": "owner",
+                          "data": {"aliases_add": ["Mary-demo"]}})
+            b.reload()
+            after = next(d for d in memory.documents(b) if d["id"] == "RAW/2026/10/meetings/ata-x.md")["sha"]
+            self.assertNotEqual(before, after)
+
+    def test_aliases_synced_at_setup(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = self._rich(td)
+            hs = FakeHindsight()
+            memory.setup(b, hs)
+            self.assertIn(("brain", "Mari-demo", "Marina-demo"), hs.aliases)
 
 
 class FreshnessTests(unittest.TestCase):
