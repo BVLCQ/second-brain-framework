@@ -240,6 +240,48 @@ class CostTests(unittest.TestCase):
             self.assertEqual(c["mode"], "none")
 
 
+class FreshnessTests(unittest.TestCase):
+    """Fresnness do servidor (plano memory-harness-wizard.md §4.4): informação, nunca bloqueio."""
+
+    def _cache(self, b, latest):
+        util.write_json(b.inst.fresh / memory.VERSION_CACHE,
+                        {"latest": latest, "checked_at": util.now().isoformat(timespec="seconds")})
+
+    def test_current_server_is_not_flagged(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            hs = FakeHindsight()
+            hs.server_version = "1.2.0"
+            self._cache(b, "1.2.0")
+            s = memory.status(b, online=True, hs=hs)
+            self.assertIn("servidor 1.2.0 (última)", s["detail"])
+            self.assertEqual(s["level"], "ok")
+
+    def test_old_server_is_flagged(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            hs = FakeHindsight()
+            hs.server_version = "0.10.1"
+            self._cache(b, "1.2.0")
+            s = memory.status(b, online=True, hs=hs)
+            self.assertIn("servidor 0.10.1 < Hindsight 1.2.0", s["detail"])
+
+    def test_no_cache_is_quiet(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            s = memory.status(b, online=True, hs=FakeHindsight())
+            self.assertNotIn("(última)", s["detail"])
+            self.assertNotIn("< Hindsight", s["detail"])
+
+    def test_version_check_tolerates_server_without_version(self):
+        class NoVersion(FakeHindsight):
+            def version(self):
+                raise util.BrainError("Hindsight GET /version → 404", code=2)
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            self.assertIsNone(memory.version_check(b, NoVersion()))
+
+
 class ApplyModeTests(unittest.TestCase):
     def test_full_without_key_in_env_is_refused(self):
         with tempfile.TemporaryDirectory() as td:

@@ -99,6 +99,11 @@ def checks(brain, online: bool = False) -> list[dict]:
         out.append(_c("ok" if age < 26 else "warn", "views", f"último render há {max(age, 0):.0f}h"))
     if cfg["memory"]["engine"] == "hindsight":
         from . import memory
+        if online:
+            try:
+                memory.refresh_release_cache(brain.inst)   # alimenta o cache da fresnness (≤1×/dia)
+            except Exception:                              # noqa: BLE001 — fresnness é informação
+                pass
         status = memory.status(brain, online=online)
         out.append(_c(status["level"], "memória", status["detail"]))
         if status.get("mode") == "full":

@@ -114,6 +114,9 @@ class Hindsight:
     def banks(self) -> dict:
         return self._req("GET", "/v1/default/banks")
 
+    def version(self) -> dict:
+        return self._req("GET", "/version")
+
     def put_bank(self, bank: str, body: dict) -> dict:
         return self._req("PUT", self._bank(bank), body)
 
@@ -654,6 +657,67 @@ def _queue_text(q: dict) -> str:
     return head + " (" + " · ".join(parts) + ")"
 
 
+# ── fresnness do servidor (plano memory-harness-wizard.md, Fase 3) ────────────
+VERSION_CACHE = ".hindsight-check.json"     # em FRESH/ (derivado): última versão upstream
+RELEASES_URL = "https://api.github.com/repos/vectorize-io/hindsight/releases/latest"
+RELEASE_MAX_AGE_H = 24
+
+
+def _read_version_cache(inst) -> dict:
+    from . import util as _u
+    p = inst.fresh / VERSION_CACHE
+    if not p.exists():
+        return {}
+    try:
+        return _u.read_json(p, {})
+    except Exception:                                  # noqa: BLE001 — cache corrompido = sem cache
+        return {}
+
+
+def refresh_release_cache(inst) -> dict:
+    """Busca a última versão do Hindsight upstream (≤1×/dia) e grava o cache em FRESH/.
+    Alimentada pelo doctor online e pelo noturno; o status só LÊ. Nunca falha."""
+    from . import util as _u
+    cache = _read_version_cache(inst)
+    ts = cache.get("checked_at")
+    if ts:
+        try:
+            if (_u.now() - _u.parse_dt(ts)).total_seconds() < RELEASE_MAX_AGE_H * 3600:
+                return cache
+        except Exception:                              # noqa: BLE001
+            pass
+    out = {"checked_at": _u.now().isoformat(timespec="seconds")}
+    try:
+        req = urllib.request.Request(RELEASES_URL, headers={
+            "Accept": "application/vnd.github+json", "User-Agent": "segundo-cerebro"})
+        with urllib.request.urlopen(req, timeout=10) as r:
+            tag = (json.loads(r.read().decode()) or {}).get("tag_name") or ""
+        out.update(latest=tag.lstrip("v"), stale=False)
+    except Exception:                                  # noqa: BLE001 — offline é estado normal
+        out.update(latest=cache.get("latest", ""), stale=True)
+    try:
+        _u.write_json(inst.fresh / VERSION_CACHE, out)
+    except Exception:                                  # noqa: BLE001 — FRESH/ pode não existir ainda
+        pass
+    return out
+
+
+def version_check(brain, hs: Hindsight) -> dict | None:
+    """Servidor vs upstream — INFORMAÇÃO, nunca bloqueio (plano §4.4).
+
+    None = sem como saber (servidor sem /version e sem cache). Sem rede aqui:
+    a última versão vem do cache; quem o alimenta é o `refresh_release_cache`."""
+    from .upstream import _vkey
+    try:
+        server = (hs.version() or {}).get("api_version") or ""
+    except util.BrainError:
+        return None
+    latest = (_read_version_cache(brain.inst) or {}).get("latest") or ""
+    if not latest:
+        return {"server": server, "latest": "", "behind": False}
+    return {"server": server, "latest": latest, "behind": _vkey(latest) > _vkey(server)}
+
+
 def status(brain, online: bool = False, hs: Hindsight | None = None) -> dict:
     mem = brain.inst.cfg["memory"]
     if mem["engine"] != "hindsight":
@@ -677,6 +741,10 @@ def status(brain, online: bool = False, hs: Hindsight | None = None) -> dict:
             if legacy:
                 detail += (f" · ⚠ bancos legados no servidor ({', '.join(legacy)})"
                            " — brain memory rebuild consolida no banco único")
+            vc = version_check(brain, hs)
+            if vc and vc.get("latest"):
+                detail += (f" · ⚠ servidor {vc['server']} < Hindsight {vc['latest']} — guides/memory.md §Atualizar o Hindsight"
+                           if vc.get("behind") else f" · servidor {vc['server']} (última)")
         problems = op_problems(brain, hs if online else None)
         q = queue(brain, hs) if online else None
     except util.BrainError as e:

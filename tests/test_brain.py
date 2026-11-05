@@ -1083,6 +1083,7 @@ class FakeHindsight(memory.Hindsight):
         self.deleted: list[str] = []            # "bank:doc" apagados (deleção sombra)
         self.deleted_banks: list[str] = []
         self.stats_payload: dict = {}           # payload de /llm-requests/stats
+        self.server_version = "1.2.0"          # /version (fresnness)
 
     def _add(self, bank: str, doc: str, status: str = "processing", op_type: str = "retain") -> str:
         self.clock += 1
@@ -1120,6 +1121,9 @@ class FakeHindsight(memory.Hindsight):
 
     def banks(self):
         return {"banks": [{"bank_id": b} for b in self.bank_bodies]}
+
+    def version(self):
+        return {"api_version": self.server_version}
 
     def retain(self, bank, items, async_=True):
         self.calls += 1
