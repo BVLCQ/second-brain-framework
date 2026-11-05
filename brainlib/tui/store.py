@@ -15,10 +15,16 @@ from typing import Any
 from .. import config, doctor, ids, model, notes as notes_mod, opener, rawsort, util, watch
 from ..core import Brain
 
+# Abas do painel Plano (Execução): 0 = árvore inteira; 1-4 = só goals/projetos naquele status.
+# Goal na aba aparece com todos os seus projetos; projeto no status aparece dentro do goal (contexto),
+# mesmo quando o goal tem outro status.
+PLAN_VIEWS = ["Todos", "Ativo", "Congelado", "Depois", "Finalizado"]
+PLAN_TAB_STATUS = [None, "ativo", "congelado", "depois", "finalizado"]
+
 PANELS_EXEC = {
     1: ("Status", ["Resumo", "Saúde", "Fontes", "Sistema"]),
     2: ("Ações", ["mine", "waiting", "watching"]),
-    3: ("Plano", ["Árvore"]),
+    3: ("Plano", PLAN_VIEWS),
     4: ("Aprovar", ["Perguntas", "Propostas", "Outbox", "Foco", "Publicar"]),
     5: ("Registro", ["Decisões", "Entregas", "Pessoas", "Artefatos"]),
     6: ("Log de comandos", ["Log", "Feedback"]),
@@ -534,11 +540,18 @@ class Store:
             out = [Item(a["id"], "action", a, q=f"{a['id']} {a['title']} {a['project'] or ''} {a['owner_name']}")
                    for a in rows]
         elif panel == 3:
+            want = PLAN_TAB_STATUS[tab] if tab < len(PLAN_TAB_STATUS) else None
             for g in m["goals"]:
+                if want is not None and g["status"] != want:
+                    pids = [pid for pid in g["projects"] if self.by_project[pid]["status"] == want]
+                    if not pids:
+                        continue                      # nem o goal nem um projeto dele está na aba
+                else:
+                    pids = list(g["projects"])
                 out.append(Item(g["id"], "g", g, q=f"{g['id']} {g['title']}"))
                 if g["id"] in collapsed:
                     continue
-                for pid in g["projects"]:
+                for pid in pids:
                     p = self.by_project[pid]
                     out.append(Item(pid, "p", p, q=f"{pid} {p['title']}", extra={"goal": g}))
                     if pid in collapsed:

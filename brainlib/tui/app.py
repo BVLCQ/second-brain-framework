@@ -39,7 +39,7 @@ from .modals import (AgentModal, ChoiceModal, ConfirmModal, Field, FilterModal, 
 from .ask_keys import AskKeys
 from .feedback_keys import FeedbackKeys
 from .portfolio_keys import PortfolioKeys
-from .store import ACTION_SORTS, ACTION_VIEWS, FACE_START, FACES, SYS_OPS, Item, Store
+from .store import ACTION_SORTS, ACTION_VIEWS, FACE_START, FACES, PLAN_TAB_STATUS, SYS_OPS, Item, Store
 
 UCAP = 3                      # linhas visíveis de um painel sem foco
 
@@ -526,6 +526,9 @@ class BrainApp(AskKeys, FeedbackKeys, PortfolioKeys, App):
                 n = 1 if m["focus"] and m["focus"]["status"] == "proposto" else 0
             elif i == 4:
                 n = sum(1 for s in m["shares"] if s["status"] in ("solicitada", "aprovada"))
+        if pid == 3 and i:
+            st = PLAN_TAB_STATUS[i] if i < len(PLAN_TAB_STATUS) else ""
+            n = sum(1 for x in m["goals"] + m["projects"] if x["status"] == st)
         if pid == 6 and i == 1:
             n = sum(1 for f in self.store.brain.state.feedbacks.values() if f.status in ("pendente", "falhou"))
         if pid == 1 and i == 1:

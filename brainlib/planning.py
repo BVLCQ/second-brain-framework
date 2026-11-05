@@ -35,8 +35,6 @@ DELIV_RE = re.compile(rf"^(\s*-\s+\[)( |x|X|-)(\]\s+)(PROJ-\d+\.\d+|{ids.LEGACY_
 META_RE = re.compile(r"^\s*-\s+([^\[\]:]{2,24}):\s*(.+?)\s*$")
 H2_RE = re.compile(r"^##\s+")
 
-ACTIVE = {"ativo", "ativa"}
-
 
 @dataclass
 class Deliverable:
@@ -64,7 +62,7 @@ class Project:
 
     @property
     def status(self) -> str:
-        return util.fold(self.meta.get("status", "ativo"))
+        return norm_status(self.meta.get("status", "ativo"))
 
     @property
     def owner(self) -> str | None:
@@ -80,7 +78,7 @@ class Goal:
 
     @property
     def status(self) -> str:
-        return util.fold(self.meta.get("status", "ativo"))
+        return norm_status(self.meta.get("status", "ativo"))
 
     @property
     def horizon(self) -> str | None:
@@ -461,7 +459,17 @@ def add_deliverable(path: Path, project_id: str, title: str, due: str = "", weig
 
 
 # ── editar nós (goal, projeto, entregável) ───────────────────────────────────
-NODE_STATUS = ["ativo", "congelado", "fechado"]          # goal e projeto; fora de "ativo" o projeto sai da saúde normal
+NODE_STATUS = ["ativo", "congelado", "depois", "finalizado"]   # goal e projeto; fora de "ativo" o projeto sai da saúde normal
+STATUS_ALIAS = {"fechado": "finalizado", "fechada": "finalizado",   # nome antigo: vale na entrada, nunca é escrito
+                "ativa": "ativo", "congelada": "congelado"}
+
+
+def norm_status(raw) -> str:
+    """Status de goal/projeto no vocabulário novo: o goals.md do dono pode carregar `fechado`/`ativa` de antes."""
+    f = util.fold(raw or "ativo")
+    return STATUS_ALIAS.get(f, f)
+
+
 _META_LABEL = {"status": "status", "horizonte": "horizonte", "por que": "por quê", "dono": "dono"}
 
 
@@ -594,7 +602,7 @@ def edit_node(path: Path, node: str, **fields) -> list[tuple[str, str, str]]:
                 continue
             key, old = meta[f]
             if f == "status":
-                value = util.fold(value)
+                value = norm_status(value)
                 if value not in NODE_STATUS:
                     raise util.BrainError(f"status: use {', '.join(NODE_STATUS)}", code=3)
             elif f == "horizon":

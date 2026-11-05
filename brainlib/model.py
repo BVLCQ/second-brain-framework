@@ -13,10 +13,10 @@ from .state import Action, State
 
 KANBAN = {"aberta": "a fazer", "fazendo": "fazendo", "aguardando": "aguardando",
           "bloqueada": "bloqueada", "fechada": "feita", "descartada": "descartada"}
-HEALTH_ORDER = ["em-risco", "travado", "atencao", "em-dia", "concluido", "congelado", "fechado"]
+HEALTH_ORDER = ["em-risco", "travado", "atencao", "em-dia", "concluido", "congelado", "depois", "fechado"]
 HEALTH_LABEL = {"em-risco": "em risco", "travado": "travado", "atencao": "atenção",
                 "em-dia": "em dia", "concluido": "concluído", "congelado": "congelado",
-                "fechado": "fechado"}
+                "depois": "depois", "fechado": "finalizado"}
 
 
 def _iso(d: date | None) -> str | None:
@@ -150,8 +150,8 @@ class ModelBuilder:
 
     def project_health(self, proj, prog: dict, actions: list[dict], last: date | None) -> dict:
         status = proj.status
-        if status not in ("ativo", "ativa"):
-            key = "congelado" if status.startswith("congel") else "fechado"
+        if status != "ativo":
+            key = {"congelado": "congelado", "depois": "depois"}.get(status, "fechado")
             return {"level": key, "label": HEALTH_LABEL[key], "reason": f"projeto {status}"}
         if prog["total"] and prog["done"] == prog["total"]:
             return {"level": "concluido", "label": "concluído", "reason": "todos os entregáveis feitos"}

@@ -18,7 +18,7 @@ from . import planning, util
 LEDGER = "PROCESSED/_ledger/events.jsonl"
 PLANNING = "PLANNING/goals.md"
 HEALTH_ICON = {"em-risco": "⚠", "travado": "⚠", "atencao": "·", "em-dia": "✓", "concluido": "✓",
-               "congelado": "·", "fechado": "·"}
+               "congelado": "·", "depois": "·", "fechado": "·"}
 
 
 class Pages:

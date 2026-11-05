@@ -16,7 +16,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 
 os.environ.setdefault("BRAIN_NOW", "2026-10-09T10:00:00-03:00")
 
-from brainlib import harvest, notes as notes_mod, planning  # noqa: E402
+from brainlib import harvest, notes as notes_mod, planning, util  # noqa: E402
 from test_brain import _brain  # noqa: E402
 
 
@@ -134,6 +134,19 @@ class GoalsRoundTripTests(unittest.TestCase):
         planning.set_deliverable(self.g, "PROJ-1.1", "feito", None)
         self.assertIn("\u2028", self.g.read_text(encoding="utf-8"))
         self.assertIn("Proj\x0c x", self.g.read_text(encoding="utf-8"))
+
+    def test_status_vocabulario_e_alias_do_antigo(self):
+        self.g.write_text("## GOAL-1 — G\n- status: ativo\n\n### PROJ-1 — P\n- status: fechado\n"
+                          "- [ ] PROJ-1.1 Um\n", encoding="utf-8")
+        plan = planning.load(self.g)
+        self.assertEqual(plan.goals["GOAL-1"].status, "ativo")
+        self.assertEqual(plan.projects["PROJ-1"].status, "finalizado")          # nome antigo lido como novo
+        planning.edit_node(self.g, "GOAL-1", status="depois")
+        self.assertIn("- status: depois", self.g.read_text(encoding="utf-8"))
+        planning.edit_node(self.g, "PROJ-1", status="congelada")               # feminino do dono vale
+        self.assertIn("- status: congelado", self.g.read_text(encoding="utf-8"))
+        with self.assertRaises(util.BrainError):
+            planning.edit_node(self.g, "GOAL-1", status="arquivado")
 
     def test_title_edit_without_spaces_around_dash(self):
         self.g.write_text("## GOAL-1—Pré-venda\n- status: ativo\n", encoding="utf-8")

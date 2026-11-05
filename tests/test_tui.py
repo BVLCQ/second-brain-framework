@@ -2364,5 +2364,48 @@ class StoreLocateTest(unittest.TestCase):
         self.assertEqual(st.locate(known["id"]), (1, 3, 0))
 
 
+class PlanTabsTest(unittest.TestCase):
+    """Painel 3 (Plano, face Execução): abas Todos/Ativo/Congelado/Depois/Finalizado filtram goals e projetos."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name) / "inst"
+        with contextlib.redirect_stdout(io.StringIO()):
+            demo_mod.cli(argparse.Namespace(dir=str(self.root), open=False))
+        planning.edit_node(self.root / "vault" / "PLANNING" / "goals.md", "GOAL-2", status="congelado")
+        planning.edit_node(self.root / "vault" / "PLANNING" / "goals.md", "GOAL-3", status="depois")
+        planning.edit_node(self.root / "vault" / "PLANNING" / "goals.md", "PROJ-2", status="finalizado")
+
+    def _ids(self, st, tab):
+        return [i.id for i in st.items(0, 3, tab, False, "")]
+
+    def test_abas_filtram_a_arvore(self):
+        from brainlib.tui.store import Store
+        st = Store(config.load(self.root))
+        todos = self._ids(st, 0)
+        self.assertIn("GOAL-1", todos) and self.assertIn("PROJ-3", todos)      # árvore inteira
+        # goal no status da aba abre inteiro; projeto no status aparece dentro do goal (contexto)
+        self.assertEqual([i for i in self._ids(st, 1) if i.startswith("GOAL-")], ["GOAL-1", "GOAL-2", "GOAL-3"])
+        self.assertIn("PROJ-2", self._ids(st, 1))                              # ativo: goal abre com tudo
+        self.assertIn("PROJ-3", self._ids(st, 1))                              # projeto ativo puxa o goal congelado
+        self.assertEqual(self._ids(st, 2), ["GOAL-2", "PROJ-3", "PROJ-3.1", "PROJ-3.2"])  # congelado
+        self.assertEqual(self._ids(st, 3), ["GOAL-3", "PROJ-4", "PROJ-4.1"])   # depois
+        self.assertEqual([i for i in self._ids(st, 4) if not i[0].isdigit() and "." not in i],
+                         ["GOAL-1", "PROJ-2"])                                 # finalizado: goal como contexto
+        self.assertIn("PROJ-2.1", self._ids(st, 4))
+
+    def test_status_antigo_no_arquivo_cai_na_aba_certa(self):
+        from brainlib.tui.store import Store
+        g = self.root / "vault" / "PLANNING" / "goals.md"
+        lines = g.read_text(encoding="utf-8").splitlines()
+        lines[lines.index("### PROJ-3 — Padronizar processos") + 1] = "- status: fechado"   # valor de antes
+        g.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        st = Store(config.load(self.root))
+        self.assertEqual(st.by_project["PROJ-3"]["status"], "finalizado")
+        self.assertIn("PROJ-3", self._ids(st, 4))                              # aba Finalizado
+        self.assertEqual(st.by_project["PROJ-3"]["health"]["level"], "fechado")
+
+
 if __name__ == "__main__":
     unittest.main()

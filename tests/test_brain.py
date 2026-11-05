@@ -742,6 +742,26 @@ class PlanAddTests(unittest.TestCase):
             self.assertIn("GOAL-1 editado", log)
             self.assertIn("PROJ-1.1 entregável editado", log)
 
+    def test_edit_status_vocabulario(self):
+        """goal/projeto: ativo · congelado · depois · finalizado; o antigo `fechado` vale como alias na entrada."""
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            goals = b.inst.planning_file
+            r = self._run(td, "plan", "edit", "GOAL-1", "--status", "depois", "--approval", "ok")
+            self.assertEqual(r.returncode, 0, r.stderr)
+            r = self._run(td, "plan", "edit", "PROJ-1", "--status", "finalizado", "--approval", "ok")
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertEqual(self._run(td, "plan", "edit", "GOAL-1", "--status", "arquivado",
+                                       "--approval", "ok").returncode, 3)
+            r = self._run(td, "plan", "edit", "GOAL-1", "--status", "fechado", "--approval", "ok")   # nome antigo
+            self.assertEqual(r.returncode, 0, r.stderr)
+            plan = planning.load(goals)
+            self.assertEqual((plan.goals["GOAL-1"].status, plan.projects["PROJ-1"].status),
+                             ("finalizado", "finalizado"))
+            self.assertIn("- status: finalizado", goals.read_text(encoding="utf-8"))
+            self.assertNotIn("- status: fechado", goals.read_text(encoding="utf-8"))
+            self.assertNotIn("- status: depois", goals.read_text(encoding="utf-8"))
+
     def test_edit_nightly_refuses(self):
         with tempfile.TemporaryDirectory() as td:
             _brain(Path(td))

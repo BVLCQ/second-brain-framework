@@ -698,9 +698,14 @@ o item selecionado comporta (goal → projeto, projeto → entregável, entregá
 Edita um nó que já existe em `PLANNING/goals.md`, mantendo o id e o resto do arquivo como está. Só os campos passados mudam; `""`
 remove o campo opcional. Se o arquivo não ficar válido, nada é gravado.
 
+Status de goal/projeto: `ativo` · `congelado` (pausa) · `depois` (de lado por escolha) · `finalizado` (encerrado). O nome
+antigo `fechado` continua valendo na entrada (vira `finalizado`). No TUI, o painel **[3] Plano** tem abas com esses
+mesmos nomes (`Todos · Ativo · Congelado · Depois · Finalizado`): a aba filtra goals e projetos pelo status — goal no
+status abre com todos os seus projetos; projeto no status aparece dentro do goal, como contexto.
+
 | Nó | Campos | Gate |
 |---|---|---|
-| `GOAL-#` | `--title` · `--status ativo\|congelado\|fechado` · `--horizon DATA` · `--why TEXTO` | **sim** |
+| `GOAL-#` | `--title` · `--status ativo\|congelado\|depois\|finalizado` · `--horizon DATA` · `--why TEXTO` | **sim** |
 | `PROJ-#` | `--title` · `--status` · `--owner PESSOA` | **sim** |
 | `PROJ-#.#` | `--title` (sem `·`) · `--due DATA` · `--weight N` | não |
 

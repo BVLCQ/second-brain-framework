@@ -160,7 +160,8 @@ class SurfacesTests(_RepoCase):
         b.record_one({"type": "person.added", "id": "eu", "by": "owner",
                       "data": {"name": "Dona", "relation": "dono"}})
         m = render.view_model(b)
-        self.assertEqual(m["update"]["version"], "2.1.0")
+        from brainlib import __version__
+        self.assertEqual(m["update"]["version"], __version__)       # a versão do módulo em execução
         self.assertEqual(m["update"]["behind"], 1)
         self.assertEqual(m["update"]["news"], ["Modo full da memória", "Painel mais rápido"])
         report = render.render_all(b, do_harvest=False)

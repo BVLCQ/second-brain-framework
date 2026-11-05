@@ -1408,9 +1408,8 @@ function editPlanNode(kind, id, node){        // goal/projeto: gate estrutural Â
     fields.push({k: "due", label: "Prazo", type: "date", value: node.due || ""});
     fields.push({k: "weight", label: "Peso", type: "number", value: String(node.weight || 1)});
   } else {
-    fields.push({k: "status", label: "Status", options: isGoal
-      ? [["ativo", "ativo"], ["congelado", "congelado"], ["fechado", "fechado"]]
-      : [["ativo", "ativo"], ["congelado", "congelado"], ["fechado", "fechado"]], value: node.status || "ativo"});
+    fields.push({k: "status", label: "Status", value: node.status || "ativo",
+      options: [["ativo", "ativo"], ["congelado", "congelado"], ["depois", "depois"], ["finalizado", "finalizado"]]});
     if (isGoal) {
       fields.push({k: "horizon", label: "Horizonte", type: "date", value: node.horizon || ""});
       fields.push({k: "why", label: "Por quÃª", value: node.why || ""});

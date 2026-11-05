@@ -1069,7 +1069,7 @@ def build_parser() -> argparse.ArgumentParser:
     x = pls.add_parser("edit", help="edita goal/projeto (GATE: exige --approval) ou entregável (sem gate)")
     x.add_argument("id", help="GOAL-# · PROJ-# · PROJ-#.#")
     x.add_argument("--title")
-    x.add_argument("--status", help="goal/projeto: ativo · congelado · fechado")
+    x.add_argument("--status", help="goal/projeto: ativo · congelado · depois · finalizado (o antigo fechado vale)")
     x.add_argument("--horizon", help="goal: AAAA-MM-DD (vazio remove)")
     x.add_argument("--why", help="goal: por quê (vazio remove)")
     x.add_argument("--owner", help="projeto: id ou alias da pessoa dona (vazio remove)")
