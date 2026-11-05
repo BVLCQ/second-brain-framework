@@ -210,14 +210,30 @@ O MCP somente-leitura (`./brain mcp`) também funciona sem memória.
 
 ## Hook de recall (Claude Code)
 
-O hook `services/hooks/recall_context.py` anexa contexto à mensagem. Variáveis:
+O hook `services/hooks/recall_context.py` injeta o contexto da **camada certa** por
+mensagem (Fase 4 do plano — roteador §3.3, determinístico, zero LLM):
 
-- `BRAIN_RECALL_ROUTE=ledger` — **rota ledger-only (Fase 2 do plano)**: pergunta de estado
-  (ID, prazo, atraso, quem deve, título de projeto) injeta até 3 linhas exatas do índice
-  SQLite (`⟶ ledger/<ID>`); todo o resto **silencia**. Zero LLM, zero vetor.
-- `BRAIN_RECALL_OFF=1` — desliga tudo.
-- A rota ledger acha o índice pelo `BRAIN_HOME` ou subindo do diretório corrente até achar
-  `vault/FRESH/_index/brain.sqlite` — rode o hook da raiz da instância (o hook instalado
-  pelo repo já roda de lá) ou exporte `BRAIN_HOME`; sem achar, silencia.
-- Demais variáveis (`BRAIN_RECALL_MIN_SCORE`, `BRAIN_RECALL_MAX`, bancos) valem para o
-  caminho vetorial clássico, que segue o padrão sem a rota ligada.
+| Pergunta | O que injeta |
+|---|---|
+| estado/ID/título de projeto ("atrasado", `TASK-…`, "projeto de pagamentos") | ≤3 linhas exatas do índice SQLite (`⟶ ledger/<ID>`) — o vetor nem é consultado |
+| literal ("o que foi dito", "exatamente", aspas) | 1–2 trechos de origem (≤400 caracteres) com `⟶ <document_id>, <data>` |
+| nome/alias de pessoa | linhas do ledger **e** até 2 itens de contexto (consulta expandida com os aliases) |
+| demais | até 3 itens de contexto |
+
+Teto de **5 itens** por mensagem; **abstenção** quando nada passa do corte
+(`BRAIN_RECALL_MIN_SCORE`, padrão **0.62** — sem reranker, ver abaixo). A perna
+vetorial tem prazo próprio (`BRAIN_RECALL_SEMANTIC_MS`, 700 ms): Hindsight lento ou
+fora degrada para o que o ledger tiver. Variáveis:
+
+- `BRAIN_RECALL_ROUTE` — `off` | `ledger` | `embed` (padrão **embed**: roteador completo).
+  `ledger` é a Fase 2 (só a perna do índice); `off` desliga (idem `BRAIN_RECALL_OFF=1`).
+- `BRAIN_RECALL_MIN_SCORE` (0.62) · `BRAIN_RECALL_MAX` (5) · `BRAIN_RECALL_BANKS` (`brain`)
+  · `BRAIN_HINDSIGHT_URL` (http://127.0.0.1:8888) · `BRAIN_RECALL_SEMANTIC_MS` (700).
+- O roteador acha o índice pelo `BRAIN_HOME` ou subindo do diretório corrente até achar
+  `vault/FRESH/_index/brain.sqlite` — rode da raiz da instância ou exporte `BRAIN_HOME`;
+  sem achar, a perna ledger silencia (a vetorial segue).
+
+O mesmo classificador está na CLI: `brain route "<pergunta>"` (o `/ask` usa antes de
+buscar). **Reranker:** o `jina-mlx` local fica **pendente de benchmark** (exige o modelo
+carregado no LM Studio da máquina; regra 4 do dono: só entra se p95 < 400 ms com 30
+candidatos) — enquanto isso, fusão RRF do servidor + corte 0.62.

@@ -24,6 +24,12 @@ STATE_WORDS = re.compile(
     r"fechad\w*|concluíd\w*|progresso|andamento|"
     r"vencid\w*|plazo\w*|pendiente\w*|atrasad\w*|abiert\w*|cerrad\w*|progreso)\b", re.I)
 
+# sinal de LITERAL (§3.3): a pergunta pede a letra exata — rota de trechos de origem
+LITERAL_RE = re.compile(
+    r"\b(exatamente?|exactamente?|literal\w*|ipsis|palavras? (?:exatas?|textuales?|ditas?)|"
+    r"o que (?:foi|se) (?:dito|disse|falou|escreveu|citou)|na [íi]ntegra|transcri\w+|"
+    r"trecho (?:exato|literal)|cita\w*)\b|\"[^\"]{6,}\"", re.I)
+
 # ID novo ou antigo (A-0146, D-3, G1, P3.2) — o ids.normalize traduz na hora
 ID_TOKEN = re.compile(r"\b([A-Za-z]{1,8})(-?)(\d+(?:\.\d+)?)\b")
 NORMAL_ID = re.compile(r"^(TASK|DEC|WIN|PROP|MSG|PUB|FOCUS|PROC|OPP|ASK|FB|GOAL|PROJ)-\d+(\.\d+)?$")
@@ -42,9 +48,29 @@ def _find_db() -> Path | None:
     return None
 
 
+def literal(question: str) -> bool:
+    """Pergunta pede a LETRA exata (§3.3) — aspas, 'o que foi dito', 'exatamente'."""
+    return bool(LITERAL_RE.search(question))
+
+
+def person_aliases(pid: str, db: Path) -> list[str]:
+    """Aliases da pessoa pelo índice (expansão de consulta do hook — Fase 4.1)."""
+    con = None
+    try:
+        con = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=2)
+        con.execute("PRAGMA busy_timeout=2000")
+        with con:
+            return [r[0] for r in con.execute("SELECT alias_fold FROM aliases WHERE person_id = ?", (pid,))]
+    except sqlite3.Error:
+        return []
+    finally:
+        if con is not None:
+            con.close()
+
+
 def classify(question: str, db: Path | None = None) -> dict:
-    """{'route': 'ledger'|None, 'ids': [...], 'people': [...], 'why': str}"""
-    out: dict = {"route": None, "ids": [], "people": [], "why": ""}
+    """{'route': 'ledger'|None, 'ids': [...], 'people': [...], 'literal': bool, 'why': str}"""
+    out: dict = {"route": None, "ids": [], "people": [], "literal": literal(question), "why": ""}
     q = util.fold(question)
     short = len(question.split()) <= 5
     seen_ids: set[str] = set()
@@ -69,11 +95,25 @@ def classify(question: str, db: Path | None = None) -> dict:
     if STATE_WORDS.search(question):
         out["route"] = "ledger"
         out["why"] = "vocabulário de estado/tempo"
+        # Fase 4: pergunta de estado COM pessoa (o que está atrasado com a Marina?) também
+        # popula people — o hook soma a perna semântica (§3.3)
+        db0 = db or _find_db()
+        if db0 is not None:
+            _scan_people_titles(q, question, out, db0)
         return out
     db = db or _find_db()
     if db is None:
         return out
-    words = {w for w in re.findall(r"\w{3,}", question)}
+    _scan_people_titles(q, question, out, db)
+    if out["ids"] or out["people"]:
+        out["route"] = "ledger"
+    return out
+
+
+def _scan_people_titles(q_fold: str, question: str, out: dict, db: Path) -> None:
+    """Preenche out['people'] (alias na pergunta) e out['ids'] (título de PROJ/GOAL dobrado, R6)."""
+    # \w não casa hífen: "Marina-demo" precisa vir inteira para bater no alias_fold
+    words = {w for w in re.findall(r"[\w-]{3,}", question)}
     con = None
     try:
         con = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=2)
@@ -82,7 +122,7 @@ def classify(question: str, db: Path | None = None) -> dict:
         with con:
             for w in words:
                 row = con.execute("SELECT person_id FROM aliases WHERE alias_fold = ?", (util.fold(w),)).fetchone()
-                if row:
+                if row and row[0] not in out["people"]:
                     out["people"].append(row[0])
             # títulos de PROJ/GOAL dobrados (R6): título inteiro na pergunta, OU duas palavras
             # distintas da pergunta no título, OU uma palavra longa (≥8) — "galeria" sozinho não basta
@@ -91,18 +131,15 @@ def classify(question: str, db: Path | None = None) -> dict:
                 if len(tf) < 6:
                     continue
                 in_title = [w for w in words if len(util.fold(w)) >= 5 and util.fold(w) in tf]
-                strong = tf in q or len(in_title) >= 2 or any(len(util.fold(w)) >= 8 for w in in_title)
+                strong = tf in q_fold or len(in_title) >= 2 or any(len(util.fold(w)) >= 8 for w in in_title)
                 if strong:
                     out["ids"].append(pid)
                     out["why"] = f"título de {kind} na pergunta"
     except sqlite3.Error:
-        return out
+        return
     finally:
         if con is not None:
             con.close()
-    if out["ids"] or out["people"]:
-        out["route"] = "ledger"
-    return out
 
 
 _EXIST_TABLES = ("actions", "decisions", "deliveries", "processes", "opportunities",

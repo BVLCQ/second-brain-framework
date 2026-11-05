@@ -987,6 +987,18 @@ propósito: refs do vault (TASK/PROC/OPP) não saem para o issue público. `push
 
 ---
 
+### `brain route`
+
+Roteia a pergunta pelo plano da memória (§3.3) — o `/ask` e o hook de recall usam o
+mesmo classificador: `route` `ledger` (estado/ID/título → linhas exatas do índice),
+`literal` (trechos de origem) ou `contexto` (busca semântica), com as linhas do ledger
+quando existirem.
+
+```bash
+brain route "como está o PROJ-3?"            # rota: ledger — ID de entidade na pergunta
+brain route "o que foi dito sobre o SLA?" --json
+```
+
 ## 18. Memória e MCP — `memory` · `mcp`
 
 A memória (Hindsight) é um **índice** do vault em mão única. O vault é a verdade:

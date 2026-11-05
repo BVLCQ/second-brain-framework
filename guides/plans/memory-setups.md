@@ -606,7 +606,10 @@ literal (pt/es), e **expansão determinística de consulta**: a pergunta é rees
 como múltiplas consultas (original + aliases da pessoa detectada + formas dobradas)
 fundidas com deduplicação.
 
-4.2 **Reranker local, com gate de latência.** Benchmark do compose refeito com
+4.2 **Reranker local, com gate de latência** (*pendente, 2026-11-05: o benchmark exige o
+`jina-mlx` carregado no LM Studio da máquina — não disponível no Mac de dev; valerá a
+regra 4 quando houver o modelo. Enquanto isso: fusão RRF do servidor + corte 0.62*).
+Benchmark do compose refeito com
 `jina-mlx` servido no host (Metal; verificar na 0.10.3 se o provider roda no container
 ou aponta para endpoint do host — parte do smoke 3.0). Aprovar **só se p95 < 400 ms
 com 30 candidatos**. Reranker de nuvem (`cohere`, `zeroentropy`) é **exclusivo do

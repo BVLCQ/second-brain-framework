@@ -793,6 +793,22 @@ def cmd_doctor(args, b: Brain) -> None:
     doctor.cli(args, b)
 
 
+def cmd_route(args, b: Brain) -> None:
+    """Roteia a pergunta (Fase 4.5): classificação + perna ledger — o /ask e o eval usam o mesmo."""
+    from . import route
+    c = route.classify(args.query)
+    lines = route.ledger_lines(args.query) if c["route"] == "ledger" else []
+    if args.json:
+        print(json.dumps({**c, "lines": lines}, ensure_ascii=False, indent=2))
+        return
+    dest = c["route"] or ("literal" if c.get("literal") else "contexto")
+    print(f"rota: {dest}" + (f" — {c['why']}" if c["why"] else ""))
+    if c.get("literal"):
+        print("sinal literal: trechos de origem (1–2 itens no hook)")
+    for ln in lines:
+        print(f"- {ln}")
+
+
 def cmd_memory(args, b: Brain) -> None:
     from . import memory
     memory.cli(args, b)
@@ -1372,6 +1388,11 @@ def build_parser() -> argparse.ArgumentParser:
         x.add_argument("--tags")
         x.add_argument("--json", action="store_true")
     p.set_defaults(fn=cmd_memory)
+
+    p = sub.add_parser("route", help="roteia uma pergunta: classificação + perna ledger (mesma lógica do hook e do /ask)")
+    p.add_argument("query")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(fn=cmd_route)
 
     p = sub.add_parser("mcp", help="servidor MCP somente-leitura (stdio) para outras IAs")
     p.set_defaults(fn=cmd_mcp)

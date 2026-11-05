@@ -4,6 +4,24 @@ O que mudou em cada versão, em linguagem humana. Para atualizar: `brain update`
 (ou `brain setup --only comando` se o `brain` ainda não estiver no PATH).
 Mantido pelo dono do framework a cada remessa — veja `guides/commands.md` § upstream.
 
+## 2.6.0 — 2026-11-05
+
+- **O hook de recall do Claude Code ficou cirúrgico (Fase 4 do plano)** — cada mensagem
+  recebe só o contexto da camada certa: pergunta de **estado** (`TASK-…`, "o que está
+  atrasado?", título de projeto) injeta até 3 linhas exatas do ledger e **nem consulta**
+  o banco vetorial; pergunta **literal** ("o que foi dito", "exatamente", aspas) traz
+  1–2 trechos de origem; **pessoa** junta ledger + contexto com a consulta expandida
+  pelos aliases; o resto recebe até 3 itens de contexto. Teto de **5 itens** por
+  mensagem e **abstenção**: nada relevante (corte 0.62) = silêncio.
+- **Degradação com prazo** — a perna vetorial tem 700 ms de orçamento próprio; Hindsight
+  lento ou fora deixa a perna do ledger responder sozinha. O velho comportamento (toda
+  mensagem ≥12 caracteres virava busca semântica com até 8 itens) acabou.
+- **`brain route "<pergunta>"`** — o mesmo classificador na CLI (o `/ask` passou a usá-lo
+  antes de buscar). Configurável: `BRAIN_RECALL_ROUTE` (`off` | `ledger` | `embed`, padrão
+  `embed`), corte, teto e prazo por variável de ambiente.
+- Corrigido no caminho: nomes com hífen ("Marina-demo") agora casam nos aliases do
+  roteador (o tokenizador cortava no hífen e a perna de pessoa nunca disparava).
+
 ## 2.5.0 — 2026-11-05
 
 - **O banco de memória emagrou e ficou mais inteligente (Fase 3 do plano)** — o que
