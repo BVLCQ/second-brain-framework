@@ -13,7 +13,7 @@ sys.path.insert(0, str(ROOT))
 
 os.environ.setdefault("BRAIN_NOW", "2026-10-09T10:00:00-03:00")
 
-from brainlib import config, memory, util                                   # noqa: E402
+from brainlib import config, dossier, index, memory, util                   # noqa: E402
 from brainlib.core import Brain                                            # noqa: E402
 
 import importlib.util as _ilu
@@ -308,6 +308,82 @@ class CorpusTests(unittest.TestCase):
             hs = FakeHindsight()
             memory.setup(b, hs)
             self.assertIn(("brain", "Mari-demo", "Marina-demo"), hs.aliases)
+
+
+class _RecallHS(FakeHindsight):
+    """Recall sempre devolve um trecho — para a perna de memória do dossiê."""
+
+    def recall(self, bank, query, tags=None, budget="mid"):
+        super().recall(bank, query, tags, budget)
+        return {"results": [{"text": "trecho: a Marina-demo revisou o orcamento-demo",
+                             "document_id": "RAW/2026/10/meetings/ata-x.md",
+                             "occurred_start": "2026-10-08"}]}
+
+
+class DossierTests(unittest.TestCase):
+    """Fase 5: montagem na leitura — ficha + DEC/WIN ligados + trechos, tudo com fonte."""
+
+    def _fixture(self, td):
+        b = _brain(Path(td))
+        b.record_one({"type": "decision.made", "by": "owner", "date": "2026-10-01", "source": "chat",
+                      "data": {"title": "Congelar o forno-demo", "decided_by": ["marina-demo"],
+                               "project": "PROJ-1"}})
+        act = b.record_one({"type": "action.opened", "by": "agent", "date": "2026-10-02",
+                            "prov": "observado", "source": "chat",
+                            "data": {"title": "Revisar orçamento", "owner": "marina-demo",
+                                     "due": "2026-10-04", "project": "PROJ-1"}})
+        b.record_one({"type": "delivery.recorded", "by": "owner", "date": "2026-10-03", "source": "chat",
+                      "data": {"title": "Forno instalado", "result": "ok", "ref": act["id"]}})
+        index.update(b)
+        return b
+
+    def test_person_by_alias_with_all_layers(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = self._fixture(td)
+            hs = _RecallHS()
+            d = dossier.build(b, "Mari-demo", hs=hs)                       # alias resolve
+            self.assertEqual((d["kind"], d["id"]), ("person", "marina-demo"))
+            self.assertEqual(d["ficha"]["name"], "Marina-demo")
+            self.assertTrue(any(dec["title"] == "Congelar o forno-demo" for dec in d["decisions"]))
+            self.assertTrue(any(w["title"] == "Forno instalado" for w in d["deliveries"]))
+            self.assertEqual(len(d["chunks"]), 1)
+            self.assertEqual(d["chunks"][0]["doc"], "RAW/2026/10/meetings/ata-x.md")
+            self.assertEqual(hs.recall_calls[-1][0], "brain")
+            self.assertEqual(hs.recall_tags[-1], ["pessoa:marina-demo"])   # filtra pelo tag da entidade
+            text = dossier.render(d)
+            self.assertIn("⟶ ledger/DEC-", text)
+            self.assertIn("Dossiê — Marina-demo", text)
+
+    def test_person_without_anything_gets_only_ficha(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = self._fixture(td)
+            d = dossier.build(b, "eu", hs=FakeHindsight())                 # dono: nada ligado
+            self.assertEqual(d["decisions"], [])
+            self.assertEqual(d["deliveries"], [])
+            self.assertEqual(d["chunks"], [])
+            self.assertIn("só a ficha", dossier.render(d))
+
+    def test_goal_dossier_scopes_its_projects(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = self._fixture(td)
+            d = dossier.build(b, "GOAL-1", hs=FakeHindsight())             # PROJ-1 é filho do GOAL-1
+            self.assertEqual(d["kind"], "goal")
+            self.assertTrue(any(dec["project"] == "PROJ-1" for dec in d["decisions"]))
+
+    def test_unknown_ref_refused(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = self._fixture(td)
+            with self.assertRaises(util.BrainError):
+                dossier.build(b, "pessoa-que-nao-existe")
+
+    def test_works_with_memory_off(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = self._fixture(td)
+            config.set_keys(b.inst, "memory", {"engine": "none"})
+            b.inst = config.load(b.inst.root); b.reload()
+            d = dossier.build(b, "PROJ-1")                                 # sem servidor: ficha + DEC/WIN
+            self.assertEqual(d["chunks"], [])
+            self.assertTrue(d["decisions"])
 
 
 class FreshnessTests(unittest.TestCase):

@@ -1374,6 +1374,10 @@ def build_parser() -> argparse.ArgumentParser:
         if name == "setup":
             x.add_argument("--mode", choices=["none", "embed", "full"],
                            help="grava as chaves do modo antes de criar os bancos (guides/memory.md)")
+    x = ms.add_parser("dossier", help="página \"onde estamos com X\" montada na leitura (Fase 5) — "
+                                       "ficha + DEC/WIN ligados + trechos, tudo com fonte")
+    x.add_argument("ref", help="ID (PROJ-1, GOAL-1) ou nome/alias de pessoa")
+    x.add_argument("--json", action="store_true")
     x = ms.add_parser("harness")
     hsub = x.add_subparsers(dest="hcmd", required=True)
     xi = hsub.add_parser("install", help="cabla harnesses no servidor do cérebro (guides/plans/memory-harness-wizard.md)")

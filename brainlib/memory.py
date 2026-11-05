@@ -858,7 +858,8 @@ def cli(args, brain) -> None:
     c = args.mcmd
     mem = brain.inst.cfg["memory"]
     # --mode é justamente o que liga o engine: setup com --mode passa mesmo com engine = "none"
-    if mem["engine"] != "hindsight" and c not in ("status", "cost") and not (c == "setup" and getattr(args, "mode", None)):
+    if mem["engine"] != "hindsight" and c not in ("status", "cost", "dossier") \
+            and not (c == "setup" and getattr(args, "mode", None)):
         raise util.BrainError("memória desligada: ponha [memory] engine = \"hindsight\" no config/brain.toml "
                               "depois de subir o servidor (guides/memory.md)", code=1)
     if c == "setup":
@@ -867,6 +868,13 @@ def cli(args, brain) -> None:
             brain.reload()
         banks = setup(brain)
         print(f"✓ bancos prontos ({mode(brain.inst.cfg['memory'])}): {', '.join(banks)}")
+    elif c == "dossier":
+        from . import dossier as _dossier
+        d = _dossier.build(brain, args.ref)
+        if args.json:
+            print(json.dumps(d, ensure_ascii=False, indent=2))
+        else:
+            print(_dossier.render(d))
     elif c == "cost":
         c_ = cost(brain)
         if args.json:

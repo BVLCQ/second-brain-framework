@@ -937,6 +937,7 @@ class DashboardAssetTests(unittest.TestCase):
         "query actions", "query decisions", "query person", "query entity", "query sql",   # ferramenta do agente/MCP (brain_query)
         "index rebuild", "index update", "index status",          # ciclo de vida: terminal (doctor avisa)
         "route",                                               # ferramenta do agente/hook (Fase 4.5)
+        "memory dossier",                                      # agente//ask — montado na leitura (Fase 5)
     }
     DYNAMIC = {"memory recall", "memory reflect",       # formulário do TUI monta; o painel busca no índice
                "decision supersede"}                     # o painel emite `decision add … --supersedes` (tecla S)
@@ -1128,6 +1129,7 @@ class FakeHindsight(memory.Hindsight):
 
     def recall(self, bank, query, tags=None, budget="mid"):
         self.recall_calls = getattr(self, "recall_calls", []) + [(bank, query)]
+        self.recall_tags = getattr(self, "recall_tags", []) + [tags]
         return {"results": []}
 
     def put_alias(self, bank, alias, canonical):
