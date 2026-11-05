@@ -1170,10 +1170,10 @@ Mapa de processos (`PROC-####`) e oportunidades/iniciativas (`OPP-####`) por ár
 |---|---|
 | `add "título" --area ÁREA` | `[--process PROC-####] [--kind melhoria-de-processo\|novo-processo\|estruturante] [--problem] [--suggestion] [--gain] [--hours-saved N] [--person …] [--goal GOAL-#]`. Antes de gravar roda o **detector de duplicatas** (código 2, nada gravado; `--force` grava). Agente: só status `ideia`, `--source` obrigatório |
 | `update OPP-####` | mesmos campos |
-| `status OPP-#### STATUS [--reason]` | `ideia · triagem · priorizada · em-andamento · piloto · validando · entregue · em-espera · descartada`; vai e volta livremente; `em-espera`/`descartada` exigem `--reason`; `em-andamento` só com projeto (use `promote`); agente só grava `ideia` |
+| `status OPP-#### STATUS [--reason]` | `ideia · triagem · priorizada · em-andamento · piloto · validando · entregue · em-espera · descartada`; vai e volta livremente; `em-espera`/`descartada` exigem `--reason`; `em-andamento` só depois de promover (use `promote`); agente só grava `ideia` |
 | `score OPP-#### --impact I --confidence C --ease F` | ICE 1–5 cada (score 1–125, calculado pelo CLI). `--suggest --reason "…"` (agente) grava só uma sugestão; o dono confirma ou muda |
 | `evidence OPP-#### --source ARTEFATO` | mais uma fonte que reforça a oportunidade |
-| `promote OPP-#### --goal GOAL-# [--title] [--approval "ok"]` | **gate**: sem `--approval` imprime o diff proposto do `goals.md` e sai com código 4; com ele cria o projeto, liga OPP ↔ PROJ-# e põe `em-andamento` (mesmo lote do ledger + linha em `PLANNING/log.md`). Proibido no noturno |
+| `promote OPP-#### --level goal\|project\|deliverable [--title] [--approval "ok"]` | **gate**: promove a nó do PLANNING no nível escolhido — `goal` (goal novo) · `project --goal GOAL-#` (projeto novo no goal) · `deliverable --project PROJ-#` (entregável novo no projeto). Sem `--level`: `--goal` ⇒ projeto, `--project` ⇒ entregável. Sem `--approval` imprime o diff proposto do `goals.md` e sai com código 4; com ele cria o nó, liga OPP ↔ nó e põe `em-andamento` (mesmo lote do ledger + linha em `PLANNING/log.md`; entregável não grava `plan.changed`, como `plan add deliverable`). Proibido no noturno |
 | `show OPP-####` · `list [--status] [--area] [--sort score]` | leitura |
 
 ### `brain doc`

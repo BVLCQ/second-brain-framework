@@ -158,6 +158,8 @@ def build(state, plan, today) -> dict:
             "quadrant": quadrant(o), "goal": o.goal, "goal_title": plan.title(o.goal) if o.goal else None,
             "project": o.project, "project_title": plan.title(o.project) if o.project else None,
             "project_progress": plan.progress(o.project) if o.project and o.project in plan.projects else None,
+            "deliverable": o.deliverable, "deliverable_title": plan.title(o.deliverable) if o.deliverable else None,
+            "promoted": o.promoted,
             "people": o.people, "people_names": [state.person_name(x) for x in o.people], "notes": o.notes,
             "evidence": o.evidence, "evidence_count": o.evidence_count,
             "docs": [_doc(d) for d in o.docs],

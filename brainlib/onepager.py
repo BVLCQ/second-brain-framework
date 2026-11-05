@@ -137,6 +137,7 @@ def fields(b, oid: str) -> tuple[str, dict]:
     area = re.search(r"\*\*Área:\*\* (.*?) · \*\*Tipo:\*\* (.*?) · \*\*Status:\*\* (.*)$", sec[""][0])
     related = [f"{d.title or d.ref} — {d.ref}" for d in o.docs if d.kind not in NO_LINK_KINDS]
     rel = [ln.replace("Processo: ", f"Processo — {o.process}: ", 1) if o.process and ln.startswith("Processo: ") else
+           ln.replace("Entregável: ", f"Entregável — {o.deliverable}: ", 1) if o.deliverable and ln.startswith("Entregável: ") else
            ln.replace("Projeto: ", f"Projeto — {o.project}: ", 1) if o.project and ln.startswith("Projeto: ") else ln
            for ln in sec["Relacionado"]]
     src = [f"origem: {source_line(b, o, o.source)}"] + [f"evidência: {source_line(b, o, e)}" for e in o.evidence]

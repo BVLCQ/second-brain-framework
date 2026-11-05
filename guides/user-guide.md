@@ -847,9 +847,11 @@ triageia, pontua e move. `ICE` = impacto × confiança × facilidade (1–5 cada
 Status vai e volta livremente: `ideia → triagem → priorizada → em-andamento → piloto → validando → entregue`, mais
 `em-espera` e `descartada` (pedem motivo). `em-andamento` só vem de **promover**.
 
-**Promover** (`p` no TUI · `./brain opportunity promote OPP-#### --goal GOAL-#`): cria um projeto no goal — mudança
-estrutural, então mostra o diff do `goals.md` e só segue com o seu "ok" literal. A oportunidade vira `em-andamento`
-e fica ligada ao projeto (o progresso dele aparece na ficha).
+**Promover** (`p` no TUI · `./brain opportunity promote OPP-#### --level goal|project|deliverable`): cria o nó do
+PLANNING no nível escolhido — **goal** novo (`--level goal`), **projeto** num goal existente (`--goal GOAL-#`) ou
+**entregável** num projeto existente (`--project PROJ-#`; cinco oportunidades do mesmo processo viram cinco
+entregáveis do mesmo projeto). Mudança estrutural, então mostra o diff do `goals.md` e só segue com o seu "ok"
+literal. A oportunidade vira `em-andamento` e fica ligada ao nó criado (o progresso aparece na ficha).
 
 **Playbooks** moram no Drive: `./brain doc link PROC-0001 --kind playbook --ref <url> --watch` cria uma fonte
 `drive-doc` no `watch.toml`; o `/update` só relê o doc quando o `modifiedTime` muda.

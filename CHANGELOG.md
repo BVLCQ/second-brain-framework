@@ -4,6 +4,16 @@ O que mudou em cada versão, em linguagem humana. Para atualizar: `brain update`
 (ou `brain setup --only comando` se o `brain` ainda não estiver no PATH).
 Mantido pelo dono do framework a cada remessa — veja `guides/commands.md` § upstream.
 
+## 2.3.0 — 2026-11-05
+
+- **Promover oportunidade em qualquer nível** — `brain opportunity promote` ganhou `--level
+  goal|project|deliverable`: a oportunidade pode virar um **goal novo** (`--level goal`), um
+  **projeto num goal** (`--goal GOAL-#`, como antes) ou um **entregável num projeto**
+  (`--project PROJ-#`) — as 5 oportunidades do mesmo processo agora cabem como entregáveis do
+  mesmo projeto. Sem `--level`, o alvo decide: `--goal` ⇒ projeto, `--project` ⇒ entregável.
+  O gate continua o mesmo: sem o seu "ok" literal, só o diff do `goals.md`. `em-andamento`
+  continua nascendo só da promoção, de qualquer nível. TUI (`p`) e painel têm o seletor de nível.
+
 ## 2.2.0 — 2026-11-05
 
 - **Plano com abas de status (TUI)** — o painel **[3] Plano** agora troca entre

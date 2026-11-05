@@ -208,7 +208,10 @@ def _sections_opportunity(brain, m: dict, oid: str) -> tuple[str, list, list[str
     related = []
     if proc:
         related.append(f"Processo: {proc['title']}" + (f" ({proc['hours_month']:g} h/mês hoje)" if proc["hours_month"] else ""))
-    if o["project"]:
+    if o["deliverable"]:
+        related.append(f"Entregável: {o['deliverable']} {o['deliverable_title'] or ''}"
+                       f" — em {o['project']} {o['project_title'] or ''}")
+    elif o["project"]:
         related.append(f"Projeto: {o['project_title']}" + (f" — {planning.format_progress(o['project_progress'])}"
                                                            if o["project_progress"] else ""))
     sections = [("", intro), ("Problema", [o["problem"]] if o["problem"] else ["não consta"]),

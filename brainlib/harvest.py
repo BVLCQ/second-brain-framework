@@ -54,9 +54,9 @@ def _opportunity_events(brain, last: dict, notices: list[dict]) -> list[dict]:
         if now_val not in OPP_STATUS:
             notices.append({"level": "warn", "title": "ficha", "detail": f"{oid}: status '{m.group(1)}' inválido — "
                             f"nada gravado (use {', '.join(sorted(OPP_STATUS))})"})
-        elif now_val == "em-andamento" and not o.project:
+        elif now_val == "em-andamento" and not o.promoted:
             notices.append({"level": "warn", "title": "ficha", "detail": f"{oid}: 'em-andamento' só depois de promover "
-                            "(`brain opportunity promote`) — nada gravado"})
+                            "(`brain opportunity promote`, qualquer nível) — nada gravado"})
         else:
             data = {"status": now_val}
             if now_val in OPP_REASON_STATUS:

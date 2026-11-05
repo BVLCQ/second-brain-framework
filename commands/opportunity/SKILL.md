@@ -133,9 +133,14 @@ Percorre as oportunidades em `ideia` (`./brain opportunity list --status ideia`)
 
 ## Promover (gate estrutural)
 
-Promover cria um projeto num goal: é mudança estrutural.
-1. `./brain opportunity promote OPP-#### --goal GOAL-#` (sem `--approval`) imprime o diff proposto do `goals.md` e sai com código 4.
-2. Mostre o diff ao dono. Só com resposta literal ("ok", "aprovo"): `./brain opportunity promote OPP-#### --goal GOAL-# --approval "ok"` — cria o projeto, grava `plan.changed` + `opportunity.promoted` + status `em-andamento` e a linha em `PLANNING/log.md`.
+Promover cria o nó do PLANNING no **nível escolhido** — as 5 oportunidades do mesmo processo podem,
+cada uma, virar um entregável do mesmo projeto:
+- **projeto num goal**: `--level project --goal GOAL-#` (ou só `--goal GOAL-#`)
+- **entregável num projeto**: `--level deliverable --project PROJ-#` (ou só `--project PROJ-#`)
+- **goal novo**: `--level goal` (sem alvo)
+
+1. `./brain opportunity promote OPP-#### --level … [--goal|--project …]` (sem `--approval`) imprime o diff proposto do `goals.md` e sai com código 4.
+2. Mostre o diff ao dono. Só com resposta literal ("ok", "aprovo"): o mesmo comando com `--approval "ok"` — cria o nó, grava os eventos (goal/projeto: `plan.changed` + `opportunity.promoted`; entregável: `opportunity.promoted` sem `plan.changed`, como `plan add deliverable`) + status `em-andamento` e a linha em `PLANNING/log.md`.
 3. Proibido no noturno. Silêncio não é aprovação.
 
 ## Duplicata

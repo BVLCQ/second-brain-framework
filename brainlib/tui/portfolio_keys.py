@@ -48,7 +48,7 @@ class PortfolioKeys:
                 add("l", "ligar doc", lambda: self.f_doc_link(it.id))
                 add("v", "evidência", self.f_evidence)
                 add("O", "one-pager", self.agent_onepager, agent=True)
-                if w(it and not it.data["project"]):
+                if w(it and not it.data.get("promoted")):
                     add("p", "promover", self.f_promote, gate=True)
                 if w(it and it.data["status"] not in ("descartada", "entregue")):
                     add("x", "descartar", self.f_opp_discard)
@@ -289,7 +289,7 @@ class PortfolioKeys:
                     continue
                 g, gs = rows.OPP_GLYPH[s]
                 note = " ← atual" if s == o["status"] else " (pede motivo)" if s in OPP_REASON_STATUS else \
-                    " (só promovendo: p)" if s == "em-andamento" and not o["project"] else ""
+                    " (só promovendo: p)" if s == "em-andamento" and not o.get("promoted") else ""
                 out.append(PickItem(Text.assemble((g + " ", gs), (s, "bold"), (note, "dim")), s))
             return out
 
@@ -301,8 +301,8 @@ class PortfolioKeys:
     def set_status(self, o: dict, status: str) -> None:
         if status == o["status"]:
             return
-        if status == "em-andamento" and not o["project"]:
-            self.log_line(f"{o['id']}: 'em-andamento' só existe depois de promover a projeto (tecla p).", "yellow")
+        if status == "em-andamento" and not o.get("promoted"):
+            self.log_line(f"{o['id']}: 'em-andamento' só existe depois de promover (tecla p, em qualquer nível).", "yellow")
             return
         if status in OPP_REASON_STATUS:
             self.form(FormSpec(f"{o['id']} → {status}", [Field("reason", "motivo", req=True, ph="por que fica assim")],
@@ -348,17 +348,27 @@ class PortfolioKeys:
     def f_promote(self) -> None:
         o = self.cur().data
         goals = [g["id"] for g in self.store.m["goals"] if g["status"] in ("ativo", "ativa")]
-        if not goals:
-            self.log_line("Nenhum goal ativo para receber o projeto.", "yellow")
-            return
+        projects = [p["id"] for p in self.store.m["projects"] if p["status"] in ("ativo", "ativa")]
         opp = self.store.brain.state.opportunities[o["id"]]
-        nid, diff = promote_proposal(self.store.brain, opp)
-        extra = Text()
-        for ln in diff:
-            extra.append("+ " + ln + "\n", "green")
+
+        def diff_res(_val, v):
+            """Diff vivo do nó que nasceria no nível/alvo atuais (muda a cada tecla)."""
+            level = v.get("level") or "project"
+            target = v.get("goal") if level == "project" else v.get("project") if level == "deliverable" else None
+            if level != "goal" and not target:
+                return ""
+            try:
+                _, lines = promote_proposal(self.store.brain, opp, v.get("title") or None, level, target)
+                return "cria:\n" + "\n".join("+ " + ln for ln in lines)
+            except Exception:  # noqa: BLE001 — o res nunca derruba o formulário
+                return ""
 
         def build(v):
-            c = ["opportunity", "promote", o["id"], "--goal", v["goal"]]
+            c = ["opportunity", "promote", o["id"], "--level", v["level"] or "project"]
+            if v["level"] == "project":
+                c += ["--goal", v["goal"]]
+            elif v["level"] == "deliverable":
+                c += ["--project", v["project"]]
             if v["title"] and v["title"] != o["title"]:
                 c += ["--title", v["title"]]
             if v["reason"]:
@@ -366,13 +376,19 @@ class PortfolioKeys:
             return [c + ["--approval", v["quote"] or "…"]]
 
         self.form(FormSpec(
-            f"Promover {o['id']} a projeto {nid}",
-            [Field("goal", "goal", choice=goals, value=goals[0]), Field("title", "título do projeto", value=o["title"], req=True),
+            f"Promover {o['id']}",
+            [Field("level", "nível", choice=[("project", "projeto — num goal"), ("deliverable", "entregável — num projeto"),
+                                             ("goal", "goal novo")], value="project", res=diff_res),
+             Field("goal", "goal alvo", choice=goals, value=goals[0] if goals else "",
+                   show=lambda v: v.get("level") == "project"),
+             Field("project", "projeto alvo", choice=projects, value=projects[0] if projects else "",
+                   show=lambda v: v.get("level") == "deliverable"),
+             Field("title", "título do nó", value=o["title"], req=True),
              Field("reason", "motivo", ph="opcional"),
              Field("quote", "sua aprovação", req=True, ph="digite a resposta literal, ex.: ok")], build,
-            sub="Criar projeto é mudança estrutural: único gate do sistema. Nasce em PLANNING/goals.md, com linha em "
-                "PLANNING/log.md e no ledger; a oportunidade vira em-andamento.",
-            gate=True, extra=extra, after=lambda: self.jump(o["id"])))
+            sub="Criar nó do PLANNING (goal, projeto ou entregável) é mudança estrutural: único gate do sistema. "
+                "Nasce em PLANNING/goals.md, com linha em PLANNING/log.md e no ledger; a oportunidade vira em-andamento.",
+            gate=True, after=lambda: self.jump(o["id"])))
 
     # ── áreas ──────────────────────────────────────────────────────────────
     def f_area_new(self) -> None:

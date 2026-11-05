@@ -487,6 +487,32 @@ def _create_project(b: Brain, goal: str, title: str, owner: str, approval: str, 
     return nid, events
 
 
+def _create_goal(b: Brain, title: str, why: str, approval: str, reason: str,
+                 evidence: str | None = None, horizon: str = "", extra=None) -> tuple[str, list[dict]]:
+    """Cria goal (GATE: exige `approval`): goals.md + plan.changed (+ eventos `extra(nid)`) no mesmo
+    lote do ledger + linha no PLANNING/log.md. Se o ledger recusar, o goals.md volta ao que era."""
+    inst = b.inst
+    if os.environ.get("BRAIN_NIGHTLY") == "1":
+        raise util.BrainError("plan add-goal: proibido no noturno — a árvore é do dono, que precisa estar presente", code=4)
+    if not (approval or "").strip():
+        raise util.BrainError("criar goal é mudança estrutural: exige --approval com a resposta literal do dono", code=4)
+    path, today = inst.planning_file, util.today().isoformat()
+    before = path.read_text(encoding="utf-8") if path.exists() else ""
+    nid = planning.add_goal(path, title, horizon, why)
+    what = f"goal criado: {title}"
+    try:
+        events = b.record([{"type": "plan.changed", "by": "owner", "data": {
+            "diff": f"{nid} {what}", "reason": reason, "evidence": evidence, "approval": approval}},
+            *(extra(nid) if extra else [])])
+        _append_plan_log(inst, f"{today} · {nid} {what} · {reason} · evidência: {evidence or '—'}"
+                               f" · aprovado: \"{approval}\"")
+    except util.BrainError:
+        util.atomic_write(path, before)          # o ledger recusou: o goals.md volta ao que era
+        raise
+    b.reload()
+    return nid, events
+
+
 def _plan_add(args, b: Brain) -> None:
     """Cria goal/projeto (gate: exige --approval do dono, vira plan.changed + PLANNING/log.md) ou entregável (sem gate)."""
     inst, kind = b.inst, args.plcmd.removeprefix("add-")
@@ -497,39 +523,31 @@ def _plan_add(args, b: Brain) -> None:
         _out(args, {"id": nid, "event": events[0]},
              f"✓ {nid} criado em PLANNING/goals.md (aprovado, registrado em PLANNING/log.md e no ledger)")
         return
+    if kind == "goal":
+        nid, events = _create_goal(b, args.title, args.why or "", args.approval,
+                                   args.reason or args.why or "novo goal", args.evidence,
+                                   horizon=args.horizon or "")
+        _out(args, {"id": nid, "event": events[0]},
+             f"✓ {nid} criado em PLANNING/goals.md (aprovado, registrado em PLANNING/log.md e no ledger)")
+        return
     if os.environ.get("BRAIN_NIGHTLY") == "1":
         raise util.BrainError(f"plan {args.plcmd}: proibido no noturno — a árvore é do dono, que precisa estar presente", code=4)
-    plan, today = b.plan, util.today().isoformat()
-    if kind == "goal":
-        nid, what = planning.next_goal_id(plan), f"goal criado: {args.title}"
-        reason = args.reason or args.why or "novo goal"
-    else:
-        if args.project not in plan.projects:
-            raise util.BrainError(f"projeto {args.project} não existe em PLANNING/goals.md", code=3)
-        nid = planning.next_deliverable_id(plan, args.project)
-    if kind != "deliverable" and not (args.approval or "").strip():
-        raise util.BrainError(f"criar {kind} é mudança estrutural: exige --approval com a resposta literal do dono", code=4)
+    if args.project not in b.plan.projects:
+        raise util.BrainError(f"projeto {args.project} não existe em PLANNING/goals.md", code=3)
+    nid = planning.next_deliverable_id(b.plan, args.project)
+    today = util.today().isoformat()
     path = inst.planning_file
     before = path.read_text(encoding="utf-8") if path.exists() else ""
-    if kind == "goal":
-        planning.add_goal(path, args.title, args.horizon or "", args.why or "")
-    else:
-        planning.add_deliverable(path, args.project, args.title, args.due or "", args.weight)
+    planning.add_deliverable(path, args.project, args.title, args.due or "", args.weight)
     try:
-        if kind != "deliverable":
-            ev = b.record_one({"type": "plan.changed", "by": "owner", "data": {
-                "diff": f"{nid} {what}", "reason": reason, "evidence": args.evidence, "approval": args.approval}})
-            _append_plan_log(inst, f"{today} · {nid} {what} · {reason} · evidência: {args.evidence or '—'}"
-                                   f" · aprovado: \"{args.approval}\"")
-        else:
-            ev = {"id": nid}
-            _append_plan_log(inst, f"{today} · {nid} entregável criado sob {args.project}: {args.title} · "
-                                   "sem gate (não é goal nem projeto)")
+        ev = {"id": nid}
+        _append_plan_log(inst, f"{today} · {nid} entregável criado sob {args.project}: {args.title} · "
+                               "sem gate (não é goal nem projeto)")
     except util.BrainError:
         util.atomic_write(path, before)          # o ledger recusou: o goals.md volta ao que era
         raise
     b.reload()
-    _out(args, {"id": nid, "event": ev}, f"✓ {nid} criado em PLANNING/goals.md" + ("" if kind == "deliverable" else " (aprovado, registrado em PLANNING/log.md e no ledger)"))
+    _out(args, {"id": nid, "event": ev}, f"✓ {nid} criado em PLANNING/goals.md")
 
 
 def _plan_edit(args, b: Brain) -> None:

@@ -1,7 +1,8 @@
 """`brain area|process|opportunity|doc` — portfólio de processos (PROC-####) e oportunidades (OPP-####).
 
 Mesmo padrão de `action`/`decision`: o agente extrai, o CLI numera e calcula (horas/mês, ICE).
-Promover oportunidade a projeto é o gate estrutural (`plan add-project`); o resto é livre.
+Promover oportunidade — a goal novo, projeto num goal ou entregável num projeto — é o gate
+estrutural (`plan add-goal`/`add-project`); o resto é livre.
 """
 from __future__ import annotations
 
@@ -10,7 +11,7 @@ import json
 import os
 
 from . import planning, portfolio, util, watch
-from .cli import _common, _create_project, _fact_opts, _out, _resolve_people
+from .cli import _append_plan_log, _common, _create_goal, _create_project, _fact_opts, _out, _resolve_people
 from .core import Brain
 from .schema import WATCH_KINDS
 
@@ -146,8 +147,12 @@ def _opp_line(b: Brain, o) -> str:
     bits = [o.id, o.status, o.title, b.state.areas[o.area].name if o.area in b.state.areas else o.area]
     if o.score is not None:
         bits.append(f"ICE {o.impact}×{o.confidence}×{o.ease}={o.score}" + (" (sugerido)" if o.ice_suggested else ""))
-    if o.project:
+    if o.promoted == "deliverable":
+        bits.append(f"{o.deliverable} em {o.project}/{o.goal}")
+    elif o.promoted == "project":
         bits.append(f"{o.project}/{o.goal}")
+    elif o.promoted == "goal":
+        bits.append(f"goal {o.goal}")
     return " · ".join(bits)
 
 
@@ -236,41 +241,115 @@ def cmd_opportunity(args, b: Brain) -> None:
              "\n".join(_opp_line(b, o) for o in rows) or "(nenhuma oportunidade)")
 
 
-def promote_proposal(b: Brain, o, title: str | None = None) -> tuple[str, list[str]]:
-    """O projeto que a promoção criaria: (id, linhas do goals.md). Usado pelo CLI e pelo gate do TUI."""
+PROMOTE_LEVELS = ("goal", "project", "deliverable")
+
+
+def _promo_where(o) -> str:
+    """Onde a oportunidade foi parar quando promovida (para mensagens)."""
+    if o.promoted == "deliverable":
+        return f"{o.deliverable} em {o.project}"
+    if o.promoted == "goal":
+        return f"goal {o.goal}"
+    return f"{o.project} em {o.goal}"
+
+
+def promote_proposal(b: Brain, o, title: str | None = None, level: str = "project",
+                     target: str | None = None) -> tuple[str, list[str]]:
+    """O nó que a promoção criaria no nível pedido: (id, linhas do goals.md). Usado pelo CLI e pelo gate do TUI."""
     why = " ".join((o.problem or "").split())[:160]
     owner = b.owner if b.owner in b.state.people else ""
+    t = title or o.title
+    if level == "goal":
+        nid = planning.next_goal_id(b.plan)
+        return nid, [f"## {nid} — {t}", "- status: ativo"] + ([f"- por quê: {why}"] if why else [])
+    if level == "deliverable":
+        nid = planning.next_deliverable_id(b.plan, target or "")
+        return nid, [f"- [ ] {nid} {t}"]
     nid = planning.next_project_id(b.plan)
-    return nid, [f"### {nid} — {title or o.title}", "- status: ativo"] + ([f"- dono: {owner}"] if owner else []) \
+    return nid, [f"### {nid} — {t}", "- status: ativo"] + ([f"- dono: {owner}"] if owner else []) \
         + ([f"- por quê: {why}"] if why else [])
 
 
 def _promote(args, b: Brain) -> None:
-    """Promove OPP a projeto num goal. Sem --approval só mostra o diff proposto e sai com código de gate."""
+    """Promove OPP a nó do PLANNING no nível escolhido: goal novo (--level goal), projeto num goal
+    (--level project --goal GOAL-#) ou entregável num projeto (--level deliverable --project PROJ-#).
+    Sem --approval só mostra o diff proposto e sai com código de gate."""
     o = _need_opp(b, args.id)
     if os.environ.get("BRAIN_NIGHTLY") == "1":
         raise util.BrainError("opportunity promote: proibido no noturno — a árvore é do dono, que precisa estar presente", code=4)
-    if o.project:
-        raise util.BrainError(f"{o.id} já foi promovida ({o.project} em {o.goal})", code=4)
-    if args.goal not in b.plan.goals:
+    level = args.level or ("deliverable" if args.project else "project" if args.goal else None)
+    if level not in PROMOTE_LEVELS:
+        raise util.BrainError("promote: diga o nível — --level goal (goal novo) · project (--goal GOAL-#) · "
+                              "deliverable (--project PROJ-#); só --goal GOAL-# continua significando projeto", code=3)
+    if level == "goal" and (args.goal or args.project):
+        raise util.BrainError("promote --level goal cria um goal novo: não leve --goal nem --project", code=3)
+    if level == "project" and args.project:
+        raise util.BrainError("promote --level project cria o projeto: passe só o --goal GOAL-# de destino", code=3)
+    if level == "deliverable" and args.goal:
+        raise util.BrainError("promote --level deliverable cria o entregável: passe só o --project PROJ-# de destino", code=3)
+    if level == "project" and args.goal not in b.plan.goals:
         raise util.BrainError(f"goal {args.goal} não existe em PLANNING/goals.md", code=3)
+    if level == "deliverable" and args.project not in b.plan.projects:
+        raise util.BrainError(f"projeto {args.project} não existe em PLANNING/goals.md", code=3)
+    if o.promoted:
+        raise util.BrainError(f"{o.id} já foi promovida ({_promo_where(o)})", code=4)
     title = args.title or o.title
-    nid, diff = promote_proposal(b, o, title)
+    target = args.goal if level == "project" else (args.project if level == "deliverable" else None)
+    nid, diff = promote_proposal(b, o, title, level, target)
     why = " ".join((o.problem or "").split())[:160]
     owner = b.owner if b.owner in b.state.people else ""
+    reason = args.reason or f"promoção de {o.id}: {o.title}"
     if not (args.approval or "").strip():
-        print(f"Proposta (sob {args.goal} — {b.plan.goals[args.goal].title}):\n  " + "\n  ".join(diff))
-        raise util.BrainError(f"promover {o.id} cria projeto: mudança estrutural — exige --approval com a "
+        if level == "goal":
+            where = "goal novo"
+        elif level == "project":
+            where = f"sob {args.goal} — {b.plan.goals[args.goal].title}"
+        else:
+            where = f"sob {args.project} — {b.plan.projects[args.project].title}"
+        print(f"Proposta ({where}):\n  " + "\n  ".join(diff))
+        raise util.BrainError(f"promover {o.id} no nível {level}: mudança estrutural — exige --approval com a "
                               "resposta literal do dono", code=4)
-    nid, events = _create_project(
-        b, args.goal, title, owner, args.approval, args.reason or f"promoção de {o.id}: {o.title}",
-        args.evidence, why,
-        extra=lambda pid: [
+    if level == "project":
+        nid, events = _create_project(
+            b, args.goal, title, owner, args.approval, reason, args.evidence, why,
+            extra=lambda pid: [
+                {"type": "opportunity.promoted", "id": o.id, "by": "owner",
+                 "data": {"project": pid, "goal": args.goal}},
+                {"type": "opportunity.status", "id": o.id, "by": "owner",
+                 "data": {"status": "em-andamento", "reason": f"promovida a {pid}"}}])
+        _out(args, {"id": nid, "events": events}, f"✓ {o.id} → {nid} em {args.goal} (aprovado; goals.md, log e ledger)\n  "
+             + _opp_line(b, b.state.opportunities[o.id]))
+        return
+    if level == "goal":
+        nid, events = _create_goal(
+            b, title, why, args.approval, reason, args.evidence,
+            extra=lambda gid: [
+                {"type": "opportunity.promoted", "id": o.id, "by": "owner", "data": {"goal": gid}},
+                {"type": "opportunity.status", "id": o.id, "by": "owner",
+                 "data": {"status": "em-andamento", "reason": f"promovida a {gid}"}}])
+        _out(args, {"id": nid, "events": events}, f"✓ {o.id} → {nid} (goal novo; aprovado; goals.md, log e ledger)\n  "
+             + _opp_line(b, b.state.opportunities[o.id]))
+        return
+    # entregável: o nó em si não é mudança estrutural (sem plan.changed, como `plan add deliverable`),
+    # mas a promoção continua gated — e o goals.md volta ao que era se o ledger recusar.
+    inst, today = b.inst, util.today().isoformat()
+    path = inst.planning_file
+    before = path.read_text(encoding="utf-8") if path.exists() else ""
+    nid = planning.add_deliverable(path, args.project, title)
+    try:
+        events = b.record([
             {"type": "opportunity.promoted", "id": o.id, "by": "owner",
-             "data": {"project": pid, "goal": args.goal}},
+             "data": {"deliverable": nid, "project": args.project, "goal": b.plan.goal_of(args.project)}},
             {"type": "opportunity.status", "id": o.id, "by": "owner",
-             "data": {"status": "em-andamento", "reason": f"promovida a {pid}"}}])
-    _out(args, {"id": nid, "events": events}, f"✓ {o.id} → {nid} em {args.goal} (aprovado; goals.md, log e ledger)\n  "
+             "data": {"status": "em-andamento", "reason": f"promovida a {nid}"}}])
+        _append_plan_log(inst, f"{today} · {nid} entregável criado sob {args.project} "
+                               f"(promoção de {o.id}): {title} · evidência: {args.evidence or '—'}"
+                               f" · aprovado: \"{args.approval}\"")
+    except util.BrainError:
+        util.atomic_write(path, before)          # o ledger recusou: o goals.md volta ao que era
+        raise
+    b.reload()
+    _out(args, {"id": nid, "events": events}, f"✓ {o.id} → {nid} em {args.project} (aprovado; goals.md, log e ledger)\n  "
          + _opp_line(b, b.state.opportunities[o.id]))
 
 
@@ -400,9 +479,13 @@ def add_parsers(sub) -> None:
     x = s.add_parser("evidence", help="mais uma fonte que reforça a oportunidade")
     x.add_argument("id")
     _fact_opts(x)
-    x = s.add_parser("promote", help="vira projeto num goal (GATE: sem --approval só mostra o diff)")
+    x = s.add_parser("promote", help="vira nó do PLANNING no nível escolhido (GATE: sem --approval só mostra o diff)")
     x.add_argument("id")
-    x.add_argument("--goal", required=True)
+    x.add_argument("--level", choices=list(PROMOTE_LEVELS),
+                   help="goal (goal novo) · project (--goal GOAL-#) · deliverable (--project PROJ-#); "
+                        "sem --level: --goal ⇒ projeto, --project ⇒ entregável")
+    x.add_argument("--goal", help="nível project: GOAL-# que recebe o projeto novo")
+    x.add_argument("--project", help="nível deliverable: PROJ-# que recebe o entregável novo")
     x.add_argument("--title")
     x.add_argument("--reason")
     x.add_argument("--evidence")

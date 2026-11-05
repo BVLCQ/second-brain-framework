@@ -93,7 +93,7 @@ TYPES: dict[str, dict] = {
     "opportunity.status": {"entity": "opportunity", "req": ["status"]},
     "opportunity.scored": {"entity": "opportunity", "req": ["impact", "confidence", "ease"]},
     "opportunity.evidence": {"entity": "opportunity", "req": ["source"]},
-    "opportunity.promoted": {"entity": "opportunity", "req": ["project", "goal"]},
+    "opportunity.promoted": {"entity": "opportunity", "req": ["goal"]},
     "doc.linked": {"entity": "doclink", "req": ["target", "kind", "ref"]},
     "doc.unlinked": {"entity": "doclink", "req": ["target", "ref"]},
     "doc.suggested": {"entity": "doclink", "req": ["target", "ref", "what"]},   # porta oppdrive: sugestão no Detalhamento
@@ -422,8 +422,9 @@ def _validate_portfolio(t: str, ev: dict, data: dict, state, plan) -> None:
         if data.get("ice_suggested"):
             _need(by == "agent", f"{t}: só o agente sugere ICE (by=agent); ICE do dono é declaração, sem ice_suggested")
         if t in {"opportunity.added", "opportunity.updated"}:
-            # projeto só nasce da promoção (gate); goal aqui é só o alvo pretendido
-            _need("project" not in data, f"{t}: project só via `brain opportunity promote` (gate do dono)")
+            # projeto/entregável só nascem da promoção (gate); goal aqui é só o alvo pretendido
+            _need("project" not in data and "deliverable" not in data,
+                  f"{t}: project/deliverable só via `brain opportunity promote` (gate do dono)")
         if t == "opportunity.added":
             _need(by != "agent" or ev.get("source"), "opportunity.added por agente exige --source")
             _need(by == "owner" or data.get("status", "ideia") == "ideia",
@@ -442,18 +443,26 @@ def _validate_portfolio(t: str, ev: dict, data: dict, state, plan) -> None:
             if st in OPP_REASON_STATUS:
                 _need(data.get("reason"), f"status '{st}' exige reason (motivo)")
             if st == "em-andamento":
-                _need(state.opportunities[eid].project,
-                      f"{eid}: 'em-andamento' só com projeto vinculado — use `brain opportunity promote`")
+                _need(state.opportunities[eid].promoted,
+                      f"{eid}: 'em-andamento' só depois de promover (`brain opportunity promote`, "
+                      "qualquer nível) — use o gate")
         if t == "opportunity.scored" and by != "owner":
             _need(data.get("ice_suggested"), "agente só grava ICE como sugestão (ice_suggested)")
         if t == "opportunity.promoted":
             _need(by == "owner", "promover oportunidade é do dono (gate)")
-            proj = plan.projects.get(data["project"])
-            _need(data["goal"] in plan.goals and proj is not None,
-                  "promoted: goal/projeto não existem no PLANNING/goals.md")
-            _need( proj.goal_id == data["goal"],
-                  f"promoted: projeto {data['project']} não pertence a {data['goal']}")
-            _need(not state.opportunities[eid].project, f"{eid} já foi promovida")
+            _need(data.get("goal") in plan.goals, "promoted: goal não existe no PLANNING/goals.md")
+            if data.get("project"):
+                proj = plan.projects.get(data["project"])
+                _need(proj is not None, "promoted: projeto não existe no PLANNING/goals.md")
+                _need(proj.goal_id == data["goal"],
+                      f"promoted: projeto {data['project']} não pertence a {data['goal']}")
+            if data.get("deliverable"):
+                _need("project" in data, "promoted: deliverable exige o projeto pai")
+                d = plan.deliverables.get(data["deliverable"])
+                _need(d is not None, "promoted: entregável não existe no PLANNING/goals.md")
+                _need(d.project_id == data["project"],
+                      f"promoted: entregável {data['deliverable']} não pertence a {data['project']}")
+            _need(not state.opportunities[eid].promoted, f"{eid} já foi promovida")
     if t.startswith("doc."):
         tgt = data["target"]
         _need(tgt in state.processes or tgt in state.opportunities, f"doc: alvo {tgt!r} não existe (PROC-… ou OPP-…)")

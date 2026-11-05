@@ -25,6 +25,17 @@ def ice(o: dict) -> str:
     return f"{o['impact']}×{o['confidence']}×{o['ease']} = **{o['score']}**" + (" (sugerido)" if o["ice_suggested"] else "")
 
 
+def _promo_ref(o) -> str | None:
+    """Referência curta ao nó criado pela promoção (lista por status e ficha)."""
+    if o.get("promoted") == "deliverable":
+        return f"{o['deliverable']} em {o['project']}"
+    if o.get("promoted") == "project":
+        return o["project"]
+    if o.get("promoted") == "goal":
+        return f"goal {o['goal']}"
+    return None
+
+
 def render(pg: Pages) -> dict[str, str]:
     """Escreve as páginas do portfólio em `pg` e devolve {id: status} das fichas de OPP (para a colheita)."""
     pf = pg.m["portfolio"]
@@ -95,7 +106,7 @@ def render(pg: Pages) -> dict[str, str]:
         items = [o for o in pf["opportunities"] if o["status"] == s]
         if items:
             out.append(f"- **{s}**: " + "; ".join(
-                f"{olink(f, o['id'])} {_clip(o['title'], 40)}" + (f" ({o['project']})" if o["project"] else "")
+                f"{olink(f, o['id'])} {_clip(o['title'], 40)}" + ((f" ({_promo_ref(o)})") if _promo_ref(o) else "")
                 for o in items))
     g = pf["gaps"]
     out += ["", "## Lacunas", ""]
@@ -154,16 +165,19 @@ def render(pg: Pages) -> dict[str, str]:
         fm = {"id": o["id"], "titulo": o["title"], "status": o["status"], "area": area(o["area"]),
               "tipo": o["kind"], "impacto": o["impact"], "confianca": o["confidence"], "facilidade": o["ease"],
               "score": o["score"], "ice_sugerido": bool(o["ice_suggested"]), "quadrante": o["quadrant"],
-              "processo": o["process"], "goal": o["goal"], "projeto": o["project"],
+              "processo": o["process"], "goal": o["goal"], "projeto": o["project"], "entregavel": o["deliverable"],
               "fonte": o["source"] or None, "prov": o["prov"], "tags": ["oportunidade"]}
         body = [f"# {o['id']} · {o['title']}", "",
                 "> Edite `status:` acima (" + " · ".join(sorted(OPP_STATUS)) + ") — vira declaração sua no próximo render. "
-                "`em-andamento` só existe depois de promover (`brain opportunity promote`).", "",
+                "`em-andamento` só existe depois de promover (`brain opportunity promote`, em qualquer nível).", "",
                 f"ICE: {ice(o)}" + (f" — {o['ice_reason']}" if o["ice_suggested"] and o["ice_reason"] else ""),
                 f"Área: {area(o['area'])} · tipo: {o['kind']}"
                 + (f" · processo: {plink(f, o['process'])}" if o["process"] else ""),
                 f"Ganho esperado: {o['gain'] or '—'}" + (f" ({hours(o['hours_saved'])})" if o["hours_saved"] else "")]
-        if o["project"]:
+        if o["deliverable"]:
+            body.append(f"Entregável: {o['deliverable']} {o['deliverable_title'] or ''} · em "
+                        f"{pg.proj(f, o['project'], short=False)} ({o['goal']})")
+        elif o["project"]:
             pr = o["project_progress"]
             body.append(f"Projeto: {pg.proj(f, o['project'], short=False)} em {o['goal']}"
                         + (f" · {pg.bar(pr['pct'])}" if pr else ""))

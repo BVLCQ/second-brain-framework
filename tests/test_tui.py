@@ -650,7 +650,9 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             await pilot.pause(0.3)
             self.assertEqual(type(app.screen).__name__, "FormModal")
             self.assertTrue(app.screen.spec.gate)
-            self.assertIn("### P", str(app.screen.spec.extra))                    # o diff proposto aparece antes de qualquer escrita
+            cmd = app.screen.spec.build(app.screen.vals())[0]          # default: projeto no goal alvo
+            self.assertIn("--level", cmd)
+            self.assertIn("--goal", cmd)
             before = (self.inst.planning_file).read_text(encoding="utf-8")
             await pilot.press("ctrl+s")                                           # sem aprovação digitada não passa
             await pilot.pause(0.2)
@@ -661,10 +663,34 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             await self.settle(app, pilot)
             st = self.state(app)
             o = st.opportunities[ids["aposta"]]
-            self.assertEqual((o.status, o.goal), ("em-andamento", "GOAL-1"))
+            self.assertEqual((o.status, o.promoted, o.goal), ("em-andamento", "project", "GOAL-1"))
             self.assertIn(f"### {o.project} — Plataforma de dados", self.inst.planning_file.read_text(encoding="utf-8"))
             self.assertEqual((app.face, app.cur().id), (1, ids["aposta"]))
             self.assertEqual(app.tab[3], 2)                                        # a aba segue o status novo
+
+    async def test_promote_to_deliverable_level(self):
+        """O formulário troca o alvo pelo nível: entregável aponta --project e some com --goal."""
+        ids = self.seed_portfolio()
+        app = self.app()
+        async with app.run_test(size=(150, 46)) as pilot:
+            await pilot.pause(0.4)
+            await pilot.press("tab", "3")
+            app.tab[3] = 1
+            app.set_sel(3, [i.id for i in app.items(3)].index(ids["prior"]))
+            app.redraw()
+            await pilot.press("p")
+            await pilot.pause(0.3)
+            self.assertEqual(type(app.screen).__name__, "FormModal")
+            await self.fill(pilot, level="deliverable", project="PROJ-1", quote="ok")
+            cmd = app.screen.spec.build(app.screen.vals())[0]
+            self.assertIn("--level", cmd)
+            self.assertIn("--project", cmd)
+            self.assertNotIn("--goal", cmd)
+            await pilot.press("ctrl+s")
+            await self.settle(app, pilot)
+            o = self.state(app).opportunities[ids["prior"]]
+            self.assertEqual((o.status, o.promoted, o.project, o.goal), ("em-andamento", "deliverable", "PROJ-1", "GOAL-1"))
+            self.assertIn(f"- [ ] {o.deliverable} Revisão de SLAs", self.inst.planning_file.read_text(encoding="utf-8"))
 
 
     # ── perguntas do agente (agent-questions, passo 4) ────────────────────

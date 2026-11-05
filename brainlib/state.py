@@ -268,6 +268,8 @@ class Opportunity:
     ice_reason: str = ""
     goal: str | None = None
     project: str | None = None
+    deliverable: str | None = None
+    promoted: str = ""               # nível da promoção: goal | project | deliverable ("" = nunca promovida)
     people: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
     evidence: list[str] = field(default_factory=list)   # fontes (artefatos/RAW) que reforçam a oportunidade
@@ -718,7 +720,10 @@ def _apply_portfolio(st: State, ev: dict, t: str, eid: str, data: dict, when: da
             if data["source"] not in o.evidence:
                 o.evidence.append(data["source"])
         elif t == "opportunity.promoted":
-            o.project, o.goal = data["project"], data["goal"]
+            o.goal = data.get("goal") or o.goal
+            o.project = data.get("project")
+            o.deliverable = data.get("deliverable")
+            o.promoted = "deliverable" if o.deliverable else ("project" if o.project else "goal")
         o.last_activity = when
 
     elif t.startswith("doc."):

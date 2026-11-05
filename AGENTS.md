@@ -217,9 +217,11 @@ vai e volta livremente entre eles. Tipos: `melhoria-de-processo` · `novo-proces
   O agente só **sugere** (`--suggest --reason`); aparece em rosa até o dono confirmar ou mudar.
 - **Horas/mês de um processo** = execuções/mês × duração × nº de executores — também do CLI.
   Ganho de oportunidade em horas é **declarado** pelo dono; o cérebro não estima.
-- **Promover** uma oportunidade = criar projeto num goal: é mudança estrutural, logo **gate**
-  (`brain opportunity promote OPP-#### --goal GOAL-# --approval "ok"`; sem `--approval` só mostra o
-  diff). Proibido no noturno. `em-andamento` só nasce da promoção.
+- **Promover** uma oportunidade = criar o nó do PLANNING no nível escolhido — goal novo, projeto num
+  goal ou entregável num projeto: é mudança estrutural, logo **gate**
+  (`brain opportunity promote OPP-#### --level goal|project|deliverable … --approval "ok"`; sem
+  `--approval` só mostra o diff). Proibido no noturno. `em-andamento` só nasce da promoção
+  (de qualquer nível).
 - Playbooks moram no Drive; a ligação (`brain doc link … --kind playbook --watch`) cria uma fonte
   `drive-doc` no watch e o `/update` só relê quando o `modifiedTime` muda.
 - Pasta e one-pager de cada oportunidade moram no Drive (porta 6, `brain oppdrive`); o one-pager

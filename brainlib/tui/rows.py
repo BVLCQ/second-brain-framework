@@ -842,16 +842,19 @@ def d_opp(store, it) -> Doc:
     if o["hours_saved"]:
         gain += f" ({hours_txt(o['hours_saved'])})"
     proj = "—"
-    if o["project"]:
+    if o.get("deliverable"):
+        proj = Text.assemble(link(o["deliverable"], o["deliverable"], "bold"), f" {o['deliverable_title']} · em ",
+                             link(o["project"], o["project"]), f" {o['project_title']} · ", link(o["goal"], o["goal"]))
+    elif o["project"]:
         pr = o["project_progress"]
         proj = Text.assemble(link(o["project"], o["project"], "bold"), f" {o['project_title']} em ", link(o["goal"], o["goal"]),
                              (f" · {bar(pr['pct'], 8)} {pct_txt(pr)}" if pr else "", DIM))
     elif o["goal"]:
-        proj = Text.assemble(link(o["goal"], o["goal"]), f" {o['goal_title'] or ''}", ("  · p promove a projeto", DIM))
+        proj = Text.assemble(link(o["goal"], o["goal"]), f" {o['goal_title'] or ''}", ("  · p promove", DIM))
     doc.blank().kv([
         ("ICE", ice), ("ganho", Text(gain)),
         ("processo", titled(store, o["process"]) if o["process"] else None),
-        ("projeto", proj if o["project"] or o["goal"] else None),
+        ("plano", proj if (o.get("promoted") or o["project"] or o["goal"]) else None),
         ("pessoas", Text(", ".join(o["people_names"])) if o["people"] else None),
         ("origem", Text(f"{o['by']} · {o['source'] or 'sem fonte'} ") + prov(o["prov"]))])
     if o["ice_suggested"] and o["ice_reason"]:
@@ -872,8 +875,9 @@ def d_opp(store, it) -> Doc:
     files_section(doc, store, o["id"], (o.get("source") or "",), o["docs"])
     notes_section(doc, store, o["id"])
     doc.sec("Equivalente na CLI").cmd(f"brain opportunity show {o['id']}")
-    if not o["project"]:
-        doc.cmd(f'brain opportunity promote {o["id"]} --goal GOAL-# --approval "ok"')
+    if not o.get("promoted"):
+        doc.p(("níveis: ", DIM), "goal novo (--level goal) · projeto (--goal GOAL-#) · entregável (--project PROJ-#)")
+        doc.cmd(f'brain opportunity promote {o["id"]} --level deliverable --project PROJ-# --approval "ok"')
     return doc
 
 

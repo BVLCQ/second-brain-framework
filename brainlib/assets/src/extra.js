@@ -997,15 +997,25 @@ function editPlanNode(kind, id, node){        // goal/projeto: gate estrutural �
     run: (v, m) => { if (v.title) node.title = v.title; if (v.status) node.status = v.status; }});
 }
 function promoteDialog(o){
-  formDialog({title: "Promover " + o.id, sub: o.title + " — vira projeto num goal (gate estrutural)", gate: true, fields: [
-      {k: "goal", label: "Goal", options: window.BRAIN.M.goals.map(g => [g.id, g.id + " — " + g.title]), value: window.BRAIN.M.goals[0] && window.BRAIN.M.goals[0].id}],
-    preview: v => "brain opportunity promote " + o.id + " --goal " + v.goal + ' --approval "ok"',
-    run: (v, m) => { const x = m.portfolio.opportunities.find(y => y.id === o.id); x.status = "em-andamento"; x.goal = v.goal;
-      if (!LIVE) toast("retrato — no live o CLI cria o PROJ no goal e o refresh traz"); }});
+  const G = window.BRAIN.M.goals, P = window.BRAIN.M.projects;
+  formDialog({title: "Promover " + o.id, sub: o.title + " — vira nó do PLANNING no nível escolhido (gate estrutural)", gate: true, fields: [
+      {k: "level", label: "Nível", options: [["project", "projeto — num goal"], ["deliverable", "entregável — num projeto"], ["goal", "goal novo"]], value: "project"},
+      {k: "goal", label: "Goal (nível projeto)", options: G.map(g => [g.id, g.id + " — " + g.title]), value: G[0] && G[0].id},
+      {k: "project", label: "Projeto (nível entregável)", options: P.map(p => [p.id, p.id + " — " + p.title]), value: P[0] && P[0].id}],
+    note: v => v.level === "project" ? "cria um PROJ-# novo dentro do goal escolhido"
+      : v.level === "deliverable" ? "cria um PROJ-#.N novo (entregável) dentro do projeto escolhido"
+      : "cria um GOAL-# novo no topo da árvore",
+    preview: v => "brain opportunity promote " + o.id + " --level " + v.level +
+      (v.level === "project" ? " --goal " + v.goal : v.level === "deliverable" ? " --project " + v.project : "") +
+      ' --approval "ok"',
+    run: (v, m) => { const x = m.portfolio.opportunities.find(y => y.id === o.id); x.status = "em-andamento"; x.promoted = v.level;
+      if (v.level === "project") x.goal = v.goal;
+      if (v.level === "deliverable") { x.project = v.project; x.goal = ((m.goals.find(g => g.projects.includes(v.project)) || {}).id) || x.goal; }
+      if (!LIVE) toast("retrato — no live o CLI cria o nó no goals.md e o refresh traz"); }});
 }
 function statusPicker(o){
   const stages = ["ideia", "triagem", "priorizada", "em-andamento", "piloto", "validando", "entregue", "em-espera", "descartada"];
-  const blocked = !o.project ? "em-andamento" : "";   // em-andamento só nasce da promoção (gate)
+  const blocked = (o.project || o.promoted) ? "" : "em-andamento";   // em-andamento só nasce da promoção (gate)
   formDialog({title: "Status · " + o.id, sub: o.title, fields: [
       {k: "status", label: "Estágio", options: stages.map(s => [s, s + (s === o.status ? " (atual)" : "") +
         (s === blocked ? " — exige promoção (gate)" : "")]), value: o.status},
@@ -1161,7 +1171,7 @@ function ctxKeys(k){
         m => { const x = m.portfolio.opportunities.find(y => y.id === o.id); x.ice_suggested = false; }); return true; }
     if (k === "e") { editOpp(o); return true; }
     if (k === "x") { oppReasonDialog(o.id, "descartada"); return true; }
-    if (k === "p" && !o.project) { promoteDialog(o); return true; }
+    if (k === "p" && !(o.project || o.promoted)) { promoteDialog(o); return true; }
     if (k === "O") { toast("(agente) one-pager: brain share opportunity → publica na porta 6"); return true; }
     return ["s", "i", "c", "x", "p", "O"].includes(k); }
   if (h.startsWith("#pf/opp/")) { const o = window.BRAIN.OPP[decodeURIComponent(h.slice(8))];
@@ -1304,7 +1314,7 @@ function keyLegend(){
     add("n", "nova");
     add("s", "status", !o); add("i", "ICE", !o); add("c", "confirmar ICE", !(o && o.ice_suggested));
     add("e", "editar", !o); add("x", "descartar", !o);
-    add("p", "promover", !(o && !o.project), true); add("O", "one-pager", !o);
+    add("p", "promover", !(o && !(o.project || o.promoted)), true); add("O", "one-pager", !o);
   } else if (h.startsWith("#pf/opp/")) { add("e", "editar"); add("s", "status"); add("i", "ICE"); }
   else if (h.startsWith("#pf/procs")) { add("n", "novo"); add("e", "editar", !id.startsWith("PROC-")); add("x", "aposentar", !id.startsWith("PROC-")); }
   else if (h.startsWith("#pf/areas")) { add("n", "nova"); add("e", "editar", !sel); }

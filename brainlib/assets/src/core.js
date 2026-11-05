@@ -458,7 +458,10 @@ function oppRow(o, i){
     (o.docs.length ? "<p>" + o.docs.map(d => chip("info", d.kind) + " " + esc(d.title || d.ref)).join(" · ") + "</p>" : "") +
     (o.status_history.length ? '<p class="muted small">' + o.status_history.map(h => fmtD(h.date) + " " + esc(h.from) + "→" + esc(h.to) + (h.reason ? " (" + esc(h.reason) + ")" : "")).join(" · ") + "</p>" : "") +
     "</details></td><td>" + esc(areaName(o.area)) + "</td><td>" + iceTxt(o) + "</td><td>" + chip("info", o.status) + "</td><td>" + esc(o.quadrant || "—") +
-    "</td><td>" + (o.project ? pL(o.project, true) + " · " + esc(o.goal) : '<span class="muted">—</span>') + '</td><td class="num">' + hrs(o.hours_saved) + "</td></tr>";
+    "</td><td>" + (o.deliverable ? "<b>" + esc(o.deliverable) + "</b> · " + pL(o.project, true)
+      : o.project ? pL(o.project, true) + " · " + esc(o.goal)
+      : o.promoted === "goal" ? esc(o.goal) + ' <span class="muted">(goal)</span>'
+      : '<span class="muted">—</span>') + '</td><td class="num">' + hrs(o.hours_saved) + "</td></tr>";
 }
 // ── face Portfólio: pf/visao · pf/opps (kanban) · pf/matrix · pf/procs · pf/areas ──
 const STAGES_PIPE = ["ideia", "triagem", "priorizada", "em-andamento", "piloto", "validando", "entregue"];
@@ -593,6 +596,7 @@ V["pf/opp"] = (q, id) => {
     "<li><b>Processo:</b> " + (o.process ? idc(o.process) + " " + esc(proc ? proc.title : "") : "—") + "</li>" +
     "<li><b>Goal:</b> " + (o.goal ? esc(o.goal) + " " + esc(o.goal_title || "") : "—") + "</li>" +
     "<li><b>Projeto:</b> " + (o.project ? pL(o.project, true) : "—") + "</li>" +
+    (o.deliverable ? "<li><b>Entregável:</b> " + esc(o.deliverable) + " " + esc(o.deliverable_title || "") + "</li>" : "") +
     '<li><b>Registrada:</b> ' + fmtD(o.added) + " · por " + esc(o.by === "owner" ? "dono" : "agente") + " [" + esc(o.prov) + "]</li></ul>");
   h += panel("Problema → Sugestão", '<div class="msg">' + esc(o.problem || "não consta") + '</div><div class="msg">' + esc(o.suggestion || "não consta") + "</div>") + "</div>";
   if (o.docs.length) h += panel("Documentos", '<ul class="feed">' + o.docs.map(d => "<li>" + chip("info", d.kind) + " " + esc(d.title || d.ref) + "</li>").join("") + "</ul>", ' style="margin-top:14px"');

@@ -1948,6 +1948,28 @@ class PortfolioStateTests(unittest.TestCase):
             self.assertEqual((o.project, o.goal, o.status), ("PROJ-1", "GOAL-1", "em-andamento"))
             self.assertEqual(b.validate_all(), [])
 
+    def test_promoted_levels_goal_and_deliverable(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = self._b(td)
+            goal_only = self._opp(b)["id"]
+            b.record_one({"type": "opportunity.promoted", "id": goal_only, "by": "owner", "data": {"goal": "GOAL-1"}})
+            b.record_one({"type": "opportunity.status", "id": goal_only, "by": "owner", "data": {"status": "em-andamento"}})
+            o = b.state.opportunities[goal_only]
+            self.assertEqual((o.promoted, o.project, o.deliverable, o.status), ("goal", None, None, "em-andamento"))
+            delivery = self._opp(b)["id"]
+            b.record_one({"type": "opportunity.promoted", "id": delivery, "by": "owner",
+                          "data": {"goal": "GOAL-1", "project": "PROJ-1", "deliverable": "PROJ-1.2"}})
+            o = b.state.opportunities[delivery]
+            self.assertEqual((o.promoted, o.project, o.deliverable, o.goal), ("deliverable", "PROJ-1", "PROJ-1.2", "GOAL-1"))
+            other = self._opp(b)["id"]
+            for bad in ({"goal": "GOAL-1", "deliverable": "PROJ-1.1"},        # entregável exige o projeto pai
+                        {"goal": "GOAL-1", "project": "PROJ-1", "deliverable": "PROJ-9.1"},
+                        {"goal": "GOAL-9"},                                   # goal não existe
+                        {"goal": "GOAL-1", "project": "PROJ-9"}):
+                with self.assertRaises(util.BrainError):
+                    b.record_one({"type": "opportunity.promoted", "id": other, "by": "owner", "data": bad})
+            self.assertEqual(b.validate_all(), [])
+
     def test_docs_evidence_and_person_merge(self):
         with tempfile.TemporaryDirectory() as td:
             b = self._b(td)
@@ -2084,6 +2106,47 @@ class PortfolioCliTests(unittest.TestCase):
             r = subprocess.run([sys.executable, str(ROOT / "brain"), "opportunity", "promote", "OPP-0001",
                                 "--goal", "GOAL-1", "--approval", "ok"], capture_output=True, text=True, env=nightly)
             self.assertEqual(r.returncode, 4)
+
+    def test_promote_levels_goal_and_deliverable(self):
+        with tempfile.TemporaryDirectory() as td:
+            self._setup(td)
+            goals = Path(td) / "vault" / "PLANNING" / "goals.md"
+            self._ok(td, "opportunity", "add", "Ajuste fino do fechamento", "--area", "operacoes", "--by", "owner")
+            self._ok(td, "opportunity", "add", "Fornecedor único de farinha", "--area", "operacoes", "--by", "owner")
+            # entregável: inferência por --project, gate imprime o diff e nada grava sem "ok"
+            before = goals.read_text(encoding="utf-8")
+            r = self._run(td, "opportunity", "promote", "OPP-0001", "--project", "PROJ-1")
+            self.assertEqual(r.returncode, 4)
+            self.assertIn("- [ ] PROJ-1.3 Ajuste fino do fechamento", r.stdout)
+            self.assertEqual(goals.read_text(encoding="utf-8"), before)
+            self._ok(td, "opportunity", "promote", "OPP-0001", "--project", "PROJ-1", "--approval", "ok")
+            o = json.loads(self._ok(td, "opportunity", "show", "OPP-0001", "--json"))
+            self.assertEqual((o["status"], o["promoted"], o["project"], o["goal"], o["deliverable"]),
+                             ("em-andamento", "deliverable", "PROJ-1", "GOAL-1", "PROJ-1.3"))
+            self.assertIn("- [ ] PROJ-1.3 Ajuste fino do fechamento", goals.read_text(encoding="utf-8"))
+            # goal novo: --level explícito
+            r = self._run(td, "opportunity", "promote", "OPP-0002", "--level", "goal")
+            self.assertEqual(r.returncode, 4)
+            self.assertIn("## GOAL-2 — Fornecedor único de farinha", r.stdout)
+            self._ok(td, "opportunity", "promote", "OPP-0002", "--level", "goal", "--approval", "ok")
+            o = json.loads(self._ok(td, "opportunity", "show", "OPP-0002", "--json"))
+            self.assertEqual((o["status"], o["promoted"], o["goal"], o["project"]),
+                             ("em-andamento", "goal", "GOAL-2", None))
+            self.assertIn("## GOAL-2 — Fornecedor único de farinha", goals.read_text(encoding="utf-8"))
+            # entregável não grava plan.changed; goal grava — nessa ordem
+            types = [e["type"] for e in Brain(config.load(Path(td))).read_events()][-5:]
+            self.assertEqual(types, ["opportunity.promoted", "opportunity.status",
+                                     "plan.changed", "opportunity.promoted", "opportunity.status"])
+            # combinações de nível × alvo erradas recusam antes de gravar
+            self._ok(td, "opportunity", "add", "Terceira", "--area", "operacoes", "--by", "owner")
+            for extra in (("--level", "deliverable", "--goal", "GOAL-1"), ("--level", "goal", "--goal", "GOAL-1"),
+                          ("--level", "goal", "--project", "PROJ-1"), ("--level", "project", "--project", "PROJ-1"),
+                          ("--level", "deliverable", "--project", "PROJ-9")):
+                self.assertEqual(self._run(td, "opportunity", "promote", "OPP-0003", *extra,
+                                           "--approval", "ok").returncode, 3, extra)
+            self.assertEqual(self._run(td, "opportunity", "promote", "OPP-0003", "--approval", "ok").returncode, 3)
+            self.assertIn("✓", self._ok(td, "validate"))
+            self.assertIn("promoção de OPP-0001", (Path(td) / "vault" / "PLANNING" / "log.md").read_text(encoding="utf-8"))
 
 
 class PortfolioModelTests(unittest.TestCase):
