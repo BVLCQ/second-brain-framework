@@ -90,6 +90,9 @@ command = ""                    # se preenchido, substitui o preset (use {prompt
 prompt = "/update"
 timeout_min = 45
 model = "claude-haiku-5-5"      # modelo do claude no noturno; vazio = padrão do claude
+# Ferramentas nativas: o preset claude já libera todas, sem pergunta — `Bash` inteiro (qualquer comando), Read, Edit, Write,
+# Glob, Grep, NotebookEdit, WebFetch, WebSearch e Task. Nada a configurar aqui, e nenhum ASK `permissao` delas.
+# Só MCP precisa de lista (abaixo); escrita no mundo exterior segue só pelas portas.
 # Ferramentas MCP de LEITURA que o agente headless pode usar (noturno e TUI), no formato do claude
 # (`mcp__<servidor>__<ferramenta>`). Sem isto o `claude -p` não tem como pedir permissão e as fontes são negadas.
 allow = []

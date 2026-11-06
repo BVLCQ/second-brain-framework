@@ -757,7 +757,9 @@ permissão negada) vira uma pergunta `ASK-####` no ledger, não uma linha que ro
 motivo, `R` retoma o agente na mesma sessão com as respostas (`claude -p --resume`). Ao responder a última pergunta de uma rodada, a TUI
 oferece retomar na hora; se não der (sessão expirada, outro agente), as respostas ficam na fila e o **passo 0** do próximo `/dump` ou
 `/update` as aplica. Quando uma rodada deixa algo para você, o log mostra "⚠ o agente deixou … · r resposta livre": `r` continua a
-conversa com um texto seu (sem sessão, vira nota para o próximo `/update`). Permissão negada vira uma pergunta com o comando exato;
+conversa com um texto seu (sem sessão, vira nota para o próximo `/update`). Ferramenta nativa nunca pede permissão: o agente
+headless já roda com `Bash` inteiro (qualquer comando), Read, Edit, Write, Glob, Grep, NotebookEdit, WebFetch, WebSearch e Task
+liberados. Permissão negada de MCP vira uma pergunta com o comando exato;
 "liberar sempre" grava a regra (`brain agent allow`, em `[tui].agent_allow`, ou em `[runner].allow` para MCP de leitura). Ferramenta de
 **escrita** no mundo exterior (enviar, postar, criar, mover) nunca é liberada por ali: passa pelas portas (`/outbox`, `/publish`).
 

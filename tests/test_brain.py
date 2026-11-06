@@ -1828,6 +1828,22 @@ class RunnerTest(unittest.TestCase):
         self.assertLess(i, com.index("--allowedTools"))  # variadico: depois dele a flag seria engolida
         self.assertEqual(com[-1], "mcp__x__ler")
 
+    def test_claude_preset_allows_any_bash_command(self):
+        """Regressão: só `Bash(./brain:*)` fazia ls/cat/cd virarem ASK `permissao`. O preset libera `Bash` inteiro, no noturno e no TUI."""
+        from unittest import mock
+        from brainlib import runner
+        from brainlib.tui import bridge
+        cfg = config.DEFAULTS | {"runner": {**config.DEFAULTS["runner"], "agent": "claude"}}
+        with mock.patch("shutil.which", return_value="/usr/bin/claude"):
+            for argv in (runner.agent_command(cfg), bridge.agent_argv(cfg, "/dump"),
+                         bridge.resume_argv(cfg, "sess-1", "segue")):
+                tools = argv[argv.index("--allowedTools") + 1:]
+                self.assertIn("Bash", tools)                                  # sem parênteses = qualquer comando
+                self.assertFalse([t for t in tools if t.startswith("Bash(")])  # nenhuma restrição por prefixo
+                for t in ("Read", "Edit", "Write", "Glob", "Grep", "NotebookEdit", "WebFetch", "WebSearch", "Task"):
+                    self.assertIn(t, tools)
+                self.assertFalse([t for t in tools if t.startswith("mcp__") and t not in cfg["runner"]["allow"]])  # MCP nunca entra no preset
+
     def test_launchd_plist_runs_nightly_at_requested_time(self):
         import argparse
         import plistlib

@@ -19,10 +19,17 @@ from pathlib import Path
 
 from . import util
 
+BASH_ALLOW = "Bash"   # qualquer comando de shell, sempre liberado para o agente headless (noturno e ações ⚡ do TUI)
+# Toda ferramenta nativa do claude, sem restrição: o agente headless não consegue pedir permissão, então cada uma
+# fora da lista virava um ASK `permissao`. MCP não entra aqui: leitura vai em [runner].allow, escrita só pelas portas.
+CLAUDE_TOOLS = [BASH_ALLOW, "Read", "Edit", "Write", "Glob", "Grep", "NotebookEdit", "WebFetch", "WebSearch", "Task"]
+
 PRESETS: dict[str, list[str]] = {
     "cursor": ["cursor-agent", "-p", "--force", "--output-format", "text", "{prompt}"],
+    # `Bash` sem restrição: o agente headless nunca consegue pedir permissão, e cada comando fora de `./brain`
+    # (ls, cat, cd, grep…) virava um ASK `permissao`. Escrita no mundo exterior continua só pelas portas (AGENTS.md).
     "claude": ["claude", "-p", "{prompt}", "--permission-mode", "acceptEdits",
-               "--allowedTools", "Bash(./brain:*)", "Read", "Edit", "Write", "Glob", "Grep"],
+               "--allowedTools", *CLAUDE_TOOLS],
     "codex": ["codex", "exec", "--full-auto", "{prompt}"],
     "agy": ["agy", "-p", "{prompt}", "--dangerously-skip-permissions"],
     "gemini": ["gemini", "-p", "{prompt}", "--yolo"],

@@ -394,7 +394,10 @@ Dúvida que bloqueia o agente ou que é do dono decidir **não fica só no log n
 só o dono responde** (`brain ask answer`, pela TUI) e nunca no noturno, que pode perguntar mas não responder. Estados:
 aberta → respondida → aplicada (ou descartada). **Passo 0 do `/dump` e do `/update`:** `./brain ask list --answered`, aplicar cada
 resposta (alias, ação, reclassificação) e gravar `./brain ask applied ASK-#### --how "…"` — é a fila de reserva quando a TUI não
-consegue retomar o agente na hora. Permissão negada ao agente também vira ASK (`kind=permissao`); liberar grava a regra em
+consegue retomar o agente na hora. **Ferramenta nativa não gera ASK:** o preset do agente headless (noturno e ações ⚡) já libera
+`Bash` inteiro — qualquer comando (`ls`, `cat`, `cd`, `grep`…) — mais Read/Edit/Write/Glob/Grep/NotebookEdit/WebFetch/
+WebSearch/Task, sem lista de exceções (`runner.CLAUDE_TOOLS`). Permissão negada de MCP também vira ASK (`kind=permissao`);
+liberar grava a regra em
 `[tui].agent_allow` (`brain agent allow`), **exceto** ferramenta MCP de escrita no mundo exterior (enviar, postar, criar, mover…),
 que nunca é liberada por aí: passa pelas portas (`/outbox`, `/publish`).
 
