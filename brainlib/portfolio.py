@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import re
 
-from . import util
+from . import ice_rubric, util
 
 STOPWORDS = {"a", "o", "as", "os", "de", "da", "do", "das", "dos", "e", "em", "no", "na", "nos", "nas",
              "para", "pra", "por", "com", "um", "uma", "que", "se", "ao", "ou", "sem", "mais", "como"}
@@ -177,6 +177,7 @@ def build(state, plan, today) -> dict:
         "by_goal": {k: [o.id for o in v] for k, v in by_goal(opps).items()},
         "ranking": [o.id for o in sorted((o for o in opps if o.score is not None and o.status not in CLOSED),
                                          key=lambda o: (-o.score, o.id))],
+        "ice_rubric": ice_rubric.as_dict(),
         "counts": {"opportunities": len(opps), "prioritized": sum(1 for o in opps if o.status == "priorizada"),
                    "processes": sum(1 for p in state.processes.values() if p.status == "ativo"),
                    "gaps": gp["total"]},

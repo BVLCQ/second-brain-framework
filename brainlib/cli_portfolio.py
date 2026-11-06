@@ -10,7 +10,7 @@ import argparse
 import json
 import os
 
-from . import planning, portfolio, util, watch
+from . import ice_rubric, planning, portfolio, util, watch
 from .cli import _append_plan_log, _common, _create_goal, _create_project, _fact_opts, _out, _resolve_people
 from .core import Brain
 from .schema import WATCH_KINDS
@@ -197,6 +197,11 @@ def cmd_opportunity(args, b: Brain) -> None:
         ev = b.record_one(_common({"type": "opportunity.status", "id": args.id, "data": {
             "status": args.status, "reason": args.reason}}, args))
         _out(args, ev, "✓ " + _opp_line(b, b.state.opportunities[args.id]))
+    elif c == "rubric":
+        if getattr(args, "json", False):
+            print(json.dumps(ice_rubric.as_dict(), ensure_ascii=False, indent=2))
+            return
+        print(ice_rubric.as_markdown() if args.md else ice_rubric.as_text(), end="")
     elif c == "score":
         _need_opp(b, args.id)
         args.by = args.by or ("agent" if args.suggest else "owner")
@@ -467,7 +472,8 @@ def add_parsers(sub) -> None:
     x.add_argument("--reason", help="obrigatório para em-espera/descartada")
     _fact_opts(x)
     _owner_default(x)
-    x = s.add_parser("score", help="ICE: impacto × confiança × facilidade (1–5); o CLI calcula o score")
+    x = s.add_parser("score", help="ICE: impacto × confiança × facilidade (1–5); o CLI calcula o score — "
+                                    "o que cada nota significa: brain opportunity rubric")
     x.add_argument("id")
     x.add_argument("--impact", type=int, required=True)
     x.add_argument("--confidence", type=int, required=True)
@@ -479,6 +485,9 @@ def add_parsers(sub) -> None:
     x = s.add_parser("evidence", help="mais uma fonte que reforça a oportunidade")
     x.add_argument("id")
     _fact_opts(x)
+    x = s.add_parser("rubric", help="rubric do ICE: o que cada nota (1–5) significa em cada eixo")
+    x.add_argument("--md", action="store_true", help="saída em Markdown (mesmo bloco do guia)")
+    x.add_argument("--json", action="store_true", help="estrutura completa (máquinas)")
     x = s.add_parser("promote", help="vira nó do PLANNING no nível escolhido (GATE: sem --approval só mostra o diff)")
     x.add_argument("id")
     x.add_argument("--level", choices=list(PROMOTE_LEVELS),

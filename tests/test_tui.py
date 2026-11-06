@@ -2289,6 +2289,7 @@ class CoverageTest(unittest.TestCase):
         "person list", "action show", "action list", "decision list", "plan show", "focus show", "outbox show",
         "outbox list", "proposal list", "publish list", "doctor", "search", "status", "artifact", "watch list", "watch since", "watch folders",
         "repos list", "note list", "raw where", "ask list", "area list", "process show", "process list", "opportunity show", "opportunity list",
+        "opportunity rubric",   # metodologia ICE: paleta (comando próprio abre o TextModal) e ? no formulário do ICE
         "feedback show", "feedback list",   # painel 4 › Feedback renderiza fila e ficha do estado em processo
         "action dupes"}   # o aviso de parecida aparece no campo título da nova ação
 

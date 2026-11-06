@@ -917,6 +917,7 @@ class DashboardAssetTests(unittest.TestCase):
         "person list", "action show", "action list", "decision list", "plan show", "focus show", "outbox show",
         "outbox list", "proposal list", "publish list", "doctor", "search", "status", "note list", "ask list",
         "area list", "process show", "process list", "opportunity show", "opportunity list", "action dupes",
+        "opportunity rubric",   # o rubric viaja no view model (portfolio.ice_rubric) e no guia gerado
         "watch list", "watch since", "watch folders", "repos list", "raw where", "artifact",
         "feedback show", "feedback list",   # painel › Sugestões renderiza fila e ficha do payload do modelo
     }

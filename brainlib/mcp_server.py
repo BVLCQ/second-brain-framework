@@ -45,8 +45,9 @@ TOOLS = [
      "ranking por ICE (top 10) e lacunas. Números calculados pelo CLI.", _schema({})),
     ("process", "Ficha de um processo (PROC-####): responsável, executores, recorrência, horas/mês, playbook, dores, lacunas, oportunidades ligadas.",
      _schema({"id": S}, ["id"])),
-    ("opportunity", "Ficha de uma oportunidade (OPP-####): problema, sugestão, ICE (e se é só sugerido), status e histórico, evidências, projeto/goal.",
-     _schema({"id": S}, ["id"])),
+    ("opportunity", "Ficha de uma oportunidade (OPP-####): problema, sugestão, ICE (e se é só sugerido), status e histórico, evidências, projeto/goal. "
+     "Com rubric=true, devolve também o rubric do ICE (o que cada nota significa) para pontuar com evidência.",
+     _schema({"id": S, "rubric": {"type": "boolean"}}, ["id"])),
     ("opportunities", "Oportunidades, filtráveis por status e área (id, nome ou alias), da maior para a menor pontuação.",
      _schema({"status": S, "area": S})),
     ("brain_read", "Lê um arquivo de texto do vault (caminho relativo ao vault: PROCESSED/…, PLANNING/…, RAW/…).",
@@ -134,8 +135,12 @@ def _process(m: dict, args) -> dict:
 
 def _opportunity(m: dict, args) -> dict:
     o = next((x for x in m["portfolio"]["opportunities"] if x["id"] == str(args.get("id", "")).upper()), None)
-    return o or {"erro": f"oportunidade {args.get('id')} não consta",
-                 "oportunidades": [x["id"] for x in m["portfolio"]["opportunities"]]}
+    if o is None:
+        return {"erro": f"oportunidade {args.get('id')} não consta",
+                "oportunidades": [x["id"] for x in m["portfolio"]["opportunities"]]}
+    if args.get("rubric"):
+        o = {**o, "ice_rubric": m["portfolio"].get("ice_rubric")}
+    return o
 
 
 def _opportunities(m: dict, args) -> list:

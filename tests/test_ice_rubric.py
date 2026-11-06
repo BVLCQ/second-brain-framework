@@ -14,6 +14,63 @@ os.environ.setdefault("BRAIN_NOW", "2026-10-09T10:00:00-03:00")
 from brainlib import ice_rubric  # noqa: E402
 
 
+class CliAndModelTests(unittest.TestCase):
+    """F1: `brain opportunity rubric`, o model carregando o rubric e o score seguindo 1–5."""
+
+    def setUp(self):
+        import argparse
+        import contextlib
+        import io
+        import tempfile
+        from brainlib import demo as demo_mod
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name) / "inst"
+        with contextlib.redirect_stdout(io.StringIO()):
+            demo_mod.cli(argparse.Namespace(dir=str(self.root), open=False))
+
+    def _run(self, *argv):
+        import subprocess
+        r = subprocess.run([sys.executable, str(ROOT / "brain"), "opportunity", *argv],
+                           capture_output=True, text=True, cwd=str(ROOT))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return r.stdout
+
+    def test_rubric_cli_prints_the_three_tables(self):
+        out = self._run("rubric")
+        for ax in ice_rubric.AXES:
+            self.assertIn(ice_rubric.RUBRIC[ax]["question"], out)
+        md = self._run("rubric", "--md")
+        self.assertIn("| Nota | Critério |", md)
+        self.assertIn(ice_rubric.as_markdown().strip(), md.strip())
+
+    def test_rubric_json_has_fifteen_levels(self):
+        import json
+        d = json.loads(self._run("rubric", "--json"))
+        self.assertEqual(sum(len(v["levels"]) for v in d["axes"].values()), 15)
+        self.assertEqual(set(d["axes"]), set(ice_rubric.AXES))
+
+    def test_view_model_carries_the_rubric(self):
+        from brainlib import config, model, render_portfolio
+        from brainlib.core import Brain
+        b = Brain(config.load(self.root))
+        m = model.build(b)
+        self.assertIn("ice_rubric", m["portfolio"])
+        self.assertEqual(list(m["portfolio"]["ice_rubric"]["axes"]), list(ice_rubric.AXES))
+        self.assertIn("ice_rubric", render_portfolio.html_payload(m)["portfolio"])   # o mapa também leva
+
+    def test_score_out_of_scale_error_points_to_rubric(self):
+        from brainlib import config, util
+        from brainlib.core import Brain
+        from brainlib.schema import validate
+        b = Brain(config.load(self.root))
+        oid = sorted(b.state.opportunities)[0]
+        with self.assertRaises(util.BrainError) as ctx:
+            validate({"type": "opportunity.scored", "id": oid, "by": "owner", "prov": "declarado",
+                      "date": "2026-10-09", "data": {"impact": 9, "confidence": 3, "ease": 3}}, b.state, b.plan)
+        self.assertIn("brain opportunity rubric", str(ctx.exception))
+
+
 class RubricTests(unittest.TestCase):
     def test_three_axes_five_levels_each(self):
         for ax in ice_rubric.AXES:

@@ -357,11 +357,11 @@ def _validate_feedback(t: str, ev: dict, data: dict, state) -> None:
         _need(f.status in ("pendente", "falhou"), f"{eid} está '{f.status}'")
 
 
-def _int15(data: dict, field: str) -> None:
+def _int15(data: dict, field: str, hint: str = "") -> None:
     if field in data:
         v = data[field]
         _need(isinstance(v, int) and not isinstance(v, bool) and 1 <= v <= 5,
-              f"{field} deve ser inteiro 1–5 (recebido {v!r})")
+              f"{field} deve ser inteiro 1–5 (recebido {v!r}){hint}")
 
 
 def _people_fields(data: dict, state) -> None:
@@ -418,7 +418,7 @@ def _validate_portfolio(t: str, ev: dict, data: dict, state, plan) -> None:
         if data.get("project"):
             _need(data["project"] in plan.projects, f"project: '{data['project']}' não existe no PLANNING/goals.md")
         for f in ("impact", "confidence", "ease"):
-            _int15(data, f)
+            _int15(data, f, hint=" — o que cada nota significa: brain opportunity rubric")
         if data.get("ice_suggested"):
             _need(by == "agent", f"{t}: só o agente sugere ICE (by=agent); ICE do dono é declaração, sem ice_suggested")
         if t in {"opportunity.added", "opportunity.updated"}:
