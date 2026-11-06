@@ -57,10 +57,10 @@ DEFAULTS: dict = {
         "entity_types": {"pessoa": "PERSON", "projeto": "PROJECT", "area": "ORG"},
     },
     "runner": {"agent": "auto", "command": "", "prompt": "/update", "timeout_min": 45,
-               "model": "",               # modelo do claude no noturno ("" = padrão do claude); só vale no preset claude
+               "model": "claude-haiku-5-5",   # modelo do claude no noturno ("" = padrão do claude); só vale no preset claude
                "allow": []},              # ferramentas MCP de LEITURA do agente headless (noturno e TUI)
     "tui": {"agent_allow": [],             # ferramentas extras do agente nas ações ⚡ do TUI (ex.: MCP de escrita)
-            "model": "", "effort": "",    # modelo e esforço do claude nas ações ⚡ ("" = padrão do claude)
+            "model": "claude-haiku-5-5", "effort": "",   # modelo e esforço do claude nas ações ⚡ ("" = padrão do claude)
             "open": {}},                  # extensão → aplicativo que abre o arquivo clicado no detalhe ({} = padrão do sistema)
     "backup": {"enabled": False, "max_file_mb": 50, "keep": 8, "weekday": 7},
     "views": {"wins_weeks": 8, "timeline_back_days": 90, "timeline_ahead_days": 45,

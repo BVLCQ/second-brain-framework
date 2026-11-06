@@ -1817,8 +1817,10 @@ class RunnerTest(unittest.TestCase):
         from unittest import mock
         from brainlib import runner
         base = {**config.DEFAULTS["runner"], "agent": "claude", "allow": ["mcp__x__ler"]}
+        self.assertEqual(config.DEFAULTS["runner"]["model"], "claude-haiku-5-5")  # default do framework
+        self.assertEqual(config.DEFAULTS["tui"]["model"], "claude-haiku-5-5")
         with mock.patch("shutil.which", return_value="/usr/bin/claude"):
-            sem = runner.agent_command(config.DEFAULTS | {"runner": base})
+            sem = runner.agent_command(config.DEFAULTS | {"runner": {**base, "model": ""}})
             com = runner.agent_command(config.DEFAULTS | {"runner": {**base, "model": "claude-haiku-5-5"}})
         self.assertNotIn("--model", sem)
         i = com.index("--model")
