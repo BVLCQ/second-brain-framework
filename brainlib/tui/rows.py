@@ -10,7 +10,7 @@ from datetime import date
 from rich.style import Style
 from rich.text import Text
 
-from .. import util
+from .. import ice_rubric, util
 from . import dates
 
 RED, AMB, GRN, CYN, VIO, DIM, FAINT = "red", "yellow", "green", "cyan", "magenta", "dim", "dim italic"
@@ -859,6 +859,11 @@ def d_opp(store, it) -> Doc:
         ("origem", Text(f"{o['by']} · {o['source'] or 'sem fonte'} ") + prov(o["prov"]))])
     if o["ice_suggested"] and o["ice_reason"]:
         doc.p(("ICE sugerido porque: ", DIM), o["ice_reason"])
+    if o["score"] is not None:
+        for ax in ice_rubric.AXES:                     # leitura do ICE: o rótulo de cada eixo (rubric)
+            lv = ice_rubric.RUBRIC[ax]["levels"].get(o[ax])
+            if lv:
+                doc.p((f"{ice_rubric.RUBRIC[ax]['name']} {o[ax]} · ", DIM), (lv["label"], DIM))
     doc.sec("Problema").p(o["problem"] or ("não consta", DIM))
     doc.sec("Sugestão").p(o["suggestion"] or ("não consta", DIM))
     doc.sec("Histórico de status")

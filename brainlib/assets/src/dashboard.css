@@ -371,3 +371,14 @@ main.col{padding-bottom:120px}
 #newslist .ni{padding:8px 2px;border-bottom:1px solid var(--line);font-size:13.5px;line-height:1.45}
 #newslist .ni:last-child{border-bottom:none}
 #newslist .nv{color:var(--accent);font-weight:700;margin-right:6px}
+
+/* ── metodologia ICE (rubric): overlay empilhável + tabela larga ────────── */
+.pal-scroll{max-height:70vh;overflow:auto;padding:12px 16px 16px}
+.pal-scroll h3{margin:14px 0 6px;font-size:13px}
+.icerub{width:100%;border-collapse:collapse;font-size:12.5px;table-layout:fixed}
+.icerub th,.icerub td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line2);vertical-align:top}
+.icerub th{font-size:10.5px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.06em;background:var(--panel)}
+.icerub td:first-child{font:700 12.5px ui-monospace,monospace;color:var(--accent);white-space:nowrap;width:34px}
+.icerub td:nth-child(3){white-space:nowrap;width:110px}
+.fhint{white-space:pre-line;line-height:1.4}
+.cline.miss{border-color:var(--risk);color:var(--risk)}

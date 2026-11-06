@@ -34,7 +34,7 @@ RUBRIC: dict = {
                 "label": "5 · Muda resultado de goal ou várias áreas (>40h/mês)",
                 "criterion": "Muda um resultado de goal ativo, ou afeta várias áreas ou muita gente",
                 "anchor": "mais de 40h",
-                "link": "Redesenha processo em mais de uma área **ou** move custo, receita ou eficiência de forma mensurável (a, c). Outras pessoas usam sem depender do dono (d).",
+                "link": "Redesenha processo em mais de uma área ou move custo, receita ou eficiência de forma mensurável (a, c). Outras pessoas usam sem depender do dono (d).",
             },
             4: {
                 "label": "4 · Ganho claro em processo crítico ou área (20–40h)",

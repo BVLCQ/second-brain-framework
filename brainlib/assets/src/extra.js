@@ -187,7 +187,8 @@ function entEntries(){
 function buildItems(q){
   const nq = norm(q);
   const free = /^brain\s/.test(q) ? [{group: "linha livre", label: "executar: " + q, cmd: q, mut: null}] : [];
-  const all = [...navEntries(), ...entEntries(), ...commands().map(c => ({group: "comando", label: c.label, cmd: c.cmd, mut: c.mut || null}))];
+  const helps = [{group: "ajuda", label: "Metodologia ICE (rubric de pontuação)", act: iceHelpOverlay}];
+  const all = [...navEntries(), ...entEntries(), ...helps, ...commands().map(c => ({group: "comando", label: c.label, cmd: c.cmd, mut: c.mut || null}))];
   const f = nq ? all.filter(it => norm(it.label + " " + (it.ent || "") + " " + (it.cmd || "") + " " + it.group).includes(nq)) : all;
   return [...free, ...f.slice(0, 30)];
 }
@@ -209,6 +210,7 @@ function renderPal(){
 }
 function pick(i){
   const it = pal.items[i]; if (!it) return;
+  if (it.act) { closePal(); it.act(); return; }
   if (it.view) { closePal(); location.hash = it.view; return; }
   if (it.cmd) {
     pal.confirmCmd = it.cmd; pal.confirmMut = it.mut;
@@ -765,35 +767,60 @@ function navStep(dir){
 
 // ── genérico: dialog de formulário → linha brain … (preview vivo) ───────
 let dlgOpen = false;
-function formDialog(o){          // {title, sub, fields[{k,label,type,value,options}], gate, preview(v)→cmd, run(cmd,v)}
+function formDialog(o){          // {title, sub, fields[{k,label,type,value,options,note(v)}], gate, note(v), help()→html, preview(v)→cmd, run(cmd,v)}
   const ov = document.createElement("div"); ov.className = "pal-back open";
   const f = o.fields.map(x => '<div class="frow"><label>' + esc(x.label) + "</label>" +
     (x.options ? '<select data-k="' + x.k + '">' + x.options.map(op => '<option value="' + esc(op[0]) + '"' + (op[0] === x.value ? " selected" : "") + ">" + esc(op[1] || op[0]) + "</option>").join("") + "</select>"
       : x.ta ? '<textarea data-k="' + x.k + '" rows="' + (x.rows || 4) + '"' + (x.ph ? ' placeholder="' + esc(x.ph) + '"' : "") + ">" + esc(x.value ?? "") + "</textarea>"
-      : '<input data-k="' + x.k + '" type="' + (x.type || "text") + '" value="' + esc(x.value ?? "") + '"' + (x.ph ? ' placeholder="' + esc(x.ph) + '"' : "") + ">") + "</div>").join("");
+      : '<input data-k="' + x.k + '" type="' + (x.type || "text") + '" value="' + esc(x.value ?? "") + '"' + (x.ph ? ' placeholder="' + esc(x.ph) + '"' : "") + ">") + "</div>" +
+      (x.note ? '<div class="note-s fhint" data-hint="' + esc(x.k) + '" style="margin:-4px 0 8px 130px"></div>' : "")).join("");
   ov.innerHTML = '<div class="palette"><div class="pin"><b>' + esc(o.title) + "</b>" + (o.gate ? ' <span class="gatebadge">gate — precisa do seu ok literal</span>' : "") + '</div>' +
     '<div class="pal-confirm open" style="display:block;border-top:0;padding:14px 16px;max-height:70vh;overflow:auto">' +
     (o.sub ? '<p class="note-s" style="margin:0 0 10px">' + esc(o.sub) + "</p>" : "") + f +
-    '<div class="note-s" data-note style="margin:0 0 6px"></div>' +
+    '<div class="note-s" data-note style="margin:0 0 6px;white-space:pre-line"></div>' +
     '<div class="cline" data-preview style="min-height:34px"></div>' +
-    '<div class="row"><span class="note-s">mesma linha que a TUI roda</span><button class="btn ghost" data-x>cancelar</button><button class="btn primary" data-ok>' + (o.gate ? "aprovar (ok)" : "executar") + "</button></div></div></div>";
+    '<div class="row"><span class="note-s">mesma linha que a TUI roda</span>' +
+    (o.help ? '<button class="btn ghost" data-help> ? orientações</button>' : "") +
+    '<button class="btn ghost" data-x>cancelar</button><button class="btn primary" data-ok>' + (o.gate ? "aprovar (ok)" : "executar") + "</button></div></div></div>";
   document.body.appendChild(ov); dlgOpen = true;
+  const close = () => { ov.remove(); dlgOpen = false; if (h2) document.removeEventListener("keydown", h2, true); };
   const vals = () => { const v = {}; ov.querySelectorAll("[data-k]").forEach(el => v[el.dataset.k] = el.value); return v; };
   const paint = () => { const p = ov.querySelector("[data-preview]"); const c = o.preview(vals()); p.textContent = c ? "$ " + c : "$ (preencha os campos)";
-    const n = ov.querySelector("[data-note]"); if (n) n.textContent = o.note ? (o.note(vals()) || "") : ""; };
+    const n = ov.querySelector("[data-note]"); if (n) n.textContent = o.note ? (o.note(vals()) || "") : "";
+    ov.querySelectorAll("[data-hint]").forEach(el => { const x = o.fields.find(y => y.k === el.dataset.hint);
+      el.textContent = x && x.note ? (x.note(vals()[x.k]) || "") : ""; }); };
   ov.querySelectorAll("[data-k]").forEach(el => el.addEventListener("input", paint));
   ov.querySelectorAll("select[data-k]").forEach(el => el.addEventListener("change", paint));
   paint();
-  ov.querySelector("[data-x]").onclick = () => { ov.remove(); dlgOpen = false; };
-  ov.onclick = e => { if (e.target === ov) { ov.remove(); dlgOpen = false; } };
+  // ? abre as orientações (o.help) mesmo com o foco num select — antes do handler global, que ignora teclas com dialog aberto
+  let h2 = null;
+  if (o.help) {
+    h2 = ev => { if (ev.key !== "?" || document.querySelector(".help-stack")) return;
+      ev.preventDefault(); ev.stopPropagation(); stackHelp("Metodologia · ICE", o.help()); };
+    document.addEventListener("keydown", h2, true);
+    ov.querySelector("[data-help]").onclick = () => stackHelp("Metodologia · ICE", o.help());
+  }
+  ov.querySelector("[data-x]").onclick = close;
+  ov.onclick = e => { if (e.target === ov) close(); };
   ov.querySelector("[data-ok]").onclick = () => {
     const v = vals(), cmd = o.preview(v);
-    ov.remove(); dlgOpen = false;
-    if (!cmd) return;
+    if (!cmd) { ov.querySelector("[data-preview]").classList.add("miss"); setTimeout(() => ov.querySelector("[data-preview]").classList.remove("miss"), 600); return; }
+    close();
     if (!LIVE) { offlineCmd("" + cmd); return; }
     runCommand(cmd, m => o.run && o.run(v, m));
   };
   const first = ov.querySelector("input,select,textarea"); if (first) first.focus();
+}
+// overlay de orientações empilhável por cima do formulário aberto: Esc/? fecham SÓ a ajuda (capture, antes do global)
+function stackHelp(title, html){
+  const ov = document.createElement("div"); ov.className = "pal-back open help-stack";
+  ov.innerHTML = '<div class="palette"><div class="pin"><b>' + esc(title) + '</b><span class="hint">? fecha</span></div>' +
+    '<div class="pal-scroll">' + html + "</div></div>";
+  document.body.appendChild(ov);
+  const close = () => { ov.remove(); document.removeEventListener("keydown", h, true); };
+  const h = ev => { if (ev.key === "Escape" || ev.key === "?") { ev.preventDefault(); ev.stopPropagation(); close(); } };
+  document.addEventListener("keydown", h, true);
+  ov.onclick = e => { if (e.target === ov) close(); };
 }
 function needSel(){ toast("selecione um item primeiro (j/k ou passe o mouse) e tente de novo"); }
 
@@ -917,15 +944,56 @@ function editOpp(o){
     run: (v, m) => { const x = m.portfolio.opportunities.find(y => y.id === o.id);
       if (v.title) x.title = v.title; if (v.problem) x.problem = v.problem; }});
 }
+// ── ICE: dropdowns do rubric (fonte única: portfolio.ice_rubric do view model) ──
+function iceAxes(){ const pf = window.BRAIN.M.portfolio || {}; return (pf.ice_rubric && pf.ice_rubric.axes) || {}; }
+function iceOpts(ax){
+  const a = iceAxes()[ax], out = [["", "— escolha —"]];
+  if (a) a.levels.forEach(l => out.push([String(l.n), l.label]));
+  return out;
+}
+function iceQ(ax){ const a = iceAxes()[ax]; return a ? a.name + " — " + a.question : ax; }
+function iceNote(ax, v){
+  const a = iceAxes()[ax]; if (!a || !v) return "";
+  const lv = a.levels.find(l => String(l.n) === String(v));
+  return lv ? lv.criterion + " · " + lv.anchor : "";
+}
+function iceHint(h){ return h == null ? null : h > 40 ? 5 : h >= 20 ? 4 : h >= 10 ? 3 : h >= 5 ? 2 : 1; }
 function iceForm(o){
-  formDialog({title: "ICE · " + o.id, sub: "impacto × confiança × facilidade (1–5) — o CLI calcula o score", fields: [
-      {k: "impact", label: "Impacto", type: "number", value: o.impact ?? 3},
-      {k: "confidence", label: "Confiança", type: "number", value: o.confidence ?? 3},
-      {k: "ease", label: "Facilidade", type: "number", value: o.ease ?? 3}],
-    preview: v => "brain opportunity score " + o.id + " --impact " + v.impact + " --confidence " + v.confidence + " --ease " + v.ease,
+  formDialog({title: "ICE · " + o.id, sub: "impacto × confiança × facilidade (1–5) — o CLI calcula o score · ? traz a metodologia", fields: [
+      {k: "impact", label: iceQ("impact"), options: iceOpts("impact"), value: o.impact == null ? "" : String(o.impact),
+        note: v => { const base = iceNote("impact", v); if (!o.hours_saved || !v) return base;
+          const hint = iceHint(o.hours_saved);
+          let t = (base ? base + "\n" : "") + "horas declaradas: " + o.hours_saved + "h/mês → faixa sugerida " + hint;
+          if (+v > hint) t += " · ⚠ escopo e horas divergem: vale a menor nota";
+          return t; }},
+      {k: "confidence", label: iceQ("confidence"), options: iceOpts("confidence"), value: o.confidence == null ? "" : String(o.confidence), note: v => iceNote("confidence", v)},
+      {k: "ease", label: iceQ("ease"), options: iceOpts("ease"), value: o.ease == null ? "" : String(o.ease), note: v => iceNote("ease", v)}],
+    help: () => iceHelpHTML(),
+    preview: v => (v.impact && v.confidence && v.ease)
+      ? "brain opportunity score " + o.id + " --impact " + v.impact + " --confidence " + v.confidence + " --ease " + v.ease
+      : null,
     run: (v, m) => { const x = m.portfolio.opportunities.find(y => y.id === o.id);
       x.impact = +v.impact; x.confidence = +v.confidence; x.ease = +v.ease; x.score = x.impact * x.confidence * x.ease; x.ice_suggested = false; }});
 }
+// metodologia: as 3 tabelas + medidas de sucesso + regras, do portfolio.ice_rubric (nada de texto no JS)
+function iceHelpHTML(){
+  const r = (window.BRAIN.M.portfolio || {}).ice_rubric || {};
+  const axes = r.axes || {};
+  let h = '<p class="note-s" style="margin:0 0 10px">Score = impacto × confiança × facilidade · 1–5 por eixo · o CLI calcula (1–125).</p>';
+  if (r.success_measures && r.success_measures.length)
+    h += '<p class="note-s">Medidas de sucesso: ' + r.success_measures.map(x => "(" + esc(x[0]) + ") " + esc(x[1])).join(" · ") + "</p>";
+  if (r.principles && r.principles.length)
+    h += '<p class="note-s">Princípios: ' + r.principles.map(esc).join(" · ") + "</p>";
+  ["impact", "confidence", "ease"].forEach(ax => { const a = axes[ax]; if (!a) return;
+    h += "<h3>" + esc(a.name) + " — " + esc(a.question) + "</h3>" +
+      '<table class="icerub"><tr><th>Nota</th><th>Critério</th><th>' + esc(a.extra_col) + "</th><th>" + esc(a.links_col) + "</th></tr>" +
+      a.levels.map(l => "<tr><td>" + esc(l.n) + "</td><td>" + esc(l.criterion) + "</td><td>" + esc(l.anchor) + "</td><td>" + esc(l.link) + "</td></tr>").join("") +
+      "</table>" + '<p class="note-s">Regras: ' + a.rules.map(esc).join(" · ") + "</p>"; });
+  return h;
+}
+function iceHelpOverlay(){ stackHelp("Metodologia · ICE", iceHelpHTML()); }
+window.iceHelp = iceHelpOverlay;
+document.addEventListener("click", e => { if (e.target.closest("[data-icehelp]")) { e.preventDefault(); iceHelpOverlay(); } });
 function editProc(pc){
   formDialog({title: "Editar " + pc.id, sub: pc.title, fields: [
       {k: "title", label: "Título", value: pc.title},
@@ -1212,6 +1280,7 @@ function helpOverlay(){
     ["[ ] ← → (h l)", "aba anterior / próxima"],
     ["`", "console da ponte (abre/fecha)"],
     ["?", "esta ajuda"],
+    ["? (dentro do ICE)", "metodologia de pontuação — as notas com critério e regras"],
     ["TODO (com cartão selecionado)", ""],
     ["n", "nova ação"], ["e", "editar"], ["c", "fechar"], ["s", "status (ciclo)"], ["t", "prazo"],
     ["D", "descartar"], ["z", "não agora / voltar"], ["o", "reabrir"], ["m", "cobrar (agente)"],

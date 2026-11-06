@@ -14,6 +14,7 @@ function normalizeBrain(m){
   m.timeline = m.timeline || {past: [], ahead: []}; m.people = m.people || [];
   m.goals = m.goals || []; m.projects = m.projects || []; m.decisions = m.decisions || [];
   m.artifacts = m.artifacts || []; m.shares = m.shares || []; m.notes = m.notes || [];
+  if (m.portfolio) m.portfolio.ice_rubric = m.portfolio.ice_rubric || {success_measures: [], principles: [], axes: {}};   // instância antiga: metodologia some, painel sobe
   // publicações (porta 3) vêm dos shares reais do ledger (Share: solicitada|aprovada|publicada|cancelada)
   if (!m.publishes.length && m.shares.length)
     m.publishes = m.shares.map(x => ({id: x.id, title: String(x.report || "").split("/").pop() || x.id,
@@ -448,7 +449,11 @@ V.search = (q) => {
 // ── portfólio (dentro do painel de execução) ───────────────────────────
 var PF = M.portfolio, AREA = idx(PF.areas), OPP = idx(PF.opportunities), PROC = idx(PF.processes);
 const hrs = v => v == null ? "—" : String(v).replace(".", ",") + " h/mês";
-const iceTxt = o => o.score == null ? '<span class="muted">sem ICE</span>' : '<span class="' + (o.ice_suggested ? "sug" : "") + '" title="' + esc(o.ice_reason || "") + '">' +
+const iceTip = o => { const ax = (PF.ice_rubric || {}).axes;
+  if (!ax || o.score == null) return esc(o.ice_reason || "");
+  const lab = k => { const v = o[k], a = ax[k]; const lv = a && a.levels.find(l => l.n === v); return a.name + " " + v + ": " + (lv ? lv.label : ""); };
+  return esc(["impact", "confidence", "ease"].map(lab).join("\n") + (o.ice_reason ? "\n" + o.ice_reason : "")); };
+const iceTxt = o => o.score == null ? '<span class="muted">sem ICE</span>' : '<span class="' + (o.ice_suggested ? "sug" : "") + '" title="' + iceTip(o) + '">' +
   o.impact + "×" + o.confidence + "×" + o.ease + " = <b>" + o.score + "</b>" + (o.ice_suggested ? " · sugerido" : "") + "</span>";
 const areaName = a => AREA[a] ? AREA[a].name : a;
 function oppRow(o, i){
@@ -484,7 +489,7 @@ V["pf/visao"] = () => {
   const active = PF.processes.filter(p => p.status === "ativo");
   const mapped = active.reduce((t, p) => t + (p.hours_month || 0), 0);
   const gain = PF.opportunities.filter(o => o.status !== "descartada").reduce((t, o) => t + (o.hours_saved || 0), 0);
-  let h = '<div class="pagehead"><div><h1>Portfólio</h1><p class="sub">Processos que existem e o que vale melhorar neles. ICE = impacto × confiança × facilidade (1–5).</p></div></div>' +
+  let h = '<div class="pagehead"><div><h1>Portfólio</h1><p class="sub">Processos que existem e o que vale melhorar neles. ICE = impacto × confiança × facilidade (1–5) · <a href="#" data-icehelp>metodologia</a>.</p></div></div>' +
     '<div class="kpis"><div class="kpi"><span>oportunidades</span><b>' + PF.counts.opportunities + "</b></div>" +
     '<div class="kpi"><span>priorizadas</span><b>' + PF.counts.prioritized + "</b></div>" +
     '<div class="kpi"><span>processos ativos</span><b>' + PF.counts.processes + "</b></div>" +
@@ -593,6 +598,9 @@ V["pf/opp"] = (q, id) => {
     '<div class="sub">' + stChip(o.status) + chip("", o.kind) + "<span>" + esc(areaName(o.area)) + "</span>" + (o.quadrant ? chip("", o.quadrant) : "") +
     "<span>ICE " + iceTxt(o) + "</span></div></div></div>";
   h += '<div class="grid g2">' + panel("Resumo", '<ul class="feed"><li><b>Ganho esperado:</b> ' + esc(o.gain || "não consta") + (o.hours_saved ? " · " + hrs(o.hours_saved) : "") + "</li>" +
+    (o.score != null ? ["impact", "confidence", "ease"].map(k => {       // leitura do ICE: rótulo de cada eixo (rubric)
+        const ax = ((PF.ice_rubric || {}).axes || {})[k], lv = ax && ax.levels.find(l => l.n === o[k]);
+        return "<li><b>" + esc(ax ? ax.name : k) + " " + o[k] + ":</b> " + esc(lv ? lv.label : "") + "</li>"; }).join("") : "") +
     "<li><b>Processo:</b> " + (o.process ? idc(o.process) + " " + esc(proc ? proc.title : "") : "—") + "</li>" +
     "<li><b>Goal:</b> " + (o.goal ? esc(o.goal) + " " + esc(o.goal_title || "") : "—") + "</li>" +
     "<li><b>Projeto:</b> " + (o.project ? pL(o.project, true) : "—") + "</li>" +

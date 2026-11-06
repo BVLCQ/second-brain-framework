@@ -59,6 +59,27 @@ class CliAndModelTests(unittest.TestCase):
         self.assertEqual(list(m["portfolio"]["ice_rubric"]["axes"]), list(ice_rubric.AXES))
         self.assertIn("ice_rubric", render_portfolio.html_payload(m)["portfolio"])   # o mapa também leva
 
+    def test_rendered_panel_payload_carries_rubric(self):
+        from brainlib import config, render
+        from brainlib.core import Brain
+        b = Brain(config.load(self.root))
+        report = render.render_all(b, do_harvest=False)
+        html = Path(report["dashboard"]).read_text(encoding="utf-8")
+        self.assertNotIn("__DATA__", html)
+        self.assertIn("ice_rubric", html)                                               # payload embutido
+        self.assertIn("iceHelpOverlay", html)                                          # metodologia no JS
+        self.assertIn("stackHelp", html)                                               # overlay empilhável
+        pf = Path(report["portfolio"]).read_text(encoding="utf-8")                     # o mapa leva o mesmo rubric
+        self.assertIn("ice_rubric", pf)
+
+    def test_built_panels_ship_the_methodology(self):
+        for name in ("dashboard.html", "portfolio.html"):
+            html = (ROOT / "brainlib" / "assets" / name).read_text(encoding="utf-8")
+            self.assertIn("iceHelpOverlay", html, name)
+            self.assertIn("? orientações", html, name)      # botão de ajuda no diálogo do ICE
+            self.assertIn("— escolha —", html, name)        # opção vazia do dropdown
+            self.assertIn(".icerub", html, name)            # tabela da metodologia
+
     def test_score_out_of_scale_error_points_to_rubric(self):
         from brainlib import config, util
         from brainlib.core import Brain
