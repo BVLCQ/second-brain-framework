@@ -89,7 +89,7 @@ agent = "auto"                  # auto | cursor | claude | codex | agy | gemini 
 command = ""                    # se preenchido, substitui o preset (use {prompt})
 prompt = "/update"
 timeout_min = 45
-model = ""                      # modelo do claude no noturno (ex.: "claude-haiku-5-5"); vazio = padrão do claude
+model = "claude-haiku-5-5"      # modelo do claude no noturno; vazio = padrão do claude
 # Ferramentas MCP de LEITURA que o agente headless pode usar (noturno e TUI), no formato do claude
 # (`mcp__<servidor>__<ferramenta>`). Sem isto o `claude -p` não tem como pedir permissão e as fontes são negadas.
 allow = []
@@ -101,7 +101,7 @@ allow = []
 # nunca de MCP de escrita no mundo exterior: isso é a porta (/outbox, /publish), com o seu gate.
 agent_allow = []
 # Modelo e esforço do claude nas ações ⚡ do TUI (o noturno não usa). Vazio = padrão do claude.
-model = ""                     # ex.: "haiku" (alias; o claude resolve)
+model = "claude-haiku-5-5"     # vazio = padrão do claude; alias ("haiku") o claude resolve — pode cair numa geração antiga
 effort = ""                    # low | medium | high | xhigh | max
 
 [tui.open]
