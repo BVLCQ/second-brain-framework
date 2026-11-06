@@ -846,8 +846,55 @@ maturidade) e **oportunidade** (`OPP-####`: área, processo, tipo, problema, sug
 **Fluxo.** O agente (no `/dump`) cria oportunidades em status `ideia` e processos citados nos documentos; você
 triageia, pontua e move. `ICE` = impacto × confiança × facilidade (1–5 cada → 1–125); o agente só **sugere**
 (aparece em rosa até você confirmar com `c` ou mudar com `i`). `/opportunity triage` percorre as ideias sem ICE.
+Como pontuar cada eixo está no **rubric** — `./brain opportunity rubric` no terminal, `?` dentro do formulário
+do ICE (TUI e painel), item "Metodologia ICE" na paleta e link na Visão do portfólio.
 Status vai e volta livremente: `ideia → triagem → priorizada → em-andamento → piloto → validando → entregue`, mais
 `em-espera` e `descartada` (pedem motivo). `em-andamento` só vem de **promover**.
+
+<!-- ice-rubric:begin — bloco GERADO por brainlib/ice_rubric.py (`brain opportunity rubric --md`); edite lá, não aqui -->
+
+ICE = impacto × confiança × facilidade · 1–5 por eixo · score 1–125 (o CLI calcula).
+
+**Medidas de sucesso que o ICE reflete:** (a) horas economizadas e processos redesenhados · (b) MVPs validados e levados à produção via engenharia · (c) taxa de acerto e efeito em custo, receita ou eficiência · (d) adoção por outras pessoas, sem depender do dono.
+**Princípios:** impacto antes de ferramenta · humano no loop · documentar para escalar · segurança e dados.
+
+### Impacto — Quanto isso move o ponteiro se der certo?
+
+| Nota | Critério | Redução de horas/mês | Vínculo com o seu sucesso |
+|---|---|---|---|
+| 5 | Muda um resultado de goal ativo, ou afeta várias áreas ou muita gente | mais de 40h | Redesenha processo em mais de uma área ou move custo, receita ou eficiência de forma mensurável (a, c). Outras pessoas usam sem depender do dono (d). |
+| 4 | Ganho claro em um processo crítico, ou em uma área inteira | 20–40h | Horas economizadas e processo redesenhado em uma área, com ganho em tempo ou erro manual (a). |
+| 3 | Melhora relevante, mas localizada (um time, um fluxo) | 10–20h | Ganho real em um fluxo, que beneficia só um time (a). |
+| 2 | Conforto ou ganho pequeno, perceptível só para poucos | 5–10h | Alivia uma dor individual. Não redesenha processo. |
+| 1 | Cosmético, ou sem efeito mensurável | menos de 5h | Sem ganho em horas, custo ou receita. |
+
+Regras: sem ganho esperado em horas, custo ou receita o impacto fica no máximo em 2 · as horas são declaradas pelo dono (o cérebro não estima) · se escopo e horas divergem, vale a menor nota · se só o dono consegue operar a solução, desconte 1 (d).
+
+### Confiança — Quão sustentado está o impacto e a viabilidade?
+
+| Nota | Critério | Proveniência | Vínculo com o sucesso (eixo dados) |
+|---|---|---|---|
+| 5 | Evidência em documento ou dado, ou já validado em piloto | [doc] | O dado existe, é confiável e tem dono. Há taxa de acerto medida em piloto (c). |
+| 4 | Várias fontes observadas, sem contradição | [observado] em 2 ou mais fontes | O dado existe e é acessível, com dono definido. A dor apareceu em mais de uma conversa. |
+| 3 | Uma fonte boa, ou raciocínio sólido sem dado | [observado] em 1 fonte | O dado existe, mas ainda não foi validado. |
+| 2 | Só relato ou intuição | [declarado] sem dado | O dado é frágil ou não tem dono. |
+| 1 | Palpite. Não há base nenhuma | [sem-fonte] | O dado não existe, ou ninguém sabe onde está. |
+
+Regras: confiança mede evidência, não entusiasmo · sem fonte citável, no máximo 2 · dado inexistente ou sem dono limita a nota a 2 · piloto que falhou baixa a confiança (parar uma iniciativa é resultado legítimo).
+
+### Facilidade — Quão barato e rápido é fazer?
+
+| Nota | Critério | Prazo | Vínculo com o sucesso (do MVP à produção) |
+|---|---|---|---|
+| 5 | Dias, sem dependência de ninguém | dias | O dono faz sozinho, em ferramenta já aprovada, com humano no loop. |
+| 4 | 1–2 semanas, dependência pequena | 1–2 semanas | MVP do dono, com apoio de uma pessoa (dado ou acesso). |
+| 3 | Um mês, ou precisa de 1–2 times | cerca de 1 mês | Acordo com 1–2 times. Para produção, exige PRD simples. |
+| 2 | Um trimestre, ou depende de engenharia ou aprovação externa | cerca de 1 trimestre | Precisa de engenharia (PRD que atenda o DOR) ou de aprovação de segurança. |
+| 1 | Projeto grande, com muitas dependências e risco alto | mais de 1 trimestre | Muitas dependências, dado sensível, ou decisão crítica que não pode ter humano no loop. |
+
+Regras: facilidade 5 é bom (fácil). Não confunda com esforço..
+
+<!-- ice-rubric:end -->
 
 **Promover** (`p` no TUI · `./brain opportunity promote OPP-#### --level goal|project|deliverable`): cria o nó do
 PLANNING no nível escolhido — **goal** novo (`--level goal`), **projeto** num goal existente (`--goal GOAL-#`) ou

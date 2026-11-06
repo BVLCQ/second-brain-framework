@@ -21,7 +21,7 @@ Stdio, JSON-RPC. Nenhuma ferramenta escreve. Cada chamada relê o ledger.
 | `brain_wins` | conquistas por semana |
 | `portfolio_overview` | portfólio: áreas, funil, matriz, top 10 por ICE, lacunas |
 | `process` | ficha de um `PROC-####` |
-| `opportunity` | ficha de uma `OPP-####` |
+| `opportunity` | ficha de uma `OPP-####`; com `rubric: true` devolve também o rubric do ICE (critério de cada nota) |
 | `opportunities` | lista filtrável por status e área |
 | `brain_read` | arquivo de texto do vault (caminho relativo) |
 

@@ -125,8 +125,11 @@ De onde vêm os arquivos relacionados:
 ## triage
 
 Percorre as oportunidades em `ideia` (`./brain opportunity list --status ideia`) **sem ICE** e, para cada uma:
-1. Leia `opportunity show` e as evidências (artefatos citados); se faltar base, deixe sem ICE.
-2. Sugira, com motivo curto e verificável (≤1 frase por eixo — impacto, confiança, facilidade, cada um 1–5):
+1. Leia `opportunity show` e as evidências (artefatos citados); se faltar base, deixe sem ICE ("não consta" vale).
+2. Pontue pelo **rubric** — rode `./brain opportunity rubric` antes de sugerir e aplique as regras de cada eixo:
+   sem ganho em horas/custo/receita o impacto fica ≤ 2 · sem fonte citável a confiança fica ≤ 2 · horas/mês são
+   **declaradas pelo dono** (não estime) · escopo e horas divergindo, vale a menor nota. Sugira com motivo curto e
+   verificável (≤1 frase por eixo — impacto, confiança, facilidade, cada um 1–5, cada frase citando a fonte):
    `./brain opportunity score OPP-#### --impact I --confidence C --ease F --suggest --reason "…" --by agent --prov observado --source <artefato>`
 3. A sugestão aparece em **rosa** até o dono confirmar (`c` no TUI, ou `opportunity score … --by owner`) ou mudar. Você **não** muda status.
 4. Termine com: quantas sugeridas, quantas ficaram sem base.

@@ -4,6 +4,28 @@ O que mudou em cada versão, em linguagem humana. Para atualizar: `brain update`
 (ou `brain setup --only comando` se o `brain` ainda não estiver no PATH).
 Mantido pelo dono do framework a cada remessa — veja `guides/commands.md` § upstream.
 
+## 2.8.0 — 2026-11-06
+
+- **Rubric do ICE — a metodologia de pontuação faz parte do Brain.** O que cada nota
+  (1–5) significa em impacto, confiança e facilidade — critério, horas/proveniência/prazo e
+  vínculo com as medidas de sucesso — mora num único lugar (`brainlib/ice_rubric.py`) e chega
+  a todas as superfícies:
+  - **CLI:** `brain opportunity rubric` (tabela plana, `--md`, `--json`); o erro de escala e o
+    `score --help` apontam para ele.
+  - **TUI:** o formulário do ICE (`i`) troca os campos livres por **dropdowns** com o rótulo de
+    cada nota e a pergunta do eixo; apoio embaixo de cada campo mostra o critério completo e,
+    com horas declaradas, a faixa sugerida (acima dela: aviso "vale a menor nota"). `?` abre a
+    **Metodologia · ICE** por cima do formulário (esc volta com tudo preservado), e o comando
+    "Metodologia ICE" da paleta abre a mesma tela. Sem as 3 escolhas, não confirma.
+  - **Painel:** os mesmos dropdowns e apoio por nota; `?` (mesmo com foco no select), o botão
+    "? orientações", o item da paleta e o link "metodologia" na Visão abrem a metodologia
+    empilhada — esc fecha só a ajuda. A ficha da oportunidade (TUI e painel) passa a ler o ICE
+    pelo rótulo de cada eixo.
+  - **Agente e guias:** a triagem (`/opportunity triage`) pontua pelo rubric com fonte por eixo;
+    o bloco "Como pontuar o ICE" do guia é **gerado** do módulo (um teste impede divergência);
+    MCP `opportunity` aceita `rubric: true`.
+  - O score continua I×C×F (1–125), calculado pelo CLI — mudou a orientação, não a contabilidade.
+
 ## 2.7.0 — 2026-11-05
 
 - **Dossiê determinístico — `brain memory dossier <ID|alias>` (Fase 5)** — a página

@@ -80,6 +80,15 @@ class CliAndModelTests(unittest.TestCase):
             self.assertIn("— escolha —", html, name)        # opção vazia do dropdown
             self.assertIn(".icerub", html, name)            # tabela da metodologia
 
+    def test_user_guide_block_matches_the_generator(self):
+        """Fonte única: o bloco "Como pontuar o ICE" do guia é gerado — não pode divergir do módulo."""
+        guide = (ROOT / "guides" / "user-guide.md").read_text(encoding="utf-8")
+        BEGIN, END = "<!-- ice-rubric:begin", "<!-- ice-rubric:end -->"
+        self.assertIn(BEGIN, guide)
+        block = guide.split(BEGIN, 1)[1].split(END, 1)[0]
+        self.assertEqual(block.strip(), ("— bloco GERADO por brainlib/ice_rubric.py (`brain opportunity rubric --md`); "
+                                         "edite lá, não aqui -->\n\n" + ice_rubric.as_markdown().rstrip()).strip())
+
     def test_score_out_of_scale_error_points_to_rubric(self):
         from brainlib import config, util
         from brainlib.core import Brain

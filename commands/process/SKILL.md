@@ -16,7 +16,7 @@ description: "Panorama de um processo (PROC-####) ou cadastro guiado: área, res
    - ferramentas e "entradas → saídas"; dores registradas; maturidade
    - playbook: ligado? lido em que data? (o `/update` relê só quando o doc muda)
    - oportunidades ligadas (`OPP-####`, status, ICE) e lacunas (`⚠ sem playbook`, `sem responsável`, `sem recorrência/duração`)
-4. O que não consta, não consta. Não deduza recorrência nem duração.
+4. O que não consta, não consta. Não deduza recorrência nem duração. ICE de oportunidade se lê pelo rubric (`./brain opportunity rubric`); sugerir é só `/opportunity triage`.
 
 ## Cadastro guiado (o processo não existe)
 
