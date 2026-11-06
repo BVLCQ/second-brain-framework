@@ -57,6 +57,7 @@ DEFAULTS: dict = {
         "entity_types": {"pessoa": "PERSON", "projeto": "PROJECT", "area": "ORG"},
     },
     "runner": {"agent": "auto", "command": "", "prompt": "/update", "timeout_min": 45,
+               "model": "",               # modelo do claude no noturno ("" = padrão do claude); só vale no preset claude
                "allow": []},              # ferramentas MCP de LEITURA do agente headless (noturno e TUI)
     "tui": {"agent_allow": [],             # ferramentas extras do agente nas ações ⚡ do TUI (ex.: MCP de escrita)
             "model": "", "effort": "",    # modelo e esforço do claude nas ações ⚡ ("" = padrão do claude)

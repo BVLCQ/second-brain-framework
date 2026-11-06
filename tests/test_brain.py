@@ -1813,6 +1813,19 @@ class RunnerTest(unittest.TestCase):
         self.assertEqual(argv[-1], "mcp__x__ler")
         self.assertNotIn("mcp__x__enviar", argv)  # escrita do TUI nunca vai pro noturno
 
+    def test_nightly_claude_model_flag_precedes_allowedtools(self):
+        from unittest import mock
+        from brainlib import runner
+        base = {**config.DEFAULTS["runner"], "agent": "claude", "allow": ["mcp__x__ler"]}
+        with mock.patch("shutil.which", return_value="/usr/bin/claude"):
+            sem = runner.agent_command(config.DEFAULTS | {"runner": base})
+            com = runner.agent_command(config.DEFAULTS | {"runner": {**base, "model": "claude-haiku-5-5"}})
+        self.assertNotIn("--model", sem)
+        i = com.index("--model")
+        self.assertEqual(com[i + 1], "claude-haiku-5-5")
+        self.assertLess(i, com.index("--allowedTools"))  # variadico: depois dele a flag seria engolida
+        self.assertEqual(com[-1], "mcp__x__ler")
+
     def test_launchd_plist_runs_nightly_at_requested_time(self):
         import argparse
         import plistlib

@@ -51,6 +51,8 @@ def agent_command(cfg: dict) -> list[str] | None:
         if preset and shutil.which(preset[0]):
             argv = [p.replace("{prompt}", prompt) for p in preset]
             if name == "claude":
+                if r.get("model"):   # antes do --allowedTools (variadico): flag depois dele seria engolida
+                    argv = [argv[0], "--model", str(r["model"])] + argv[1:]
                 argv += read_allow(cfg) + door_allow(cfg)
             return argv
     return None

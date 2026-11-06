@@ -89,6 +89,7 @@ agent = "auto"                  # auto | cursor | claude | codex | agy | gemini 
 command = ""                    # se preenchido, substitui o preset (use {prompt})
 prompt = "/update"
 timeout_min = 45
+model = ""                      # modelo do claude no noturno (ex.: "claude-haiku-5-5"); vazio = padrão do claude
 # Ferramentas MCP de LEITURA que o agente headless pode usar (noturno e TUI), no formato do claude
 # (`mcp__<servidor>__<ferramenta>`). Sem isto o `claude -p` não tem como pedir permissão e as fontes são negadas.
 allow = []
