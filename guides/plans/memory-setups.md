@@ -696,7 +696,10 @@ sem execução. O cenário B (Sonnet nos mental models) volta a ser o alvo da Fa
 `HINDSIGHT_API_<OP>_LLM_*` por operação (retain/consolidation = Haiku high;
 mental-model-refresh/reflect = Sonnet high; default = Haiku medium);
 `HINDSIGHT_API_SKIP_LLM_VERIFICATION` sai; **ligar `enable_dry_run_extract`** (feature
-flag; sem ela o dry-run falha com erro que parece do endpoint — R5);
+flag; sem ela o dry-run falha com erro que parece do endpoint — R5. *Auditado na 1.2.0
+(2026-11-05): é variável de AMBIENTE (`HINDSIGHT_API_ENABLE_DRY_RUN_EXTRACT=true`, já no
+`compose.full.yaml`), não chave de banco — PATCH devolve 400; o endpoint
+`/memories/dry-run-extract` existe e chega ao LLM*);
 `GET /banks/brain-mem/health/llm` por operação; dry-run com 5 chunks reais (reunião,
 Slack, documento, nota, PDF); banco `brain-compat` com 20 documentos (retain,
 consolidação, um mental model); `GET /llm-requests/stats` → conferir premissas de
