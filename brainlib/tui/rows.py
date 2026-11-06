@@ -1042,3 +1042,34 @@ def d_docl(store, it) -> Doc:
                     ("última leitura", Text(util.fmt_date(d["read"])) if d["read"] else None)])
     doc.blank().p(doc_link("⏎ abrir", d["target"], d["n"], "bold cyan"), ("  (URL no navegador; caminho do vault no editor)", DIM))
     return doc.sec("Equivalente na CLI").cmd(f"brain doc unlink {d['target']} --ref …")
+
+
+def ice_methodology(width: int = 100) -> Text:
+    """As 3 tabelas do rubric ICE como `Text` — a tela `?` do formulário e o comando da paleta da TUI."""
+    import io
+    from rich.console import Console
+    from rich.table import Table
+
+    from .. import ice_rubric
+
+    out = Text("Metodologia · ICE\n", "bold")
+    out.append("Score = impacto × confiança × facilidade · 1–5 por eixo · o CLI calcula (1–125).\n", DIM)
+    out.append("Medidas de sucesso: " + " · ".join(f"({k}) {t}" for k, t in ice_rubric.SUCCESS_MEASURES) + "\n", DIM)
+    out.append("Princípios: " + " · ".join(ice_rubric.PRINCIPLES) + "\n\n", DIM)
+    buf = io.StringIO()
+    con = Console(file=buf, width=max(60, width), no_color=True, highlight=False, emoji=False)
+    for ax in ice_rubric.AXES:
+        r = ice_rubric.RUBRIC[ax]
+        t = Table(title=f"{r['name']} — {r['question']}", title_style="cyan", expand=True, pad_edge=False)
+        t.add_column("Nota", justify="right", no_wrap=True)
+        t.add_column("Critério")
+        t.add_column(r["extra_col"], no_wrap=True)
+        t.add_column(r["links_col"], ratio=1)
+        for n in ice_rubric.levels(ax):
+            lv = r["levels"][n]
+            t.add_row(str(n), lv["criterion"], lv["anchor"], lv["link"])
+        con.print(t)
+        con.print("Regras: " + " · ".join(r["rules"]), style=DIM)
+        con.print()
+    out.append(Text(buf.getvalue().rstrip()))
+    return out

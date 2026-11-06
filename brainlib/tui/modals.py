@@ -60,6 +60,8 @@ class FormSpec:
     render: bool = True
     show: str | None = None                          # abre a saída inteira num modal (ex.: memória)
     intercept: Callable[[dict], bool] | None = None  # roda ao confirmar; True = assumiu o fluxo (ex.: perguntar antes de gravar)
+    help: Callable[[], Text] | None = None           # tecla ?: orientações de preenchimento (ex.: metodologia do ICE)
+    help_title: str = "Orientações"                  # título da tela que o ? abre
 
 
 @dataclass
@@ -80,9 +82,12 @@ def preview(cmds: list[list[str]]) -> Text:
 
 class FormModal(ModalScreen):
     # enter confirma em qualquer campo (inclusive nas listas); espaço/seta abre a lista de um campo de escolha
+    # ? abre as orientações do formulário (spec.help) — com prioridade para vencer o Select fechado, e
+    # check_action desliga a tecla nos formulários sem help (o ? continua digitável nos Input)
     BINDINGS = [Binding("escape", "cancel", "Cancelar"), Binding("ctrl+s", "submit", "Confirmar"),
                 Binding("ctrl+o", "external_edit", "Abrir no editor", show=False),
-                Binding("enter", "enter_submit", priority=True, show=False)]
+                Binding("enter", "enter_submit", priority=True, show=False),
+                Binding("question_mark", "show_help", "Orientações", priority=True, show=False)]
 
     def __init__(self, spec: FormSpec):
         super().__init__()
@@ -105,15 +110,21 @@ class FormModal(ModalScreen):
                         elif f.choice or f.options:
                             pairs = _pairs(f, {x.id: x.value for x in s.fields})
                             val = f.value if f.value in [v for _, v in pairs] else pairs[0][1]
-                            yield Select(pairs, value=val, allow_blank=False, id=f"f_{f.id}", classes="fin")
+                            # opção vazia ("— escolha —") no topo: o estado sem escolha mostra o prompt dela
+                            prompt = pairs[0][0] if pairs and pairs[0][1] == "" else "Select"
+                            yield Select(pairs, value=val, allow_blank=False, prompt=prompt,
+                                         id=f"f_{f.id}", classes="fin")
                         else:
                             yield Input(value=f.value, placeholder=f.ph, id=f"f_{f.id}", classes="fin")
                     yield Static("", id=f"r_{f.id}", classes="fres")
             yield Static("", id="cmdp")
             yield Static("", id="err")
             multi = any(f.multi for f in s.fields)
-            yield Static(Text("ctrl+s confirmar · ctrl+o abrir no seu editor (markdown) · enter quebra a linha · tab próximo campo · esc cancelar" if multi else
-                              "enter confirmar · tab próximo campo · espaço abre a lista · esc cancelar", "dim"), id="mf")
+            keys = ("ctrl+s confirmar · ctrl+o abrir no seu editor (markdown) · enter quebra a linha · tab próximo campo"
+                    if multi else "enter confirmar · tab próximo campo · espaço abre a lista")
+            keys += " · ? orientações" if s.help else ""
+            keys += " · esc cancelar"
+            yield Static(Text(keys, "dim"), id="mf")
 
     def on_mount(self) -> None:
         self._update()
@@ -123,10 +134,11 @@ class FormModal(ModalScreen):
 
     def _raw(self) -> dict:
         out = {}
+        null = getattr(Select, "NULL", object())       # textual ≥8: valor sem escolha é sentinela, não ""
         for f in self.spec.fields:
             w = self.query_one(f"#f_{f.id}")
             v = w.text if isinstance(w, TextArea) else w.value
-            out[f.id] = "" if v is Select.BLANK else str(v).strip()
+            out[f.id] = "" if v is Select.BLANK or v is null else str(v).strip()
         return out
 
     def _hidden(self, raw: dict) -> set[str]:
@@ -176,10 +188,17 @@ class FormModal(ModalScreen):
     def check_action(self, action: str, parameters) -> bool | None:
         if action == "enter_submit":                       # lista aberta: enter escolhe a opção; caixa grande: enter quebra a linha
             return not isinstance(self.focused, (SelectOverlay, TextArea))
+        if action == "show_help":                          # só os formulários com orientações (ex.: ICE) pegam o ?
+            return self.spec.help is not None
         return True
 
     def action_enter_submit(self) -> None:
         self.action_submit()
+
+    def action_show_help(self) -> None:
+        """? abre as orientações do formulário por cima (ex.: metodologia do ICE); esc volta com os valores intactos."""
+        if self.spec.help is not None:
+            self.app.push_screen(TextModal(self.spec.help_title, self.spec.help()))
 
     def action_submit(self) -> None:
         v, hidden = self.vals(), self._hidden(self._raw())

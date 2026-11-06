@@ -502,13 +502,13 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             await pilot.press("ctrl+s")
             await pilot.pause(0.2)
             self.assertEqual(got[-1][0], [["opportunity", "status", ids["sugerida"], "descartada", "--reason", "duplicada", "--by", "owner"]])
-            # i: ICE
+            # i: ICE — dropdowns do rubric; sem as 3 escolhas não confirma
             await pilot.press("i")
             await pilot.pause(0.3)
-            await self.fill(pilot, impact="9")
+            await self.fill(pilot, impact="")
             await pilot.press("ctrl+s")
             await pilot.pause(0.2)
-            self.assertIn("1 a 5", self.text_of(app.screen.query_one("#err")))
+            self.assertIn("Preencha", self.text_of(app.screen.query_one("#err")))
             await self.fill(pilot, impact="2", confidence="3", ease="4")
             await pilot.press("ctrl+s")
             await pilot.pause(0.2)
@@ -531,6 +531,67 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             await pilot.press("ctrl+s")
             await pilot.pause(0.2)
             self.assertEqual(got[-1][0], [["doc", "link", ids["sugerida"], "--kind", "playbook", "--ref", "1AbCdEfGhIjKlMnOpQrS", "--by", "owner", "--watch"]])
+
+    async def test_ice_form_dropdowns_methodology_and_palette(self):
+        from brainlib import ice_rubric
+        ids = self.seed_portfolio()
+        app = self.app()
+        got: list = []
+        app.exec = lambda cmds, **kw: got.append((cmds, kw))
+        async with app.run_test(size=(150, 46)) as pilot:
+            await pilot.pause(0.4)
+            app.jump(ids["sugerida"])                                   # ICE sugerido 4×3×4
+            await pilot.press("i")
+            await pilot.pause(0.3)
+            self.assertEqual(type(app.screen).__name__, "FormModal")
+            sels = list(app.screen.query("Select"))
+            self.assertEqual(len(sels), 3)                              # 3 dropdowns, não Inputs
+            for sel in sels:
+                self.assertEqual(len(sel._options), 6)                  # — escolha — + 5 notas
+            labels = "\n".join(self.text_of(app.screen.query_one(f"#b_{k} Label"))
+                               for k in ("impact", "confidence", "ease"))
+            for ax in ice_rubric.AXES:
+                self.assertIn(ice_rubric.RUBRIC[ax]["question"], labels)   # pergunta do eixo visível
+            # ICE sugerido abre com os valores pré-selecionados
+            self.assertEqual([app.screen.query_one(f"#f_{k}").value for k in ("impact", "confidence", "ease")],
+                             ["4", "3", "4"])
+            # ? abre a metodologia (TextModal do rubric, NÃO a tela de atalhos); esc volta com tudo preservado
+            await pilot.press("question_mark")
+            await pilot.pause(0.2)
+            self.assertEqual(type(app.screen).__name__, "TextModal")
+            self.assertIn("Metodologia", self.text_of(app.screen.query_one("#mt")))
+            body = self.text_of(app.screen.query_one("#mb"))
+            self.assertIn(ice_rubric.RUBRIC["impact"]["question"], body)
+            self.assertIn("mais de 40h", body)
+            await pilot.press("escape")
+            await pilot.pause(0.2)
+            self.assertEqual(type(app.screen).__name__, "FormModal")
+            self.assertEqual([app.screen.query_one(f"#f_{k}").value for k in ("impact", "confidence", "ease")],
+                             ["4", "3", "4"])
+            # comando gravado segue idêntico ao de antes (mesma linha da CLI)
+            await self.fill(pilot, impact="5", confidence="5", ease="5")
+            await pilot.press("ctrl+s")
+            await pilot.pause(0.2)
+            self.assertEqual(got[-1][0], [["opportunity", "score", ids["sugerida"], "--impact", "5",
+                                           "--confidence", "5", "--ease", "5", "--by", "owner"]])
+            # comando "Metodologia ICE" da paleta abre a mesma tela, sozinha
+            await pilot.press(":")
+            await pilot.pause(0.3)
+            await self.typ(pilot, "Metodologia")
+            await pilot.press("enter")
+            await pilot.pause(0.3)
+            self.assertEqual(type(app.screen).__name__, "TextModal")
+            self.assertIn("Metodologia · ICE", self.text_of(app.screen.query_one("#mt")))
+            await pilot.press("escape")
+            await pilot.pause(0.2)
+            # ? continua digitável nos Input de formulários sem orientações (editar oportunidade)
+            await pilot.press("e")
+            await pilot.pause(0.3)
+            self.assertEqual(type(app.screen).__name__, "FormModal")
+            await self.typ(pilot, "?")
+            await pilot.pause(0.1)
+            self.assertEqual(type(app.screen).__name__, "FormModal")   # nenhuma tela abriu
+            self.assertIn("?", app.screen.query_one("#f_title").value) # o ? foi digitado
 
     async def test_new_opportunity_warns_about_duplicates_before_writing(self):
         ids = self.seed_portfolio()

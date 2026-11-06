@@ -141,6 +141,7 @@ CMD_CATALOG = [               # paleta de comandos: nome, linha da CLI, (face, p
     ("Editar oportunidade", "brain opportunity update OPP-#### …", (1, 3, 0, "e")),
     ("Status da oportunidade", "brain opportunity status OPP-#### <status>", (1, 3, 0, "s")),
     ("ICE da oportunidade", "brain opportunity score OPP-#### --impact … --confidence … --ease …", (1, 3, 0, "i")),
+    ("Metodologia ICE", "brain opportunity rubric", (None, None, None, "icehelp")),
     ("Confirmar ICE sugerido", "brain opportunity score OPP-#### (valores sugeridos)", (1, 3, 0, "c")),
     ("Evidência da oportunidade", "brain opportunity evidence OPP-#### --source …", (1, 3, 0, "v")),
     ("One-pager da oportunidade", "agente: /opportunity onepager OPP-####", (1, 3, 0, "O")),
@@ -2225,6 +2226,9 @@ class BrainApp(AskKeys, FeedbackKeys, PortfolioKeys, App):
                 self.f_note()
             elif k == "r":
                 self.free_reply()
+            elif k == "icehelp":
+                from . import rows
+                self.push_screen(TextModal("Metodologia · ICE", rows.ice_methodology(min(100, self.size.width - 6))))
             return
         self.face = face
         self.p, self.tab[p] = p, t
@@ -2270,7 +2274,7 @@ class BrainApp(AskKeys, FeedbackKeys, PortfolioKeys, App):
             body.append(f"  {k:<9}", "bold cyan")
             body.append(d + "\n")
         body.append("\nEm qualquer tela\n", "dim")
-        for k, d in (("?", "esta ajuda"), (":", "paleta de comandos"), ("/", "filtrar a lista"), ("g", "buscar em tudo"), ("N", "nova nota na inbox"), ("r", "regenerar views"),
+        for k, d in (("?", "esta ajuda — dentro do formulário do ICE, a metodologia de pontuação"), (":", "paleta de comandos"), ("/", "filtrar a lista"), ("g", "buscar em tudo"), ("N", "nova nota na inbox"), ("r", "regenerar views"),
                      ("ctrl+t", "tema claro / escuro"), ("q", "sair")):
             body.append(f"  {k:<9}", "bold cyan")
             body.append(d + "\n")

@@ -315,16 +315,37 @@ class PortfolioKeys:
         self.set_status(self.cur().data, "descartada")
 
     def f_ice(self) -> None:
+        from .. import ice_rubric
         o = self.cur().data
-        fields = [Field("impact", "impacto (1–5)", value=str(o["impact"] or ""), req=True, check=self._scale_check),
-                  Field("confidence", "confiança (1–5)", value=str(o["confidence"] or ""), req=True, check=self._scale_check),
-                  Field("ease", "facilidade (1–5)", value=str(o["ease"] or ""), req=True, check=self._scale_check)]
-        self.form(FormSpec(f"ICE de {o['id']}", fields,
-                           lambda v: [["opportunity", "score", o["id"], "--impact", v["impact"] or "…", "--confidence", v["confidence"] or "…",
-                                       "--ease", v["ease"] or "…", "--by", "owner"]],
-                           sub="Score = impacto × confiança × facilidade (1–125). O CLI calcula e mostra o resultado." + (
-                               f" Sugestão do agente: {o['ice_reason']}" if o["ice_suggested"] and o["ice_reason"] else ""),
-                           show="ICE gravado"))
+        q = lambda ax: f"{ice_rubric.RUBRIC[ax]['name']} — {ice_rubric.RUBRIC[ax]['question']}"  # noqa: E731
+
+        def res(axis):
+            def _r(v: str) -> str:
+                return ice_rubric.describe(axis, int(v)) if v.isdigit() else ""
+            return _r
+
+        def impact_res(v: str) -> str:
+            out = res("impact")(v)
+            h = o.get("hours_saved")
+            if v.isdigit() and h:
+                hint = ice_rubric.hint_from_hours(h) or 1
+                out += f"\nhoras declaradas: {h:g} h/mês → faixa sugerida {hint}"
+                if int(v) > hint:
+                    out += " · ⚠ escopo e horas divergem: vale a menor nota"
+            return out
+
+        self.form(FormSpec(
+            f"ICE de {o['id']}",
+            [Field("impact", q("impact"), value=str(o["impact"] or ""), choice=ice_rubric.options("impact"), req=True, res=impact_res),
+             Field("confidence", q("confidence"), value=str(o["confidence"] or ""), choice=ice_rubric.options("confidence"), req=True, res=res("confidence")),
+             Field("ease", q("ease"), value=str(o["ease"] or ""), choice=ice_rubric.options("ease"), req=True, res=res("ease"))],
+            lambda v: [["opportunity", "score", o["id"], "--impact", v["impact"] or "…", "--confidence", v["confidence"] or "…",
+                        "--ease", v["ease"] or "…", "--by", "owner"]],
+            sub="Score = impacto × confiança × facilidade (1–125). O CLI calcula e mostra o resultado." + (
+                f" Sugestão do agente: {o['ice_reason']}" if o["ice_suggested"] and o["ice_reason"] else ""),
+            show="ICE gravado",
+            help=lambda: rows.ice_methodology(min(100, self.size.width - 6)),
+            help_title="Metodologia · ICE"))
 
     def confirm_ice(self) -> None:
         o = self.cur().data
