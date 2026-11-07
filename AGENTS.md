@@ -215,6 +215,7 @@ vai e volta livremente entre eles. Tipos: `melhoria-de-processo` · `novo-proces
   dono move status. O ledger recusa agente gravando outro status, ou ICE como firme.
 - **ICE = impacto × confiança × facilidade** (1–5 cada, score 1–125): quem calcula é o `./brain`.
   O agente só **sugere** (`--suggest --reason`); aparece em rosa até o dono confirmar ou mudar.
+  **Rubric** (o que cada nota significa): `brain opportunity rubric` — fonte única de CLI, TUI, painel e guia.
 - **Horas/mês de um processo** = execuções/mês × duração × nº de executores — também do CLI.
   Ganho de oportunidade em horas é **declarado** pelo dono; o cérebro não estima.
 - **Promover** uma oportunidade = criar o nó do PLANNING no nível escolhido — goal novo, projeto num
