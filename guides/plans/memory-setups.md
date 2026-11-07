@@ -76,7 +76,8 @@ por setup, então qualquer escolha é um sistema completo.
 - **Hook injeta ruído** (trechos de transcrição sem relação), corte 0,55, 8 itens.
 - **Reranker neural já medido** (comentário no `services/compose.yaml`): `bge-reranker-v2-m3`
   na CPU do container: top-1 de 91,7% → 95,8%, mas 1,6 s @ 30 candidatos — estoura o
-  timeout do hook. Só vale servido no host com aceleração (Fase 4.2).
+  timeout do hook. Medido também no host com aceleração (2026-11-07, Fase 4.2):
+  reprovado — melhor caso no Metal fp16 fica em p95 2,7 s.
 - **Volume extraível:** ~3,0 MB em 16 dias (`meetings` 1,63 MB + `documents` 0,79 +
   `notes` 0,19 + `slack` 0,10) → teto de ~1.900 chunks/mês. `connectors/` e `github/`
   não entram (espelho estruturado já no ledger; diff de código é ruído).
@@ -606,15 +607,16 @@ literal (pt/es), e **expansão determinística de consulta**: a pergunta é rees
 como múltiplas consultas (original + aliases da pessoa detectada + formas dobradas)
 fundidas com deduplicação.
 
-4.2 **Reranker local, com gate de latência** (*pendente, 2026-11-05: o benchmark exige o
-`jina-mlx` carregado no LM Studio da máquina — não disponível no Mac de dev; valerá a
-regra 4 quando houver o modelo. Enquanto isso: fusão RRF do servidor + corte 0.62*).
-Benchmark do compose refeito com
-`jina-mlx` servido no host (Metal; verificar na 0.10.3 se o provider roda no container
-ou aponta para endpoint do host — parte do smoke 3.0). Aprovar **só se p95 < 400 ms
-com 30 candidatos**. Reranker de nuvem (`cohere`, `zeroentropy`) é **exclusivo do
-`full`** (manda pergunta e candidatos para fora — mesma regra da seção 4.3: chave do
-dono). Se nenhum passar: `rrf` e corte semântico 0,62.
+4.2 **Reranker local, com gate de latência** — **reprovado em 2026-11-07** (regra 4).
+Benchmark no Mac de dev (M3, 16 GB), 30 candidatos de ~320 tokens (tamanho de chunk
+real): `jina-reranker-v3.5-mlx` (build MLX oficial, listwise) ~14–15 s por chamada;
+`bge-reranker-v2-m3` no Metal fp16 (melhor caso) p50 2,6 s / **p95 2,7 s** — fp32 p95
+15 s, CPU 11 s. Sanidade OK (documento certo no topo, score ~1,0), mas nenhum se
+aproxima dos 400 ms; o M4 Pro esperado (≤2× mais rápido) tampouco alcança. **Fica
+`rrf` + corte semântico 0,62** (como já shipado na Fase 4). Reabrir só com candidados
+menores (~100 tokens) ou top-10 em vez de 30 — recalcular o gate antes. Reranker de
+nuvem (`cohere`, `zeroentropy`) é **exclusivo do `full`** (manda pergunta e candidatos
+para fora — mesma regra da seção 4.3: chave do dono).
 
 4.3 **Saída por rota** (cada linha cita a fonte): ledger → até 3 linhas `lines`
 `⟶ ledger/<ID>`; literal → 1–2 trechos de chunk (≤ 400 caracteres) `⟶ <document_id>,
