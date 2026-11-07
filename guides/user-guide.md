@@ -658,10 +658,12 @@ arquivo** que funciona em qualquer navegador, com dois modos:
   aprovação literal, `--by owner`). A allowlist é fechada; `update`,
   `migrate`, `backup` e cia. seguem no terminal.
 
-O painel tem duas **faces** (como o TUI): **Execução** e **Portfólio** —
+O painel tem três **faces** (como o TUI): **Execução**, **Portfólio** e **Configurações** —
 `Tab`/`Shift+Tab` troca, e cada face lembra onde você estava. A barra
 lateral traz as páginas (com badges), a busca ⌘K e a barra inferior mostra
-as teclas do contexto — clicáveis, com os gates em destaque.
+as teclas do contexto — clicáveis, com os gates em destaque. A face
+**Configurações** mostra provedores da memória, harnesses e saúde — e o
+formulário de trocar provedor roda a mesma linha da TUI e do CLI.
 
 **Execução** — páginas:
 
@@ -905,7 +907,8 @@ literal. A oportunidade vira `em-andamento` e fica ligada ao nó criado (o progr
 **Playbooks** moram no Drive: `./brain doc link PROC-0001 --kind playbook --ref <url> --watch` cria uma fonte
 `drive-doc` no `watch.toml`; o `/update` só relê o doc quando o `modifiedTime` muda.
 
-**No TUI** (`./brain tui`): `Tab` / `Shift+Tab` giram entre as faces **Execução** e **Portfólio** (cada uma lembra
+**No TUI** (`./brain tui`): `Tab` / `Shift+Tab` giram entre as faces **Execução**, **Portfólio** e
+**Configurações** (cada uma lembra
 onde você estava; dentro de formulários o Tab continua mudando de campo). Painéis do Portfólio: **1 Visão** (funil,
 top 5 por ICE, lacunas; por área; por goal) · **2 Processos** (todos, por área, lacunas) · **3 Oportunidades**
 (triagem, priorizadas, em curso, arquivo) · **4 Matriz** (impacto × facilidade em 2×2, ranking) · **5 Registro**

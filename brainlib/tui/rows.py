@@ -212,6 +212,18 @@ def row(store, it, width: int) -> Text:
     if k == "sys":
         right = T(("⚡ ", VIO)) if d.get("agent") else T(("porta ", AMB) if d.get("door") else "", ("info" if d.get("info") else "⏎", DIM))
         return two(T(("▸", DIM), " ", d["name"]), right, width)
+    if k == "prov":
+        cloud = ("☁ ", AMB) if d.get("cloud") else (("local", DIM) if d.get("local") else "")
+        key = " · sem chave" if d.get("key_env") and not d.get("key_present") else ""
+        right = T(cloud, (key, RED if key else DIM))
+        model = d.get("model") or "—"
+        return two(T((d.get("icon", d["slot"]), "bold"), " ", (d.get("label") or "—", "")), right, width) \
+            if model == "—" else two(T((d.get("icon", d["slot"]), "bold"), " ", (d.get("label") or "—", ""), " ", (f"· {model}", DIM)), right, width)
+    if k == "hw":
+        mark, st = ("✓", GRN) if d["wired"] else (("○", AMB) if d["detected"] else ("○", FAINT))
+        right = T(("instalado nesta máquina", DIM) if d["detected"] and not d["wired"]
+                  else ("" if d["wired"] else ("não encontrado", FAINT)))
+        return two(T((mark, st), " ", d["label"]), right, width)
     return T(str(it.id))
 
 
@@ -332,7 +344,7 @@ def detail(store, it) -> Text:
           "ask": d_ask, "msg": d_msg, "fday": d_focus, "fwarn": d_focus, "pub": d_pub, "dec": d_dec, "del": d_del,
           "per": d_person, "art": d_art, "doc": d_doc, "sys": d_sys, "src": d_src, "opp": d_opp, "proc": d_proc,
           "pgrp": d_pgrp, "pvfunil": d_funil, "pvgaps": d_gaps, "mx": d_matrix, "area": d_area, "docl": d_docl,
-          "fb": d_fb}[it.kind]
+          "fb": d_fb, "prov": d_prov, "hw": d_hw}[it.kind]
     return fn(store, it).text()
 
 
@@ -1078,3 +1090,38 @@ def ice_methodology(width: int = 100) -> Text:
         con.print()
     out.append(Text(buf.getvalue().rstrip()))
     return out
+
+
+def d_prov(store, it) -> Doc:
+    """Ficha de um slot de provedor (face Configurações): o que está escolhido, onde mora cada coisa."""
+    d = it.data
+    doc = Doc().h(Text(d.get("icon", d["slot"]), "bold"), Text(f" — {d.get('label') or '—'}"))
+    doc.kv([
+        ("slot", Text(d["slot"])),
+        ("provedor", Text(d["provider"] or "—")),
+        ("modelo", Text(d.get("model") or "—")),
+        ("egress", Text("☁ texto do vault vai à API do provedor", AMB) if d.get("cloud")
+         else Text("local — nada sai da máquina", GRN)),
+        ("chave", Text(f"presente ({d['key_env']})", GRN) if d.get("key_present")
+         else (Text(f"ausente — brain memory providers set {d['slot']} --provider {d['provider']} --key …", RED)
+               if d.get("key_env") else Text("não usa", DIM))),
+    ])
+    doc.blank().p(Text("Tecla s troca o provedor (formulário) · w abre o wizard da memória.", DIM))
+    doc.p(Text("Trocou embeddings? brain memory rebuild re-deriva os vetores do vault.", DIM))
+    return doc
+
+
+def d_hw(store, it) -> Doc:
+    """Ficha de um harness (face Configurações): cablado? encontrado? o que o doctor confere."""
+    d = it.data
+    doc = Doc().h(Text(d["label"], "bold"))
+    doc.kv([
+        ("id", Text(d["name"])),
+        ("cablado", Text("sim — memória no banco dos agentes", GRN) if d["wired"]
+         else Text("não", AMB)),
+        ("nesta máquina", Text("instalado", DIM) if d["detected"] else Text("não encontrado", FAINT)),
+    ])
+    doc.blank().p(Text("Tecla i cabla/reinstala (instalador oficial) · v verifica a conexão "
+                       "(banco, recall ping, config apontando para cá).", DIM))
+    doc.p(Text("O banco dos agentes nunca é tocado pelo brain memory rebuild.", DIM))
+    return doc

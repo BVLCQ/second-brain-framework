@@ -666,10 +666,55 @@ function dropPlan(a, target){                    // → {cmd, mut, deny?}
     mut: m => { m.actions.find(y => y.id === a.id).status = target === "aguardando" ? "aguardando" : target; }};
 }
 let dragId = null, lastMoved = null;
+
+// ── face Configurações: troca de provedor da memória (mesma linha do CLI; sem campos condicionais:
+//    um select por slot, "manter" nos que não mudam — o preview monta só a linha do slot escolhido) ──
+function wireCfgMemoria(){
+  const b = document.querySelector("[data-provform]");
+  if (!b) return;
+  b.onclick = () => formDialog({
+    title: "Trocar provedor da memória",
+    sub: "A escolha vai ao config/.env (chave nunca volta em output) e ao [memory]. Recrie o container depois para aplicar.",
+    fields: [
+      {k: "llm", label: "LLM (só modo full)", options: [["", "manter"], ["anthropic", "Anthropic (Haiku/Sonnet cenário B)"],
+        ["openai", "OpenAI"], ["fireworks", "Fireworks"], ["zai", "Z.ai (GLM)"], ["lmstudio", "LM Studio (local)"], ["custom", "custom"]], value: ""},
+      {k: "embeddings", label: "Embeddings", options: [["", "manter"], ["local", "Local — LM Studio bge-m3 (zero egress)"],
+        ["fireworks", "Fireworks — Qwen3-Embedding-8B"], ["openai", "OpenAI"], ["cohere", "Cohere"], ["custom", "custom"]], value: ""},
+      {k: "reranker", label: "Reranker", options: [["", "manter"], ["off", "off — fusão RRF (recomendado)"],
+        ["fireworks", "Fireworks — Qwen3-Reranker-8B"], ["cohere", "Cohere"], ["zeroentropy", "ZeroEntropy"],
+        ["openrouter", "OpenRouter"], ["custom", "custom"]], value: ""},
+      {k: "model", label: "modelo", ph: "vazio = recomendado do provedor"},
+      {k: "base_url", label: "base URL", ph: "custom / openai-wire"},
+      {k: "key", label: "API key", type: "password", ph: "vazio = mantém a do config/.env"},
+      {k: "models", label: "modelos por operação (LLM)", ph: "retain=…,consolidation=… (vazio = recomendados)"},
+      {k: "candidates", label: "top-N candidatos (reranker)", ph: "vazio = default do provedor"}
+    ],
+    preview(v){
+      const slot = ["llm", "embeddings", "reranker"].find(s => v[s]);
+      if (!slot) return null;
+      let c = "brain memory providers set " + slot + " --provider " + v[slot];
+      if (v.model) c += " --model " + v.model;
+      if (v.base_url) c += " --base-url " + v.base_url;
+      if (v.key) c += " --key " + v.key;
+      if (slot === "llm" && v.models) c += " --models " + v.models;
+      if (slot === "reranker" && v.candidates) c += " --candidates " + v.candidates;
+      return c;
+    },
+    note(v){
+      const slot = ["llm", "embeddings", "reranker"].find(s => v[s]);
+      if (slot && v[slot] !== "local" && v[slot] !== "off") return "☁ nuvem: texto do vault vai à API do provedor (mesmo gate de egress do plano).";
+      if (slot === "embeddings") return "trocar embeddings pede o rebuild da memória: vetores antigos ficam incompatíveis.";
+      return "";
+    },
+    run: () => {}
+  });
+}
+
 window.afterRoute = function(view){
   if (location.hash.startsWith("#focus")) wireFocus();
   if (location.hash.startsWith("#pf/opps")) wireOppKanban();
   if (location.hash.startsWith("#ask")) wireAskPage();
+  if (location.hash.startsWith("#cfg/memoria")) wireCfgMemoria();
   wireP0();
   collectSel();
   document.querySelectorAll("#view .card").forEach(el => {

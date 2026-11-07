@@ -22,7 +22,7 @@ PLAN_VIEWS = ["Todos", "Ativo", "Congelado", "Depois", "Finalizado"]
 PLAN_TAB_STATUS = [None, "ativo", "congelado", "depois", "finalizado"]
 
 PANELS_EXEC = {
-    1: ("Status", ["Resumo", "Saúde", "Fontes", "Sistema"]),
+    1: ("Status", ["Resumo", "Fontes", "Sistema"]),
     2: ("Ações", ["mine", "waiting", "watching"]),
     3: ("Plano", PLAN_VIEWS),
     4: ("Aprovar", ["Perguntas", "Propostas", "Outbox", "Foco", "Publicar"]),
@@ -58,10 +58,18 @@ PANELS_PORT = {
     6: ("Log de comandos", ["Log", "Feedback"]),
 }
 
+# Configurações (face 2): o que o dono re-edita quando quer — provedores da memória, harnesses, saúde.
+# A configuração é seção viva, não "setup uma vez": as mesmas escolhas do wizard, sem refazer a instalação.
+PANELS_CFG = {
+    1: ("Memória", ["Provedores", "Harnesses"]),
+    2: ("Instância", ["Saúde"]),
+    6: ("Log de comandos", ["Log", "Feedback"]),
+}
+
 # Face = conjunto de painéis 1–5 com abas próprias; o painel 6 (Log) é comum. Tab/Shift+Tab giram entre as faces
 # (carrossel). Uma face nova entra só declarando-se aqui (e em FACE_START: o painel em que ela abre).
-FACES = [("Execução", PANELS_EXEC), ("Portfólio", PANELS_PORT)]
-FACE_START = [2, 3]
+FACES = [("Execução", PANELS_EXEC), ("Portfólio", PANELS_PORT), ("Configurações", PANELS_CFG)]
+FACE_START = [2, 3, 1]
 OPP_TABS = [("ideia", "triagem"), ("priorizada",), ("em-andamento", "piloto", "validando"),
             ("entregue", "em-espera", "descartada")]      # status de cada aba de Oportunidades (a última recebe o resto)
 PANELS = PANELS_EXEC                 # compatibilidade: os painéis da face Execução
@@ -96,6 +104,15 @@ SYS_OPS = [
              "documento do vault (/ask confirma no arquivo)."},
     {"id": "sys:memsetup", "name": "Memória: criar bancos", "args": ["memory", "setup"], "confirm": True,
      "desc": "Cria ou atualiza os bancos brain-mem e brain-raw no servidor."},
+    {"id": "sys:provshow", "name": "Memória: provedores", "args": ["memory", "providers", "show"],
+     "show": "Provedores",
+     "desc": "O stack atual: LLM, embeddings e reranker — quem é local, quem é nuvem (egress), chave presente."},
+    {"id": "sys:wizmem", "name": "Wizard da memória (terminal interativo)", "args": ["setup", "--only", "memoria"],
+     "external": True,
+     "desc": "Re-roda o passo Memória do setup: modo, provedores, chaves. Configuração é seção viva, não uma vez só."},
+    {"id": "sys:hwverify", "name": "Harnesses: verificar", "args": ["memory", "harness", "verify"],
+     "show": "Harnesses",
+     "desc": "Conexão dos agentes de código com o Hindsight: banco existe, recall responde, configs apontando pra cá."},
     {"id": "sys:memrebuild", "name": "Memória: reconstruir tudo", "args": ["memory", "rebuild"], "confirm": True,
      "desc": "APAGA os dois bancos e reenvia tudo a partir do vault. Demora; o vault não é tocado."},
     {"id": "sys:backup", "name": "Backup do vault", "args": ["backup"], "door": "backup · Drive",
@@ -513,17 +530,23 @@ class Store:
     # ── listas por painel ──────────────────────────────────────────────────
     def items(self, face: int, panel: int, tab: int, show_all: bool = False, filt: str = "",
               collapsed: set[str] | None = None, view: int = 0, sort: int = 0) -> list[Item]:
+        if panel == 6 and tab == 1:          # aba Feedback do painel do log: fila do que vira issue — comum a TODAS as faces
+            fbs = [f for f in self.brain.state.feedbacks.values() if show_all or f.status != "criado"]
+            order = {"pendente": 0, "falhou": 1, "criado": 2}      # acionável no topo
+            fbs.sort(key=lambda f: (order.get(f.status, 3), f.id))
+            out: list[Item] = [Item(f.id, "fb", f, q=f"{f.id} {f.kind} {f.title} {f.status} {f.url}") for f in fbs]
+            if filt:
+                fl = util.fold(filt)
+                out = [i for i in out if fl in util.fold(i.q)]
+            return out
         if face != 0:
             return self._items_face(face, panel, tab, show_all, filt)
         m, collapsed = self.m, (set() if filt else collapsed or set())     # filtrando, a árvore abre sozinha
-        out: list[Item] = []
+        out = []
         if panel == 1:
             if tab == 0:
                 out = [Item("resumo", "resumo", q="resumo hoje")]
             elif tab == 1:
-                out = [Item(f"doc:{i}", "doc", c, q=f"{c['title']} {c['detail']}", extra={"fix": self._fix_for(c)})
-                       for i, c in enumerate(self.health)]
-            elif tab == 2:
                 out = [Item(f"src:{s['key']}", "src", s, q=f"{s['key']} {s.get('kind', '')} {s.get('channel', '')}") for s in self.sources]
             else:
                 out = [Item(o["id"], "sys", o, q=f"{o['name']} {' '.join(o.get('args', []))} {o.get('agent', '')}") for o in SYS_OPS]
@@ -585,11 +608,6 @@ class Store:
                 out = [Item(p["id"], "per", p, q=f"{p['id']} {p['name']} {' '.join(p['aliases'])}") for p in m["people"]]
             else:
                 out = [Item(a["id"], "art", a, q=f"{a['title']} {a['kind']} {a['summary']}") for a in m["artifacts"]]
-        elif panel == 6 and tab == 1:          # aba Feedback do painel do log: a fila do que vira issue
-            fbs = [f for f in self.brain.state.feedbacks.values() if show_all or f.status != "criado"]
-            order = {"pendente": 0, "falhou": 1, "criado": 2}      # acionável no topo
-            fbs.sort(key=lambda f: (order.get(f.status, 3), f.id))
-            out = [Item(f.id, "fb", f, q=f"{f.id} {f.kind} {f.title} {f.status} {f.url}") for f in fbs]
         if filt:
             f, node = util.fold(filt), self.node_for(filt)
             if node:                                  # filtro é um id: mostra tudo que está associado a ele
@@ -600,7 +618,9 @@ class Store:
         return out
 
     def _items_face(self, face: int, panel: int, tab: int, show_all: bool, filt: str) -> list[Item]:
-        """Listas das faces além da Execução. Hoje só o Portfólio (face 1)."""
+        """Listas das faces além da Execução: Portfólio (1) e Configurações (2)."""
+        if face == 2:
+            return self._items_cfg(panel, tab, filt)
         if face != 1:
             return []
         pf, out = self.pf, []
@@ -699,3 +719,33 @@ class Store:
         if any(a["id"] == node for a in self.m["artifacts"]):
             return (5, 3)
         return None
+
+    def _items_cfg(self, panel: int, tab: int, filt: str) -> list[Item]:
+        """Face Configurações: provedores da memória (llm · embeddings · reranker), harnesses, saúde."""
+        out: list[Item] = []
+        if panel == 1:
+            if tab == 0:
+                from .. import providers as _prov
+                icons = {"llm": "LLM", "embeddings": "Embeddings", "reranker": "Reranker"}
+                st = _prov.stack(self.brain)
+                for slot in _prov.SLOTS:
+                    s = st[slot]
+                    out.append(Item(f"prov:{slot}", "prov", {"slot": slot, "icon": icons[slot], **s},
+                                    q=f"{slot} {s['provider']} {s['model']} {s['label']}"))
+            else:
+                from .. import harness as _h
+                wired = self.inst.cfg["memory"].get("harnesses") or []
+                det = _h.detect()
+                for name in ("claude-code", "cursor-cli", "codex", "hermes"):
+                    label = _h.AGENTS.get(name, "Hermes")
+                    out.append(Item(f"hw:{name}", "hw",
+                                    {"name": name, "label": label, "wired": name in wired,
+                                     "detected": det.get(name, False)},
+                                    q=f"{name} {label} {'cablado' if name in wired else 'desligado'}"))
+        elif panel == 2:
+            out = [Item(f"doc:{i}", "doc", c, q=f"{c['title']} {c['detail']}",
+                        extra={"fix": self._fix_for(c)}) for i, c in enumerate(self.health)]
+        if filt:
+            f = util.fold(filt)
+            out = [i for i in out if f in util.fold(i.q)]
+        return out

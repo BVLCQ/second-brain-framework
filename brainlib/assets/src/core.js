@@ -9,6 +9,7 @@ function normalizeBrain(m){
   m.counts = m.counts || {}; m.questions = m.questions || []; m.proposals = m.proposals || [];
   m.outbox = m.outbox || []; m.health = m.health || []; m.deliveries = m.deliveries || [];
   m.feedback = m.feedback || [];
+  m.providers = m.providers || {}; m.harnesses = m.harnesses || [];   // face Configurações (ausente em instância antiga)
   m.actions = m.actions || []; m.publishes = m.publishes || []; m.focus = m.focus || null;
   m.deliverables_done = m.deliverables_done || [];
   m.timeline = m.timeline || {past: [], ahead: []}; m.people = m.people || [];
@@ -412,6 +413,23 @@ V.feedback = () => {
 };
 V.health = () => '<div class="pagehead"><div><h1>Saúde</h1><p class="sub">Checagens do brain doctor.</p></div></div>' +
   panel("", '<ul class="feed health">' + (M.health || []).map(c => '<li class="' + c.level + '"><span class="hicon">' + ({ok: "✓", warn: "⚠", error: "✗"}[c.level]) + "</span> <b>" + esc(c.title) + "</b> — " + esc(c.detail) + "</li>").join("") + "</ul>");
+V["cfg/saude"] = V.health;                      // face Configurações: a mesma régua do doctor
+V["cfg/memoria"] = () => {
+  const rows = [["llm", "LLM"], ["embeddings", "Embeddings"], ["reranker", "Reranker"]].map(([k, icon]) => {
+    const p = M.providers[k] || {};
+    const egress = p.cloud ? '<span class="late">☁ egress</span>' : (p.local ? '<span class="dim">local</span>' : "");
+    const key = p.key_env ? (p.key_present ? '<span class="ok">chave ok</span>' : '<span class="late">sem chave</span>') : "";
+    return "<tr><td><b>" + icon + "</b></td><td>" + esc(p.label || "—") + "</td><td>" + esc(p.model || "—") + "</td><td>" + egress + " " + key + "</td></tr>";
+  }).join("");
+  const hw = (M.harnesses || []).map(h => "<tr><td>" + esc(h.label) + "</td><td>" +
+    (h.wired ? '<span class="ok">✓ cablado</span>' : (h.detected ? '<span class="dim">instalado, não cablado</span>' : '<span class="dim">não encontrado</span>')) + "</td></tr>").join("");
+  return '<div class="pagehead"><div><h1>Memória</h1><p class="sub">Provedores (LLM · embeddings · reranker) e harnesses — configuração viva: mude quando quiser; o passo inteiro do setup re-roda no terminal pelo comando do wizard.</p></div></div>' +
+    panel("Provedores", '<div class="twrap"><table><tr><th>Slot</th><th>Provedor</th><th>Modelo</th><th></th></tr>' + rows + "</table></div>" +
+      '<p class="note-s" style="margin:10px 2px">A chave mora no config/.env e nunca aparece aqui. Trocou embeddings? O comando rebuild da memória re-deriva os vetores do vault. Depois de trocar, recrie o container (compose com o env-file da config).</p>' +
+      '<button class="btn primary" data-provform>Trocar provedor</button>') +
+    panel("Harnesses — agentes de código", '<div class="twrap"><table><tr><th>Agente</th><th>Estado</th></tr>' + hw + "</table></div>" +
+      '<p class="note-s" style="margin:10px 2px">Cablar e verificar ficam no terminal (instalação oficial + verificação de conexão); o banco dos agentes nunca é tocado pelo rebuild da memória.</p>');
+};
 V.action = (q, id) => {
   const a = A[id]; if (!a) return empty("Ação não encontrada");
   return '<p class="crumb muted"><a href="#todo">← TODO</a></p><div class="pagehead"><div><h1>' + a.id + " · " + esc(a.title) + '</h1>' +
@@ -659,9 +677,10 @@ const TABS_EXEC = [["home", "Início"], ["todo", "TODO", () => M.counts.mine_ove
   ["outbox", "Mensagens", () => M.counts.outbox_pending], ["feedback", "Sugestões", () => (M.feedback || []).filter(f => f.status !== "criado").length || 0], ["health", "Saúde", () => (M.health || []).filter(c => c.level !== "ok").length]];
 const TABS_PF = [["pf/visao", "Visão geral"], ["pf/opps", "Oportunidades", () => PF.opportunities.filter(o => o.status !== "descartada").length],
   ["pf/matrix", "Matriz"], ["pf/procs", "Processos", () => PF.processes.filter(p => p.status === "ativo").length], ["pf/areas", "Áreas", () => PF.areas.length]];
-const FACES = [["execucao", "Execução", TABS_EXEC], ["portfolio", "Portfólio", TABS_PF]];
+const TABS_CFG = [["cfg/memoria", "Memória"], ["cfg/saude", "Saúde"]];
+const FACES = [["execucao", "Execução", TABS_EXEC], ["portfolio", "Portfólio", TABS_PF], ["configuracoes", "Configurações", TABS_CFG]];
 if (window.PF_ONLY) { FACES.length = 0; FACES.push(["portfolio", "Portfólio", TABS_PF]); }
-const faceOf = v => v.indexOf("pf/") === 0 ? "portfolio" : "execucao";
+const faceOf = v => v.indexOf("pf/") === 0 ? "portfolio" : (v.indexOf("cfg/") === 0 ? "configuracoes" : "execucao");
 const PARENT = {project: "projects", person: "people", action: "todo", decision: "decisions", "pf/opp": "pf/opps", "pf/area": "pf/areas"};
 function go(view, params){ const q = new URLSearchParams(Object.entries(params || {}).filter(([, v]) => v)).toString(); location.hash = view + (q ? "?" + q : ""); }
 function route(){

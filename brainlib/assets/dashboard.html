@@ -1118,10 +1118,55 @@ function dropPlan(a, target){                    // → {cmd, mut, deny?}
     mut: m => { m.actions.find(y => y.id === a.id).status = target === "aguardando" ? "aguardando" : target; }};
 }
 let dragId = null, lastMoved = null;
+
+// ── face Configurações: troca de provedor da memória (mesma linha do CLI; sem campos condicionais:
+//    um select por slot, "manter" nos que não mudam — o preview monta só a linha do slot escolhido) ──
+function wireCfgMemoria(){
+  const b = document.querySelector("[data-provform]");
+  if (!b) return;
+  b.onclick = () => formDialog({
+    title: "Trocar provedor da memória",
+    sub: "A escolha vai ao config/.env (chave nunca volta em output) e ao [memory]. Recrie o container depois para aplicar.",
+    fields: [
+      {k: "llm", label: "LLM (só modo full)", options: [["", "manter"], ["anthropic", "Anthropic (Haiku/Sonnet cenário B)"],
+        ["openai", "OpenAI"], ["fireworks", "Fireworks"], ["zai", "Z.ai (GLM)"], ["lmstudio", "LM Studio (local)"], ["custom", "custom"]], value: ""},
+      {k: "embeddings", label: "Embeddings", options: [["", "manter"], ["local", "Local — LM Studio bge-m3 (zero egress)"],
+        ["fireworks", "Fireworks — Qwen3-Embedding-8B"], ["openai", "OpenAI"], ["cohere", "Cohere"], ["custom", "custom"]], value: ""},
+      {k: "reranker", label: "Reranker", options: [["", "manter"], ["off", "off — fusão RRF (recomendado)"],
+        ["fireworks", "Fireworks — Qwen3-Reranker-8B"], ["cohere", "Cohere"], ["zeroentropy", "ZeroEntropy"],
+        ["openrouter", "OpenRouter"], ["custom", "custom"]], value: ""},
+      {k: "model", label: "modelo", ph: "vazio = recomendado do provedor"},
+      {k: "base_url", label: "base URL", ph: "custom / openai-wire"},
+      {k: "key", label: "API key", type: "password", ph: "vazio = mantém a do config/.env"},
+      {k: "models", label: "modelos por operação (LLM)", ph: "retain=…,consolidation=… (vazio = recomendados)"},
+      {k: "candidates", label: "top-N candidatos (reranker)", ph: "vazio = default do provedor"}
+    ],
+    preview(v){
+      const slot = ["llm", "embeddings", "reranker"].find(s => v[s]);
+      if (!slot) return null;
+      let c = "brain memory providers set " + slot + " --provider " + v[slot];
+      if (v.model) c += " --model " + v.model;
+      if (v.base_url) c += " --base-url " + v.base_url;
+      if (v.key) c += " --key " + v.key;
+      if (slot === "llm" && v.models) c += " --models " + v.models;
+      if (slot === "reranker" && v.candidates) c += " --candidates " + v.candidates;
+      return c;
+    },
+    note(v){
+      const slot = ["llm", "embeddings", "reranker"].find(s => v[s]);
+      if (slot && v[slot] !== "local" && v[slot] !== "off") return "☁ nuvem: texto do vault vai à API do provedor (mesmo gate de egress do plano).";
+      if (slot === "embeddings") return "trocar embeddings pede o rebuild da memória: vetores antigos ficam incompatíveis.";
+      return "";
+    },
+    run: () => {}
+  });
+}
+
 window.afterRoute = function(view){
   if (location.hash.startsWith("#focus")) wireFocus();
   if (location.hash.startsWith("#pf/opps")) wireOppKanban();
   if (location.hash.startsWith("#ask")) wireAskPage();
+  if (location.hash.startsWith("#cfg/memoria")) wireCfgMemoria();
   wireP0();
   collectSel();
   document.querySelectorAll("#view .card").forEach(el => {
@@ -1875,6 +1920,7 @@ function normalizeBrain(m){
   m.counts = m.counts || {}; m.questions = m.questions || []; m.proposals = m.proposals || [];
   m.outbox = m.outbox || []; m.health = m.health || []; m.deliveries = m.deliveries || [];
   m.feedback = m.feedback || [];
+  m.providers = m.providers || {}; m.harnesses = m.harnesses || [];   // face Configurações (ausente em instância antiga)
   m.actions = m.actions || []; m.publishes = m.publishes || []; m.focus = m.focus || null;
   m.deliverables_done = m.deliverables_done || [];
   m.timeline = m.timeline || {past: [], ahead: []}; m.people = m.people || [];
@@ -2278,6 +2324,23 @@ V.feedback = () => {
 };
 V.health = () => '<div class="pagehead"><div><h1>Saúde</h1><p class="sub">Checagens do brain doctor.</p></div></div>' +
   panel("", '<ul class="feed health">' + (M.health || []).map(c => '<li class="' + c.level + '"><span class="hicon">' + ({ok: "✓", warn: "⚠", error: "✗"}[c.level]) + "</span> <b>" + esc(c.title) + "</b> — " + esc(c.detail) + "</li>").join("") + "</ul>");
+V["cfg/saude"] = V.health;                      // face Configurações: a mesma régua do doctor
+V["cfg/memoria"] = () => {
+  const rows = [["llm", "LLM"], ["embeddings", "Embeddings"], ["reranker", "Reranker"]].map(([k, icon]) => {
+    const p = M.providers[k] || {};
+    const egress = p.cloud ? '<span class="late">☁ egress</span>' : (p.local ? '<span class="dim">local</span>' : "");
+    const key = p.key_env ? (p.key_present ? '<span class="ok">chave ok</span>' : '<span class="late">sem chave</span>') : "";
+    return "<tr><td><b>" + icon + "</b></td><td>" + esc(p.label || "—") + "</td><td>" + esc(p.model || "—") + "</td><td>" + egress + " " + key + "</td></tr>";
+  }).join("");
+  const hw = (M.harnesses || []).map(h => "<tr><td>" + esc(h.label) + "</td><td>" +
+    (h.wired ? '<span class="ok">✓ cablado</span>' : (h.detected ? '<span class="dim">instalado, não cablado</span>' : '<span class="dim">não encontrado</span>')) + "</td></tr>").join("");
+  return '<div class="pagehead"><div><h1>Memória</h1><p class="sub">Provedores (LLM · embeddings · reranker) e harnesses — configuração viva: mude quando quiser; o passo inteiro do setup re-roda no terminal pelo comando do wizard.</p></div></div>' +
+    panel("Provedores", '<div class="twrap"><table><tr><th>Slot</th><th>Provedor</th><th>Modelo</th><th></th></tr>' + rows + "</table></div>" +
+      '<p class="note-s" style="margin:10px 2px">A chave mora no config/.env e nunca aparece aqui. Trocou embeddings? O comando rebuild da memória re-deriva os vetores do vault. Depois de trocar, recrie o container (compose com o env-file da config).</p>' +
+      '<button class="btn primary" data-provform>Trocar provedor</button>') +
+    panel("Harnesses — agentes de código", '<div class="twrap"><table><tr><th>Agente</th><th>Estado</th></tr>' + hw + "</table></div>" +
+      '<p class="note-s" style="margin:10px 2px">Cablar e verificar ficam no terminal (instalação oficial + verificação de conexão); o banco dos agentes nunca é tocado pelo rebuild da memória.</p>');
+};
 V.action = (q, id) => {
   const a = A[id]; if (!a) return empty("Ação não encontrada");
   return '<p class="crumb muted"><a href="#todo">← TODO</a></p><div class="pagehead"><div><h1>' + a.id + " · " + esc(a.title) + '</h1>' +
@@ -2525,9 +2588,10 @@ const TABS_EXEC = [["home", "Início"], ["todo", "TODO", () => M.counts.mine_ove
   ["outbox", "Mensagens", () => M.counts.outbox_pending], ["feedback", "Sugestões", () => (M.feedback || []).filter(f => f.status !== "criado").length || 0], ["health", "Saúde", () => (M.health || []).filter(c => c.level !== "ok").length]];
 const TABS_PF = [["pf/visao", "Visão geral"], ["pf/opps", "Oportunidades", () => PF.opportunities.filter(o => o.status !== "descartada").length],
   ["pf/matrix", "Matriz"], ["pf/procs", "Processos", () => PF.processes.filter(p => p.status === "ativo").length], ["pf/areas", "Áreas", () => PF.areas.length]];
-const FACES = [["execucao", "Execução", TABS_EXEC], ["portfolio", "Portfólio", TABS_PF]];
+const TABS_CFG = [["cfg/memoria", "Memória"], ["cfg/saude", "Saúde"]];
+const FACES = [["execucao", "Execução", TABS_EXEC], ["portfolio", "Portfólio", TABS_PF], ["configuracoes", "Configurações", TABS_CFG]];
 if (window.PF_ONLY) { FACES.length = 0; FACES.push(["portfolio", "Portfólio", TABS_PF]); }
-const faceOf = v => v.indexOf("pf/") === 0 ? "portfolio" : "execucao";
+const faceOf = v => v.indexOf("pf/") === 0 ? "portfolio" : (v.indexOf("cfg/") === 0 ? "configuracoes" : "execucao");
 const PARENT = {project: "projects", person: "people", action: "todo", decision: "decisions", "pf/opp": "pf/opps", "pf/area": "pf/areas"};
 function go(view, params){ const q = new URLSearchParams(Object.entries(params || {}).filter(([, v]) => v)).toString(); location.hash = view + (q ? "?" + q : ""); }
 function route(){

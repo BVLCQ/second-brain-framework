@@ -1,3 +1,19 @@
+## 2.9.0 — provedores da memória + face Configurações
+
+- **Provedores LLM · embeddings · reranker** (plano memory-providers.md): o wizard pergunta
+  os três slots (recomendados — Haiku/Sonnet cenário B, Qwen3-Embedding/Reranker-8B na Fireworks —
+  ou custom), o `brain memory providers show|set` grava sem wizard, e o compose injeta o
+  config/.env (`env_file`). Chave só no .env, nunca no config/view/painel.
+- **Face [Configurações] na TUI** (Execução · Portfólio · Configurações): Memória
+  (Provedores · Harnesses) e Instância (Saúde — que saiu de Execução › 1). Wizard da memória
+  abre num terminal suspenso (w); provedor muda por formulário (s).
+- **Painel**: mesma face Configurações — stack atual, harnesses e formulário de troca
+  (mesma linha da TUI/CLI, pela ponte do serve).
+- **Doctor**: provedor de nuvem sem chave = erro; conexão harness↔Hindsight verificada
+  (banco existe, recall responde, configs apontando para cá) com o comando que corrige.
+- Reranker local segue reprovado (benchmark 2026-11-07, §4.2 do plano): default `off`/RRF;
+  nuvem entra pelo menu, com o aviso de egress.
+
 # Novidades — Segundo Cérebro
 
 O que mudou em cada versão, em linguagem humana. Para atualizar: `brain update`

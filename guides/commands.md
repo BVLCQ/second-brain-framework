@@ -1028,6 +1028,10 @@ brain memory recall "o que foi decidido sobre o forno?"
 brain memory recall "prazos" --tags proj:PROJ-1,pessoa:marina-demo
 brain memory harness install claude-code cursor-cli   # memória dos agentes no mesmo servidor
 brain memory harness verify
+brain memory providers show                          # o stack atual (chave: presença, nunca valor)
+brain memory providers set embeddings --provider fireworks --key …   # escolha sem wizard
+brain memory providers set reranker --off            # volta à fusão RRF
+brain memory providers set llm --provider anthropic --key …         # recomendados por operação (cenário B)
 brain memory reflect "como está o projeto de churn?"
 brain memory rebuild
 brain memory setup --mode full      # troca de setup (full exige chave no .env + "ok" no wizard)

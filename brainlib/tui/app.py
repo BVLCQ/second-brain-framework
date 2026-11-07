@@ -37,6 +37,7 @@ from . import bridge, dates, rows
 from .modals import (AgentModal, ChoiceModal, ConfirmModal, Field, FilterModal, FormModal, FormSpec, PickerModal,
                      PickItem, TextModal)
 from .ask_keys import AskKeys
+from .config_keys import ConfigKeys
 from .feedback_keys import FeedbackKeys
 from .portfolio_keys import PortfolioKeys
 from .store import ACTION_SORTS, ACTION_VIEWS, FACE_START, FACES, PLAN_TAB_STATUS, SYS_OPS, Item, Store
@@ -89,21 +90,26 @@ CMD_CATALOG = [               # paleta de comandos: nome, linha da CLI, (face, p
     ("Nova decisão", 'brain decision add "…" --decided-by …', (0, 5, 0, "n")),
     ("Registrar entrega", 'brain delivery "…" --ref …', (0, 5, 1, "n")),
     ("Nova pessoa", 'brain person add "…" --id …', (0, 5, 2, "n")),
-    ("Saúde da instância", "brain doctor --online", (0, 1, 1, None)),
-    ("Regenerar views", "brain render", (0, 1, 3, "enter", "sys:render")),
-    ("Abrir painel HTML", "brain render --open", (0, 1, 3, "enter", "sys:open")),
-    ("Validar ledger", "brain validate", (0, 1, 3, "enter", "sys:validate")),
-    ("Backup do vault", "brain backup", (0, 1, 3, "enter", "sys:backup")),
-    ("Atualizar framework", "brain update --check", (0, 1, 3, "enter", "sys:update")),
-    ("Varredura upstream", "brain upstream scan", (0, 1, 3, "enter", "sys:upstream")),
-    ("Memória: sincronizar", "brain memory sync", (0, 1, 3, "enter", "sys:memory")),
-    ("Memória: perguntar", 'brain memory recall|reflect "…"', (0, 1, 3, "enter", "sys:recall")),
-    ("Memória: status", "brain memory status", (0, 1, 3, "enter", "sys:memstatus")),
-    ("Saúde online", "brain doctor --online", (0, 1, 3, "enter", "sys:doctor")),
-    ("Colher edições do dono", "brain sync", (0, 1, 3, "enter", "sys:sync")),
-    ("Backup: ver últimos", "brain backup --status", (0, 1, 3, "enter", "sys:backupst")),
-    ("Agendamento: ver", "brain schedule status", (0, 1, 3, "enter", "sys:schedst")),
-    ("Agendamento: remover", "brain schedule remove", (0, 1, 3, "enter", "sys:unsched")),
+    ("Saúde da instância", "brain doctor --online", (2, 2, 0, None)),
+    ("Regenerar views", "brain render", (0, 1, 2, "enter", "sys:render")),
+    ("Abrir painel HTML", "brain render --open", (0, 1, 2, "enter", "sys:open")),
+    ("Validar ledger", "brain validate", (0, 1, 2, "enter", "sys:validate")),
+    ("Backup do vault", "brain backup", (0, 1, 2, "enter", "sys:backup")),
+    ("Atualizar framework", "brain update --check", (0, 1, 2, "enter", "sys:update")),
+    ("Varredura upstream", "brain upstream scan", (0, 1, 2, "enter", "sys:upstream")),
+    ("Memória: sincronizar", "brain memory sync", (0, 1, 2, "enter", "sys:memory")),
+    ("Memória: perguntar", 'brain memory recall|reflect "…"', (0, 1, 2, "enter", "sys:recall")),
+    ("Memória: status", "brain memory status", (0, 1, 2, "enter", "sys:memstatus")),
+    ("Saúde online", "brain doctor --online", (2, 2, 0, "enter", "sys:doctor")),
+    ("Colher edições do dono", "brain sync", (0, 1, 2, "enter", "sys:sync")),
+    ("Backup: ver últimos", "brain backup --status", (0, 1, 2, "enter", "sys:backupst")),
+    ("Agendamento: ver", "brain schedule status", (0, 1, 2, "enter", "sys:schedst")),
+    ("Agendamento: remover", "brain schedule remove", (0, 1, 2, "enter", "sys:unsched")),
+    ("Provedores da memória", "brain memory providers show", (2, 1, 0, "s")),
+    ("Trocar provedor (formulário)", "brain memory providers set <slot> --provider …", (2, 1, 0, "s")),
+    ("Wizard da memória", "brain setup --only memoria", (2, 1, 0, "w", "sys:wizmem")),
+    ("Cablar harness", "brain memory harness install claude-code|cursor-cli|codex|hermes", (2, 1, 1, "i")),
+    ("Verificar harnesses", "brain memory harness verify", (2, 1, 1, "v")),
     ("Editar pessoa", "brain person update ID …", (0, 5, 2, "u")),
     ("Quem é…?", 'brain person resolve "…"', (0, 5, 2, "R")),
     ("Sincronizar o foco", "brain focus sync [--dry-run]", (0, 4, 3, "s")),
@@ -206,7 +212,7 @@ class Log(RichLog):
         self.app.goto_panel(6)
 
 
-class BrainApp(AskKeys, FeedbackKeys, PortfolioKeys, App):
+class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
     CSS_PATH = "tui.tcss"
     TITLE = "brain"
     ENABLE_COMMAND_PALETTE = False
@@ -488,6 +494,8 @@ class BrainApp(AskKeys, FeedbackKeys, PortfolioKeys, App):
         return t
 
     def _title(self, pid: int) -> Text:
+        if pid not in self.panels:                       # painel que a face atual não define
+            return Text(f" [{pid}] ", "dim")
         name, tabs = self.panels[pid]
         t = Text.assemble((f" [{pid}] ", "bold"), (name, "bold"))
         spans: list[tuple[int, int, int]] = []
@@ -512,8 +520,11 @@ class BrainApp(AskKeys, FeedbackKeys, PortfolioKeys, App):
         return t
 
     def _badge(self, pid: int, i: int) -> str:
-        if self.store is None or self.face != 0:
+        if self.store is None or self.face not in (0, 2):
             return ""
+        if self.face == 2:
+            n = sum(1 for h in self.store.health if h["level"] != "ok") if (pid, i) == (2, 0) else 0
+            return str(n) if n else ""
         c, m = self.store.counts, self.store.m
         n = 0
         if pid == 4:
@@ -533,8 +544,6 @@ class BrainApp(AskKeys, FeedbackKeys, PortfolioKeys, App):
         if pid == 6 and i == 1:
             n = sum(1 for f in self.store.brain.state.feedbacks.values() if f.status in ("pendente", "falhou"))
         if pid == 1 and i == 1:
-            n = sum(1 for h in self.store.health if h["level"] != "ok")
-        if pid == 1 and i == 2:
             n = sum(1 for x in self.store.sources if x["failures"])
         return str(n) if n else ""
 
@@ -545,11 +554,12 @@ class BrainApp(AskKeys, FeedbackKeys, PortfolioKeys, App):
         fill = self.fill_panel()
         for pid in (1, 2, 3, 4, 5):
             panel = self.query_one(f"#p{pid}", ListPanel)
-            panel.set_class(pid == self.p, "-on")
+            live = pid in self.panels                     # face pode não definir todos os painéis (Configurações: 1-2)
+            panel.set_class(live and pid == self.p, "-on")
             compact = self.face == 0 and pid == 1 and self.tab[1] == 0
-            panel.set_class(pid == fill and not compact, "-fill")
+            panel.set_class(live and pid == fill and not compact, "-fill")
             panel.border_title = self._title(pid)
-            n = len(self.items(pid)) if self.store and not compact else 0
+            n = len(self.items(pid)) if self.store and live and not compact else 0
             panel.border_subtitle = f" {self.sel_index(pid) + 1} de {n} " if n else ""
             panel.refresh(layout=True)
         self.query_one("#detail", Static).update(rows.detail(self.store, self.cur()) if self.store else Text(""))
@@ -890,11 +900,6 @@ class BrainApp(AskKeys, FeedbackKeys, PortfolioKeys, App):
                 add("b", "brief", lambda: self.agent_brief(), agent=True)
                 add("o", "painel HTML", lambda: self.run_sys("sys:open"))
             elif t == 1:
-                if w(it and it.extra.get("fix")):
-                    add("f", "corrigir", self.fix_doc)
-                add("o", "testar online", lambda: self.run_sys("sys:doctor"))
-                add("enter", "ampliar", self.toggle_zoom)
-            elif t == 2:
                 add("n", "adicionar", self.f_source_add)
                 if w(it and it.data["in_watch"]):
                     add("e", "editar", self.f_source_edit)
@@ -1903,6 +1908,12 @@ class BrainApp(AskKeys, FeedbackKeys, PortfolioKeys, App):
         if op.get("form") == "memory":
             self.f_memory()
             return
+        if op.get("external"):
+            import sys as _sys
+            from .bridge import FRAMEWORK
+            self.log_line(f"$ brain {' '.join(op['args'])}  (terminal interativo)", "cyan")
+            self.external([_sys.executable, str(FRAMEWORK / "brain"), *op["args"]])
+            return
         args = op["apply"] if apply else op["args"]
         if op.get("info"):
             self.log_line("$ brain mcp  (fica ouvindo em stdio; registre-o na outra IA: claude mcp add segundo-cerebro -- brain mcp)", "dim")
@@ -2115,7 +2126,7 @@ class BrainApp(AskKeys, FeedbackKeys, PortfolioKeys, App):
         return out | self._extras(v["other"])
 
     def _source_after(self, getkey) -> None:
-        self.p, self.tab[1] = 1, 2
+        self.p, self.tab[1] = 1, 1                     # Fontes (aba 1 desde a face Configurações)
         self.redraw()
         k = getkey()
         if k:

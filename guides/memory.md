@@ -180,6 +180,33 @@ brain memory harness verify                           # banco existe? recall pin
 - O sub-passo "Harnesses" do `brain setup --only memoria` faz tudo isso perguntando;
   o doctor avisa se o banco dos agentes sumir do servidor.
 
+## Provedores — LLM · embeddings · reranker (plano memory-providers.md)
+
+Três slots independentes, escolhidos no wizard e re-editáveis a qualquer momento
+(configuração é seção viva, não "setup uma vez"):
+
+| Slot | Default | Nuvem recomendada | Onde muda |
+|---|---|---|---|
+| **LLM** (só `full`) | — | Anthropic (Haiku extração/consolidação · Sonnet mental models — cenário B) · Fireworks · Z.ai · custom | wizard · `brain memory providers set llm …` · TUI Configurações · painel |
+| **Embeddings** | local — LM Studio bge-m3 (zero egress) | Fireworks `qwen3-embedding-8b` @1536 · OpenAI · Cohere · custom | idem |
+| **Reranker** | off — fusão RRF (veredito 2026-11-07: local reprovado no gate de 400 ms) | Fireworks `qwen3-reranker-8b` (top-50) · Cohere · ZeroEntropy · OpenRouter · custom | idem |
+
+Regras do desenho:
+
+- **A escolha mora no `[memory]`** (`llm_provider`, `embeddings_provider`, `reranker_provider`…);
+  **a chave mora no `config/.env`** (0600) e nunca volta em output, view ou painel.
+- **Egress é dito na tela**: qualquer provedor de nuvem manda texto do vault para fora
+  (LLM para extrair, embeddings para vetorizar, reranker para ranquear) — o wizard avisa
+  em cada escolha e o doctor narra (`cloud_embeddings`/`cloud_reranker`/`cloud_llm`).
+- **Compose**: o `env_file: ../config/.env` injeta as chaves `HINDSIGHT_API_*` no container;
+  os cinco campos do stack local são fallback de fábrica. Trocou provedor? Recrie com
+  `--env-file config/.env`. **Trocou embeddings?** Vetores antigos ficam incompatíveis —
+  `brain memory rebuild` re-deriva tudo do vault.
+- **Doctor**: provedor de nuvem sem chave = erro; harness cablado sem conexão (banco,
+  recall ping, config apontando pra cá) = aviso com o comando que corrige.
+- `jina-mlx` existe no servidor mas **fica fora do menu** — benchmark 2026-11-07 reprovou
+  (§4.2 do plano da memória).
+
 ## Migração de instâncias antigas (0.10.x · dois bancos · sem harnesses)
 
 1. **Atualize o servidor** — `guides/memory.md` § *Atualizar o Hindsight de versão*

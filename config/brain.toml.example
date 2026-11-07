@@ -85,6 +85,22 @@ raw_awaiting_dump = "degraded"  # embed: entra com contexto degradado · full: "
 degraded_after_days = 7          # embed: RAW sem /dump espera N dias antes de entrar degradado
 exclude_types = ["connectors", "github"]   # tipos do RAW que nunca vão ao banco
 
+# Provedores (plano memory-providers.md) — configuráveis no wizard (`brain setup --only memoria`),
+# no CLI (`brain memory providers set …`) e na face Configurações da TUI/painel.
+# A ESCOLHA mora aqui; a CHAVE mora no config/.env (nunca neste arquivo).
+# llm_provider = ""               # "" = não escolhido · anthropic|openai|fireworks|zai|lmstudio|custom (só full)
+# llm_models = ""                 # "retain=…,consolidation=…" por operação (vazio = recomendados do provedor)
+# embeddings_provider = "local"   # local (LM Studio, zero egress) | fireworks | openai | cohere | custom
+# embeddings_model = "text-embedding-bge-m3"
+# embeddings_base_url = ""
+# embeddings_dimensions = 0       # 0 = não força (fireworks MRL usa 1536)
+# cloud_embeddings = false        # true = embeddings fora da máquina (registro de egresso)
+# reranker_provider = "off"       # off = fusão RRF (veredito 2026-11-07) | fireworks | cohere | zeroentropy | openrouter | custom
+# reranker_model = ""
+# reranker_base_url = ""
+# reranker_max_candidates = 0
+# cloud_reranker = false          # true = pergunta+candidatos vão a uma API externa
+
 [runner]
 agent = "auto"                  # auto | cursor | claude | codex | agy | gemini | none
 command = ""                    # se preenchido, substitui o preset (use {prompt})

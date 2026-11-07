@@ -1032,10 +1032,17 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(app.items(3))                                              # o demo traz oportunidades
             await pilot.press("5", "enter")                          # Registro › Áreas, detalhe ampliado
             self.assertTrue(app.zoom)
+            await pilot.press("tab")                                 # Configurações: Memória › Provedores
+            self.assertEqual((app.face, app.p), (2, 1))
+            self.assertIn("[Configurações]", self.text_of(app.query_one("#faces")))
+            self.assertIn("Memória", str(app.query_one("#p1").border_title))
+            self.assertEqual([i.id for i in app.items(1)], ["prov:llm", "prov:embeddings", "prov:reranker"])
             await pilot.press("tab")                                 # volta à Execução (carrossel)
             self.assertEqual((app.face, app.p, app.tab[2], app.cur().id), (0, 2, tab, sel))
             self.assertFalse(app.zoom)
-            await pilot.press("shift+tab")                           # para trás: também gira (0 → 1)
+            await pilot.press("shift+tab")                           # para trás: 0 → 2 → 1 → 0
+            self.assertEqual((app.face, app.p, app.zoom), (2, 1, False))
+            await pilot.press("shift+tab")
             self.assertEqual((app.face, app.p, app.tab[5], app.zoom), (1, 5, 0, True))
             await pilot.press("shift+tab")
             self.assertEqual(app.face, 0)
@@ -1050,6 +1057,8 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             app.redraw()
             await pilot.press("tab")
             self.assertEqual((app.filt, app.zoom), (None, False))
+            await pilot.press("tab")                                # face 2 também não herda o filtro da Execução
+            self.assertEqual((app.face, app.filt, app.zoom), (2, None, False))
             await pilot.press("tab")
             self.assertEqual((app.filt, app.zoom), ((2, 0, "bancada"), True))
             await pilot.press("escape", "escape")                    # esc desfaz zoom e depois o filtro
@@ -1777,8 +1786,8 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
         app = self.app()
         async with app.run_test(size=(140, 44)) as pilot:
             await pilot.pause(0.4)
-            await pilot.press("1", "]", "]")
-            self.assertEqual((app.p, app.tab[1]), (1, 2))
+            await pilot.press("1", "]")
+            self.assertEqual((app.p, app.tab[1]), (1, 1))
             self.assertEqual([i.id for i in app.items(1)], ["src:slack-dados", "src:gcal-14d"])
             await pilot.press("n")                                  # adicionar
             await pilot.pause(0.3)
@@ -1812,7 +1821,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
         app = self.app()
         async with app.run_test(size=(140, 44)) as pilot:
             await pilot.pause(0.4)
-            await pilot.press("1", "]", "]", "n")
+            await pilot.press("1", "]", "n")
             await pilot.pause(0.3)
             await self.fill(pilot, key="Slack Dados", kind="slack")           # key inválida
             await pilot.press("enter")
@@ -1832,7 +1841,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
         app = self.app()
         async with app.run_test(size=(140, 60)) as pilot:
             await pilot.pause(0.4)
-            await pilot.press("1", "]", "]", "n")
+            await pilot.press("1", "]", "n")
             await pilot.pause(0.3)
             shown = lambda: {b.id[2:] for b in app.screen.query(".fbox") if b.display}
             self.assertEqual(shown(), {"key", "note", "kind", "query", "window", "other"})       # gmail
@@ -1882,7 +1891,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
         async with app.run_test(size=(140, 44)) as pilot:
             await pilot.pause(0.4)
             app.jump_source("avulsa-1")
-            await pilot.press("1", "]", "]")
+            await pilot.press("1", "]")
             app.jump_source("avulsa-1")
             self.assertFalse(app.cur().data["in_watch"])
             self.assertIn("w", {k.k for k in app.ctx_keys()})
@@ -2363,16 +2372,17 @@ class CoverageTest(unittest.TestCase):
         "action not-dup",     # julgamento do agente sobre um par de candidatas; o dono decide pela proposta
         "feedback pushed", "feedback failed",   # recuperação manual (o push morreu depois de criar) — agente/terminal
     }
-    NOT_IN_TUI = {"demo", "tui", "migrate ids", "serve", "memory cost", "memory harness", "setup",
+    NOT_IN_TUI = {"demo", "tui", "migrate ids", "serve", "memory cost",
                   "query actions", "query decisions", "query person", "query entity", "query sql",
-                  "index rebuild", "index update", "index status", "route", "memory dossier", "memory models", "memory eval"}   # query/index/route/dossier = ferramenta do agente + doctor   # migração única no terminal; serve é a ponte do painel HTML; custo = doctor/CLI; setup = Fase 2 do plano (face própria na TUI)
+                  "index rebuild", "index update", "index status", "route", "memory dossier", "memory models", "memory eval"}   # query/index/route/dossier = ferramenta do agente + doctor   # migração única no terminal; serve é a ponte do painel HTML; custo = doctor/CLI
+    # setup e memory harness SAÍRAM daqui: a face Configurações emite ambos (wizard interativo via terminal suspenso; install/verify dos harnesses)
     DYNAMIC = {"memory recall", "memory reflect"}      # o formulário "Memória: perguntar" monta o subcomando
 
     def test_every_cli_subcommand_is_accounted_for(self):
         import re
         from brainlib import cli
         src = "".join((ROOT / "brainlib" / "tui" / f).read_text(encoding="utf-8")
-                      for f in ("app.py", "store.py", "portfolio_keys.py", "ask_keys.py", "feedback_keys.py"))
+                      for f in ("app.py", "store.py", "portfolio_keys.py", "config_keys.py", "ask_keys.py", "feedback_keys.py"))
         sub = next(a for a in cli.build_parser()._actions if a.__class__.__name__ == "_SubParsersAction")
         uncovered = []
         for name, p in sub.choices.items():

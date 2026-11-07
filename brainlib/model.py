@@ -304,6 +304,8 @@ class ModelBuilder:
                           "pushed": _iso(f.pushed), "synced": _iso(f.synced)}
                          for f in sorted(st.feedbacks.values(), key=lambda f: f.id, reverse=True)],
             "portfolio": portfolio.build(st, plan, today),
+            "providers": _provider_stack(self.b),
+            "harnesses": _harness_list(self.b),
             "questions": [{"id": q.id, "text": q.text, "kind": q.kind, "status": q.status, "options": q.options,
                            "context": q.context, "run": q.run, "answer": q.answer, "asked": _iso(q.asked)}
                           for q in sorted(st.questions.values(), key=lambda q: q.id) if q.status in ("aberta", "respondida")],
@@ -513,3 +515,20 @@ class ModelBuilder:
 
 def build(brain) -> dict:
     return ModelBuilder(brain).build()
+
+
+def _provider_stack(brain) -> dict:
+    """Stack de provedores da memória para o painel Configurações (offline; chave = só presença)."""
+    try:
+        from . import providers as _prov
+        return _prov.stack(brain)
+    except Exception:                                       # noqa: BLE001 — painel não pode quebrar por config
+        return {}
+
+
+def _harness_list(brain) -> list:
+    from . import harness as _h
+    wired = brain.inst.cfg["memory"].get("harnesses") or []
+    det = _h.detect()
+    return [{"name": n, "label": _h.AGENTS.get(n, "Hermes"), "wired": n in wired,
+             "detected": bool(det.get(n))} for n in ("claude-code", "cursor-cli", "codex", "hermes")]

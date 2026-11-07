@@ -26,6 +26,7 @@ ALLOWED: dict[str, set[str] | None] = {
     "action": {"open", "update", "close", "reopen", "merge", "drop"},
     "ask": {"answer", "drop"},
     "focus": {"approve", "apply", "plan", "sync"},
+    "memory": {"providers"},                     # face Configurações: troca de provedor (wizard no terminal)
     "outbox": {"draft", "approve", "cancel"},
     "decision": {"add"},
     "delivery": None,                                   # posicional, sem subcomando
