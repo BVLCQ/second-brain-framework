@@ -461,6 +461,57 @@ def _st_memoria(brain) -> str:
     return "off" if m == "none" else "done"
 
 
+def _providers_step(brain, ui, slots: list[str]) -> bool:
+    """Escolha de provedores por slot (plano memory-providers.md) — wizard e re-edição usam o mesmo
+    caminho do `brain memory providers set`. Devolve True se o .env mudou (container a recriar)."""
+    from . import providers as prov
+    st = prov.stack(brain)
+    env_keys = config.load_env(brain.inst)
+    labels = {"llm": "LLM (extração · consolidação · mental models)",
+              "embeddings": "embeddings", "reranker": "reranker"}
+    changed = False
+    for slot in slots:
+        cur = st[slot]["provider"]
+        reg = prov.PROVIDERS[slot]
+        opts = list(reg)
+        default = cur if cur in opts else ("off" if slot == "reranker" else
+                                           "local" if slot == "embeddings" else "anthropic")
+        p = ui.choice(f"Provedor de {labels[slot]}", opts, default)
+        info = reg[p]
+        if p in ("local", "off"):
+            res = prov.set_slot(brain, slot, p)
+            ui.say(f"✓ {slot}: {info['label']}")
+            changed = changed or bool(res["env"])
+            continue
+        if slot != "llm":
+            ui.say(f"  ☁ nuvem: o texto do vault vai à API do provedor para "
+                   f"{'vetorizar' if slot == 'embeddings' else 'reranquear'} — mesmo gate de egress do plano §4.3")
+        key_env = info.get("key_env", "")
+        key = ""
+        if key_env and not env_keys.get(key_env):
+            key = ui.secret(f"API key ({key_env})")
+        rec = info.get("models") or (info.get("model") and {"default": info["model"]}) or {}
+        models, model, base_url = None, "", ""
+        if slot == "llm" and rec and ui.confirm("Usar os modelos recomendados por operação (cenário B do plano)?", True):
+            models = dict(rec)
+        elif slot == "llm":
+            model = ui.ask("Modelo default (vazio = padrão do provedor)", info.get("model", ""))
+            cheap = ui.ask("Modelo BARATO p/ extração+consolidação (vazio = default)", "")
+            if cheap:
+                models = {"retain": cheap, "consolidation": cheap}
+        elif p == "custom":
+            model = ui.ask("Modelo", "")
+        if p == "custom" or (slot == "llm" and p in ("zai", "fireworks")):
+            base_url = ui.ask("Base URL", info.get("base_url", ""))
+        res = prov.set_slot(brain, slot, p, model=model, models=models, base_url=base_url, key=key)
+        ui.say(f"✓ {slot} → {res['label']}" + (" (chave gravada no config/.env)" if key else ""))
+        if res["rebuild_needed"]:
+            ui.say("⚠ embeddings mudaram: vetores antigos são incompatíveis — `brain memory rebuild` "
+                   "re-deriva tudo do vault depois do wizard")
+        changed = changed or bool(res["env"])
+    return changed
+
+
 def _run_memoria(brain, ui, mode_hint: str | None = None) -> None:
     from . import memory
     mem = brain.inst.cfg["memory"]
@@ -475,15 +526,32 @@ def _run_memoria(brain, ui, mode_hint: str | None = None) -> None:
                "(orbstack.dev) e rode `brain setup --only memoria` de novo. Os demais passos seguem.")
         if not ui.interactive:
             return
-    elif hindsight_health(url) is None:
+    if mode == "full":
+        gate = ui.ask('Modo full: texto do vault (reuniões, Slack, documentos) irá para a API de LLM '
+                      'com a SUA chave (plano da memória §4.3). Digite "ok" para aceitar', "")
+        if gate.strip().lower() != "ok":
+            ui.say("✗ sem o \"ok\" literal o modo full não é gravado — nada mudou")
+            return
+    env_file = brain.inst.env_file if brain.inst.env_file.exists() else None
+    slots = ["llm", "embeddings", "reranker"] if mode == "full" else ["embeddings", "reranker"]
+    env_changed = _providers_step(brain, ui, slots)
+    mem = brain.inst.cfg["memory"]                       # set_slot recarregou a config
+    if hindsight_health(url) is None:
         ui.say("subindo o Hindsight (docker compose)…")
-        if compose_up(mode, ui, env_file=brain.inst.env_file if mode == "full" else None) \
-                and not wait_hindsight(url, 120):
+        if compose_up(mode, ui, env_file=env_file) and not wait_hindsight(url, 120):
             ui.say(f"✗ Hindsight não respondeu em {url} — veja `docker logs hindsight`")
             return
         ui.say("✓ Hindsight no ar")
+    elif env_changed:
+        ui.say("recriando o Hindsight com os provedores do config/.env…")
+        if compose_up(mode, ui, env_file=env_file) and not wait_hindsight(url, 120):
+            ui.say("⚠ recriação falhou — rode você: docker compose -f services/compose.yaml "
+                   + ("-f services/compose.full.yaml " if mode == "full" else "")
+                   + "--env-file config/.env up -d")
+        else:
+            ui.say("✓ Hindsight recriado com os provedores escolhidos")
     if mode == "embed":
-        if not lmstudio_up():
+        if mem["embeddings_provider"] == "local" and not lmstudio_up():
             ui.say("⚠ LM Studio não responde em :1234 — suba-o com o modelo text-embedding-bge-m3 "
                    "(guides/memory.md); o sync só vai funcionar com ele no ar")
         memory._apply_mode(brain, "embed")
@@ -493,31 +561,6 @@ def _run_memoria(brain, ui, mode_hint: str | None = None) -> None:
                          cwd=brain.inst.root, timeout=180)
         ui.say(("✓ sync de validação: " + out.splitlines()[-1]) if code == 0 else f"⚠ sync de validação: {out[:200]}")
     else:
-        gate = ui.ask('Modo full: texto do vault (reuniões, Slack, documentos) irá para a API de LLM '
-                      'com a SUA chave (plano da memória §4.3). Digite "ok" para aceitar', "")
-        if gate.strip().lower() != "ok":
-            ui.say("✗ sem o \"ok\" literal o modo full não é gravado — nada mudou")
-            return
-        env = config.load_env(brain.inst)
-        provider = ui.ask("Provider (anthropic | openai | outro compatível | lmstudio)",
-                          "anthropic")
-        model = ui.ask("Modelo default (vazio = padrão do provider)", "")
-        key = env.get("HINDSIGHT_API_LLM_API_KEY") or ("" if provider == "lmstudio" else ui.secret("API key"))
-        updates = {"HINDSIGHT_API_LLM_PROVIDER": provider}
-        if model:
-            updates["HINDSIGHT_API_LLM_MODEL"] = model
-        if key:
-            updates["HINDSIGHT_API_LLM_API_KEY"] = key
-        cheap = ui.ask("Modelo BARATO p/ extração+consolidação (vazio = default)", "")
-        if cheap:
-            updates["HINDSIGHT_API_RETAIN_LLM_MODEL"] = cheap
-            updates["HINDSIGHT_API_CONSOLIDATION_LLM_MODEL"] = cheap
-        set_env(brain.inst, updates)
-        ui.say("✓ chaves gravadas no config/.env (0600, não impressas)")
-        if hindsight_health(url) is None:
-            if compose_up("full", ui, env_file=brain.inst.env_file) and not wait_hindsight(url, 120):
-                ui.say(f"✗ Hindsight não respondeu em {url} — veja `docker logs hindsight`")
-                return
         memory._apply_mode(brain, "full")
         memory.setup(brain)
         ui.say(f"✓ memória full pronta (banco único {mem['bank']}) — valide o custo com `brain memory cost`")

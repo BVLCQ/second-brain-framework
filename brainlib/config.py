@@ -56,6 +56,19 @@ DEFAULTS: dict = {
         "degraded_after_days": 7,          # embed: RAW sem /dump entra degradado após N dias (0 = envia já)
         "exclude_types": ["connectors", "github"],   # tipos do RAW que não vão ao banco (§3.2 do plano)
         "entity_types": {"pessoa": "PERSON", "projeto": "PROJECT", "area": "ORG"},
+        # provedores (plano memory-providers.md): a ESCOLHA mora aqui; a chave mora no config/.env
+        "llm_provider": "",                    # "" = ainda não escolhido · anthropic|openai|fireworks|zai|lmstudio|custom (só full)
+        "llm_models": "",                      # "retain=…,consolidation=…" por operação (vazio = recomendados do provedor)
+        "embeddings_provider": "local",        # local (LM Studio, zero egress) | fireworks | openai | cohere | custom
+        "embeddings_model": "text-embedding-bge-m3",
+        "embeddings_base_url": "",
+        "embeddings_dimensions": 0,            # 0 = não força (fireworks MRL usa 1536)
+        "cloud_embeddings": False,             # true = embeddings fora da máquina (registro de egresso)
+        "reranker_provider": "off",            # off = fusão RRF (veredito 2026-11-07) | fireworks | cohere | zeroentropy | openrouter | custom
+        "reranker_model": "",
+        "reranker_base_url": "",
+        "reranker_max_candidates": 0,
+        "cloud_reranker": False,               # true = pergunta+candidatos vão a uma API externa
     },
     "runner": {"agent": "auto", "command": "", "prompt": "/update", "timeout_min": 45,
                "model": "claude-haiku-5-5",   # modelo do claude no noturno ("" = padrão do claude); só vale no preset claude

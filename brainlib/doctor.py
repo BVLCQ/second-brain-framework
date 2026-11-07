@@ -106,17 +106,40 @@ def checks(brain, online: bool = False) -> list[dict]:
                 pass
         status = memory.status(brain, online=online)
         out.append(_c(status["level"], "memória", status["detail"]))
+        from . import providers as _prov
+        for slot, s in _prov.stack(brain).items():
+            if s["cloud"] and s["key_env"] and not s["key_present"]:
+                out.append(_c("error", "memória",
+                              f"{slot} em nuvem ({s['provider']}) sem a chave no config/.env ({s['key_env']}) — "
+                              f"`brain memory providers set {slot} --provider {s['provider']} --key …`"))
         harnesses = cfg["memory"].get("harnesses") or []
-        if harnesses and online:
+        if harnesses:
+            problems = []
+            v = None
             try:
                 from . import harness as _harness
-                ids = {b.get("bank_id") for b in memory.client(brain).banks().get("banks", [])}
-                bank = cfg["memory"]["harness_bank"]
-                if bank not in ids:
-                    out.append(_c("warn", "memória", f"banco dos harnesses '{bank}' não existe no servidor "
-                                 f"({', '.join(harnesses)}) — `brain memory harness verify`"))
+                v = _harness.verify(brain, memory.client(brain))
             except util.BrainError as e:
-                out.append(_c("warn", "memória", f"harnesses: {e}"))
+                problems.append(f"sem conexão ao servidor ({e})")
+            else:
+                if not v["bank_exists"]:
+                    problems.append(f"banco '{v['bank']}' não existe no servidor — criado no primeiro uso; "
+                                    f"`brain memory harness install`")
+                elif not v["ping"]:
+                    problems.append(f"banco '{v['bank']}' não responde ao recall — `docker logs hindsight`")
+                for name in harnesses:
+                    if name == "hermes" and not v["hermes_config"]:
+                        problems.append("Hermes: config não aponta para este servidor — "
+                                        "`brain memory harness install hermes`")
+                    elif name != "hermes" and not v["coding_agent"]:
+                        problems.append(f"{name}: config do agente não aponta para este servidor — "
+                                        f"`brain memory harness install {name}`")
+            if problems:
+                out.append(_c("warn", "harnesses", "; ".join(problems[:3])
+                              + (" …" if len(problems) > 3 else "")))
+            else:
+                out.append(_c("ok", "harnesses",
+                              f"{len(harnesses)} cablado(s) · banco '{(v or {}).get('bank', '?')}' responde ao recall"))
         if status.get("mode") == "full":
             # régua do full: chave presente; gasto do mês como INFORMAÇÃO (sem teto — decisão do dono)
             if not any(k.startswith("HINDSIGHT_API") and k.endswith("API_KEY") and v for k, v in env.items()):

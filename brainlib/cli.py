@@ -1395,6 +1395,22 @@ def build_parser() -> argparse.ArgumentParser:
     xi.add_argument("agents", nargs="+", choices=["claude-code", "cursor-cli", "codex", "hermes"])
     xv = hsub.add_parser("verify", help="banco dos agentes, recall ping e configs")
     xv.add_argument("--json", action="store_true")
+    xp = ms.add_parser("providers", help="provedores da memória — LLM · embeddings · reranker "
+                                         "(plano memory-providers.md); configurável também no wizard")
+    ps = xp.add_subparsers(dest="pcmd", required=True)
+    pw = ps.add_parser("show", help="o stack atual (chave: presença, nunca valor)")
+    pw.add_argument("--json", action="store_true")
+    pv = ps.add_parser("set", help="grava a escolha (config/.env + [memory]); recrie o container para aplicar")
+    pv.add_argument("slot", choices=["llm", "embeddings", "reranker"])
+    pv.add_argument("--provider", required=True,
+                    help="llm: anthropic|openai|fireworks|zai|lmstudio|custom · embeddings: local|fireworks|openai|cohere|custom "
+                         "· reranker: off|fireworks|cohere|zeroentropy|openrouter|custom")
+    pv.add_argument("--model", help="modelo (default do provedor quando omitido — exceto llm custom/openai)")
+    pv.add_argument("--models", help="llm por operação: retain=…,consolidation=…,mental_models=…,reflect=…,default=…")
+    pv.add_argument("--base-url", help="endpoint (custom / openai-wire)")
+    pv.add_argument("--dimensions", type=int, default=0, help="embeddings: dimensão de saída (ex.: 1536 MRL)")
+    pv.add_argument("--candidates", type=int, default=0, help="reranker: top-N candidatos (default do provedor)")
+    pv.add_argument("--key", help="chave da API — vai ao config/.env (0600), nunca volta em output")
     x = ms.add_parser("eval", help="roda o conjunto-ouro contra as pernas do sistema (Fase 0)")
     x.add_argument("--gold", help="caminho do gold (padrão vault/eval/memory-gold.jsonl)")
     x.add_argument("--route", choices=["on", "off", "ledger"], default="on",

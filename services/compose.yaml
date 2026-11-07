@@ -34,17 +34,23 @@ services:
       # consolidação em andamento ficava presa em "processing" para sempre.
       HINDSIGHT_API_WORKER_ID: hindsight
       # Idiomas usados aqui: pt-BR, es, en — modelos multilíngues.
-      # Embeddings bge-m3 (1024 dims) servidos pelo LM Studio (Metal), não pela CPU do container.
-      HINDSIGHT_API_EMBEDDINGS_PROVIDER: openai
-      HINDSIGHT_API_EMBEDDINGS_OPENAI_BASE_URL: http://host.docker.internal:1234/v1
-      HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL: text-embedding-bge-m3
-      HINDSIGHT_API_EMBEDDINGS_OPENAI_API_KEY: lm-studio
-      # Reranker desligado (fusão RRF dos retrievers). Benchmark no M4 Pro, out/2026, pt/es/en:
-      #   bge-m3 sozinho: 91,7% top-1 nas perguntas difíceis, ~15 ms por consulta
-      #   + bge-reranker-v2-m3 (CPU do container): 95,8%, mas 1,6 s @30 e 15 s @300 candidatos
-      #   rerankers menores (mMiniLM, Qwen3-Reranker-0.6B) pioraram o acerto.
-      # Container não usa a GPU do Mac; reranker neural só valeria servido no host com Metal.
-      HINDSIGHT_API_RERANKER_PROVIDER: rrf
+      # Provedores (plano memory-providers.md): o wizard e o `brain memory providers set` gravam no
+      # config/.env; o bloco env_file abaixo injeta TODAS as chaves HINDSIGHT_API_* dele no container
+      # (dims, candidatos, modelos por operação, wire do reranker…). Os cinco campos abaixo são o
+      # stack local de fábrica: valem quando o .env não define — `environment:` vence `env_file:`,
+      # então recrie SEMPRE com --env-file config/.env depois de trocar de provedor.
+      HINDSIGHT_API_EMBEDDINGS_PROVIDER: ${HINDSIGHT_API_EMBEDDINGS_PROVIDER:-openai}
+      HINDSIGHT_API_EMBEDDINGS_OPENAI_BASE_URL: ${HINDSIGHT_API_EMBEDDINGS_OPENAI_BASE_URL:-http://host.docker.internal:1234/v1}
+      HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL: ${HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL:-text-embedding-bge-m3}
+      HINDSIGHT_API_EMBEDDINGS_OPENAI_API_KEY: ${HINDSIGHT_API_EMBEDDINGS_OPENAI_API_KEY:-lm-studio}
+      # Reranker desligado por padrão = fusão RRF (benchmark 2026-11-07: local reprovado no gate de
+      # 400 ms; nuvem — Fireworks Qwen3-Reranker-8B, Cohere, ZeroEntropy… — entra pelo config/.env).
+      HINDSIGHT_API_RERANKER_PROVIDER: ${HINDSIGHT_API_RERANKER_PROVIDER:-rrf}
+    env_file:
+      # config da instância (chaves de provedor) — relativo a services/: ../config/.env.
+      # required: false: instância sem .env sobe com o stack local de fábrica.
+      - path: ../config/.env
+        required: false
     volumes:
       - hindsight-data:/home/hindsight/.pg0
     healthcheck:

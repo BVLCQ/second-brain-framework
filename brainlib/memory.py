@@ -953,7 +953,7 @@ def cli(args, brain) -> None:
     c = args.mcmd
     mem = brain.inst.cfg["memory"]
     # --mode é justamente o que liga o engine: setup com --mode passa mesmo com engine = "none"
-    if mem["engine"] != "hindsight" and c not in ("status", "cost", "dossier", "eval") \
+    if mem["engine"] != "hindsight" and c not in ("status", "cost", "dossier", "eval", "providers") \
             and not (c == "setup" and getattr(args, "mode", None)):
         raise util.BrainError("memória desligada: ponha [memory] engine = \"hindsight\" no config/brain.toml "
                               "depois de subir o servidor (guides/memory.md)", code=1)
@@ -963,6 +963,9 @@ def cli(args, brain) -> None:
             brain.reload()
         banks = setup(brain)
         print(f"✓ bancos prontos ({mode(brain.inst.cfg['memory'])}): {', '.join(banks)}")
+    elif c == "providers":
+        from . import providers
+        providers.cli(args, brain)
     elif c == "eval":
         from . import memory_eval
         memory_eval.cli(args, brain)
