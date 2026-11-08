@@ -933,7 +933,8 @@ class DashboardAssetTests(unittest.TestCase):
     NOT_IN_PANEL = {      # ciclo de vida do framework e config: terminal/TUI (o painel é de uso diário)
         "demo", "tui", "serve", "migrate ids", "update", "upstream hook", "upstream scan", "backup", "mcp",
         "nightly", "schedule", "validate", "sync", "memory setup", "memory rebuild", "memory sync",
-        "memory status", "memory cost", "memory harness", "agent allow", "watch add", "watch edit", "watch remove", "doc link", "doc unlink",
+        "memory status", "memory cost", "agent allow", "watch add", "watch edit", "watch remove", "doc link", "doc unlink",
+        # (memory harness saiu daqui: a face Configurações do painel emite install/verify)
         "note edit", "setup",                          # wizard do dono: terminal primeiro (TUI/painel = Fases 2–3 do plano)
         "query actions", "query decisions", "query person", "query entity", "query sql",   # ferramenta do agente/MCP (brain_query)
         "index rebuild", "index update", "index status",          # ciclo de vida: terminal (doctor avisa)

@@ -671,8 +671,19 @@ let dragId = null, lastMoved = null;
 //    um select por slot, "manter" nos que não mudam — o preview monta só a linha do slot escolhido) ──
 function wireCfgMemoria(){
   const b = document.querySelector("[data-provform]");
-  if (!b) return;
-  b.onclick = () => formDialog({
+  if (b) b.onclick = () => formDialog(provFormSpec());
+  document.querySelectorAll("#view [data-hw]").forEach(btn => {
+    btn.onclick = () => runCommand("brain memory harness install " + btn.dataset.hw, m => {
+      const x = (m.harnesses || []).find(y => y.name === btn.dataset.hw);
+      if (x) x.wired = true;                       // otimista: o refresh da ponta confirma
+    });
+  });
+  const v = document.querySelector("[data-hwverify]");
+  if (v) v.onclick = () => runCommand("brain memory harness verify", () => {});
+}
+
+function provFormSpec(){
+  return {
     title: "Trocar provedor da memória",
     sub: "A escolha vai ao config/.env (chave nunca volta em output) e ao [memory]. Recrie o container depois para aplicar.",
     fields: [
@@ -707,7 +718,7 @@ function wireCfgMemoria(){
       return "";
     },
     run: () => {}
-  });
+  };
 }
 
 window.afterRoute = function(view){

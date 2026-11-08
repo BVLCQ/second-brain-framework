@@ -422,13 +422,15 @@ V["cfg/memoria"] = () => {
     return "<tr><td><b>" + icon + "</b></td><td>" + esc(p.label || "—") + "</td><td>" + esc(p.model || "—") + "</td><td>" + egress + " " + key + "</td></tr>";
   }).join("");
   const hw = (M.harnesses || []).map(h => "<tr><td>" + esc(h.label) + "</td><td>" +
-    (h.wired ? '<span class="ok">✓ conectado</span>' : (h.detected ? '<span class="dim">instalado, não conectado</span>' : '<span class="dim">não encontrado</span>')) + "</td></tr>").join("");
+    (h.wired ? '<span class="ok">✓ conectado</span>' : (h.detected ? '<span class="dim">instalado, não conectado</span>' : '<span class="dim">não encontrado</span>')) +
+    '</td><td><button class="btn" data-hw="' + esc(h.name) + '">' + (h.wired ? "reinstalar" : "conectar") + "</button></td></tr>").join("");
   return '<div class="pagehead"><div><h1>Memória</h1><p class="sub">Provedores (LLM · embeddings · reranker) e harnesses — configuração viva: mude quando quiser; o passo inteiro do setup re-roda no terminal pelo comando do wizard.</p></div></div>' +
     panel("Provedores", '<div class="twrap"><table><tr><th>Slot</th><th>Provedor</th><th>Modelo</th><th></th></tr>' + rows + "</table></div>" +
       '<p class="note-s" style="margin:10px 2px">A chave mora no config/.env e nunca aparece aqui. Trocou embeddings? O comando rebuild da memória re-deriva os vetores do vault. Depois de trocar, recrie o container (compose com o env-file da config).</p>' +
       '<button class="btn primary" data-provform>Trocar provedor</button>') +
-    panel("Harnesses — agentes de código", '<div class="twrap"><table><tr><th>Agente</th><th>Estado</th></tr>' + hw + "</table></div>" +
-      '<p class="note-s" style="margin:10px 2px">Conectar e verificar ficam no terminal (instalação oficial + verificação de conexão); o banco dos agentes nunca é tocado pelo rebuild da memória.</p>');
+    panel("Harnesses — agentes de código", '<div class="twrap"><table><tr><th>Agente</th><th>Estado</th><th></th></tr>' + hw + "</table></div>" +
+      '<p class="note-s" style="margin:10px 2px">Conectar roda o instalador oficial apontado ao servidor do cérebro (banco próprio, fora do rebuild da memória). Verificar confere a conexão: banco, recall e configs apontando para cá.</p>' +
+      '<button class="btn ghost" data-hwverify>verificar conexão</button>');
 };
 V.action = (q, id) => {
   const a = A[id]; if (!a) return empty("Ação não encontrada");
