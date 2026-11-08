@@ -328,8 +328,9 @@ apontar, trate como pista e confirme no arquivo.
   e escreve **só chamando `./brain`**, com a linha exata no log. Gates e portas pedem a
   resposta literal do dono; ações do agente (⚡) rodam o runner configurado. Recusa abrir
   com `BRAIN_NIGHTLY=1`. Guia: `guides/tui-mockup.html`. **Faces:** Tab / Shift+Tab giram
-  entre `Execução` (painéis de hoje) e `Portfólio` (Visão, Processos, Oportunidades, Matriz,
-  Registro); cada face lembra onde estava.
+  entre `Execução` (painéis de hoje), `Portfólio` (Visão, Processos, Oportunidades, Matriz,
+  Registro) e `Configurações` (Memória: Provedores, Harnesses · Instância: Saúde); cada face
+  lembra onde estava.
 
 ## Memória para IA (Hindsight)
 
@@ -348,9 +349,11 @@ Sem servidor, o motor é `none` e `/ask` usa índice → artefato → RAW. Guias
 
 ## Segurança
 
-- **Registro de egresso da memória (modo full):** a camada de memória envia texto
-  do vault à API de LLM configurada pelo dono, quando `[memory].cloud_llm = true`
-  (chave no `config/.env`; nada público — a invariante da porta 5 continua).
+- **Registro de egresso da memória:** a camada de memória pode enviar texto do vault a APIs
+  externas configuradas pelo dono — LLM no modo full (`[memory].cloud_llm = true`) e, desde o
+  plano memory-providers, embeddings e reranker de nuvem (`cloud_embeddings`/`cloud_reranker =
+  true`). O wizard avisa na tela em cada escolha de nuvem e o doctor narra; chave no
+  `config/.env`, nada público — a invariante da porta 5 continua.
 - Segredos **nunca** aparecem no chat, em log, em artefato ou em view. Não
   leia `.env` além de checar existência/permissão; nunca imprima seu conteúdo.
 - `config/watch.toml` define o universo observável — fonte não listada não é
