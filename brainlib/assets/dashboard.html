@@ -566,13 +566,10 @@ function commands(){
   mine.forEach(a => out.push({label: "Fechar · " + a.id + " " + a.title, act: () => closeForm(a)}));
   MD.actions.filter(a => a.open && a.due_suggested).forEach(a => out.push({label: "Confirmar prazo sugerido · " + a.id + " (" + (a.due || "").slice(0, 10) + ")",
     cmd: "brain action update " + a.id + " --confirm-due", mut: m => { m.actions.find(x => x.id === a.id).due_suggested = false; }}));
-  if (D0.focus && D0.focus.status === "proposto") {
-    out.push({label: "Aprovar plano de foco " + D0.focus.id + ' (quote "ok")',
-      cmd: 'brain focus approve ' + D0.focus.id + ' --quote "ok"', mut: m => { m.focus.status = "aprovado"; m.focus.quote = "ok"; }});
-    out.push({label: "Aprovar e aplicar " + D0.focus.id + " no Google Calendar",
-      cmd: "brain focus apply " + D0.focus.id + " --mode google",
-      mut: m => { m.focus.status = "aplicado"; m.focus.applied = m.focus.blocks; m.focus.mode = "google"; }});
-  }
+  if (D0.focus && D0.focus.status === "proposto")
+    out.push({label: "Aprovar plano de foco " + D0.focus.id + " (gate)", act: () => focusApproveForm()});
+  if (D0.focus && D0.focus.status === "aprovado")
+    out.push({label: "Aplicar plano de foco " + D0.focus.id + " no calendário (gate)", act: () => focusApplyForm()});
   MD.outbox.filter(m0 => m0.status === "rascunho").forEach(m0 => out.push({label: "Aprovar mensagem " + m0.id + " para " + m0.to_name,
     act: () => approveMsgForm(m0)}));
   MD.proposals.forEach(p => {
@@ -691,33 +688,50 @@ $("#palrun").onclick = () => { const c = pal.confirmCmd, m0 = pal.confirmMut; cl
 $("#palq").addEventListener("input", e => { pal.sel = 0; pal.items = buildItems(e.target.value); renderPal(); });
 
 // ── foco: reservar bloco (aprova + aplica o plano — as portas reais do CLI) ──
-function focusMut(status){
-  return m => {
-    m.focus.status = status;
-    if (status === "aprovado") m.focus.quote = "ok";
-    if (status === "aplicado") { m.focus.applied = m.focus.blocks; m.focus.mode = "google"; }
-  };
-}
 function focusReserve(){
   const f = window.BRAIN.M.focus;
   const ov = document.createElement("div"); ov.className = "pal-back open";
   ov.innerHTML = '<div class="palette"><div class="pin"><b>Reservar bloco de foco</b><span class="hint">' + esc(f.id) + "</span></div>" +
     '<div class="pal-confirm open" style="display:block;border-top:0;padding:14px 16px">' +
-    '<div class="cline">$ brain focus approve ' + esc(f.id) + ' --quote "ok"</div>' +
-    '<div class="cline">$ brain focus apply ' + esc(f.id) + " --mode google</div>" +
     '<p class="note-s" style="margin:0 0 10px">o CLI aprova e aplica o plano inteiro — evento brain_focus=1 no calendário. Reservar bloco-a-bloco seria extensão nova do CLI.</p>' +
-    '<div class="row"><span class="note-s"></span><button class="btn ghost" data-x>cancelar</button><button class="btn primary" data-ok>reservar</button></div></div></div>';
+    '<div class="row"><span class="note-s"></span><button class="btn ghost" data-x>cancelar</button><button class="btn primary" data-ok>continuar</button></div></div></div>';
   document.body.appendChild(ov);
   ov.querySelector("[data-x]").onclick = () => ov.remove();
   ov.onclick = e => { if (e.target === ov) ov.remove(); };
   ov.querySelector("[data-ok]").onclick = () => {
     ov.remove();
-    if (!LIVE) { offlineCmd('brain focus approve ' + f.id + ' --quote "ok"'); return; }
-    serveRun('brain focus approve ' + f.id + ' --quote "ok"').then(ok => {
-      if (ok && window.BRAIN.M.focus && window.BRAIN.M.focus.status === "aprovado")
-        serveRun("brain focus apply " + f.id + " --mode google");
-    });
+    if (window.BRAIN.M.focus && window.BRAIN.M.focus.status === "aprovado") focusApplyForm();
+    else focusApproveForm();
   };
+}
+function focusApproveForm(){                            // gate: resposta literal, como a TUI
+  const f = window.BRAIN.M.focus;
+  formDialog({title: "Aprovar plano " + f.id, gate: true,
+    sub: "Um ok libera o lote inteiro. Só depois dele o aplicar vira possível.",
+    fields: [{k: "quote", label: "Sua aprovação", value: "", ph: "ok"}],
+    preview: v => v.quote ? "brain focus approve " + f.id + " --quote " + q(v.quote) : null,
+    run: (v, m) => { m.focus.status = "aprovado"; m.focus.quote = v.quote; }});
+}
+function focusApplyForm(){                              // gate: modo ics/google, default do plano
+  const f = window.BRAIN.M.focus;
+  formDialog({title: "Aplicar " + f.id, gate: true,
+    sub: "Grava os blocos brain_focus=1 no calendário (google) ou gera o arquivo .ics.",
+    fields: [{k: "mode", label: "Modo", options: [["ics", "ics — arquivo local"], ["google", "google — Calendar"]], value: f.mode || "google"}],
+    preview: v => "brain focus apply " + f.id + " --mode " + v.mode,
+    run: (v, m) => { m.focus.status = "aplicado"; m.focus.applied = m.focus.blocks; m.focus.mode = v.mode; }});
+}
+function focusPlanForm(){                               // a TUI roda o mesmo comando com --days
+  const M = window.BRAIN.M;
+  formDialog({title: "Planejar foco", sub: "Blocos EDF nas suas ações mine com prazo. Nada vai ao calendário ainda.",
+    fields: [{k: "days", label: "Horizonte (dias)", type: "number", value: (M.focus && M.focus.horizon && M.focus.horizon.days) || "7"}],
+    preview: v => (+v.days >= 1 && +v.days <= 30) ? "brain focus plan --days " + v.days : null,
+    run: (v, m) => { m.focus = m.focus || {}; }});
+}
+function focusSyncForm(){                               // dry-run ou aplicar, escolha do dono
+  formDialog({title: "Sincronizar o foco", sub: "Blocos futuros de ações já fechadas: no google saem do calendário; no ics, o arquivo avisa.",
+    fields: [{k: "mode", label: "O que fazer", options: [["dry", "só mostrar (dry-run)"], ["apply", "remover agora"]], value: "dry"}],
+    preview: v => "brain focus sync" + (v.mode === "dry" ? " --dry-run" : ""),
+    run: (v, m) => {}});
 }
 function wireFocus(){
   const f = window.BRAIN.M.focus; if (!f) return;
@@ -729,14 +743,7 @@ function wireFocus(){
     if (row.innerHTML) {
       head.appendChild(row);
       row.querySelectorAll("button").forEach(b => b.onclick = () => {
-        if (b.dataset.c === "approve") {
-          if (!LIVE) { offlineCmd('brain focus approve ' + f.id + ' --quote "ok"'); return; }
-          runCommand('brain focus approve ' + f.id + ' --quote "ok"', focusMut("aprovado"));
-        } else {
-          if (!LIVE) { offlineCmd("brain focus apply " + f.id + " --mode google"); return; }
-          runCommand("brain focus apply " + f.id + " --mode google", focusMut("aplicado"));
-        }
-      });
+        if (b.dataset.c === "approve") focusApproveForm(); else focusApplyForm(); });
     }
   }
   document.querySelectorAll("#view .blk.prop").forEach(el => {
@@ -1706,10 +1713,10 @@ function ctxKeys(k){
   }
   if (h.startsWith("#focus")) {
     const f = M.focus;
-    if (k === "A" && f && f.status === "proposto") { $("#view .planbtns [data-c=approve]") ? $("#view .planbtns [data-c=approve]").click() : focusApproveKey(); return true; }
-    if (k === "a" && f && f.status === "aprovado") { const b = $("#view .planbtns [data-c=apply]"); if (b) b.click(); return true; }
-    if (k === "s") { runCommand("brain focus sync --dry-run"); toast("--dry-run: conferir o diff antes de aplicar"); return true; }
-    if (k === "p") { toast("(agente) /focus: o agente lê a agenda e propõe o plano — brain focus plan"); return true; }
+    if (k === "A" && f && f.status === "proposto") { focusApproveForm(); return true; }
+    if (k === "a" && f && f.status === "aprovado") { focusApplyForm(); return true; }
+    if (k === "s") { focusSyncForm(); return true; }
+    if (k === "p") { focusPlanForm(); return true; }
     return false; }
   if (h.startsWith("#outbox")) {
     if (k === "n") { draftForm(); return true; }
@@ -1805,7 +1812,7 @@ function ctxKeys(k){
     return false; }
   return false;
 }
-function focusApproveKey(){ runCommand('brain focus approve ' + window.BRAIN.M.focus.id + ' --quote "ok"', focusMut("aprovado")); }
+function focusApproveKey(){ focusApproveForm(); }      // compat: tecla A e botões usam o mesmo gate
 
 function helpOverlay(){
   const ov = document.createElement("div"); ov.className = "pal-back open";
