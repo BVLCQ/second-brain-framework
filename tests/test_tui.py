@@ -2388,7 +2388,8 @@ class CoverageTest(unittest.TestCase):
     }
     NOT_IN_TUI = {"demo", "tui", "migrate ids", "serve", "memory cost",
                   "query actions", "query decisions", "query person", "query entity", "query sql",
-                  "index rebuild", "index update", "index status", "route", "memory dossier", "memory models", "memory eval"}   # query/index/route/dossier = ferramenta do agente + doctor   # migração única no terminal; serve é a ponte do painel HTML; custo = doctor/CLI
+                  "index rebuild", "index update", "index status", "route", "memory dossier", "memory eval",
+                  "memory models list", "memory models show", "memory models sync", "memory models refresh"}   # query/index/route/dossier = ferramenta do agente + doctor   # migração única no terminal; serve é a ponte do painel HTML; custo = doctor/CLI; models = CLI do dono/agente (full-only)
     # setup e memory harness SAÍRAM daqui: a face Configurações emite ambos (wizard interativo via terminal suspenso; install/verify dos harnesses)
     DYNAMIC = {"memory recall", "memory reflect"}      # o formulário "Memória: perguntar" monta o subcomando
 
@@ -2398,15 +2399,23 @@ class CoverageTest(unittest.TestCase):
         src = "".join((ROOT / "brainlib" / "tui" / f).read_text(encoding="utf-8")
                       for f in ("app.py", "store.py", "portfolio_keys.py", "config_keys.py", "ask_keys.py", "feedback_keys.py"))
         sub = next(a for a in cli.build_parser()._actions if a.__class__.__name__ == "_SubParsersAction")
+
+        def leaves(pr, path):                      # anda até a folha: memory models list & cia não escapam
+            inner = [a for a in pr._actions if a.__class__.__name__ == "_SubParsersAction"]
+            if not inner:
+                yield path
+                return
+            for nm, sp in inner[0].choices.items():
+                yield from leaves(sp, path + [nm])
+
         uncovered = []
-        for name, p in sub.choices.items():
-            inner = [a for a in p._actions if a.__class__.__name__ == "_SubParsersAction"]
-            for sc in (inner[0].choices if inner else [None]):
-                label = f"{name} {sc}" if sc else name
-                pat = re.compile(r'\[\s*"%s"\s*,\s*"%s"' % (name, sc)) if sc else re.compile(r'\[\s*"%s"\s*[,\]]' % name)
-                if pat.search(src) or label in self.READ_ONLY_VIEWS | self.AGENT_ONLY | self.NOT_IN_TUI | self.DYNAMIC:
-                    continue
-                uncovered.append(label)
+        paths = [p for name, pr in sub.choices.items() for p in leaves(pr, [name])]
+        for path in paths:
+            label = " ".join(path)
+            pat = re.compile(r'\[\s*"' + r'"\s*,\s*"'.join(path) + r'"')
+            if pat.search(src) or label in self.READ_ONLY_VIEWS | self.AGENT_ONLY | self.NOT_IN_TUI | self.DYNAMIC:
+                continue
+            uncovered.append(label)
         self.assertEqual(uncovered, [], "subcomandos sem lugar no TUI (e sem justificativa em CoverageTest)")
 
 

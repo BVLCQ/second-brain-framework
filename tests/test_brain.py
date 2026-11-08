@@ -920,6 +920,7 @@ class DashboardAssetTests(unittest.TestCase):
         "opportunity rubric",   # o rubric viaja no view model (portfolio.ice_rubric) e no guia gerado
         "watch list", "watch since", "watch folders", "repos list", "raw where", "artifact",
         "feedback show", "feedback list",   # painel › Sugestões renderiza fila e ficha do payload do modelo
+        "memory providers show",            # cfg/Memória renderiza a pilha do payload (o TUI roda ao vivo)
     }
     AGENT_ONLY = {        # quem escreve é o agente (extração, snapshot, envio), conforme a Constituição
         "init", "add", "snapshot", "repos pull", "proposal add", "outbox sent", "outbox failed", "publish done",
@@ -940,20 +941,28 @@ class DashboardAssetTests(unittest.TestCase):
         "index rebuild", "index update", "index status",          # ciclo de vida: terminal (doctor avisa)
         "route",                                               # ferramenta do agente/hook (Fase 4.5)
         "memory dossier",                                      # agente//ask — montado na leitura (Fase 5)
-        "memory models",                                       # Fase 8: full-only, CLI do dono/agente
+        "memory models list", "memory models show", "memory models sync", "memory models refresh",   # Fase 8: full-only, CLI do dono/agente
         "memory eval",                                         # Fase 0: harness do conjunto-ouro
     }
     DYNAMIC = {"memory recall", "memory reflect",       # formulário do TUI monta; o painel busca no índice
                "decision supersede"}                     # o painel emite `decision add … --supersedes` (tecla S)
 
     def _cli_cmds(self):
-        from brainlib import cli as _cli
+        from brainlib import cli as _cli                      # (comando, sub-caminho até a FOLHA — "models list" & cia contam)
         sub = next(a for a in _cli.build_parser()._actions if a.__class__.__name__ == "_SubParsersAction")
-        out = []
-        for name, pr in sorted(sub.choices.items()):
+
+        def leaves(pr, path):
             inner = [a for a in pr._actions if a.__class__.__name__ == "_SubParsersAction"]
-            for sc in (sorted(inner[0].choices) if inner else [None]):
-                out.append((name, sc))
+            if not inner:
+                yield path
+                return
+            for nm, sp in sorted(inner[0].choices.items()):
+                yield from leaves(sp, path + [nm])
+
+        out = []
+        for name, pr in sub.choices.items():
+            for path in leaves(pr, [name]):
+                out.append((path[0], " ".join(path[1:]) if len(path) > 1 else None))
         return out
 
     def test_every_cli_command_has_a_place_in_the_panel(self):
@@ -987,7 +996,7 @@ class DashboardAssetTests(unittest.TestCase):
             label = f"{name} {sc}" if sc else name
             if _re.search(r"\bbrain " + _re.escape(label) + r"\b", src):
                 emitted.add((name, sc))
-        denied = [(n, sc) for (n, sc) in emitted - prose if not _serve._allowed_argv([n] + ([sc] if sc else []))]
+        denied = [(n, sc) for (n, sc) in emitted - prose if not _serve._allowed_argv([n] + (sc.split() if sc else []))]
         self.assertEqual(denied, [], "comandos emitidos pelo painel fora da allowlist do serve")
 
     def test_data_placeholder_and_face_split(self):
