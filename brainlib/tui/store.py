@@ -741,7 +741,7 @@ class Store:
                     out.append(Item(f"hw:{name}", "hw",
                                     {"name": name, "label": label, "wired": name in wired,
                                      "detected": det.get(name, False)},
-                                    q=f"{name} {label} {'cablado' if name in wired else 'desligado'}"))
+                                    q=f"{name} {label} {'conectado' if name in wired else 'não conectado'}"))
         elif panel == 2:
             out = [Item(f"doc:{i}", "doc", c, q=f"{c['title']} {c['detail']}",
                         extra={"fix": self._fix_for(c)}) for i, c in enumerate(self.health)]

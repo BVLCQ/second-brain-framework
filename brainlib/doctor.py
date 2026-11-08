@@ -139,7 +139,7 @@ def checks(brain, online: bool = False) -> list[dict]:
                               + (" …" if len(problems) > 3 else "")))
             else:
                 out.append(_c("ok", "harnesses",
-                              f"{len(harnesses)} cablado(s) · banco '{(v or {}).get('bank', '?')}' responde ao recall"))
+                              f"{len(harnesses)} conectado(s) · banco '{(v or {}).get('bank', '?')}' responde ao recall"))
         if status.get("mode") == "full":
             # régua do full: chave presente; gasto do mês como INFORMAÇÃO (sem teto — decisão do dono)
             if not any(k.startswith("HINDSIGHT_API") and k.endswith("API_KEY") and v for k, v in env.items()):

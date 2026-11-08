@@ -572,7 +572,7 @@ def _harness_step(brain, ui) -> None:
     também guarda a memória dos agentes de código, em banco próprio (fora do rebuild)."""
     from . import harness, memory as _memory
     if not getattr(ui, "interactive", False):
-        return                                   # cablar é opt-in do dono — sem pergunta, sem ação
+        return                                   # conectar é opt-in do dono — sem pergunta, sem ação
     det = harness.detect()
     opts = [k for k, on in det.items() if on]
     if not opts:
@@ -582,7 +582,7 @@ def _harness_step(brain, ui) -> None:
            f"'{mem['harness_bank']}' (nunca tocada pelo `memory rebuild`)")
     for name in opts:
         label = harness.AGENTS.get(name, "Hermes")
-        if not ui.confirm(f"Cablar {label} no Hindsight do cérebro?", False):
+        if not ui.confirm(f"Conectar {label} no Hindsight do cérebro?", False):
             continue
         if name == harness.HERMES:
             r = harness.wire_hermes(brain)
@@ -594,7 +594,7 @@ def _harness_step(brain, ui) -> None:
                        "hermes plugins install hindsight — vale na PRÓXIMA sessão do Hermes")
         else:
             for r in harness.install(brain, [name]):
-                ui.say(f"✓ {harness.AGENTS[r['agent']]} cablado (instalador oficial)" if r["ok"]
+                ui.say(f"✓ {harness.AGENTS[r['agent']]} conectado (instalador oficial)" if r["ok"]
                        else f"✗ {r['agent']}: {r['hint']}")
     wired = brain.inst.cfg["memory"].get("harnesses") or []
     if wired:

@@ -7,7 +7,7 @@ Plano: guides/plans/memory-harness-wizard.md. Um serviço, dois mundos:
                  conversa/git dos harnesses — NUNCA tocada pelo `memory rebuild`,
                  nunca vira fato do vault.
 
-Claude Code / Cursor CLI / Codex são cablados pelo INSTALADOR OFICIAL
+Claude Code / Cursor CLI / Codex são conectados pelo INSTALADOR OFICIAL
 (@vectorize-io/hindsight-coding-agents) em modo self-hosted apontado ao nosso
 servidor — o encanamento é do upstream, não nosso. O Hermes ganha config escrita
 aqui (~/.hermes/hindsight/config.json + memory.provider); o plugin em si pede
@@ -162,7 +162,7 @@ def ping(hs, bank: str) -> bool:
 
 
 def verify(brain, hs, home: Path | None = None) -> dict:
-    """Estado do cablado: banco existe? ping responde? configs apontam pra cá?"""
+    """Estado da conexão: banco existe? ping responde? configs apontam pra cá?"""
     mem = brain.inst.cfg["memory"]
     bank = mem["harness_bank"]
     out: dict = {"bank": bank, "bank_exists": False, "ping": False, "hermes_config": False,

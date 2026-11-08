@@ -1055,7 +1055,7 @@ def cli(args, brain) -> None:
             if clis:
                 for r in harness.install(brain, clis):
                     label = harness.AGENTS.get(r["agent"], r["agent"])
-                    print(f"✓ {label} cablado (instalador oficial → {mem['url']}, banco {mem['harness_bank']})"
+                    print(f"✓ {label} conectado (instalador oficial → {mem['url']}, banco {mem['harness_bank']})"
                           if r["ok"] else f"✗ {label}: {r['hint']}")
         elif hcmd == "verify":
             v = harness.verify(brain, client(brain))

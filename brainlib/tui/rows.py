@@ -1112,16 +1112,16 @@ def d_prov(store, it) -> Doc:
 
 
 def d_hw(store, it) -> Doc:
-    """Ficha de um harness (face Configurações): cablado? encontrado? o que o doctor confere."""
+    """Ficha de um harness (face Configurações): conectado? encontrado? o que o doctor confere."""
     d = it.data
     doc = Doc().h(Text(d["label"], "bold"))
     doc.kv([
         ("id", Text(d["name"])),
-        ("cablado", Text("sim — memória no banco dos agentes", GRN) if d["wired"]
+        ("conectado", Text("sim — memória no banco dos agentes", GRN) if d["wired"]
          else Text("não", AMB)),
         ("nesta máquina", Text("instalado", DIM) if d["detected"] else Text("não encontrado", FAINT)),
     ])
-    doc.blank().p(Text("Tecla i cabla/reinstala (instalador oficial) · v verifica a conexão "
+    doc.blank().p(Text("Tecla i conecta/reinstala (instalador oficial) · v verifica a conexão "
                        "(banco, recall ping, config apontando para cá).", DIM))
     doc.p(Text("O banco dos agentes nunca é tocado pelo brain memory rebuild.", DIM))
     return doc

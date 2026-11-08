@@ -31,7 +31,7 @@ class ConfigKeys:
                     add("enter", "ficha", self.toggle_zoom)
             else:                                         # Harnesses
                 if w(it and it.kind == "hw"):
-                    add("i", "cablar" if not it.data["wired"] else "reinstalar",
+                    add("i", "conectar" if not it.data["wired"] else "reinstalar",
                         lambda: self.f_harness_install())
                 add("v", "verificar conexão", lambda: self.exec(
                     [["memory", "harness", "verify"]], render=False, show="Harnesses"))

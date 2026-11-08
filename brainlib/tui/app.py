@@ -108,7 +108,7 @@ CMD_CATALOG = [               # paleta de comandos: nome, linha da CLI, (face, p
     ("Provedores da memória", "brain memory providers show", (2, 1, 0, "s")),
     ("Trocar provedor (formulário)", "brain memory providers set <slot> --provider …", (2, 1, 0, "s")),
     ("Wizard da memória", "brain setup --only memoria", (2, 1, 0, "w", "sys:wizmem")),
-    ("Cablar harness", "brain memory harness install claude-code|cursor-cli|codex|hermes", (2, 1, 1, "i")),
+    ("Conectar harness", "brain memory harness install claude-code|cursor-cli|codex|hermes", (2, 1, 1, "i")),
     ("Verificar harnesses", "brain memory harness verify", (2, 1, 1, "v")),
     ("Editar pessoa", "brain person update ID …", (0, 5, 2, "u")),
     ("Quem é…?", 'brain person resolve "…"', (0, 5, 2, "R")),

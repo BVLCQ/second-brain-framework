@@ -202,7 +202,7 @@ Regras do desenho:
   os cinco campos do stack local são fallback de fábrica. Trocou provedor? Recrie com
   `--env-file config/.env`. **Trocou embeddings?** Vetores antigos ficam incompatíveis —
   `brain memory rebuild` re-deriva tudo do vault.
-- **Doctor**: provedor de nuvem sem chave = erro; harness cablado sem conexão (banco,
+- **Doctor**: provedor de nuvem sem chave = erro; harness conectado sem resposta (banco,
   recall ping, config apontando pra cá) = aviso com o comando que corrige.
 - `jina-mlx` existe no servidor mas **fica fora do menu** — benchmark 2026-11-07 reprovou
   (§4.2 do plano da memória).

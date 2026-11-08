@@ -1016,7 +1016,7 @@ chave do dono — `guides/memory.md`), escolha livre e reversível.
 | `cost [--json]` | medidor mensal de LLM (embed: US$ 0; full: tokens + US$ por operação/modelo) — sem teto, só informação |
 | `recall CONSULTA [--tags a,b]` | busca semântica no banco único (`--bank` é legado, ignorado) |
 | `reflect CONSULTA [--tags]` | resposta sintetizada pelo LLM a partir das memórias |
-| `harness install AGENTE…` | cabla agentes de código no servidor do cérebro: `claude-code` · `cursor-cli` · `codex` (instalador oficial) · `hermes` (config local_external) — banco próprio `harness_bank`, fora do `rebuild` |
+| `harness install AGENTE…` | conecta agentes de código no servidor do cérebro: `claude-code` · `cursor-cli` · `codex` (instalador oficial) · `hermes` (config local_external) — banco próprio `harness_bank`, fora do `rebuild` |
 | `harness verify` | banco dos agentes existe? recall ping? configs apontam pra cá? |
 | `models sync\|refresh\|list\|show` | mental models (Fase 8, modo full): catálogo do PLANNING + pessoas (`mm-goal-#`/`mm-proj-#`/`mm-pessoa-<id>`), refresh em delta com intervalo mínimo de 24h — exige `mental_models = true` |
 | `eval [--gold …] [--route on\|off\|ledger] [--k N] [--save …]` | conjunto-ouro (Fase 0): recall@k, MRR, citação, itens, abstenção e tokens por tipo — gold em `vault/eval/memory-gold.jsonl` (exemplo no `template/`) |
