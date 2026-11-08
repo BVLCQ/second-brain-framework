@@ -797,8 +797,7 @@ window.afterRoute = function(view){
     qa.querySelectorAll("button").forEach(b => b.onclick = ev => {
       ev.preventDefault(); ev.stopPropagation();
       if (b.dataset.c === "fechar")
-        runCommand('brain action close ' + id + ' --how "feito pelo painel"', m => {
-          const x = m.actions.find(y => y.id === id); x.open = false; x.status = "fechada"; x.closed = m.today; lastMoved = id; });
+        closeForm(a);                                    // diálogo com "como foi" + resultado, como a TUI
       else
         runCommand("brain action update " + id + " --status fazendo", m => { m.actions.find(x => x.id === id).status = "fazendo"; lastMoved = id; });
     });
