@@ -625,9 +625,13 @@ function runCommand(cmd, mut){
 // ── paleta ⌘K ───────────────────────────────────────────────────────────
 const pal = {open: false, sel: 0, items: [], confirmCmd: null, confirmMut: null};
 function navEntries(){
-  const tabs = [["face/execucao", "→ face Execução"], ["face/portfolio", "→ face Portfólio"],
+  const pfOnly = !!window.PF_ONLY;                     // portfolio.html: só a face Portfólio existe
+  const tabs = pfOnly ? [["face/portfolio", "→ face Portfólio"],
+    ["pf/visao", "Portfólio · Visão"], ["pf/opps", "Portfólio · Oportunidades"], ["pf/matrix", "Portfólio · Matriz"], ["pf/procs", "Portfólio · Processos"], ["pf/areas", "Portfólio · Áreas"]]
+    : [["face/execucao", "→ face Execução"], ["face/portfolio", "→ face Portfólio"], ["face/configuracoes", "→ face Configurações"],
     ["home", "Início"], ["todo", "TODO"], ["projects", "Projetos"], ["decisions", "Decisões"], ["wins", "Conquistas"],
-    ["people", "Pessoas"], ["timeline", "Linha do tempo"], ["focus", "Foco"], ["outbox", "Mensagens"], ["feedback", "Sugestões"], ["health", "Saúde"],
+    ["people", "Pessoas"], ["timeline", "Linha do tempo"], ["focus", "Foco"], ["outbox", "Mensagens"], ["feedback", "Sugestões"],
+    ["cfg/memoria", "Configurações · Memória"], ["cfg/saude", "Configurações · Saúde"],
     ["pf/visao", "Portfólio · Visão"], ["pf/opps", "Portfólio · Oportunidades"], ["pf/matrix", "Portfólio · Matriz"],
     ["pf/procs", "Portfólio · Processos"], ["pf/areas", "Portfólio · Áreas"]];
   return tabs.map(t => ({group: t[0].startsWith("face/") ? "faces" : "ir para", label: t[1], view: t[0]}));
@@ -2659,6 +2663,7 @@ function route(){
     return;
   }
   if (seg[0] === "portfolio") seg = ["pf", "visao"];          // link antigo
+  if (seg[0] === "health") seg = ["cfg", "saude"];            // Saúde mora só na Configurações (link antigo)
   const pf = seg[0] === "pf";
   let view = pf ? "pf/" + (seg[1] || "visao") : (seg[0] === "cfg" ? "cfg/" + (seg[1] || "memoria") : seg[0]);
   const arg = pf ? seg.slice(2).join("/") : (seg[0] === "cfg" ? seg.slice(2).join("/") : seg.slice(1).join("/"));

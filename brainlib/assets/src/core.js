@@ -697,6 +697,7 @@ function route(){
     return;
   }
   if (seg[0] === "portfolio") seg = ["pf", "visao"];          // link antigo
+  if (seg[0] === "health") seg = ["cfg", "saude"];            // Saúde mora só na Configurações (link antigo)
   const pf = seg[0] === "pf";
   let view = pf ? "pf/" + (seg[1] || "visao") : (seg[0] === "cfg" ? "cfg/" + (seg[1] || "memoria") : seg[0]);
   const arg = pf ? seg.slice(2).join("/") : (seg[0] === "cfg" ? seg.slice(2).join("/") : seg.slice(1).join("/"));
