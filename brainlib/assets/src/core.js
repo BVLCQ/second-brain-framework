@@ -197,15 +197,26 @@ V.home = () => {
 };
 V.todo = (q) => {
   const proj = q.get("p") || "", showWatch = q.get("w") === "1";
-  const mine = M.actions.filter(a => a.list === "mine" && a.mine && (!proj || a.project === proj));
-  const recent = new Date(M.today + "T12:00:00"); recent.setDate(recent.getDate() - 14);
+  const view = q.get("v") || "todas", sortK = q.get("o") || "prazo", showAll = q.get("a") === "1";
+  const end = new Date(M.today + "T12:00:00"); { const d = end.getDay(); end.setDate(end.getDate() + (d === 0 ? 0 : 7 - d)); }
+  const endS = end.toISOString().slice(0, 10);
+  let mine = M.actions.filter(a => a.list === "mine" && a.mine && (!proj || a.project === proj));
+  if (view === "semana") mine = mine.filter(a => a.open && ((a.due && a.due <= endS) || a.status === "fazendo"));
+  else if (view === "depois") mine = mine.filter(a => a.open && !a.parked && !((a.due && a.due <= endS) || a.status === "fazendo"));
+  else if (view === "nao-agora") mine = mine.filter(a => a.open && a.parked);
+  const recent = new Date(M.today + "T12:00:00");
+  if (!showAll) recent.setDate(recent.getDate() - 14);
   const cols = [["A fazer", a => a.open && a.status === "aberta", "aberta"],
     ["Fazendo", a => a.open && a.status === "fazendo", "fazendo"],
-    ["Bloqueada / aguardando", a => a.open && (a.status === "bloqueada" || a.status === "aguardando"), "aguardando"],
-    ["Feita (14 dias)", a => a.status === "fechada" && a.closed && new Date(a.closed + "T12:00:00") >= recent, "fechada"]];
-  const sortA = l => l.sort((x, y) => (x.due || "9999").localeCompare(y.due || "9999") || (x.priority === "alta" ? -1 : 0));
+    ["Bloqueada / aguardando", a => a.open && ((a.blocked_by && a.blocked_by.length) || a.status === "aguardando"), "aguardando"],
+    ["Feita" + (showAll ? "" : " (14 dias)"), a => a.status === "fechada" && a.closed && new Date(a.closed + "T12:00:00") >= recent, "fechada"]];
+  const sortA = l => l.sort((x, y) => sortK === "id" ? x.id.localeCompare(y.id)
+    : ((x.due || "9999").localeCompare(y.due || "9999") || (x.priority === "alta" ? -1 : 0)));
+  const VIEWS = [["todas", "todas"], ["semana", "esta semana"], ["depois", "depois"], ["nao-agora", "não agora"]];
   let h = '<div class="pagehead"><div><h1>TODO</h1><p class="sub">Suas ações em quadro. Feche pelo chat (/done), marcando em FRESH/todo.md — ou pelo painel, se a ponte CLI estiver ligada.</p></div></div>' +
     '<div class="filters">' + dd("fp", M.projects.map(p => [p.id, p.id + " " + p.title]), proj, "todos os projetos") +
+    dd("fv", VIEWS, view, "todas as vistas") + dd("fo", [["prazo", "por prazo"], ["id", "por id"]], sortK, "por prazo") +
+    '<label class="chk"><input type="checkbox" id="fa"' + (showAll ? " checked" : "") + "> todas (fechadas além de 14d)</label>" +
     '<label class="chk"><input type="checkbox" id="fw"' + (showWatch ? " checked" : "") + "> mostrar observando</label></div>";
   h += '<div class="kanban">' + cols.map(([t, f, key]) => { const l = sortA(mine.filter(f)); return '<div class="col" data-col="' + key + '"><h3>' + t + ' <span class="count">' + l.length + "</span></h3>" + (l.map(card).join("") || empty("—")) + "</div>"; }).join("") + "</div>";
   const waiting = M.actions.filter(a => a.open && a.list === "waiting" && (!proj || a.project === proj));
@@ -215,10 +226,16 @@ V.todo = (q) => {
     h += panel("Observando — contexto, não cobra · " + w.length, actionTable(w.map(a => a.id), ["owner", "project"]), ' style="margin-top:14px"');
   }
   setTimeout(() => {
-    const b = document.querySelector('[data-dd="fp"] .dd-btn');
-    if (b) b.addEventListener("ddchange", e => go("todo", {p: e.detail.value, w: showWatch ? "1" : ""}));
+    [["fp", "p"], ["fv", "v"], ["fo", "o"]].forEach(([id0, key]) => {
+      const b = document.querySelector('[data-dd="' + id0 + '"] .dd-btn');
+      if (b) b.addEventListener("ddchange", e => go("todo", {p: proj, w: showWatch ? "1" : "",
+        v: view !== "todas" ? view : "", o: sortK !== "prazo" ? sortK : "", a: showAll ? "1" : "", [key]: e.detail.value}));});
+    const fa = document.querySelector("#fa");
+    if (fa) fa.onchange = e => go("todo", {p: proj, w: showWatch ? "1" : "",
+      v: view !== "todas" ? view : "", o: sortK !== "prazo" ? sortK : "", a: e.target.checked ? "1" : ""});
     const c = document.querySelector("#fw");
-    if (c) c.onchange = e => go("todo", {p: proj, w: e.target.checked ? "1" : ""});
+    if (c) c.onchange = e => go("todo", {p: proj, w: e.target.checked ? "1" : "",
+      v: view !== "todas" ? view : "", o: sortK !== "prazo" ? sortK : "", a: showAll ? "1" : ""});
   });
   return h;
 };

@@ -43,6 +43,7 @@ ALLOWED: dict[str, set[str] | None] = {
     "note": {"add"},
     "proposal": {"accept", "reject"},
     "feedback": {"add", "push", "sync"},          # porta 7: o dono registra/publica/confere pelo painel
+    "doctor": None,                                 # cfg/saude 'testar online': leitura, sem escrita
 }
 DENY_HINT = "fora da allowlist da ponte — rode no terminal se for o caso"
 

@@ -896,8 +896,8 @@ function pubRequestForm(){
     fields: [
       {k: "report", label: "Relatório (caminho do share)", value: "reports/share/", ph: "reports/share/…html"},
       {k: "to", label: "Destino", value: "", ph: "slack:#seu-canal"}],
-    preview: v => (v.report.length > 14 && v.to) ? "brain publish request " + v.report + " --to " + v.to
-      : "brain share status   # 1º exporta · depois: publish request <caminho> --to <destino>",
+    note: v => (v.report.length > 14 && v.to) ? "" : "1º exporta (comando `share`) · depois pedia o caminho + destino aqui",
+    preview: v => (v.report.length > 14 && v.to) ? "brain publish request " + v.report + " --to " + v.to : null,
     run: (v, m) => { const n = Math.max(0, ...(m.publishes || []).map(x => +x.id.slice(4))) + 1;
       (m.publishes = m.publishes || []).unshift({id: "PUB-" + String(n).padStart(4, "0"),
         title: v.title || v.report, to: v.to, status: "solicitada", date: m.today, link: null}); }});
@@ -929,19 +929,22 @@ function nbForm(kind){
       {k: "title", label: "Título", ph: "o que saiu"},
       {k: "ref", label: "Ref", value: "", ph: "TASK/PROJ/GOAL"},
       {k: "result", label: "Resultado", value: ""},
-      {k: "impact", label: "Impacto", value: ""}],
+      {k: "impact", label: "Impacto", value: ""},
+      {k: "evidence", label: "Evidência", value: "", ph: "caminho do artefato/RAW (opcional)"}],
     preview: v => v.title ? 'brain delivery "' + v.title.replace(/"/g, "'") + '"' + (v.ref ? " --ref " + v.ref : "") +
-      (v.result ? ' --result "' + v.result.replace(/"/g, "'") + '"' : "") + (v.impact ? ' --impact "' + v.impact.replace(/"/g, "'") + '"' : "") : null,
+      (v.result ? ' --result "' + v.result.replace(/"/g, "'") + '"' : "") + (v.impact ? ' --impact "' + v.impact.replace(/"/g, "'") + '"' : "") +
+      (v.evidence ? ' --evidence "' + v.evidence.replace(/"/g, "'") + '"' : "") : null,
     run: (v, m) => { m.deliveries.unshift({id: "W" + Date.now(), title: v.title, date: m.today, ref: v.ref || null,
       project: v.ref && v.ref.startsWith("PROJ") ? v.ref : null, result: v.result || "resultado não declarado",
       impact: v.impact || null, prov: "declarado", source_label: "declarado no painel"}); }});
   if (kind === "person") return formDialog({title: "Nova pessoa", fields: [
       {k: "name", label: "Nome", ph: "Nome Sobrenome"},
+      {k: "pid", label: "ID (só p/ ficha do dono no dia zero)", value: "", ph: "deixe vazio"},
       {k: "role", label: "Papel", value: ""},
       {k: "relation", label: "Relação", value: ""},
       {k: "email", label: "E-mail", value: ""},
       {k: "alias", label: "Alias", value: "", ph: "apelido"}],
-    preview: v => v.name ? "brain person add " + q(v.name) + " --role " + q(v.role || "—") + " --relation " + q(v.relation || "—") +
+    preview: v => v.name ? "brain person add " + q(v.name) + (v.pid ? " --id " + v.pid : "") + " --role " + q(v.role || "—") + " --relation " + q(v.relation || "—") +
       (v.email ? " --email " + q(v.email) : "") + (v.alias ? " --alias " + v.alias : "") : null,
     run: (v, m) => { const id0 = norm(v.name).replace(/[^a-z]+/g, "-").replace(/^-|-$/g, "");
       m.people.push({id: id0, name: v.name, aliases: v.alias ? [v.alias] : [], role: v.role || null, relation: v.relation || null,
@@ -1033,6 +1036,17 @@ function noteForm(){
     preview: v => v.text ? "brain note add --text \"" + v.text.replace(/"/g, "'") + "\"" +
       (v.link ? " --link " + v.link : "") : null,
     run: (v, m) => { toast(LIVE ? "nota na inbox — o /dump arquiva" : "retrato — comando copiado"); }});
+}
+function shareForm(){                                 // mesmo formulário da TUI (S exportar na árvore)
+  const M = window.BRAIN.M;
+  formDialog({title: "Exportar (share)", sub: "export datado em reports/share — sai da máquina só pelas portas",
+    fields: [
+      {k: "kind", label: "O quê", options: [["status", "status"], ["goal", "goal"], ["project", "projeto"]], value: "status"},
+      {k: "target", label: "Goal/Projeto", options: [["", "—"], ...M.goals.map(g => [g.id, g.id + " " + g.title]),
+        ...M.projects.map(x => [x.id, x.id + " " + x.title])]},
+      {k: "fmt", label: "Formato", options: [["html", "html"], ["md", "md"]], value: "html"}],
+    preview: v => "brain share " + v.kind + (v.target && v.kind !== "status" ? " " + v.target : "") + " --format " + v.fmt,
+    run: (v, m) => {}});
 }
 function planForm(){
   const M = window.BRAIN.M;
@@ -1131,7 +1145,7 @@ function wireOppKanban(){
 }
 
 // ── kanban: botões rápidos + arrastar e soltar (ponte CLI) ──────────────
-function colOf(a){ if (!a.open) return "fechada"; return (a.status === "bloqueada" || a.status === "aguardando") ? "aguardando" : a.status; }
+function colOf(a){ if (!a.open) return "fechada"; return ((a.blocked_by && a.blocked_by.length) || a.status === "aguardando") ? "aguardando" : a.status; }
 function dropPlan(a, target){                    // → {cmd, mut, dialog?, deny?}
   const from = colOf(a);
   if (from === target) return null;
@@ -1205,6 +1219,12 @@ window.afterRoute = function(view){
   if (location.hash.startsWith("#pf/opps")) wireOppKanban();
   if (location.hash.startsWith("#ask")) wireAskPage();
   if (location.hash.startsWith("#cfg/memoria")) wireCfgMemoria();
+  if (location.hash.startsWith("#cfg/saude")) {
+    const head = document.querySelector("#view .pagehead");
+    if (head && !head.querySelector(".planbtns")) { const row = document.createElement("div"); row.className = "planbtns";
+      const b = document.createElement("button"); b.className = "btn"; b.textContent = "↻ testar online";
+      b.onclick = () => runCommand("brain doctor --online"); row.appendChild(b); head.appendChild(row); }
+  }
   wireP0();
   collectSel();
   document.querySelectorAll("#view .card").forEach(el => {
@@ -1430,6 +1450,11 @@ function newAction(){
     },
     run: (v, m) => {}});
 }
+function personAliasForm(pe){
+  formDialog({title: "Alias · " + pe.name, fields: [{k: "alias", label: "Novo alias", value: "", ph: "apelido"}],
+    preview: v => v.alias ? "brain person alias " + pe.id + " " + v.alias : null,
+    run: (v, m) => { m.people.find(x => x.id === pe.id).aliases.push(v.alias); }});
+}
 function editPerson(pe){
   formDialog({title: "Editar " + pe.name, fields: [
       {k: "name", label: "Nome", value: pe.name},
@@ -1492,6 +1517,39 @@ function iceNote(ax, v){
   return lv ? lv.criterion + " · " + lv.anchor : "";
 }
 function iceHint(h){ return h == null ? null : h > 40 ? 5 : h >= 20 ? 4 : h >= 10 ? 3 : h >= 5 ? 2 : 1; }
+function oppAddForm(pref){                            // pré-fill: {process} p/ "nova opp a partir do processo"
+  pref = pref || {};
+  formDialog({title: "Nova oportunidade", fields: [
+        {k: "title", label: "Título", ph: "o que vale melhorar"},
+        {k: "area", label: "Área", options: areaOpts(), value: M.portfolio.areas[0] && M.portfolio.areas[0].id},
+        {k: "kind", label: "Tipo", options: [["melhoria-de-processo", "melhoria-de-processo"], ["novo-processo", "novo-processo"], ["estruturante", "estruturante"]]},
+        {k: "process", label: "Processo", options: procOpts(), value: (pref.process || "")},
+        {k: "problem", label: "Problema", ph: "o que dói hoje"},
+        {k: "suggestion", label: "Sugestão", ph: "como resolver"},
+        {k: "gain", label: "Ganho esperado"},
+        {k: "hours", label: "Horas/mês economizadas", type: "number"},
+        {k: "person", label: "Pessoa ligada", options: peopleOpts()},
+        {k: "goal", label: "Goal", options: goalOpts()}],
+      preview: v => {
+        if (!v.title) return null;
+        let c = "brain opportunity add " + q(v.title) + " --area " + v.area + " --kind " + v.kind;
+        if (v.process) c += " --process " + v.process;
+        if (v.problem) c += " --problem " + q(v.problem);
+        if (v.suggestion) c += " --suggestion " + q(v.suggestion);
+        if (v.gain) c += " --gain " + q(v.gain);
+        if (v.hours) c += " --hours-saved " + v.hours;
+        if (v.person) c += " --person " + v.person;
+        if (v.goal) c += " --goal " + v.goal;
+        return c;
+      },
+      run: (v, m) => { const n = Math.max(0, ...m.portfolio.opportunities.map(x => +x.id.slice(4))) + 1;   // lista vazia: 0001, não -Infinity
+        m.portfolio.opportunities.push({id: "OPP-" + String(n).padStart(4, "0"), title: v.title, area: v.area, kind: v.kind,
+          status: "ideia", status_history: [], score: null, ice_suggested: false, docs: [], evidence: [], people: []}); }});
+}
+function confirmIce(o){                              // ICE sugerido vira firme com as notas sugeridas
+  runCommand("brain opportunity score " + o.id + " --impact " + o.impact + " --confidence " + o.confidence + " --ease " + o.ease,
+    m => { const x = m.portfolio.opportunities.find(y => y.id === o.id); x.ice_suggested = false; });
+}
 function iceForm(o){
   formDialog({title: "ICE · " + o.id, sub: "impacto × confiança × facilidade (1–5) — o CLI calcula o score · ? traz a metodologia", fields: [
       {k: "impact", label: iceQ("impact"), options: iceOpts("impact"), value: o.impact == null ? "" : String(o.impact),
@@ -1653,7 +1711,15 @@ function ctxKeys(k){
   const goOrSel = (hash, fn) => { const el = selEl(); if (el && (fn || true) && SEL.i >= 0 && fn) fn(); else location.hash = hash; };
 
   if (h.startsWith("#home")) { if (k === "n") { noteForm(); return true; } return false; }
-  if (h.startsWith("#projects")) { if (k === "n") { planForm(); return true; } return false; }
+  if (h.startsWith("#projects")) {
+    if (k === "n" || k === "G") { planForm(); return true; }   // G = novo goal: o gate estrutural mora no formulário
+    if (k === "P") { const id = selId() || "";
+      if (id.startsWith("GOAL-")) progressForm(id);
+      else if (id) toast("P declara progresso de goal — selecione um goal");
+      else needSel();
+      return true; }
+    if (k === "S") { shareForm(); return true; }
+    return false; }
   if (h.startsWith("#todo") || h.startsWith("#action/")) {
     const a = h.startsWith("#action/") ? A_OF(decodeURIComponent(h.slice(8))) : null;
     if (k === "n" && h.startsWith("#todo")) { newAction(); return true; }
@@ -1678,7 +1744,15 @@ function ctxKeys(k){
     if (k === "o" && !t.open) { reopenForm(t); return true; }
     if (k === "m") { const w = (t.open && t.list === "waiting") ? t : null;
       if (w) chaseDraft(w); else toast("m cobrar: selecione uma ação aguardando outra pessoa (waiting)"); return true; }
-    return mut.includes(k) || k === "o";
+    if (["v", "O", "a"].includes(k)) {                 // vista · ordem · todas, como o TUI (v/O/a)
+      const qs = new URLSearchParams((location.hash.split("?")[1]) || "");
+      if (k === "v") { const order = ["todas", "semana", "depois", "nao-agora"];
+        const cur = qs.get("v") || "todas"; qs.set("v", order[(order.indexOf(cur) + 1) % order.length]); }
+      if (k === "O") qs.set("o", (qs.get("o") || "prazo") === "prazo" ? "id" : "prazo");
+      if (k === "a") qs.get("a") === "1" ? qs.delete("a") : qs.set("a", "1");
+      location.hash = "todo" + (qs.toString() ? "?" + qs.toString() : "");
+      return true; }
+    return mut.includes(k) || k === "o" || ["v", "O", "a"].includes(k);
   }
   if (h.startsWith("#project/")) { const p = window.BRAIN.P[decodeURIComponent(h.slice(9))];
     if (k === "e" && p) { editPlanNode("project", p.id, p); return true; }
@@ -1686,19 +1760,26 @@ function ctxKeys(k){
     if (k === " " && dv) { delivToggle(dv); return true; }
     if (k === "s" && dv) { delivState(dv); return true; }
     return false; }
-  if (h.startsWith("#people")) { if (k === "n") { nbForm("person"); return true; } return false; }
+  if (h.startsWith("#people")) {
+    if (k === "n") { nbForm("person"); return true; }
+    const id = selId() || ""; const pe = id && window.BRAIN.PE[id] ? window.BRAIN.PE[id] : null;
+    if ((k === "u" || k === "e") && pe) { editPerson(pe); return true; }
+    if (k === "a" && pe) { personAliasForm(pe); return true; }
+    if (k === "u" || k === "e" || k === "a") needSel();
+    return false; }
   if (h.startsWith("#wins")) { if (k === "n") { nbForm("delivery"); return true; } return false; }
   if (h.startsWith("#person/")) { const pe = window.BRAIN.PE[decodeURIComponent(h.slice(8))];
     if ((k === "u" || k === "e") && pe) { editPerson(pe); return true; }
-    if (k === "a" && pe) { formDialog({title: "Alias · " + pe.name, fields: [{k: "alias", label: "Novo alias", ph: "apelido"}],
-      preview: v => v.alias ? "brain person alias " + pe.id + " " + v.alias : null,
-      run: (v, m) => { m.people.find(x => x.id === pe.id).aliases.push(v.alias); }}); return true; } return false; }
+    if (k === "a" && pe) { personAliasForm(pe); return true; } return false; }
   if (h.startsWith("#ask")) {
     if (k === "n") { pubRequestForm(); return true; }
     const id = selId() || "";
     const q = id.startsWith("ASK-") ? M.questions.find(x => x.id === id) : null;
     const pr = id.startsWith("PROP-") ? M.proposals.find(x => x.id === id) : null;
-    if (!q && !pr) { if (k === "a" || k === "x" || k === "r" || k === "A") needSel(); return k === "R"; }
+    const pu = id.startsWith("PUB-") ? (M.publishes || []).find(x => x.id === id) : null;
+    if (!q && !pr && !pu) { if (k === "a" || k === "x" || k === "r" || k === "A") needSel(); return k === "R"; }
+    if (k === "A" && pu) { if (pu.status === "solicitada") pubAction("approve", pu.id); else toast(pu.id + " está " + pu.status); return true; }
+    if (k === "x" && pu) { if (pu.status === "solicitada" || pu.status === "aprovada") pubAction("cancel", pu.id); else toast(pu.id + " está " + pu.status); return true; }
     if (k === "a" && q) { if (q.status !== "aberta") { toast(q.id + " já está " + q.status); return true; }
       formDialog({title: "Responder " + q.id, sub: q.text,
       fields: [{k: "answer", label: "Resposta", value: (q.options && q.options[0]) || ""}],
@@ -1747,39 +1828,17 @@ function ctxKeys(k){
   if (h.startsWith("#decisions")) {
     if (k === "n") { nbForm("decision"); return true; }
     if (k === "S") { const d = selDec(); if (d) supersedeForm(d); return true; } return false; }
+  if (h.startsWith("#pf/matrix")) {
+    const o = selOpp(); if (!o) return false;
+    if (k === "s") { statusPicker(o); return true; }
+    if (k === "i") { iceForm(o); return true; }
+    return false; }
   if (h.startsWith("#pf/opps")) {
-    if (k === "n") { formDialog({title: "Nova oportunidade", fields: [
-        {k: "title", label: "Título", ph: "o que vale melhorar"},
-        {k: "area", label: "Área", options: areaOpts(), value: M.portfolio.areas[0] && M.portfolio.areas[0].id},
-        {k: "kind", label: "Tipo", options: [["melhoria-de-processo", "melhoria-de-processo"], ["novo-processo", "novo-processo"], ["estruturante", "estruturante"]]},
-        {k: "process", label: "Processo", options: procOpts()},
-        {k: "problem", label: "Problema", ph: "o que dói hoje"},
-        {k: "suggestion", label: "Sugestão", ph: "como resolver"},
-        {k: "gain", label: "Ganho esperado"},
-        {k: "hours", label: "Horas/mês economizadas", type: "number"},
-        {k: "person", label: "Pessoa ligada", options: peopleOpts()},
-        {k: "goal", label: "Goal", options: goalOpts()}],
-      preview: v => {
-        if (!v.title) return null;
-        let c = "brain opportunity add " + q(v.title) + " --area " + v.area + " --kind " + v.kind;
-        if (v.process) c += " --process " + v.process;
-        if (v.problem) c += " --problem " + q(v.problem);
-        if (v.suggestion) c += " --suggestion " + q(v.suggestion);
-        if (v.gain) c += " --gain " + q(v.gain);
-        if (v.hours) c += " --hours-saved " + v.hours;
-        if (v.person) c += " --person " + v.person;
-        if (v.goal) c += " --goal " + v.goal;
-        return c;
-      },
-      run: (v, m) => { const n = Math.max(...m.portfolio.opportunities.map(x => +x.id.slice(4))) + 1;
-        m.portfolio.opportunities.push({id: "OPP-" + String(n).padStart(4, "0"), title: v.title, area: v.area, kind: v.kind,
-          status: "ideia", status_history: [], score: null, ice_suggested: false, docs: [], evidence: [], people: []}); }}); return true; }
+    if (k === "n") { oppAddForm(); return true; }
     const o = selOpp(); if (!o) return k === "n";
     if (k === "s") { statusPicker(o); return true; }
     if (k === "i") { iceForm(o); return true; }
-    if (k === "c" && o.ice_suggested) {
-      runCommand("brain opportunity score " + o.id + " --impact " + o.impact + " --confidence " + o.confidence + " --ease " + o.ease,
-        m => { const x = m.portfolio.opportunities.find(y => y.id === o.id); x.ice_suggested = false; }); return true; }
+    if (k === "c" && o.ice_suggested) { confirmIce(o); return true; }
     if (k === "e") { editOpp(o); return true; }
     if (k === "x") { if (["descartada", "entregue"].includes(o.status)) { toast(o.id + " está " + o.status); return true; }
       oppReasonDialog(o.id, "descartada"); return true; }
@@ -1789,14 +1848,31 @@ function ctxKeys(k){
   if (h.startsWith("#pf/opp/")) { const o = window.BRAIN.OPP[decodeURIComponent(h.slice(8))];
     if (k === "e" && o) { editOpp(o); return true; }
     if (k === "s" && o) { statusPicker(o); return true; }
-    if (k === "i" && o) { iceForm(o); return true; } return false; }
+    if (k === "i" && o) { iceForm(o); return true; }
+    if (k === "c" && o && o.ice_suggested) { confirmIce(o); return true; }
+    if (k === "x" && o && !["descartada", "entregue"].includes(o.status)) { oppReasonDialog(o.id, "descartada"); return true; }
+    if (k === "p" && o && !(o.project || o.promoted)) { promoteDialog(o); return true; }
+    return false; }
   if (h.startsWith("#pf/procs")) {
     if (k === "n") { nbForm("process"); return true; }
     const id = selId(); const pc = id && id.startsWith("PROC-") ? M.portfolio.processes.find(x => x.id === id) : null;
     if (k === "e" && pc) { editProc(pc); return true; }
+    if (k === "a" && pc) { oppAddForm({process: pc.id}); return true; }
     if (k === "x" && pc) { formDialog({title: "Aposentar " + pc.id, fields: [{k: "reason", label: "Motivo", value: ""}],
       preview: v => v.reason ? "brain process retire " + pc.id + ' --reason "' + v.reason.replace(/"/g, "'") + '"' : null,
       run: (v, m) => { m.portfolio.processes.find(x => x.id === pc.id).status = "aposentado"; }}); return true; }
+    return false; }
+  if (h.startsWith("#cfg/memoria")) {
+    if (k === "s") { const b = document.querySelector("[data-provform]"); if (b) b.click(); else formDialog(provFormSpec()); return true; }
+    if (k === "v") { runCommand("brain memory harness verify", () => {}); return true; }
+    if (k === "i") { const id = selId() || ""; const hw = (window.BRAIN.M.harnesses || []).find(x => (x.name || x.id) === id);
+      if (hw) runCommand("brain memory harness install " + (hw.name || hw.id), m => {
+        const x = (m.harnesses || []).find(y => (y.name || y.id) === (hw.name || hw.id)); if (x) x.wired = true; });
+      else needSel();
+      return true; }
+    return false; }
+  if (h.startsWith("#cfg/saude")) {
+    if (k === "o") { runCommand("brain doctor --online"); return true; }   // re-check ao vivo; a régua da página é do render
     return false; }
   if (h.startsWith("#pf/areas") || h.startsWith("#pf/area/")) {
     if (k === "n" && h.startsWith("#pf/areas")) { nbForm("area"); return true; }
@@ -1808,7 +1884,7 @@ function ctxKeys(k){
       preview: v => { const parts = []; if (v.name && v.name !== a.name) parts.push("--name " + q(v.name)); if (v.alias) parts.push("--alias " + q(v.alias));
         if (v.note && v.note !== (a.note || "")) parts.push("--note " + q(v.note));
         return parts.length ? "brain area update " + a.id + " " + parts.join(" ") : null; },
-      run: (v, m) => { const x = m.portfolio.areas.find(y => y.id === a.id); if (v.name) x.name = v.name; if (v.alias) x.aliases.push(v.alias); }}); return true; }
+      run: (v, m) => { const x = m.portfolio.areas.find(y => y.id === a.id); if (v.name) x.name = v.name; if (v.alias) x.aliases.push(v.alias); if (v.note) x.note = v.note; }}); return true; }
     return false; }
   return false;
 }
@@ -1827,21 +1903,27 @@ function helpOverlay(){
     ["? (dentro do ICE)", "metodologia de pontuação — as notas com critério e regras"],
     ["TODO (com cartão selecionado)", ""],
     ["n", "nova ação"], ["e", "editar"], ["c", "fechar"], ["s", "status (ciclo)"], ["t", "prazo"],
-    ["D", "descartar"], ["z", "não agora / voltar"], ["o", "reabrir"], ["m", "cobrar (agente)"],
-    ["Foco", ""], ["A", "aprovar plano (gate)"], ["a", "aplicar no calendário (gate)"], ["s", "sync"], ["p", "planejar (agente)"],
+    ["D", "descartar"], ["z", "não agora / voltar"], ["o", "reabrir"], ["m", "cobrar (rascunho de msg)"],
+    ["v / O / a", "vista · ordem · todas (como o TUI)"],
+    ["Foco", ""], ["A", "aprovar plano (gate)"], ["a", "aplicar no calendário (gate · ics ou google)"], ["s", "sync (dry-run ou aplicar)"], ["p", "planejar (focus plan --days)"],
     ["Mensagens", ""], ["A", "aprovar rascunho (gate)"], ["S", "enviar (agente)"], ["x", "cancelar"],
     ["Decisões", ""], ["S", "superar (nova decisão)"],
     ["Perguntas e propostas", ""], ["a", "responder pergunta / aceitar proposta (gate)"],
     ["r", "rejeitar proposta"], ["x", "descartar pergunta"], ["R", "retomar o agente"],
     ["Portfólio · Oportunidades", ""], ["n", "nova"], ["s", "status"], ["i", "ICE"], ["c", "confirmar ICE sugerido"],
     ["e", "editar"], ["x", "descartar"], ["p", "promover (gate)"], ["O", "one-pager (agente)"],
-    ["Portfólio · Processos", ""], ["n", "novo"], ["e", "editar"], ["x", "aposentar"],
+    ["Portfólio · Processos", ""], ["n", "novo"], ["e", "editar"], ["a", "nova oportunidade daqui"], ["x", "aposentar"],
+    ["Portfólio · Matriz", ""], ["s", "status"], ["i", "ICE"],
+    ["Configurações · Memória", ""], ["s", "trocar provedor"], ["v", "verificar harnesses"], ["i", "conectar selecionado"],
+    ["Configurações · Saúde", ""], ["o", "testar online (doctor --online)"],
+    ["Publicar (porta 3)", ""], ["A", "aprovar (gate)"], ["x", "cancelar"],
     ["Ficha de projeto", ""], ["space", "entregável feito"], ["s", "estado do entregável"],
     ["Publicar (porta 3)", ""], ["n", "pedir publicação"],
     ["Outros n", ""], ["n", "nota (Início) · estrutura do plano (Projetos) · rascunhar msg · nova decisão · nova entrega · nova pessoa · novo processo · nova área"],
     ["Ficha de ação", ""], ["m", "mesclar duplicada"],
     ["Pessoas / fichas", ""], ["u ou e", "editar pessoa"], ["a", "alias"],
-    ["Projetos / Goals", ""], ["e", "editar (gate estrutural: brain plan log)"],
+    ["Projetos / Goals", ""], ["e", "editar (gate estrutural: brain plan log)"], ["G", "novo goal (gate)"],
+    ["P", "declarar progresso do goal"], ["S", "exportar (share)"],
   ];
   ov.innerHTML = '<div class="palette"><div class="pin"><b>Teclas — as mesmas da TUI</b><span class="hint">? fecha</span></div>' +
     '<div style="padding:10px 16px 14px;max-height:70vh;overflow:auto"><table class="khelp">' +
@@ -1905,9 +1987,14 @@ function keyLegend(){
     add("e", "editar", !t || !t.open); add("c", "fechar", !t || !t.open); add("s", "status", !t || !t.open);
     add("t", "prazo", !t || !t.open); add("D", "descartar", !t || !t.open); add("z", t && t.parked ? "voltar" : "não agora", !t || !t.open);
     add("o", "reabrir", !(t && !t.open)); add("m", "cobrar", !(t && t.open && t.list === "waiting"));
+    const qs0 = new URLSearchParams((location.hash.split("?")[1]) || "");
+    const vl = {todas: "todas", semana: "esta semana", depois: "depois", "nao-agora": "não agora"}[qs0.get("v") || "todas"];
+    add("v", "vista: " + vl); add("O", "ordem: " + ((qs0.get("o") || "prazo") === "prazo" ? "prazo" : "id"));
+    add("a", qs0.get("a") === "1" ? "só recentes" : "todas");
   } else if (h.startsWith("#action/")) { add("e", "editar"); add("c", "fechar"); add("m", "mesclar"); }
   else if (h.startsWith("#home")) add("n", "nota");
-  else if (h.startsWith("#projects")) add("n", "estrutura");
+  else if (h.startsWith("#projects")) { add("n", "estrutura"); add("G", "novo goal (gate)");
+    add("P", "progresso do goal", !id.startsWith("GOAL-")); add("S", "exportar"); }
   else if (h.startsWith("#project/")) { add("e", "editar (gate)");
     add("space", "marcar feito", !(selEl() && selEl().dataset.deliv)); add("s", "estado", !(selEl() && selEl().dataset.deliv)); }
   else if (h.startsWith("#person/")) { add("u", "editar"); add("a", "alias"); }
@@ -1916,6 +2003,9 @@ function keyLegend(){
     const qs = id.startsWith("ASK-") ? (M.questions || []).find(x => x.id === id) : null;
     const ps = id.startsWith("PROP-") ? (M.proposals || []).find(x => x.id === id) : null;
     add("n", "pedir publicação");
+    const pu = id.startsWith("PUB-") ? (M.publishes || []).find(x => x.id === id) : null;
+    add("A", "aprovar publicação (gate)", !(pu && pu.status === "solicitada"), true);
+    add("x", "cancelar publicação", !!pu ? !(pu.status === "solicitada" || pu.status === "aprovada") : true);
     add("a", id.startsWith("PROP-") ? "aceitar (gate)" : "responder", !(qs ? qs.status === "aberta" : ps ? ps.status === "aberta" : false));
     add("r", "rejeitar proposta", !(ps && ps.status === "aberta"));
     add("x", "descartar pergunta", !(qs && qs.status === "aberta"));
@@ -1938,16 +2028,22 @@ function keyLegend(){
     const fb = fid.startsWith("FB-") ? (M.feedback || []).find(x => x.id === fid) : null;
     add("n", "sugerir/corrigir"); add("p", "publicar", !(fb && (fb.status === "pendente" || fb.status === "falhou"))); add("s", "sincronizar");
   } else if (h.startsWith("#decisions")) { add("n", "nova"); add("S", "superar", !id.startsWith("DEC-")); }
+  else if (h.startsWith("#pf/matrix")) { add("s", "status", !o); add("i", "ICE", !o); }
   else if (h.startsWith("#pf/opps")) {
     add("n", "nova");
     add("s", "status", !o); add("i", "ICE", !o); add("c", "confirmar ICE", !(o && o.ice_suggested));
     add("e", "editar", !o); add("x", "descartar", !o);
     add("p", "promover", !(o && !(o.project || o.promoted)), true); add("O", "one-pager", !o);
-  } else if (h.startsWith("#pf/opp/")) { add("e", "editar"); add("s", "status"); add("i", "ICE"); }
-  else if (h.startsWith("#pf/procs")) { add("n", "novo"); add("e", "editar", !id.startsWith("PROC-")); add("x", "aposentar", !id.startsWith("PROC-")); }
+  } else if (h.startsWith("#pf/opp/")) { add("e", "editar"); add("s", "status"); add("i", "ICE");
+    add("c", "confirmar ICE", !(o && o.ice_suggested)); add("p", "promover (gate)", !!(o && (o.project || o.promoted)), true);
+    add("x", "descartar", !o || ["descartada", "entregue"].includes(o.status)); }
+  else if (h.startsWith("#pf/procs")) { add("n", "novo"); add("e", "editar", !id.startsWith("PROC-"));
+    add("a", "nova oportunidade daqui", !id.startsWith("PROC-")); add("x", "aposentar", !id.startsWith("PROC-")); }
+  else if (h.startsWith("#cfg/memoria")) { add("s", "provedor"); add("v", "verificar harnesses"); add("i", "conectar", !id); }
+  else if (h.startsWith("#cfg/saude")) { add("o", "testar online"); }
   else if (h.startsWith("#pf/areas")) { add("n", "nova"); add("e", "editar", !sel); }
   else if (h.startsWith("#wins")) add("n", "nova entrega");
-  else if (h.startsWith("#people")) add("n", "nova pessoa");
+  else if (h.startsWith("#people")) { add("n", "nova pessoa"); add("u", "editar", !id); add("a", "alias", !id); }
   else if (h.startsWith("#pf/area/")) add("e", "editar");
   return out;
 }
@@ -2170,15 +2266,26 @@ V.home = () => {
 };
 V.todo = (q) => {
   const proj = q.get("p") || "", showWatch = q.get("w") === "1";
-  const mine = M.actions.filter(a => a.list === "mine" && a.mine && (!proj || a.project === proj));
-  const recent = new Date(M.today + "T12:00:00"); recent.setDate(recent.getDate() - 14);
+  const view = q.get("v") || "todas", sortK = q.get("o") || "prazo", showAll = q.get("a") === "1";
+  const end = new Date(M.today + "T12:00:00"); { const d = end.getDay(); end.setDate(end.getDate() + (d === 0 ? 0 : 7 - d)); }
+  const endS = end.toISOString().slice(0, 10);
+  let mine = M.actions.filter(a => a.list === "mine" && a.mine && (!proj || a.project === proj));
+  if (view === "semana") mine = mine.filter(a => a.open && ((a.due && a.due <= endS) || a.status === "fazendo"));
+  else if (view === "depois") mine = mine.filter(a => a.open && !a.parked && !((a.due && a.due <= endS) || a.status === "fazendo"));
+  else if (view === "nao-agora") mine = mine.filter(a => a.open && a.parked);
+  const recent = new Date(M.today + "T12:00:00");
+  if (!showAll) recent.setDate(recent.getDate() - 14);
   const cols = [["A fazer", a => a.open && a.status === "aberta", "aberta"],
     ["Fazendo", a => a.open && a.status === "fazendo", "fazendo"],
-    ["Bloqueada / aguardando", a => a.open && (a.status === "bloqueada" || a.status === "aguardando"), "aguardando"],
-    ["Feita (14 dias)", a => a.status === "fechada" && a.closed && new Date(a.closed + "T12:00:00") >= recent, "fechada"]];
-  const sortA = l => l.sort((x, y) => (x.due || "9999").localeCompare(y.due || "9999") || (x.priority === "alta" ? -1 : 0));
+    ["Bloqueada / aguardando", a => a.open && ((a.blocked_by && a.blocked_by.length) || a.status === "aguardando"), "aguardando"],
+    ["Feita" + (showAll ? "" : " (14 dias)"), a => a.status === "fechada" && a.closed && new Date(a.closed + "T12:00:00") >= recent, "fechada"]];
+  const sortA = l => l.sort((x, y) => sortK === "id" ? x.id.localeCompare(y.id)
+    : ((x.due || "9999").localeCompare(y.due || "9999") || (x.priority === "alta" ? -1 : 0)));
+  const VIEWS = [["todas", "todas"], ["semana", "esta semana"], ["depois", "depois"], ["nao-agora", "não agora"]];
   let h = '<div class="pagehead"><div><h1>TODO</h1><p class="sub">Suas ações em quadro. Feche pelo chat (/done), marcando em FRESH/todo.md — ou pelo painel, se a ponte CLI estiver ligada.</p></div></div>' +
     '<div class="filters">' + dd("fp", M.projects.map(p => [p.id, p.id + " " + p.title]), proj, "todos os projetos") +
+    dd("fv", VIEWS, view, "todas as vistas") + dd("fo", [["prazo", "por prazo"], ["id", "por id"]], sortK, "por prazo") +
+    '<label class="chk"><input type="checkbox" id="fa"' + (showAll ? " checked" : "") + "> todas (fechadas além de 14d)</label>" +
     '<label class="chk"><input type="checkbox" id="fw"' + (showWatch ? " checked" : "") + "> mostrar observando</label></div>";
   h += '<div class="kanban">' + cols.map(([t, f, key]) => { const l = sortA(mine.filter(f)); return '<div class="col" data-col="' + key + '"><h3>' + t + ' <span class="count">' + l.length + "</span></h3>" + (l.map(card).join("") || empty("—")) + "</div>"; }).join("") + "</div>";
   const waiting = M.actions.filter(a => a.open && a.list === "waiting" && (!proj || a.project === proj));
@@ -2188,10 +2295,16 @@ V.todo = (q) => {
     h += panel("Observando — contexto, não cobra · " + w.length, actionTable(w.map(a => a.id), ["owner", "project"]), ' style="margin-top:14px"');
   }
   setTimeout(() => {
-    const b = document.querySelector('[data-dd="fp"] .dd-btn');
-    if (b) b.addEventListener("ddchange", e => go("todo", {p: e.detail.value, w: showWatch ? "1" : ""}));
+    [["fp", "p"], ["fv", "v"], ["fo", "o"]].forEach(([id0, key]) => {
+      const b = document.querySelector('[data-dd="' + id0 + '"] .dd-btn');
+      if (b) b.addEventListener("ddchange", e => go("todo", {p: proj, w: showWatch ? "1" : "",
+        v: view !== "todas" ? view : "", o: sortK !== "prazo" ? sortK : "", a: showAll ? "1" : "", [key]: e.detail.value}));});
+    const fa = document.querySelector("#fa");
+    if (fa) fa.onchange = e => go("todo", {p: proj, w: showWatch ? "1" : "",
+      v: view !== "todas" ? view : "", o: sortK !== "prazo" ? sortK : "", a: e.target.checked ? "1" : ""});
     const c = document.querySelector("#fw");
-    if (c) c.onchange = e => go("todo", {p: proj, w: e.target.checked ? "1" : ""});
+    if (c) c.onchange = e => go("todo", {p: proj, w: e.target.checked ? "1" : "",
+      v: view !== "todas" ? view : "", o: sortK !== "prazo" ? sortK : "", a: showAll ? "1" : ""});
   });
   return h;
 };
