@@ -894,6 +894,7 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
             if t == 0:
                 if w(self.store and self.store.is_empty()):
                     add("i", "primeira entrevista", self.agent_init, agent=True)
+                add("n", "nota", self.f_note)
                 add("u", "atualizar tudo", self.agent_update, agent=True)
                 add("c", "puxar fonte", self.pick_source, agent=True)
                 add("d", "processar inbox", lambda: self.agent_dump(), agent=True)
@@ -1528,7 +1529,11 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
 
     def cycle_status(self) -> None:
         a = self.cur().data
-        nxt = {"aberta": "fazendo", "fazendo": "aguardando", "aguardando": "aberta", "bloqueada": "fazendo"}.get(a["status"], "fazendo")
+        blk = a.get("blocked_by_all") or a.get("blocked_by") or []
+        if blk:
+            self.log_line(f"{a['id']} segue bloqueada por {', '.join(blk)} — resolva o bloqueio para movê-la", "yellow")
+            return
+        nxt = {"aberta": "fazendo", "fazendo": "aguardando", "aguardando": "aberta"}.get(a["status"], "fazendo")
         self.exec([["action", "update", a["id"], "--status", nxt, "--by", "owner"]])
 
     def f_drop(self) -> None:
@@ -1710,6 +1715,8 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
                 c += ["--ref", v["ref"]]
             if v["why"]:
                 c += ["--why", v["why"]]
+            if v.get("channel") and v["channel"] != "slack":
+                c += ["--channel", v["channel"]]
             return [c]
 
         def after() -> None:
@@ -1720,7 +1727,8 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
         self.form(FormSpec("Rascunhar mensagem no Slack", [
             Field("to", "para", value=to, req=True, ph="id da pessoa ou #canal", check=self._check_recipient),
             Field("text", "texto", value=text, req=True, ph="Oi …"),
-            Field("ref", "ref", value=ref, ph="TASK-####"), Field("why", "por quê", value=why)], build,
+            Field("ref", "ref", value=ref, ph="TASK-####"), Field("why", "por quê", value=why),
+            Field("channel", "canal", choice=[("slack", "slack"), ("email", "email")], value="slack")], build,
             sub="O agente envia depois da sua aprovação, como você. O texto aprovado fica travado por hash.", after=after))
 
     def f_approve_msg(self) -> None:

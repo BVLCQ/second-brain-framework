@@ -693,7 +693,7 @@ function wireOppKanban(){
 }
 
 // ── kanban: botões rápidos + arrastar e soltar (ponte CLI) ──────────────
-function colOf(a){ if (!a.open) return "fechada"; return ((a.blocked_by && a.blocked_by.length) || a.status === "aguardando") ? "aguardando" : a.status; }
+function colOf(a){ if (!a.open) return "fechada"; return ((a.blocked_by && a.blocked_by.length) || a.status === "bloqueada" || a.status === "aguardando") ? "aguardando" : a.status; }
 function dropPlan(a, target){                    // → {cmd, mut, dialog?, deny?}
   const from = colOf(a);
   if (from === target) return null;

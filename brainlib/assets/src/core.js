@@ -208,7 +208,7 @@ V.todo = (q) => {
   if (!showAll) recent.setDate(recent.getDate() - 14);
   const cols = [["A fazer", a => a.open && a.status === "aberta", "aberta"],
     ["Fazendo", a => a.open && a.status === "fazendo", "fazendo"],
-    ["Bloqueada / aguardando", a => a.open && ((a.blocked_by && a.blocked_by.length) || a.status === "aguardando"), "aguardando"],
+    ["Bloqueada / aguardando", a => a.open && ((a.blocked_by && a.blocked_by.length) || a.status === "bloqueada" || a.status === "aguardando"), "aguardando"],
     ["Feita" + (showAll ? "" : " (14 dias)"), a => a.status === "fechada" && a.closed && new Date(a.closed + "T12:00:00") >= recent, "fechada"]];
   const sortA = l => l.sort((x, y) => sortK === "id" ? x.id.localeCompare(y.id)
     : ((x.due || "9999").localeCompare(y.due || "9999") || (x.priority === "alta" ? -1 : 0)));

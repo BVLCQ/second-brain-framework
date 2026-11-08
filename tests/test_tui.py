@@ -1119,7 +1119,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             await pilot.press("4", "]", "]")
             self.assertIn("n", keys())                      # outbox: rascunhar
             await pilot.press("1")
-            self.assertEqual({"u", "c", "d", "b", "o"}, keys())   # resumo: agente e painel
+            self.assertEqual({"n", "u", "c", "d", "b", "o"}, keys())   # resumo: nota + agente e painel (n = paridade com o painel)
             every = {k.k for k in app.ctx_keys(every=True, panel=4, tab=2)}
             self.assertEqual({"n", "A", "S", "x", "T"}, every)
 
@@ -1188,6 +1188,20 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             log = self.log_text(app)
             self.assertIn(f"$ brain action close {target} --how", log)
             self.assertIn("brain render", log)
+
+    async def test_status_cycle_refuses_blocked_action(self):
+        app = self.app()
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause(0.4)
+            app.face, app.p = 0, 2
+            items = app.items(2)
+            blk = next(it for it in items if it.data.get("blocked_by_all"))
+            app.set_sel(2, [i.id for i in items].index(blk.id))
+            app.redraw()
+            app.cycle_status()
+            await pilot.pause(0.2)
+            self.assertIn("segue bloqueada", self.log_text(app))        # o painel faz igual: explica e não move
+            self.assertNotIn("$ brain action update", self.log_text(app))  # status "bloqueada" é derivado do blocked_by
 
     async def test_new_action_without_due_offers_agent_suggestion(self):
         app = self.app()
