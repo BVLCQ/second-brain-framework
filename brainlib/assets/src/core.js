@@ -691,7 +691,8 @@ function route(){
   if (seg[0] === "face") {                       // trocar de face: volta pra onde a face estava
     const f = FACES.some(x => x[0] === seg[1]) ? seg[1] : "execucao";
     const last = localStorage.getItem("mock-face-" + f);
-    location.hash = last || (f === "portfolio" ? "pf/visao" : "home");
+    const entry = FACES.find(x => x[0] === f) || FACES[0];
+    location.hash = last || entry[2][0][0];      // default = primeira aba da própria face (carrossel: toda face é alcançável)
     return;
   }
   if (seg[0] === "portfolio") seg = ["pf", "visao"];          // link antigo
