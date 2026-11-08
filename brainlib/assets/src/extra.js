@@ -24,9 +24,8 @@ window.renderTabs = function(view, TABS, PARENT){
       (n ? '<span class="badge">' + n + "</span>" : "") + "</a>";
   }).join("");
 };
-window.renderFaces = function(face){
-  const fs = window.PF_ONLY ? [["portfolio", "Portfólio"]]
-    : [["execucao", "Execução"], ["portfolio", "Portfólio"]];
+window.renderFaces = function(face, F){   // F vem por parâmetro (padrão da casa: o core é um IIFE, nada vaza pro escopo global)
+  const fs = (F || []).map(f => [f[0], f[1]]);
   document.getElementById("faces").innerHTML = fs.map(function(f){
     return '<button class="' + (face === f[0] ? "on" : "") + '" data-f="' + f[0] + '" title="Tab/Shift+Tab na TUI">' + f[1] + "</button>";
   }).join("");

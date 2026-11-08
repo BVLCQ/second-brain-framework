@@ -696,15 +696,15 @@ function route(){
   }
   if (seg[0] === "portfolio") seg = ["pf", "visao"];          // link antigo
   const pf = seg[0] === "pf";
-  let view = pf ? "pf/" + (seg[1] || "visao") : seg[0];
-  const arg = pf ? seg.slice(2).join("/") : seg.slice(1).join("/");
+  let view = pf ? "pf/" + (seg[1] || "visao") : (seg[0] === "cfg" ? "cfg/" + (seg[1] || "memoria") : seg[0]);
+  const arg = pf ? seg.slice(2).join("/") : (seg[0] === "cfg" ? seg.slice(2).join("/") : seg.slice(1).join("/"));
   const q = new URLSearchParams(qs);
   if (!V[view]) view = "home";
   if (window.PF_ONLY && faceOf(view) === "execucao") { location.hash = "#pf/visao"; return; }
   localStorage.setItem("mock-face-" + faceOf(view), raw);
   if (typeof window.renderTabs === "function")
     window.renderTabs(view, (FACES.find(f => f[0] === faceOf(view)) || FACES[0])[2], PARENT);
-  if (typeof window.renderFaces === "function") window.renderFaces(faceOf(view));
+  if (typeof window.renderFaces === "function") window.renderFaces(faceOf(view), FACES);
   $("#view").innerHTML = V[view](q, arg && decodeURIComponent(arg));
   if (typeof window.afterRoute === "function") window.afterRoute(view, q, arg);
   window.scrollTo(0, 0);
@@ -742,10 +742,10 @@ if (qi) {
 }
 window.addEventListener("hashchange", route);
 route();
-})();
 
 
 // ── versão + atualização (canto inferior direito; dados vêm do cache do render) ──
+// (dentro do MESMO IIFE do core: o M e o $ daqui não existem fora dele — badge morto desde que o core virou IIFE)
 (function(){
   const u = M.update || {};
   const b = document.getElementById("verbadge");
@@ -773,4 +773,5 @@ route();
   const back = document.getElementById("newsback");
   back.addEventListener("click", e => { if(e.target === back) back.hidden = true; });
   document.addEventListener("keydown", e => { if(e.key === "Escape") back.hidden = true; });
+})();
 })();
