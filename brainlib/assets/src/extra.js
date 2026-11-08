@@ -1,6 +1,7 @@
 /* VARIANTE B extras — paleta ⌘K + ponte CLI simulada (mesmos comandos que o TUI dispara). */
 (function(){
 "use strict";
+let faceList = [], faceCur = "execucao";   // carrossel de faces: alimentado pelo renderFaces (o core passa a lista)
 const D0 = JSON.parse(document.getElementById("data").textContent);
 D0.counts = D0.counts || {}; D0.questions = D0.questions || []; D0.proposals = D0.proposals || [];
 D0.outbox = D0.outbox || []; D0.health = D0.health || []; D0.deliveries = D0.deliveries || [];
@@ -25,10 +26,16 @@ window.renderTabs = function(view, TABS, PARENT){
   }).join("");
 };
 window.renderFaces = function(face, F){   // F vem por parâmetro (padrão da casa: o core é um IIFE, nada vaza pro escopo global)
-  const fs = (F || []).map(f => [f[0], f[1]]);
-  document.getElementById("faces").innerHTML = fs.map(function(f){
-    return '<button class="' + (face === f[0] ? "on" : "") + '" data-f="' + f[0] + '" title="Tab/Shift+Tab na TUI">' + f[1] + "</button>";
-  }).join("");
+  faceList = (F && F.length ? F : faceList);   // carrossel do Tab usa a lista que o core passa
+  faceCur = face;
+  const n = faceList.length, i = Math.max(0, faceList.findIndex(f => f[0] === face));
+  const cur = faceList[i] || ["", "—"];
+  const prev = n > 1 ? faceList[(i + n - 1) % n] : null;   // ‹ face atual ›: tamanho constante, por mais faces que entrem
+  const next = n > 1 ? faceList[(i + 1) % n] : null;
+  document.getElementById("faces").innerHTML =
+    (prev ? '<button class="fnav" data-f="' + prev[0] + '" title="Face anterior · ' + prev[1] + ' (Shift+Tab)">‹</button>' : "") +
+    '<button class="fcur" data-f="' + (next ? next[0] : cur[0]) + '" title="Próxima face — Tab">' + cur[1] + "</button>" +
+    (next ? '<button class="fnav" data-f="' + next[0] + '" title="Próxima face · ' + next[1] + ' (Tab)">›</button>' : "");
   document.querySelectorAll("#faces button").forEach(b => b.onclick = () => { location.hash = "#face/" + b.dataset.f; });
 };
 
@@ -1382,7 +1389,15 @@ document.addEventListener("keydown", e => {
   if (/input|textarea|select/i.test(e.target.tagName || "") || e.target.isContentEditable) return;
   const k = e.key;
   if (k === "`") { e.preventDefault(); conToggle(); return; }
-  if (k === "Tab") { e.preventDefault(); location.hash = "#face/" + (location.hash.startsWith("#pf/") ? "execucao" : "portfolio"); return; }
+  if (k === "Tab") {                                            // carrossel: Tab avança, Shift+Tab volta, wrap nas pontas
+    e.preventDefault();
+    if (faceList.length > 1) {
+      const i = Math.max(0, faceList.findIndex(f => f[0] === faceCur));
+      const step = e.shiftKey ? faceList.length - 1 : 1;
+      location.hash = "#face/" + faceList[(i + step) % faceList.length][0];
+    }
+    return;
+  }
   if (k === "/") { e.preventDefault(); openPal(); return; }
   if (k === "?") { e.preventDefault(); helpOverlay(); return; }
   if (k === "j" || k === "ArrowDown") { e.preventDefault(); selMove(1); return; }
