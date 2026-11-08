@@ -690,23 +690,30 @@ formulário de trocar provedor roda a mesma linha da TUI e do CLI.
 - **Linha do tempo** — o que aconteceu e o que vem.
 - **Foco** (badge: plano proposto) — o plano da semana **com o seu
   calendário real**: eventos ocupados em cinza, blocos propostos em azul,
-  conflitos em vermelho. `A` aprova (gate), `a` aplica, `s` sincroniza,
-  `p` replaneja; clicar num bloco proposto reserva o plano.
+  conflitos em vermelho. `A` aprova (gate — resposta literal), `a` aplica
+  (gate — ics ou google), `s` sincroniza (dry-run ou aplicar), `p` planeja
+  com o horizonte em dias; clicar num bloco proposto reserva o plano.
 - **Mensagens** (badge: rascunhos) — o outbox: rascunhos, enviadas,
-  falhas. `n` rascunha, `A` aprova o texto exato (gate), `x` cancela.
+  falhas. `n` rascunha, `A` aprova o texto exato (gate — o diálogo mostra a
+  mensagem e espera seu `enviar N`), `x` cancela (rascunho ou aprovada).
 - **Perguntas** — a caixa de aprovação: ASKs, propostas (aceitar/rejeitar
-  com quote) e a seção **Publicar** (porta 3). `n` pede publicação.
+  com quote) e a seção **Publicar** (porta 3). `n` pede publicação,
+  `A` aprova (gate) e `x` cancela a publicação selecionada.
 - **Sugestões** (badge: pendentes) — a fila do que vira issue no GitHub.
 
-**Configurações** — páginas: **Memória** (provedores, harnesses, trocar
-provedor) e **Saúde** (badge: avisos) — o `doctor` visual; desde a face
-Configurações a Saúde mora só aqui, como na TUI.
+**Configurações** — páginas: **Memória** (provedores, harnesses; `s` troca
+provedor, `v` verifica os harnesses, `i` conecta o selecionado) e **Saúde**
+(badge: avisos) — o `doctor` visual + `o` testa online de novo; desde a face
+Configurações a Saúde mora só aqui, como na TUI (a paleta também leva só
+aqui — o link antigo `#health` redireciona).
 
 **Portfólio** — páginas: **Visão geral** (funil, horas/mês por área,
 lacunas), **Oportunidades** (kanban por estágio — arrastar muda status;
-`em-espera`/`descartada` pedem motivo digitado; `i` sugere ICE, `c`
-confirma, `p` promover = gate estrutural), **Matriz** impacto × facilidade,
-**Processos** (`n` novo, `e` edita, `x` aposenta) e **Áreas** (`n` nova;
+`em-espera`/`descartada` pedem motivo digitado; `i` pontua ICE, `c`
+confirma o sugerido, `p` promover = gate estrutural — na ficha as mesmas
+teclas), **Matriz** impacto × facilidade (`s` status, `i` ICE no selecionado),
+**Processos** (`n` novo, `e` edita, `a` abre a opp a partir daqui, `x`
+aposenta) e **Áreas** (`n` nova;
 clicar numa área abre a página da área com processos, oportunidades e
 pessoas dela).
 

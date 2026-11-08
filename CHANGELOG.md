@@ -1,3 +1,33 @@
+## 2.9.1 — paridade CLI × TUI × painel (auditoria dupla)
+
+- **Painel usa a ponte única**: todo gesto passa pelo `runCommand` — no modo
+  retrato o comando copiado leva `--by owner` como no vivo (antes 12 atalhos
+  copiavam sem, e um copiava uma linha que não era comando).
+- **Fechar/reabrir no painel viram diálogo** com os campos da TUI (como foi +
+  resultado, que vira entrega WIN; motivo) — tecla, ficha, arrasto e paleta.
+- **Gates de verdade no foco**: aprovar pede a resposta literal, aplicar
+  escolhe ics ou google (não mais `--mode google` fixo), planejar roda
+  `focus plan --days` e o sync escolhe dry-run ou aplicar.
+- **Porta 2 no painel**: aprovar mensagem mostra o texto exato e espera seu
+  `enviar N`; cancelar cobre rascunho e aprovada, com motivo.
+- **Guardas de estado**: mutação só em ação aberta (como a TUI), responder/
+  aceitar/descartar só no que está aberto, publicar/descartar de OPP nos
+  estados que fazem sentido; `s` numa ação bloqueada explica e não move
+  (agora igual nos três: o status "bloqueada" é derivado do `blocked_by`).
+- **Seleção respeitada**: outbox, feedback e cobrança agem sobre o item
+  selecionado (antes o primeiro da lista).
+- **Teclas da TUI no painel**: `v`/`O`/`a` no TODO (vista · ordem · todas),
+  `G`/`P`/`S` em Projetos, `u`/`a` em Pessoas, `s`/`i` na Matriz, `c`/`x`/`p`
+  na ficha de oportunidade, `a`-nova-opp no processo, `A`/`x` de publicação,
+  `s`/`v`/`i` na Configurações › Memória e `o`-testar-online na Saúde
+  (`doctor --online` entrou na allowlist do serve).
+- **Saúde só na Configurações** em toda parte: o link antigo `#health`
+  redireciona, a paleta lista as três faces + as páginas cfg, e o
+  portfolio.html não lista mais páginas que não existem lá.
+- **TUI**: `n`-nota no Resumo (paridade com o painel), rascunho com canal,
+  e a régua de cobertura dos testes anda até a folha do argparse (os
+  `memory models …` deixaram de escapar da checagem).
+
 ## 2.9.0 — provedores da memória + face Configurações
 
 - **Provedores LLM · embeddings · reranker** (plano memory-providers.md): o wizard pergunta
