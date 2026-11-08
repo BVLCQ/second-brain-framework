@@ -2612,10 +2612,11 @@ V.ask = () => {
 // ── router + faces (mesma lógica da TUI: Execução | Portfólio, cada face lembra onde estava) ──
 const TABS_EXEC = [["home", "Início"], ["todo", "TODO", () => M.counts.mine_overdue], ["projects", "Projetos"], ["decisions", "Decisões"], ["ask", "Perguntas", () => ((M.questions || []).filter(q => q.status === "aberta").length + M.proposals.length) || 0], ["wins", "Conquistas"],
   ["people", "Pessoas"], ["timeline", "Linha do tempo"], ["focus", "Foco", () => M.focus && M.focus.status === "proposto" ? 1 : 0],
-  ["outbox", "Mensagens", () => M.counts.outbox_pending], ["feedback", "Sugestões", () => (M.feedback || []).filter(f => f.status !== "criado").length || 0], ["health", "Saúde", () => (M.health || []).filter(c => c.level !== "ok").length]];
+  ["outbox", "Mensagens", () => M.counts.outbox_pending], ["feedback", "Sugestões", () => (M.feedback || []).filter(f => f.status !== "criado").length || 0]];
+  // (Saúde saiu daqui com a face Configurações — mesma decisão da TUI: mora só lá, com o badge de avisos)
 const TABS_PF = [["pf/visao", "Visão geral"], ["pf/opps", "Oportunidades", () => PF.opportunities.filter(o => o.status !== "descartada").length],
   ["pf/matrix", "Matriz"], ["pf/procs", "Processos", () => PF.processes.filter(p => p.status === "ativo").length], ["pf/areas", "Áreas", () => PF.areas.length]];
-const TABS_CFG = [["cfg/memoria", "Memória"], ["cfg/saude", "Saúde"]];
+const TABS_CFG = [["cfg/memoria", "Memória"], ["cfg/saude", "Saúde", () => (M.health || []).filter(c => c.level !== "ok").length]];
 const FACES = [["execucao", "Execução", TABS_EXEC], ["portfolio", "Portfólio", TABS_PF], ["configuracoes", "Configurações", TABS_CFG]];
 if (window.PF_ONLY) { FACES.length = 0; FACES.push(["portfolio", "Portfólio", TABS_PF]); }
 const faceOf = v => v.indexOf("pf/") === 0 ? "portfolio" : (v.indexOf("cfg/") === 0 ? "configuracoes" : "execucao");

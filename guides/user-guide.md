@@ -696,7 +696,11 @@ formulário de trocar provedor roda a mesma linha da TUI e do CLI.
   falhas. `n` rascunha, `A` aprova o texto exato (gate), `x` cancela.
 - **Perguntas** — a caixa de aprovação: ASKs, propostas (aceitar/rejeitar
   com quote) e a seção **Publicar** (porta 3). `n` pede publicação.
-- **Saúde** (badge: avisos) — o `doctor` visual.
+- **Sugestões** (badge: pendentes) — a fila do que vira issue no GitHub.
+
+**Configurações** — páginas: **Memória** (provedores, harnesses, trocar
+provedor) e **Saúde** (badge: avisos) — o `doctor` visual; desde a face
+Configurações a Saúde mora só aqui, como na TUI.
 
 **Portfólio** — páginas: **Visão geral** (funil, horas/mês por área,
 lacunas), **Oportunidades** (kanban por estágio — arrastar muda status;
