@@ -111,9 +111,7 @@ function commands(){
   const mine = MD.actions.filter(a => a.open && a.mine && a.list === "mine");
   mine.filter(a => a.status === "aberta").forEach(a => out.push({label: "Marcar fazendo · " + a.id + " " + a.title,
     cmd: "brain action update " + a.id + " --status fazendo", mut: m => { m.actions.find(x => x.id === a.id).status = "fazendo"; }}));
-  mine.forEach(a => out.push({label: "Fechar · " + a.id + " " + a.title,
-    cmd: 'brain action close ' + a.id + ' --how "feito pelo painel"',
-    mut: m => { const x = m.actions.find(y => y.id === a.id); x.open = false; x.status = "fechada"; x.closed = m.today; }}));
+  mine.forEach(a => out.push({label: "Fechar · " + a.id + " " + a.title, act: () => closeForm(a)}));
   MD.actions.filter(a => a.open && a.due_suggested).forEach(a => out.push({label: "Confirmar prazo sugerido · " + a.id + " (" + (a.due || "").slice(0, 10) + ")",
     cmd: "brain action update " + a.id + " --confirm-due", mut: m => { m.actions.find(x => x.id === a.id).due_suggested = false; }}));
   if (D0.focus && D0.focus.status === "proposto") {
@@ -124,7 +122,7 @@ function commands(){
       mut: m => { m.focus.status = "aplicado"; m.focus.applied = m.focus.blocks; m.focus.mode = "google"; }});
   }
   MD.outbox.filter(m0 => m0.status === "rascunho").forEach(m0 => out.push({label: "Aprovar mensagem " + m0.id + " para " + m0.to_name,
-    cmd: 'brain outbox approve ' + m0.id + ' --quote "enviar 1"', mut: m => { m.outbox.find(x => x.id === m0.id).status = "aprovada"; }}));
+    act: () => approveMsgForm(m0)}));
   MD.proposals.forEach(p => {
     out.push({label: "Aceitar proposta " + p.id + " · " + p.summary.slice(0, 60) + "…",
       cmd: 'brain proposal accept ' + p.id + ' --quote "ok"', mut: m => { m.proposals = m.proposals.filter(x => x.id !== p.id); }});
@@ -194,7 +192,7 @@ function buildItems(q){
   const nq = norm(q);
   const free = /^brain\s/.test(q) ? [{group: "linha livre", label: "executar: " + q, cmd: q, mut: null}] : [];
   const helps = [{group: "ajuda", label: "Metodologia ICE (rubric de pontuação)", act: iceHelpOverlay}];
-  const all = [...navEntries(), ...entEntries(), ...helps, ...commands().map(c => ({group: "comando", label: c.label, cmd: c.cmd, mut: c.mut || null}))];
+  const all = [...navEntries(), ...entEntries(), ...helps, ...commands().map(c => ({group: "comando", label: c.label, cmd: c.cmd, mut: c.mut || null, act: c.act || null}))];
   const f = nq ? all.filter(it => norm(it.label + " " + (it.ent || "") + " " + (it.cmd || "") + " " + it.group).includes(nq)) : all;
   return [...free, ...f.slice(0, 30)];
 }
@@ -294,7 +292,6 @@ function wireFocus(){
 
 // ── perguntas e propostas (porta do dono: responder, descartar, aceitar, rejeitar) ──
 function askAnswer(id, text){
-  if (!LIVE) { offlineCmd("brain ask answer " + id + ' "' + text.replace(/"/g, "'") + '"'); return; }
   runCommand('brain ask answer ' + id + ' "' + text.replace(/"/g, "'") + '"',
     m => { const q = m.questions.find(x => x.id === id); if (q) { q.status = "respondida"; q.answer = text; } });
 }
@@ -338,9 +335,7 @@ function mutDeliv(id0, st){ return m => { const d = findDelivIn(m, id0); if (d) 
 function delivToggle(id0){
   const d = findDelivIn(window.BRAIN.M, id0); if (!d) return;
   const st = d.status === "feito" ? "nao-iniciado" : "feito";
-  const cmd = "brain plan deliverable " + id0 + " --status " + st;
-  if (!LIVE) { offlineCmd("" + cmd); return; }
-  runCommand(cmd, mutDeliv(id0, st));
+  runCommand("brain plan deliverable " + id0 + " --status " + st, mutDeliv(id0, st));
 }
 function delivState(id0){
   formDialog({title: "Estado · " + id0, fields: [{k: "status", label: "Estado",
@@ -376,6 +371,32 @@ function draftForm(prefill){
 function chaseDraft(a){
   draftForm({to: a.owner, ref: a.id, why: "cobrança pelo painel",
     text: 'Oi! Atualização sobre "' + a.title + '"? ' + (a.due ? "Era pra " + a.due.slice(8, 10) + "/" + a.due.slice(5, 7) + ". " : "") + "Consegue me dar um status?"});
+}
+function closeForm(a){                                 // como a TUI: como foi + resultado (vira WIN)
+  formDialog({title: "Fechar " + a.id, sub: a.title,
+    fields: [{k: "how", label: "Como foi", value: "", ph: "enviei o draft, confirmação chegou"},
+             {k: "outcome", label: "Resultado (vira entrega WIN)", value: "", ph: "opcional"}],
+    preview: v => v.how ? "brain action close " + a.id + " --how " + q(v.how) +
+      (v.outcome ? " --outcome " + q(v.outcome) : "") : null,
+    run: (v, m) => { const x = m.actions.find(y => y.id === a.id); x.open = false; x.status = "fechada"; x.closed = m.today; }});
+}
+function reopenForm(a){
+  formDialog({title: "Reabrir " + a.id, sub: a.title, fields: [{k: "reason", label: "Motivo", value: "", ph: "voltou ao radar"}],
+    preview: v => v.reason ? "brain action reopen " + a.id + " --reason " + q(v.reason) : null,
+    run: (v, m) => { const x = m.actions.find(y => y.id === a.id); x.open = true; x.status = "aberta"; x.closed = null; }});
+}
+function approveMsgForm(m0){                            // porta 2: texto exato + resposta literal, como a TUI
+  const n = (m0.id.split("-")[1] || "0").replace(/^0+/, "") || "0";
+  formDialog({title: "Aprovar " + m0.id + " → " + (m0.to_name || m0.to || "?"), gate: true,
+    sub: q(m0.text) + " — você aprova este texto exato; se mudar uma palavra, a aprovação cai.",
+    fields: [{k: "quote", label: "Sua aprovação", value: "", ph: "enviar " + n}],
+    preview: v => v.quote ? "brain outbox approve " + m0.id + " --quote " + q(v.quote) : null,
+    run: (v, m) => { m.outbox.find(x => x.id === m0.id).status = "aprovada"; }});
+}
+function cancelMsgForm(m0){
+  formDialog({title: "Cancelar " + m0.id, sub: m0.text, fields: [{k: "reason", label: "Motivo", value: "", ph: "opcional"}],
+    preview: v => "brain outbox cancel " + m0.id + (v.reason ? " --reason " + q(v.reason) : ""),
+    run: (v, m) => { m.outbox.find(x => x.id === m0.id).status = "cancelada"; }});
 }
 function feedbackForm(){
   formDialog({title: "Sugestão ou bug", sub: "porta 7 — vira issue pública no repo do framework · sem dados pessoais",
@@ -508,10 +529,8 @@ function wireP0(){
   document.querySelectorAll("#view [data-progress]").forEach(b => b.onclick = () => progressForm(b.dataset.progress));
   document.querySelectorAll("#view [data-pub]").forEach(b => { const parts = b.dataset.pub.split(":"); b.onclick = () => pubAction(parts[0], parts[1]); });
   document.querySelectorAll("#view [data-fb]").forEach(b => { const id0 = b.dataset.fb; b.onclick = () => {
-    if (!LIVE) { offlineCmd("brain feedback push " + id0); return; }
     runCommand("brain feedback push " + id0); }});
   document.querySelectorAll("#view [data-fbsync]").forEach(b => { b.onclick = () => {
-    if (!LIVE) { offlineCmd("brain feedback sync"); return; }
     runCommand("brain feedback sync"); }});
   const head = document.querySelector("#view .pagehead");
   if (head && !head.querySelector(".planbtns")) {
@@ -532,12 +551,8 @@ function wireP0(){
     b.onclick = () => {
       if (b.dataset.act === "merge") return mergeForm(a0);
       if (b.dataset.act === "edit") return editAction(a0);
-      const cmd = b.dataset.act === "close"
-        ? 'brain action close ' + a0.id + ' --how "feito pelo painel"'
-        : "brain action reopen " + a0.id + ' --reason "reaberta pelo painel"';
-      runCommand(cmd, m => { const x = m.actions.find(y => y.id === a0.id);
-        if (b.dataset.act === "close") { x.open = false; x.status = "fechada"; x.closed = m.today; }
-        else { x.open = true; x.status = "aberta"; x.closed = null; } });
+      if (b.dataset.act === "close") return closeForm(a0);
+      if (b.dataset.act === "reopen") return reopenForm(a0);
     };
   });
 }
@@ -620,7 +635,6 @@ function oppReasonDialog(id, stage){
     if (!reason) { toast("estágio lateral exige motivo — o CLI recusa sem --reason"); return; }
     const cmd = "brain opportunity status " + id + " " + stage + ' --reason "' + reason.replace(/"/g, "'") + '"';
     ov.remove();
-    if (!LIVE) { offlineCmd("" + cmd); return; }
     runCommand(cmd, oppMut(id, stage, reason));
   };
 }
@@ -648,24 +662,20 @@ function wireOppKanban(){
       const o = window.BRAIN.M.portfolio.opportunities.find(x => x.id === id);
       if (!o || o.status === stage) return;
       if (OPP_LAT.includes(stage)) { oppReasonDialog(id, stage); return; }
-      const cmd = "brain opportunity status " + id + " " + stage;
-      if (!LIVE) { offlineCmd("" + cmd); return; }
-      runCommand(cmd, oppMut(id, stage));
+      runCommand("brain opportunity status " + id + " " + stage, oppMut(id, stage));
     });
   });
 }
 
 // ── kanban: botões rápidos + arrastar e soltar (ponte CLI) ──────────────
 function colOf(a){ if (!a.open) return "fechada"; return (a.status === "bloqueada" || a.status === "aguardando") ? "aguardando" : a.status; }
-function dropPlan(a, target){                    // → {cmd, mut, deny?}
+function dropPlan(a, target){                    // → {cmd, mut, dialog?, deny?}
   const from = colOf(a);
   if (from === target) return null;
   if (target === "fechada")
-    return {cmd: 'brain action close ' + a.id + ' --how "arrastada para Feita no painel"',
-      mut: m => { const x = m.actions.find(y => y.id === a.id); x.open = false; x.status = "fechada"; x.closed = m.today; }};
+    return {dialog: () => closeForm(a)};          // como foi + resultado opcional (WIN)
   if (!a.open)
-    return {cmd: 'brain action reopen ' + a.id + ' --reason "reaberta no painel"',
-      mut: m => { const x = m.actions.find(y => y.id === a.id); x.open = true; x.status = target === "aguardando" ? "aguardando" : target; x.closed = null; }};
+    return {dialog: () => reopenForm(a)};         // motivo, como a TUI pede
   if (a.blocked_by.length && target !== "aguardando")
     return {deny: a.id + " segue bloqueada por " + a.blocked_by.join(", ") + " — resolva o bloqueio para movê-la"};
   return {cmd: "brain action update " + a.id + " --status " + (target === "aguardando" ? "aguardando" : target),
@@ -777,7 +787,7 @@ window.afterRoute = function(view){
       const plan = dropPlan(a, col.dataset.col); if (!plan) return;
       if (plan.deny) { toast(plan.deny); return; }
       lastMoved = id;
-      if (!LIVE) { offlineCmd("" + plan.cmd); return; }
+      if (plan.dialog) { plan.dialog(); return; }         // fechar/reabrir pedem os campos, como a TUI
       runCommand(plan.cmd, plan.mut);
     });
   });
@@ -868,8 +878,7 @@ function formDialog(o){          // {title, sub, fields[{k,label,type,value,opti
     const v = vals(), cmd = o.preview(v);
     if (!cmd) { ov.querySelector("[data-preview]").classList.add("miss"); setTimeout(() => ov.querySelector("[data-preview]").classList.remove("miss"), 600); return; }
     close();
-    if (!LIVE) { offlineCmd("" + cmd); return; }
-    runCommand(cmd, m => o.run && o.run(v, m));
+    runCommand(cmd, m => o.run && o.run(v, m));   // runCommand aplica ownerCmd (--by owner) nos dois modos
   };
   const first = ov.querySelector("input,select,textarea"); if (first) first.focus();
 }
@@ -1186,14 +1195,14 @@ function ctxKeys(k){
     const a = h.startsWith("#action/") ? A_OF(decodeURIComponent(h.slice(8))) : null;
     if (k === "n" && h.startsWith("#todo")) { newAction(); return true; }
     const t = a || selTask(); if (!t) return k === "n";
+    const mut = ["e", "c", "s", "t", "D", "z"];          // como o TUI: mutação só em ação aberta
+    if (mut.includes(k) && !t.open) { toast(t.id + " está " + (t.status === "descartada" ? "descartada" : "fechada") + " — reabra com o antes"); return true; }
     if (k === "e") { editAction(t); return true; }
     if (k === "m" && h.startsWith("#action/")) { mergeForm(t); return true; }
-    if (k === "c") { if (!LIVE) { offlineCmd("brain action close " + t.id); return true; }
-      runCommand('brain action close ' + t.id + ' --how "feito pelo painel"', m => { const x = A_OF(t.id); x.open = false; x.status = "fechada"; x.closed = m.today; }); return true; }
+    if (k === "c") { closeForm(t); return true; }
     if (k === "s") {
       if (t.blocked_by && t.blocked_by.length) { toast(t.id + " segue bloqueada por " + t.blocked_by.join(", ")); return true; }
       const next = {aberta: "fazendo", fazendo: "aguardando", aguardando: "aberta"}[t.status] || "aberta";
-      if (!LIVE) { offlineCmd("brain action update " + t.id + " --status " + next); return true; }
       runCommand("brain action update " + t.id + " --status " + next, m => { A_OF(t.id).status = next; }); return true; }
     if (k === "t") { formDialog({title: "Prazo · " + t.id, sub: t.title, fields: [{k: "due", label: "Prazo", type: "date", value: t.due || ""}],
       preview: v => v.due ? "brain action update " + t.id + " --due " + v.due : null,
@@ -1202,13 +1211,11 @@ function ctxKeys(k){
       preview: v => v.reason ? "brain action drop " + t.id + ' --reason "' + v.reason.replace(/"/g, "'") + '"' : null,
       run: (v, m) => { const x = A_OF(t.id); x.open = false; x.status = "descartada"; }}); return true; }
     if (k === "z") { const park = !t.parked;
-      if (!LIVE) { offlineCmd("brain action update " + t.id + (park ? " --park" : " --unpark")); return true; }
       runCommand("brain action update " + t.id + (park ? " --park" : " --unpark"), m => { A_OF(t.id).parked = park; }); return true; }
-    if (k === "o" && !t.open) { if (!LIVE) { offlineCmd("brain action reopen " + t.id); return true; }
-      runCommand('brain action reopen ' + t.id + ' --reason "reaberta no painel"', m => { const x = A_OF(t.id); x.open = true; x.status = "aberta"; x.closed = null; }); return true; }
-    if (k === "m") { const w = M.actions.find(x => x.open && x.list === "waiting") || (t.list === "waiting" ? t : null);
-      if (w) chaseDraft(w); else toast("m cobrar: precisa de uma ação aguardando outra pessoa"); return true; }
-    return k === "c" || k === "s" || k === "t" || k === "z";
+    if (k === "o" && !t.open) { reopenForm(t); return true; }
+    if (k === "m") { const w = (t.open && t.list === "waiting") ? t : null;
+      if (w) chaseDraft(w); else toast("m cobrar: selecione uma ação aguardando outra pessoa (waiting)"); return true; }
+    return mut.includes(k) || k === "o";
   }
   if (h.startsWith("#project/")) { const p = window.BRAIN.P[decodeURIComponent(h.slice(9))];
     if (k === "e" && p) { editPlanNode("project", p.id, p); return true; }
@@ -1228,14 +1235,16 @@ function ctxKeys(k){
     const id = selId() || "";
     const q = id.startsWith("ASK-") ? M.questions.find(x => x.id === id) : null;
     const pr = id.startsWith("PROP-") ? M.proposals.find(x => x.id === id) : null;
-    if (!q && !pr) { if (k === "a" || k === "x" || k === "r") needSel(); return k === "R"; }
-    if (k === "a" && q) { formDialog({title: "Responder " + q.id, sub: q.text,
+    if (!q && !pr) { if (k === "a" || k === "x" || k === "r" || k === "A") needSel(); return k === "R"; }
+    if (k === "a" && q) { if (q.status !== "aberta") { toast(q.id + " já está " + q.status); return true; }
+      formDialog({title: "Responder " + q.id, sub: q.text,
       fields: [{k: "answer", label: "Resposta", value: (q.options && q.options[0]) || ""}],
       preview: v => v.answer ? "brain ask answer " + q.id + ' "' + v.answer.replace(/"/g, "'") + '"' : null,
       run: (v, m) => { const x = m.questions.find(y => y.id === q.id); x.status = "respondida"; x.answer = v.answer; }}); return true; }
-    if (k === "a" && pr) { propQuote(pr.id, true); return true; }
-    if (k === "r" && pr) { propQuote(pr.id, false); return true; }
-    if (k === "x" && q) { const el = selEl(); const d = el && el.querySelector("[data-drop]"); if (d) d.click(); return true; }
+    if (k === "a" && pr) { if (pr.status !== "aberta") { toast(pr.id + " já está " + pr.status); return true; } propQuote(pr.id, true); return true; }
+    if (k === "r" && pr) { if (pr.status !== "aberta") { toast(pr.id + " já está " + pr.status); return true; } propQuote(pr.id, false); return true; }
+    if (k === "x" && q) { if (q.status !== "aberta") { toast(q.id + " já está " + q.status); return true; }
+      const el = selEl(); const d = el && el.querySelector("[data-drop]"); if (d) d.click(); return true; }
     if (k === "R") { toast("(agente) retoma a sessão com as respostas aplicadas — claude -p --resume"); return true; }
     return false;
   }
@@ -1248,20 +1257,29 @@ function ctxKeys(k){
     return false; }
   if (h.startsWith("#outbox")) {
     if (k === "n") { draftForm(); return true; }
-    const draft = M.outbox.find(x0 => x0.status === "rascunho");
-    if (k === "A" && draft) { if (!LIVE) { offlineCmd('brain outbox approve ' + draft.id + ' --quote "enviar 1"'); return true; }
-      runCommand('brain outbox approve ' + draft.id + ' --quote "enviar 1"', m => { m.outbox.find(x0 => x0.id === draft.id).status = "aprovada"; }); return true; }
+    const mid = selId() || "";
+    const m0 = mid.startsWith("MSG-") ? M.outbox.find(x => x.id === mid) : null;
+    if (k === "A") {
+      if (m0 && m0.status === "rascunho") approveMsgForm(m0);
+      else if (!m0) needSel();
+      else toast(m0.id + " está " + m0.status + " — aprovar vale para rascunho");
+      return true; }
     if (k === "S") { toast("(agente) envio pelo MCP do Slack como o dono — porta 2, após aprovação do texto exato"); return true; }
-    if (k === "x" && draft) { if (!LIVE) { offlineCmd("brain outbox cancel " + draft.id); return true; }
-      runCommand("brain outbox cancel " + draft.id, m => { m.outbox.find(x0 => x0.id === draft.id).status = "cancelada"; }); return true; }
+    if (k === "x") {
+      if (m0 && (m0.status === "rascunho" || m0.status === "aprovada")) cancelMsgForm(m0);
+      else if (!m0) needSel();
+      else toast(m0.id + " está " + m0.status + " — cancelar vale para rascunho ou aprovada");
+      return true; }
     return false; }
   if (h.startsWith("#feedback")) {
     if (k === "n") { feedbackForm(); return true; }
-    if (k === "s") { if (!LIVE) { offlineCmd("brain feedback sync"); return true; }
-      runCommand("brain feedback sync"); return true; }
-    const fb = M.feedback.find(x0 => x0.status !== "criado");
-    if (k === "p" && fb) { if (!LIVE) { offlineCmd("brain feedback push " + fb.id); return true; }
-      runCommand("brain feedback push " + fb.id); return true; }
+    if (k === "s") { runCommand("brain feedback sync"); return true; }
+    if (k === "p") { const fid = selId() || "";
+      const fb = fid.startsWith("FB-") ? M.feedback.find(x => x.id === fid) : null;
+      if (fb && (fb.status === "pendente" || fb.status === "falhou")) runCommand("brain feedback push " + fb.id);
+      else if (!fb) needSel();
+      else toast(fb.id + " está " + fb.status + " — publicar vale para pendente ou falhou");
+      return true; }
     return false; }
   if (h.startsWith("#decisions")) {
     if (k === "n") { nbForm("decision"); return true; }
@@ -1296,11 +1314,12 @@ function ctxKeys(k){
     const o = selOpp(); if (!o) return k === "n";
     if (k === "s") { statusPicker(o); return true; }
     if (k === "i") { iceForm(o); return true; }
-    if (k === "c" && o.ice_suggested) { if (!LIVE) { offlineCmd("brain opportunity score " + o.id + " (regrava pelo dono)"); return true; }
+    if (k === "c" && o.ice_suggested) {
       runCommand("brain opportunity score " + o.id + " --impact " + o.impact + " --confidence " + o.confidence + " --ease " + o.ease,
         m => { const x = m.portfolio.opportunities.find(y => y.id === o.id); x.ice_suggested = false; }); return true; }
     if (k === "e") { editOpp(o); return true; }
-    if (k === "x") { oppReasonDialog(o.id, "descartada"); return true; }
+    if (k === "x") { if (["descartada", "entregue"].includes(o.status)) { toast(o.id + " está " + o.status); return true; }
+      oppReasonDialog(o.id, "descartada"); return true; }
     if (k === "p" && !(o.project || o.promoted)) { promoteDialog(o); return true; }
     if (k === "O") { toast("(agente) one-pager: brain share opportunity → publica na porta 6"); return true; }
     return ["s", "i", "c", "x", "p", "O"].includes(k); }
@@ -1420,9 +1439,9 @@ function keyLegend(){
   const add = (k, label, dim, gate) => out.push({k: k, label: label, dim: !!dim, gate: !!gate});
   if (h.startsWith("#todo")) {
     add("n", "nova");
-    add("e", "editar", !t); add("c", "fechar", !t); add("s", "status", !t);
-    add("t", "prazo", !t); add("D", "descartar", !t); add("z", t && t.parked ? "voltar" : "não agora", !t);
-    add("o", "reabrir", !(t && !t.open)); add("m", "cobrar", !t);
+    add("e", "editar", !t || !t.open); add("c", "fechar", !t || !t.open); add("s", "status", !t || !t.open);
+    add("t", "prazo", !t || !t.open); add("D", "descartar", !t || !t.open); add("z", t && t.parked ? "voltar" : "não agora", !t || !t.open);
+    add("o", "reabrir", !(t && !t.open)); add("m", "cobrar", !(t && t.open && t.list === "waiting"));
   } else if (h.startsWith("#action/")) { add("e", "editar"); add("c", "fechar"); add("m", "mesclar"); }
   else if (h.startsWith("#home")) add("n", "nota");
   else if (h.startsWith("#projects")) add("n", "estrutura");
@@ -1431,10 +1450,12 @@ function keyLegend(){
   else if (h.startsWith("#person/")) { add("u", "editar"); add("a", "alias"); }
   else if (h.startsWith("#ask")) {
     const id = SEL.i >= 0 ? (selId() || "") : "";
+    const qs = id.startsWith("ASK-") ? (M.questions || []).find(x => x.id === id) : null;
+    const ps = id.startsWith("PROP-") ? (M.proposals || []).find(x => x.id === id) : null;
     add("n", "pedir publicação");
-    add("a", id.startsWith("PROP-") ? "aceitar (gate)" : "responder", !id);
-    add("r", "rejeitar proposta", !id.startsWith("PROP-"));
-    add("x", "descartar pergunta", !id.startsWith("ASK-"));
+    add("a", id.startsWith("PROP-") ? "aceitar (gate)" : "responder", !(qs ? qs.status === "aberta" : ps ? ps.status === "aberta" : false));
+    add("r", "rejeitar proposta", !(ps && ps.status === "aberta"));
+    add("x", "descartar pergunta", !(qs && qs.status === "aberta"));
     add("R", "retomar o agente");
   }
   else if (h.startsWith("#focus")) {
@@ -1443,11 +1464,16 @@ function keyLegend(){
     if (f && f.status === "aprovado") add("a", "aplicar", false, true);
     add("s", "sync"); add("p", "planejar");
   } else if (h.startsWith("#outbox")) {
-    const d = M.outbox.some(x => x.status === "rascunho");
-    add("n", "rascunhar"); add("A", "aprovar", !d, true); add("S", "enviar", !d); add("x", "cancelar", !d);
+    const mid = SEL.i >= 0 ? (selId() || "") : "";
+    const m0 = mid.startsWith("MSG-") ? M.outbox.find(x => x.id === mid) : null;
+    add("n", "rascunhar");
+    add("A", "aprovar", !(m0 && m0.status === "rascunho"), true);
+    add("S", "enviar", !(m0 && m0.status === "aprovada"));
+    add("x", "cancelar", !(m0 && (m0.status === "rascunho" || m0.status === "aprovada")));
   } else if (h.startsWith("#feedback")) {
-    const fb = M.feedback.some(x => x.status !== "criado");
-    add("n", "sugerir/corrigir"); add("p", "publicar", !fb); add("s", "sincronizar");
+    const fid = SEL.i >= 0 ? (selId() || "") : "";
+    const fb = fid.startsWith("FB-") ? (M.feedback || []).find(x => x.id === fid) : null;
+    add("n", "sugerir/corrigir"); add("p", "publicar", !(fb && (fb.status === "pendente" || fb.status === "falhou"))); add("s", "sincronizar");
   } else if (h.startsWith("#decisions")) { add("n", "nova"); add("S", "superar", !id.startsWith("DEC-")); }
   else if (h.startsWith("#pf/opps")) {
     add("n", "nova");
