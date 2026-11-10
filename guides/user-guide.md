@@ -740,7 +740,13 @@ instala o Textual numa venv à parte. Para experimentar com dados fictícios, ab
 (até o domingo corrente, mais tudo que já está atrasado; sem prazo só entra se estiver em andamento) →
 **Depois** (semana que vem em diante e o que não tem data) → **Não agora**. `z` põe a ação selecionada em
 "não agora" (adiada de propósito; é decisão sua, o agente não marca) e `z` de novo a traz de volta. Ação em
-"não agora" sai do planejador de foco e ganha seção própria no `todo.md`. Fechadas só aparecem em **Todas**.
+"não agora" sai do planejador de foco e ganha seção própria no `todo.md`. Nas vistas de prazo só as abertas.
+
+**Fechadas recentes sempre à vista (`a`).** Na aba **Minhas**, as ações fechadas nos últimos 14 dias
+ficam sempre no fim da lista — a mesma regra da coluna "Feita" do painel. `a` alterna entre
+**só recentes** (abertas + fechadas de 14 dias; descartadas fora) e **todas** (inclusive fechadas
+antigas e descartadas). Nas abas Aguardando/Observando o padrão continua só abertas; `a` lá mostra
+tudo.
 
 **Ordem do painel Ações (`O`).** A tecla `O` alterna entre **Prazo** (padrão: atrasadas primeiro, sem prazo por
 último; empate pelo ID) e **ID** (`TASK-0001`, `TASK-0002`…). As duas são crescentes. Vale para as três listas

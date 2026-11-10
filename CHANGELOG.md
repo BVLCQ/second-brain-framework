@@ -1,3 +1,15 @@
+## 2.9.2 — fechadas recentes sempre à vista na TUI
+
+- **Paridade com a coluna "Feita" do painel**: na aba **Minhas** da TUI, as
+  ações fechadas nos últimos 14 dias agora ficam sempre no fim da lista —
+  antes elas só apareciam depois de apertar `a`, e sumiam de novo ao trocar
+  de vista. O que foi feito fica visível sem caçar atalho.
+- `a` na aba Minhas alterna **só recentes** ↔ **todas** (fechadas antigas e
+  descartadas continuam só em "todas", como no painel). Nas abas
+  Aguardando/Observando o padrão segue só abertas.
+- Vistas de prazo (`v`) continuam só com abertas — a mesma regra do painel.
+  Guia §8 atualizado.
+
 ## 2.9.1 — paridade CLI × TUI × painel (auditoria dupla)
 
 - **Painel usa a ponte única**: todo gesto passa pelo `runCommand` — no modo

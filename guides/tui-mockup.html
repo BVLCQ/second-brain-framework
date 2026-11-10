@@ -711,7 +711,7 @@ function keys(all){
     if(w(it&&it.a&&isOpen(it.a))){add('c','fechar',closeAction);add('e','editar',editAction);add('s','status',cycleStatus);add('t','prazo',editDue);add('D','descartar',dropAction)}
     if(t===1&&w(it&&it.a))add('m','cobrar',chase);
     if(w(it&&it.a&&!isOpen(it.a)))add('o','reabrir',reopen);
-    add('a',S.showAll?'só abertas':'todas',function(){S.showAll=!S.showAll;draw()});add('enter','ficha',zoom);
+    add('a',(S.showAll&&S.tab[2]===0)?'só recentes':(S.showAll?'só abertas':'todas'),function(){S.showAll=!S.showAll;draw()});add('enter','ficha',zoom);
   }
   if(p===3){
     if(w(it&&it.kind==='d')){add('space','feito',toggleDone);add('s','estado',setDelivState)}

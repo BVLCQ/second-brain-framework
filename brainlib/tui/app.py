@@ -930,7 +930,8 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
                 add("z", "voltar" if it and it.data["parked"] else "não agora", self.toggle_park)
             add("v", f"vista: {ACTION_VIEWS[self.view].lower()}", self.cycle_view)
             add("O", f"ordem: {ACTION_SORTS[self.sort].lower()}", self.cycle_sort)
-            add("a", "só abertas" if self.show_all else "todas", self.toggle_all)
+            # aba Minhas: fechadas ≤14d sempre visíveis (coluna Feita do painel) — voltar é "só recentes"
+            add("a", ("só recentes" if t == 0 else "só abertas") if self.show_all else "todas", self.toggle_all)
             add("enter", "ficha", self.toggle_zoom)
         elif p == 3:
             kind = it.kind if it else ""

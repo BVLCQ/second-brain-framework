@@ -552,7 +552,14 @@ class Store:
                 out = [Item(o["id"], "sys", o, q=f"{o['name']} {' '.join(o.get('args', []))} {o.get('agent', '')}") for o in SYS_OPS]
         elif panel == 2:
             lst = ["mine", "waiting", "watching"][tab]
-            rows = [a for a in m["actions"] if a["list"] == lst and (show_all or a["open"])]
+            # Paridade com a coluna "Feita" do painel: fechadas dos últimos 14 dias ficam sempre
+            # visíveis no fim da aba Minhas (descartadas não); "a" (todas) mostra as antigas também.
+            cutoff = (util.today() - timedelta(days=14)).isoformat()
+            def _visible(a: dict) -> bool:
+                if a["open"] or show_all:
+                    return True
+                return tab == 0 and a["status"] == "fechada" and bool(a["closed"]) and a["closed"] >= cutoff
+            rows = [a for a in m["actions"] if a["list"] == lst and _visible(a)]
             if view:
                 today = util.today()
                 rows = [a for a in rows if action_view(a, today) == view]

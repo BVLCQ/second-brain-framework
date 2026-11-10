@@ -1717,6 +1717,42 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             await self.settle(app, pilot)
             self.assertFalse(self.state(app).actions[target].parked)
 
+    async def test_recent_closed_actions_stay_visible(self):
+        """Aba Minhas mostra as fechadas dos últimos 14 dias por padrão (paridade com a coluna
+        Feita do painel); descartadas e fechadas antigas só com `a` (todas). Aguardando/observando
+        continuam só abertas por padrão."""
+        from brainlib.core import Brain
+        b = Brain(self.inst)
+        ev = b.record_one({"type": "action.opened", "date": "2026-09-01", "by": "owner",
+                           "data": {"title": "Fechar a planilha antiga", "owner": "voce"}})
+        old = ev["id"]
+        b.record_one({"type": "action.closed", "id": old, "date": "2026-09-02", "by": "owner",
+                      "data": {"how": "feita na época"}})
+        ev = b.record_one({"type": "action.opened", "date": "2026-10-05", "by": "owner",
+                           "data": {"title": "Cobrar relatório", "owner": "sonia-demo", "list": "waiting"}})
+        wait_closed = ev["id"]
+        b.record_one({"type": "action.closed", "id": wait_closed, "date": "2026-10-07", "by": "owner",
+                      "data": {"how": "relatório chegou"}})
+        app = self.app()
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause(0.4)
+            ids = [i.id for i in app.items(2)]
+            self.assertIn("TASK-0001", ids)                     # fechada há 8 dias: visível sem apertar nada
+            self.assertIn("TASK-0010", ids)                     # fechada há 7 dias: idem
+            self.assertNotIn("TASK-0006", ids)                  # descartada: só com `a`
+            self.assertNotIn(old, ids)                          # fechada há 37 dias: só com `a`
+            await pilot.press("a")                              # todas
+            ids = [i.id for i in app.items(2)]
+            self.assertIn(old, ids)
+            self.assertIn("TASK-0006", ids)
+            await pilot.press("a")                              # de volta a só recentes
+            self.assertNotIn(old, [i.id for i in app.items(2)])
+            await pilot.press("]")                              # aguardando: fechada recente continua oculta
+            ids = [i.id for i in app.items(2)]
+            self.assertNotIn(wait_closed, ids)
+            await pilot.press("a")
+            self.assertIn(wait_closed, [i.id for i in app.items(2)])
+
     async def test_registry_forms_and_share_publish_flow(self):
         app = self.app()
         async with app.run_test(size=(140, 44)) as pilot:
