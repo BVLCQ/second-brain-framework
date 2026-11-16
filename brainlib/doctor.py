@@ -175,6 +175,15 @@ def checks(brain, online: bool = False) -> list[dict]:
         mb = sum(p.stat().st_size for p in big) / 2**20
         out.append(_c("ok", "arquivos grandes", f"{len(big)} arquivos > 50 MB no RAW ({mb:.0f} MB) — "
                                                 "fora do backup e da memória por padrão"))
+    from . import perms
+    pst = perms.status(inst)
+    if pst["static"] != "ok":
+        out.append(_c("warn", "permissões", ".claude/settings.json ausente ou desatualizado — `./brain update` (ou git pull): "
+                                           "sem ele o Claude Code pergunta antes de cada comando"))
+    if pst["local"] != "ok":
+        out.append(_c("warn", "permissões", "MCP e pastas da instância fora da sessão interativa — `./brain agent permissions`"))
+    if pst["static"] == "ok" and pst["local"] == "ok":
+        out.append(_c("ok", "permissões", "sessão interativa pré-autorizada (.claude/settings.json + settings.local.json)"))
     out.extend(upstream.doctor_checks(inst))
     from . import __version__ as _ver
     c = upstream.read_check_cache(inst)
