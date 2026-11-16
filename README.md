@@ -91,6 +91,9 @@ Painel, depois de qualquer mudança:
 ./brain render --open
 ```
 
+Sem terminal: `./brain app install` cria o ícone **Segundo Cérebro** (macOS: `~/Applications`,
+arraste para o Dock · Linux: menu de aplicativos). Clique duplo = o mesmo `render --open`.
+
 Noturno (render → agente `/update` → memória → backup semanal):
 
 ```bash

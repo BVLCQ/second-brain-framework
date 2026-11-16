@@ -874,6 +874,11 @@ def cmd_update(args, b) -> None:
     upstream.cli_update(args, b)
 
 
+def cmd_app(args, b) -> None:
+    from . import launcher
+    launcher.cli(args)
+
+
 def cmd_upstream(args, b) -> None:
     from . import upstream
     upstream.cli_upstream(args, b)
@@ -1532,6 +1537,14 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--yes", action="store_true", help="não-interativo com defaults (caminho das IAs)")
     p.add_argument("--mode", choices=["none", "embed", "full"], help="modo do passo memória (full exige o ok literal)")
     p.set_defaults(fn=cmd_setup)
+    p = sub.add_parser("app", help="ícone clicável do painel (macOS: .app · Linux: .desktop): clique duplo = `render --open`")
+    asub = p.add_subparsers(dest="acmd", required=True)
+    for nm, hp in (("install", "cria (ou recria) o ícone; padrão ~/Applications no macOS"),
+                   ("uninstall", "remove o ícone (só se foi criado por este comando)")):
+        x = asub.add_parser(nm, help=hp)
+        x.add_argument("--dest", help="pasta de destino (ex.: ~/Desktop); padrão: aplicativos do usuário")
+        x.add_argument("--name", default="Segundo Cérebro", help="nome do app (padrão: Segundo Cérebro)")
+    p.set_defaults(fn=cmd_app, no_brain=True)
     p = sub.add_parser("serve", help="ponte CLI do painel: 127.0.0.1 + token — o HTML executa as mesmas linhas do TUI")
     p.add_argument("--port", type=int, default=8787, help="porta local (padrão 8787)")
     p.add_argument("--open", action="store_true", help="abre o painel no navegador com o token na URL")
