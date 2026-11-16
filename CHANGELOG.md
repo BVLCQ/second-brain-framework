@@ -1,4 +1,4 @@
-## 2.14.0 — mesmas teclas no TUI e no painel
+## 2.15.0 — mesmas teclas no TUI e no painel
 
 - **Um verbo, uma tecla.** `d` descarta, remove, cancela, aposenta, desliga ou rejeita em toda tela (antes era `D`
   em Ações, `x` em quase tudo, `u` em Documentos, `r` em Propostas). `e` edita (Pessoas deixa de usar `u`),
@@ -12,7 +12,7 @@
   A ponte do painel ganhou `doc link|unlink`, `watch add|edit|remove`, `opportunity evidence` e `person resolve`.
 - `doctor.fix_for` passa a ser a única regra de "o que fazer com este aviso" (TUI e painel).
 
-## 2.13.0 — ícone clicável do painel
+## 2.14.0 — ícone clicável do painel
 
 - **`brain app install`**: cria o app **Segundo Cérebro** — clique duplo faz o
   `brain render --open` (regenera as views, sobe a ponte se preciso e abre o
@@ -28,7 +28,7 @@
   Refazer o passo (`--only painel`) é idempotente.
 - O app guarda o caminho da instância e do framework: mudou a pasta, reinstale.
 
-## 2.12.1 — o chat do Claude Code não pede mais licença
+## 2.13.1 — o chat do Claude Code não pede mais licença
 
 - **Sessão interativa pré-autorizada.** Antes só o agente headless (noturno e
   ações ⚡) tinha as ferramentas liberadas; o chat do terminal/app perguntava a
@@ -44,6 +44,19 @@
   vault). Roda sozinho em `init`, `agent allow`, `update` e no noturno; o
   `doctor` avisa se ficou para trás. `--check` só confere.
 - MCP de **escrita** no mundo exterior continua fora: só pelas portas.
+
+## 2.13.0 — `mine` é sempre do dono do Brain
+
+- **Lista `mine` preenche o dono**: na TUI e no painel, escolher a lista `mine` põe o dono em `eu` (sair de `mine`
+  limpa só o que era você). No ledger, `mine` sem dono grava o dono do Brain, e `mine` com outra pessoa é
+  **recusado** ("é waiting"); ação nova de outra pessoa, sem lista dita, nasce `waiting` (antes herdava `mine`).
+  Trocar o dono de uma `mine` pede mudar a lista junto (`--list waiting`).
+- **"eu" vale o dono do Brain**: `eu`, `Eu` ou `EU` em `--owner`, `--people` e no JSON do `brain add`.
+- **TODO do painel filtra pela lista `mine`**, sem exigir que você seja o dono (a TUI sempre foi assim): some a
+  diferença entre as duas telas. Cartão de `mine` com dono antigo diferente mostra quem é; a paleta (`⌘K`) também
+  fecha e marca "fazendo" essas ações. A semente da demo deixou de ter uma `mine` do Caio-demo.
+- Dado antigo não é reescrito: `mine` com outro dono continua no ledger; editar a ação na TUI/painel já vem com
+  `eu` preenchido e o comando mostra a correção.
 
 ## 2.12.0 — filtros em cascata (TUI e painel)
 

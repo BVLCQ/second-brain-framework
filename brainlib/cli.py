@@ -43,6 +43,9 @@ def _fact_opts(p: argparse.ArgumentParser) -> None:
 def _resolve_people(b: Brain, values: list[str]) -> list[str]:
     out = []
     for v in util.split_csv(values):
+        if util.fold(v) == "eu":                  # "eu"/"Eu"/"EU" é o dono do Brain
+            out.append(b.owner)
+            continue
         if v in b.state.people:
             out.append(v)
             continue

@@ -108,7 +108,7 @@ if (LIVE) {
 function commands(){
   const out = [];
   const MD = (window.BRAIN && window.BRAIN.M) || D0;   // model vivo: o que já rodou sai da paleta
-  const mine = MD.actions.filter(a => a.open && a.mine && a.list === "mine");
+  const mine = MD.actions.filter(a => a.open && a.list === "mine");
   mine.filter(a => a.status === "aberta").forEach(a => out.push({label: "Marcar fazendo · " + a.id + " " + a.title,
     cmd: "brain action update " + a.id + " --status fazendo", mut: m => { m.actions.find(x => x.id === a.id).status = "fazendo"; }}));
   mine.forEach(a => out.push({label: "Fechar · " + a.id + " " + a.title, act: () => closeForm(a)}));
@@ -945,7 +945,7 @@ function navStep(dir){
 
 // ── genérico: dialog de formulário → linha brain … (preview vivo) ───────
 let dlgOpen = false;
-function formDialog(o){          // {title, sub, fields[{k,label,type,value,options,note(v)}], gate, note(v), help()→html, preview(v)→cmd, run(cmd,v)}
+function formDialog(o){          // {title, sub, fields[{k,label,type,value,options,note(v),fill:{on,set(v)→valor|undefined}}], gate, note(v), help()→html, preview(v)→cmd, run(cmd,v)}
   const ov = document.createElement("div"); ov.className = "pal-back open";
   const f = o.fields.map(x => '<div class="frow"><label>' + esc(x.label) + "</label>" +
     (x.options ? '<select data-k="' + x.k + '">' + x.options.map(op => '<option value="' + esc(op[0]) + '"' + (op[0] === x.value ? " selected" : "") + ">" + esc(op[1] || op[0]) + "</option>").join("") + "</select>"
@@ -967,8 +967,12 @@ function formDialog(o){          // {title, sub, fields[{k,label,type,value,opti
     const n = ov.querySelector("[data-note]"); if (n) n.textContent = o.note ? (o.note(vals()) || "") : "";
     ov.querySelectorAll("[data-hint]").forEach(el => { const x = o.fields.find(y => y.k === el.dataset.hint);
       el.textContent = x && x.note ? (x.note(vals()[x.k]) || "") : ""; }); };
-  ov.querySelectorAll("[data-k]").forEach(el => el.addEventListener("input", paint));
-  ov.querySelectorAll("select[data-k]").forEach(el => el.addEventListener("change", paint));
+  // campo que se preenche sozinho quando outro muda (ex.: lista mine → dono = você); `undefined` não mexe no que a pessoa escolheu
+  const follow = ch => o.fields.filter(x => x.fill && x.fill.on === ch).forEach(x => {
+    const nv = x.fill.set(vals()), el = ov.querySelector('[data-k="' + x.k + '"]');
+    if (nv !== undefined && el && (el.tagName !== "SELECT" || [...el.options].some(op => op.value === nv))) el.value = nv; });
+  ov.querySelectorAll("[data-k]").forEach(el => el.addEventListener("input", () => { follow(el.dataset.k); paint(); }));
+  ov.querySelectorAll("select[data-k]").forEach(el => el.addEventListener("change", () => { follow(el.dataset.k); paint(); }));
   paint();
   // ? abre as orientações (o.help) mesmo com o foco num select — antes do handler global, que ignora teclas com dialog aberto
   let h2 = null;
@@ -1001,6 +1005,9 @@ function stackHelp(title, html){
 }
 function needSel(){ toast("selecione um item primeiro (j/k ou passe o mouse) e tente de novo"); }
 
+// lista mine é sempre do dono do Brain: escolher mine preenche o dono com você; sair de mine limpa só o que era você
+const ownerFill = M => ({on: "list", set: v => v.list === "mine" ? M.owner.id : (v.owner === M.owner.id ? "" : undefined)});
+
 // ── editar entidades (tecla e nas fichas, como a TUI) ───────────────────
 const A_OF = id => window.BRAIN.M.actions.find(x => x.id === id);
 function editAction(a){
@@ -1016,7 +1023,7 @@ function editAction(a){
       {k: "blocked", label: "Bloqueada por", ph: "TASK-#### (a CLI não remove bloqueio)", value: (a.blocked_by || []).join(",")},
       {k: "people", label: "Pessoas (+)", ph: "adiciona: ids por vírgula"},
       {k: "list", label: "Lista", options: [["mine", "minhas"], ["waiting", "aguardando outro"], ["watching", "observando"]], value: a.list},
-      {k: "owner", label: "Dono", options: peopleOpts(), value: a.owner},
+      {k: "owner", label: "Dono", options: peopleOpts(), value: a.list === "mine" ? M.owner.id : a.owner, fill: ownerFill(M)},
       {k: "note", label: "Nota (histórico)", ph: "vai para o histórico da ação"}],
     preview: v => {
       let c = "brain action update " + a.id;
@@ -1045,7 +1052,7 @@ function newAction(){
     fields: [
       {k: "title", label: "Título", ph: "o que precisa ser feito"},
       {k: "list", label: "Lista", options: [["mine", "minhas"], ["waiting", "aguardando outro"], ["watching", "observando"]], value: "mine"},
-      {k: "owner", label: "Dono", options: peopleOpts(), value: M.owner.id},
+      {k: "owner", label: "Dono", options: peopleOpts(), value: M.owner.id, fill: ownerFill(M)},
       {k: "due", label: "Prazo", type: "date", value: ""},
       {k: "effort", label: "Esforço", ph: "90m · 2h · 1h30"},
       {k: "priority", label: "Prioridade", options: [["normal", "normal"], ["alta", "alta"], ["baixa", "baixa"]], value: "normal"},

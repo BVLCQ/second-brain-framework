@@ -18,7 +18,8 @@ Isto é `[declarado]`. Não passe pela inbox.
 2. Resolva pessoas citadas (`brain person resolve`). Ambíguo → pergunte (sem chat — rodada ⚡ ou noturno — `./brain ask add`). Inexistente → ofereça `person add` (ou `ask add`).
 3. Case projeto/entregável com `PLANNING/goals.md` se for óbvio; senão deixe sem.
 4. Esforço se o dono falou tempo (`90m`, `2h`).
-5. Lista: padrão `mine`. Se a ação é de outra pessoa para o dono, `--list waiting --owner <id>`.
+5. Lista: padrão `mine` (o dono é sempre o do Brain; "eu" vale ele). Se a ação é de outra pessoa para o dono,
+   `--list waiting --owner <id>` — `mine` com outra pessoa o ledger recusa.
 
 ```
 ./brain action open "<título>" --due AAAA-MM-DD --effort 90m --project PROJ-1 \

@@ -1171,6 +1171,29 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             await pilot.press("tab")                                 # fechado o modal, volta a girar
             self.assertEqual(app.face, 1)
 
+    async def test_new_action_form_prefills_the_owner_with_eu_when_the_list_is_mine(self):
+        app = self.app()
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause(0.4)
+            await pilot.press("n")
+            await pilot.pause(0.3)
+            self.assertEqual(type(app.screen).__name__, "FormModal")
+            lst, owner = app.screen.query_one("#f_list"), app.screen.query_one("#f_owner")
+            self.assertEqual((lst.value, owner.value), ("mine", "eu"))        # mine nasce com o dono preenchido
+            lst.value = "waiting"
+            await pilot.pause(0.2)
+            self.assertEqual(owner.value, "")                                 # outra lista não herda o "eu"
+            owner.value = "marina-demo"
+            lst.value = "watching"
+            await pilot.pause(0.2)
+            self.assertEqual(owner.value, "marina-demo")                      # o que a pessoa escolheu não é apagado
+            lst.value = "mine"
+            await pilot.pause(0.2)
+            self.assertEqual(owner.value, "eu")                               # voltar a mine preenche de novo
+            preview = self.text_of(app.screen.query_one("#cmdp"))
+            self.assertNotIn("marina-demo", preview)
+            await pilot.press("escape")
+
     async def test_jump_and_catalog_switch_face_and_click_on_the_strip(self):
         app = self.app()
         async with app.run_test(size=(140, 44)) as pilot:

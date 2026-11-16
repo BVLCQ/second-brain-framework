@@ -118,6 +118,8 @@ class Brain:
         data = {k: v for k, v in (ev.get("data") or {}).items() if v not in (None, "")}
         ev["data"] = data
         schema.normalize_event(ev)              # entrada com nome antigo (A-0146, G1, P3.2) é gravada no formato novo
+        if t in ("action.opened", "action.updated"):
+            self._action_owner(t, ev.get("id"), data, working)
 
         if spec.get("prefix"):
             ev["id"] = working.next_id(spec["prefix"])
@@ -139,6 +141,38 @@ class Brain:
         if spec["entity"] and spec["entity"] != "run" and not ev.get("id") and t != "plan.changed":
             raise util.BrainError(f"{t}: id obrigatório", code=4)
         return ev
+
+    def _action_owner(self, t: str, aid: str | None, data: dict, working: state_mod.State) -> None:
+        """Lista `mine` é sempre do dono do Brain; "eu" (qualquer caixa) é o dono do Brain.
+
+        Vale em toda porta (CLI, TUI, painel, `brain add`): `mine` sem dono preenche com você; `mine` com outra
+        pessoa é recusada (é `waiting`); ação nova de outra pessoa, sem lista dita, nasce `waiting`."""
+        me = self.owner
+        if isinstance(data.get("owner"), str) and util.fold(data["owner"]) == "eu":
+            data["owner"] = me
+        owner, lst = data.get("owner"), data.get("list")
+        if t == "action.opened":
+            if not lst:
+                if owner and owner != me:
+                    data["list"] = lst = "waiting"
+                else:
+                    lst = "mine"
+            if lst == "mine":
+                if owner and owner != me:
+                    raise util.BrainError(f"action.opened: lista mine é sua ({me}), mas o dono é {owner} — "
+                                          f"o que outra pessoa deve a você é lista waiting", code=4)
+                data["owner"] = me
+            return
+        cur = working.actions.get(aid)
+        if lst == "mine":
+            if owner and owner != me:
+                raise util.BrainError(f"action.updated: lista mine é sua ({me}), mas o dono é {owner} — "
+                                      f"o que outra pessoa deve a você é lista waiting", code=4)
+            if not owner and cur is not None and cur.owner != me:
+                data["owner"] = me
+        elif not lst and owner and owner != me and cur is not None and cur.list == "mine":
+            raise util.BrainError(f"action.updated: {aid} está na lista mine (sua); para dar a {owner} "
+                                  f"mude a lista junto: --list waiting", code=4)
 
     def _vault_rel(self, p: str) -> str:
         if not p or not isinstance(p, str):

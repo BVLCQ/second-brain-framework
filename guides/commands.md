@@ -112,7 +112,7 @@ próprio motor.
 
 | Lista | Quem deve | Cobrado no TODO? | Entra no foco? |
 |---|---|---|---|
-| `mine` | você | sim | sim |
+| `mine` | você (o dono já vem preenchido como `eu`) | sim | sim |
 | `waiting` | outra pessoa, a você | aparece no brief | não |
 | `watching` | o time, a si mesmo | não | não |
 
@@ -424,8 +424,8 @@ brain person list --json
 ### `brain action open TÍTULO`
 | Opção | Uso |
 |---|---|
-| `--owner PESSOA` | dono da ação (padrão: você) |
-| `--list mine\|waiting\|watching` | lista (padrão: `mine` se é sua, `waiting` se é de outro) |
+| `--owner PESSOA` | dono da ação (padrão: você; `eu`, em qualquer caixa, é você) |
+| `--list mine\|waiting\|watching` | lista (padrão: `mine` se é sua, `waiting` se é de outro). `mine` é sempre sua: sem `--owner` o dono vem preenchido; `mine` com outra pessoa é recusado |
 | `--due AAAA-MM-DD` | prazo. **Sem prazo, o foco ignora a ação** |
 | `--effort 90m\|2h\|1h30\|1d` | esforço estimado (usado pelo foco) |
 | `--project PROJ-#` | projeto do PLANNING |
