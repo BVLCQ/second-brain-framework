@@ -643,6 +643,11 @@ def apply(st: State, ev: dict) -> None:
             if data.get("proposal") in st.proposals:
                 st.proposals[data["proposal"]].feedback = eid
         f = st.feedbacks[eid]
+        if t == "feedback.revised":
+            f.title, f.body = data.get("title", f.title), data.get("body", f.body)
+            if data.get("proposal"):
+                f.proposal = data["proposal"]
+                st.proposals[f.proposal].feedback = eid
         if t == "feedback.pushed":
             f.status, f.number, f.url, f.pushed = "criado", data["number"], data["url"], when
         elif t == "feedback.synced":

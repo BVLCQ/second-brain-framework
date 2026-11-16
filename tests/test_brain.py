@@ -920,11 +920,11 @@ class DashboardAssetTests(unittest.TestCase):
         "area list", "process show", "process list", "opportunity show", "opportunity list", "action dupes",
         "opportunity rubric",   # o rubric viaja no view model (portfolio.ice_rubric) e no guia gerado
         "watch list", "watch since", "watch folders", "watch docs", "repos list", "raw where", "artifact",
-        "feedback show", "feedback list",   # painel › Sugestões renderiza fila e ficha do payload do modelo
+        "feedback show", "feedback list", "feedback template",   # painel › Sugestões renderiza fila e ficha do payload do modelo
         "memory providers show",            # cfg/Memória renderiza a pilha do payload (o TUI roda ao vivo)
     }
     AGENT_ONLY = {        # quem escreve é o agente (extração, snapshot, envio), conforme a Constituição
-        "init", "add", "snapshot", "repos pull", "proposal add", "outbox sent", "outbox failed", "publish done",
+        "init", "add", "snapshot", "repos pull", "proposal add", "feedback revise", "outbox sent", "outbox failed", "publish done",
         "pdf text", "pdf render", "video transcribe", "video frames", "person merge", "person resolve",
         "raw archive", "raw sort", "ask add", "ask applied", "opportunity evidence",
         "oppdrive status", "oppdrive onepager", "oppdrive record", "oppdrive suggested",

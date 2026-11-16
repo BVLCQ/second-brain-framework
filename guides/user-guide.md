@@ -609,6 +609,9 @@ em outros agentes, o texto é entendido do mesmo jeito.)
   O `brain doctor` avisa quando há sugestão na fila e falta o token.
 - O issue é público: a porta recusa texto com seu nome, e-mail ou caminhos da máquina, e não publica
   nada no noturno.
+- **Molde e validadores:** a issue segue um molde por tipo (sugestão, bug, proposta de código — os campos dos
+  formulários de `.github/ISSUE_TEMPLATE/`) e passa por validadores que recusam pessoas, prints, links internos,
+  e-mails reais, telefones e IDs do vault; exemplos usam a padaria fictícia. Guia: `guides/feedback-issues.md`.
 - **Propostas de melhoria do código** (`proposal add --kind framework`): o agente escreve o texto público da
   issue na própria proposta; ao **aceitar**, o cérebro registra o `FB-####` e publica no GitHub do framework. Rejeitada, nada sobe.
 

@@ -1,0 +1,50 @@
+name: 'Sugestão'
+description: 'Uma ideia de melhoria para o Segundo Cérebro'
+title: '[sugestão] '
+labels: ['sugestão']
+body:
+  - type: markdown
+    attributes:
+      value: 'Este repositório é público. Não inclua nomes de pessoas, e-mails, telefones, links internos (Drive, Slack, Jira…), prints ou números reais da sua empresa. Para exemplos use a padaria fictícia (`marina-demo`, "Padaria Pão Quente", `contato@example.com`).'
+  - type: input
+    id: resumo
+    attributes:
+      label: 'Resumo'
+      description: 'Uma ou duas frases: o que melhoraria.'
+    validations:
+      required: true
+  - type: textarea
+    id: problema
+    attributes:
+      label: 'Problema'
+      description: 'O que dói hoje e para quem. Use um exemplo fictício, ex.: a Padaria Pão Quente com 36 fichas de receita para conferir uma a uma.'
+    validations:
+      required: true
+  - type: textarea
+    id: proposta
+    attributes:
+      label: 'Proposta'
+      description: 'O que você propõe, de forma concreta (comando, tela ou regra).'
+    validations:
+      required: true
+  - type: textarea
+    id: alternativas
+    attributes:
+      label: 'Alternativas consideradas'
+      description: 'O que mais foi pensado e por que não.'
+    validations:
+      required: false
+  - type: textarea
+    id: validacao
+    attributes:
+      label: 'Como validar'
+      description: 'Como saber que ficou bom (teste, antes/depois).'
+    validations:
+      required: false
+  - type: checkboxes
+    id: privacidade
+    attributes:
+      label: Privacidade
+      options:
+        - label: 'Revisei o texto: não há dado real (pessoas, e-mails, prints, links internos). Os exemplos usam dados fictícios.'
+          required: true

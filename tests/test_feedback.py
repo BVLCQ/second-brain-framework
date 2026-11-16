@@ -124,6 +124,18 @@ class FeedbackFlowTests(unittest.TestCase):
         with self.assertRaises(util.BrainError):          # issue já criada: não empurra duas vezes
             feedback.push(self.brain, "FB-0001")
 
+    def test_push_avisa_quando_a_issue_sai_sem_o_label(self):
+        feedback.add(self.brain, "bug", "Sem permissão de label")
+        self._fake_env()
+        orig = feedback.create_issue
+        try:
+            feedback.create_issue = lambda *a, **k: {"number": 5, "url": "https://github.com/o/r/issues/5", "labels": []}
+            ev = feedback.push(self.brain, "FB-0001")
+        finally:
+            feedback.create_issue = orig
+        self.assertIn("label 'bug'", ev["label_note"])
+        self.assertEqual(self.brain.state.feedbacks["FB-0001"].status, "criado")
+
     def test_push_falha_de_api_registra_failed_e_retry(self):
         feedback.add(self.brain, "bug", "Erro 500 no GitHub")
         self._fake_env()
@@ -151,7 +163,7 @@ class FeedbackFlowTests(unittest.TestCase):
                 feedback.push(self.brain, "FB-0001")
         finally:
             feedback.create_issue = orig
-        self.assertIn("público", str(cm.exception))
+        self.assertIn("pública", str(cm.exception))
         self.assertEqual(self.brain.state.feedbacks["FB-0001"].status, "pendente")
 
     def test_noturno_nao_publica(self):
@@ -198,7 +210,7 @@ class FeedbackFlowTests(unittest.TestCase):
         self.assertEqual(feedback.issue_title(f), "[bug] Dashboard quebra")
         body = feedback.issue_body(f)
         self.assertIn("🐞 bug", body)
-        self.assertIn("## Descrição\nStackTrace tal", body)
+        self.assertIn("### Resumo\nStackTrace tal", body)
         self.assertIn("`FB-0001`", body)
 
     def test_issue_nao_carrega_refs_do_vault_nem_de_evento_antigo(self):
@@ -212,7 +224,7 @@ class FeedbackFlowTests(unittest.TestCase):
         body = feedback.issue_body(f)
         self.assertNotIn("TASK-", body)
         self.assertNotIn("OPP-", body)
-        self.assertNotIn("## Contexto", body)
+        self.assertNotIn("Contexto", body)
 
     def test_estado_reconstroi_do_ledger(self):
         feedback.add(self.brain, "sugestao", "Primeira")
@@ -325,7 +337,10 @@ class FrameworkProposalTests(unittest.TestCase):
     """Proposta `framework` aceita pelo dono → issue no GitHub (porta 7). create_issue é falso; sem rede."""
 
     TITLE = "Checagem em lote das fontes do Drive"
-    BODY = "O /update lê cada doc vigiado um a um; uma busca de metadados em lote evitaria leituras."
+    BODY = ("### Resumo\nChecar vários docs do Drive numa só consulta.\n\n"
+            "### Contexto\nA Padaria Pão Quente vigia 36 fichas de receita e o /update consulta uma por vez.\n\n"
+            "### Proposta\nUm comando lista os docs vigiados e compara as revisões de uma vez.\n\n"
+            "### Critérios de aceite\n- só os docs alterados são lidos\n- doc removido aparece como falha")
 
     def setUp(self):
         self._td = tempfile.TemporaryDirectory()

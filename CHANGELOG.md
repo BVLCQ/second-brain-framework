@@ -1,3 +1,17 @@
+## 2.11.0 — molde das issues e validadores de dado sensível
+
+- **Molde por tipo** para tudo que o cérebro publica no GitHub: `sugestao`, `bug` e `framework` (proposta de
+  código aceita). Cada campo vira `### Título`, igual ao que os formulários novos de `.github/ISSUE_TEMPLATE/`
+  (Sugestão, Bug, Proposta de código) escrevem — issue do cérebro e issue à mão têm a mesma cara.
+  `brain feedback template --kind …` imprime o molde; o agente é obrigado a segui-lo (`--body-file`).
+- **Validadores públicos** (`brainlib/publicguard.py`) em todo caminho que publica: pessoas e domínios do
+  ledger, IDs do vault, **prints/imagens**, links externos e internos, e-mails reais, @menções, telefone,
+  CPF/CNPJ, IP e IDs opacos do Drive/Slack. Recusam sem override e sem ecoar o valor (só tipo e linha).
+  Exemplos usam sempre a padaria fictícia (`marina-demo`, "Padaria Pão Quente"). Guia: `guides/feedback-issues.md`.
+- **`brain feedback revise FB-####`** corrige título/corpo de um FB que ainda não virou issue (evento
+  `feedback.revised`; o ledger continua append-only) e liga o FB à proposta que o originou.
+- `[feedback].allow_hosts` libera hosts extras em links do texto público.
+
 ## 2.10.1 — token do GitHub no setup
 
 - **Setup › Portas** explica como criar o token da porta 7 (fine-grained: Issues

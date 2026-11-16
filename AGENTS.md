@@ -137,10 +137,18 @@ somente-leitura para o mundo.
    URL. `add` registra e publica na sequência — o pedido do dono no chat **ou no painel/TUI** é a
    aprovação; sugestão que partiu do agente só publica com um "ok". Superfícies: painel HTML (aba
    Sugestões, ponta da ponte `serve`), TUI (log › Feedback) e chat (`/feedback`). O texto é
-   público: a porta recusa título/corpo com dado do dono (mesmas regras da varredura do `upstream`),
-   sem override. **Propostas que mudam o código** do cérebro (`brain proposal add --kind framework`, com
-`--issue-title/--issue-body` públicos) viram issue **quando o dono aceita**: o `proposal accept` registra o
-`FB-####` e publica — o "aceito" aprova o texto que ele viu; rejeitada, nada sobe. Token: `GITHUB_TOKEN` em `config/.env`. No noturno nada é publicado. `feedback sync`
+   público: a porta recusa título/corpo com dado do dono (regras do `upstream`), ID do vault, print,
+   link externo ou interno, e-mail real, @menção, telefone, CPF/CNPJ e ID opaco (`publicguard.py`),
+   sem override e sem ecoar o valor achado (só tipo e linha). O corpo segue um **molde por tipo**
+   (`sugestao` · `bug` · `framework` — os campos dos formulários de `.github/ISSUE_TEMPLATE/`): o
+   agente é obrigado a segui-lo (`brain feedback template --kind …`; headless usa `--body-file`) e os
+   exemplos usam sempre os dados fictícios da padaria (`marina-demo`, "Padaria Pão Quente",
+   `contato@example.com`). Guia: `guides/feedback-issues.md`. **Propostas que mudam o código** do
+   cérebro (`brain proposal add --kind framework`, com `--issue-title` e `--issue-body[-file]` no molde
+   `framework`) viram issue **quando o dono aceita**: o `proposal accept` registra o `FB-####` e
+   publica — o "aceito" aprova o texto que ele viu; rejeitada, nada sobe. `brain feedback revise`
+   corrige o texto de um FB que ainda não virou issue. Token: `GITHUB_TOKEN` em `config/.env`. No
+   noturno nada é publicado. `feedback sync`
    relê o estado de cada issue (aberta/fechada · concluída/não será feita) e grava `feedback.synced` —
    observação de porta já aberta, roda até no noturno (passo 6 do `/update`).
 

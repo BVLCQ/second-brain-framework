@@ -65,6 +65,8 @@ tools = []
 # título/corpo com dado do dono (mesmas regras da varredura do upstream). No noturno nada é publicado.
 # Token (permissão de criar issues no repo) vai em config/.env: GITHUB_TOKEN=…
 repo = "BVLCQ/second-brain-framework"
+# Hosts além de github.com/example.*/localhost que podem aparecer num link do texto público (padrão: nenhum).
+# allow_hosts = []
 
 [memory]
 # Modos (guides/memory.md): none · embed (dois bancos de chunks, zero LLM, nada sai da máquina)

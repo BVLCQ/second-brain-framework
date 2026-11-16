@@ -395,13 +395,16 @@ def cmd_proposal(args, b: Brain) -> None:
                 "into": ids.normalize(args.into) if args.into else None, "evidence": args.evidence}
         if args.kind == "framework":
             from . import feedback
-            if not (args.issue_title and args.issue_body):
-                raise util.BrainError("proposta framework: --issue-title e --issue-body obrigatórios — o texto "
-                                      "público (sem nomes, IDs ou caminhos) que vira issue no GitHub se o dono aceitar",
-                                      code=2)
-            feedback.public_text_guard(b.inst, args.issue_title, args.issue_body)
-            data.update(issue_title=args.issue_title.strip(), issue_body=args.issue_body.strip())
-        elif args.issue_title or args.issue_body:
+            from . import issues
+            body = Path(args.issue_body_file).read_text(encoding="utf-8") if args.issue_body_file else args.issue_body
+            if not (args.issue_title and body):
+                raise util.BrainError("proposta framework: --issue-title e --issue-body (ou --issue-body-file) "
+                                      "obrigatórios — o texto público, no molde `brain feedback template --kind "
+                                      "framework`, que vira issue no GitHub se o dono aceitar", code=2)
+            issues.require("framework", body, "o corpo da issue")
+            feedback.public_text_guard(b.inst, args.issue_title, body)
+            data.update(issue_title=args.issue_title.strip(), issue_body=body.strip())
+        elif args.issue_title or args.issue_body or args.issue_body_file:
             raise util.BrainError("--issue-title/--issue-body só valem em --kind framework", code=2)
         ev = b.record_one(_common({"type": "proposal.opened", "data": data}, args))
         _out(args, ev, f"✓ {ev['id']} · proposta ({args.kind}): {args.summary}"
@@ -1088,7 +1091,9 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--into", help="descartar-acao/unificar-acao: a ação que fica (--target é a duplicada)")
     x.add_argument("--evidence")
     x.add_argument("--issue-title", help="framework: título PÚBLICO da issue (sem dado do dono nem IDs do vault)")
-    x.add_argument("--issue-body", help="framework: corpo PÚBLICO da issue — o dono aceita vendo este texto")
+    x.add_argument("--issue-body", help="framework: corpo PÚBLICO da issue no molde (`brain feedback template --kind "
+                                        "framework`) — o dono aceita vendo este texto")
+    x.add_argument("--issue-body-file", help="o mesmo, de um arquivo (headless não passa heredoc)")
     _fact_opts(x)
     for name in ("accept", "reject"):
         x = rs.add_parser(name)

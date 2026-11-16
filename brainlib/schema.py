@@ -79,6 +79,7 @@ TYPES: dict[str, dict] = {
     "question.applied": {"entity": "question", "req": ["how"]},
     "question.dropped": {"entity": "question", "req": ["reason"]},
     "feedback.added": {"entity": "feedback", "new": True, "prefix": ids.prefix("feedback"), "req": ["kind", "title"]},
+    "feedback.revised": {"entity": "feedback", "req": []},          # corrige texto/origem enquanto não virou issue
     "feedback.pushed": {"entity": "feedback", "req": ["number", "url"]},
     "feedback.synced": {"entity": "feedback", "req": ["state"]},
     "feedback.failed": {"entity": "feedback", "req": ["error"]},
@@ -349,6 +350,17 @@ def _validate_feedback(t: str, ev: dict, data: dict, state) -> None:
             _need(data["proposal"] in state.proposals, f"proposal: {data['proposal']!r} não existe")
         return
     f = state.feedbacks[eid]
+    if t == "feedback.revised":
+        _need(f.status in ("pendente", "falhou"), f"{eid} está '{f.status}' — a issue já existe; não se edita por aqui")
+        _need(any(k in data for k in ("title", "body", "proposal")), "feedback.revised: nada para mudar (title, body ou proposal)")
+        for k in ("title", "body"):
+            _need(k not in data or (isinstance(data[k], str) and (data[k].strip() or k == "body")), f"{k} deve ser texto")
+        if data.get("proposal"):
+            pr = state.proposals.get(data["proposal"])
+            _need(pr is not None and pr.status == "aceita",
+                  f"proposal: {data['proposal']!r} precisa ser uma proposta já aceita pelo dono "
+                  "(a que mudou o código; as antigas, de antes do tipo framework, eram `outro`)")
+            _need(not pr.feedback or pr.feedback == eid, f"{data['proposal']} já gerou {pr.feedback}")
     if t == "feedback.pushed":
         _need(isinstance(data["number"], int) and not isinstance(data["number"], bool) and data["number"] > 0,
               "number deve ser inteiro positivo (o número do issue no GitHub)")

@@ -618,7 +618,7 @@ O agente sugere; só você aceita ou rejeita. O noturno nunca aprova nada: ele c
 | `--target ID` | alvo (ex.: `TASK-0012`, `PROJ-1`); em `descartar-acao`/`unificar-acao`, a duplicada (sai) |
 | `--into ID` | `descartar-acao`/`unificar-acao`: a ação que fica |
 | `--evidence TEXTO` | por que sugerir agora |
-| `--issue-title TEXTO` / `--issue-body TEXTO` | **obrigatórios em `framework`**, proibidos nos outros: o texto **público** da issue (sem nomes, e-mails, caminhos nem IDs do vault) |
+| `--issue-title TEXTO` / `--issue-body TEXTO` (ou `--issue-body-file ARQ`) | **obrigatórios em `framework`**, proibidos nos outros: o texto **público** da issue, no molde `brain feedback template --kind framework` (sem pessoas, prints, links internos nem IDs do vault — ver `guides/feedback-issues.md`) |
 | + opções de registro | |
 
 ```bash

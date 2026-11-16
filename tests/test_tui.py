@@ -2410,7 +2410,7 @@ class CoverageTest(unittest.TestCase):
         "outbox list", "proposal list", "publish list", "doctor", "search", "status", "artifact", "watch list", "watch since", "watch folders", "watch docs",
         "repos list", "note list", "raw where", "ask list", "area list", "process show", "process list", "opportunity show", "opportunity list",
         "opportunity rubric",   # metodologia ICE: paleta (comando próprio abre o TextModal) e ? no formulário do ICE
-        "feedback show", "feedback list",   # painel 4 › Feedback renderiza fila e ficha do estado em processo
+        "feedback show", "feedback list", "feedback template",   # painel 4 › Feedback renderiza fila e ficha do estado em processo
         "action dupes"}   # o aviso de parecida aparece no campo título da nova ação
 
     AGENT_ONLY = {        # quem escreve é o agente (extração, snapshot, envio), conforme a Constituição
@@ -2420,7 +2420,7 @@ class CoverageTest(unittest.TestCase):
         "oppdrive status", "oppdrive onepager", "oppdrive record", "oppdrive suggested",   # porta do Drive: quem cria é o agente
         "oppdrive build", "oppdrive sync", "oppdrive synced", "oppdrive restyle", "oppdrive links",    # (e quem mantém o Resumo)
         "action not-dup",     # julgamento do agente sobre um par de candidatas; o dono decide pela proposta
-        "feedback pushed", "feedback failed",   # recuperação manual (o push morreu depois de criar) — agente/terminal
+        "feedback revise", "feedback pushed", "feedback failed",   # revise = corrigir texto no terminal; recuperação manual (o push morreu depois de criar) — agente/terminal
     }
     NOT_IN_TUI = {"demo", "tui", "migrate ids", "serve", "memory cost",
                   "query actions", "query decisions", "query person", "query entity", "query sql",
