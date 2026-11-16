@@ -391,14 +391,35 @@ def cmd_artifact(args, b: Brain) -> None:
 
 def cmd_proposal(args, b: Brain) -> None:
     if args.rcmd == "add":
-        ev = b.record_one(_common({"type": "proposal.opened", "data": {
-            "kind": args.kind, "summary": args.summary, "target": args.target,
-            "into": ids.normalize(args.into) if args.into else None, "evidence": args.evidence}}, args))
-        _out(args, ev, f"✓ {ev['id']} · proposta ({args.kind}): {args.summary}")
+        data = {"kind": args.kind, "summary": args.summary, "target": args.target,
+                "into": ids.normalize(args.into) if args.into else None, "evidence": args.evidence}
+        if args.kind == "framework":
+            from . import feedback
+            if not (args.issue_title and args.issue_body):
+                raise util.BrainError("proposta framework: --issue-title e --issue-body obrigatórios — o texto "
+                                      "público (sem nomes, IDs ou caminhos) que vira issue no GitHub se o dono aceitar",
+                                      code=2)
+            feedback.public_text_guard(b.inst, args.issue_title, args.issue_body)
+            data.update(issue_title=args.issue_title.strip(), issue_body=args.issue_body.strip())
+        elif args.issue_title or args.issue_body:
+            raise util.BrainError("--issue-title/--issue-body só valem em --kind framework", code=2)
+        ev = b.record_one(_common({"type": "proposal.opened", "data": data}, args))
+        _out(args, ev, f"✓ {ev['id']} · proposta ({args.kind}): {args.summary}"
+             + ("\n  se aceita, vira issue no GitHub: " + args.issue_title if args.kind == "framework" else ""))
     elif args.rcmd in ("accept", "reject"):
         t = "proposal.accepted" if args.rcmd == "accept" else "proposal.rejected"
         ev = b.record_one({"type": t, "id": args.id, "by": "owner", "data": {"quote": args.quote}})
-        _out(args, ev, f"✓ {args.id} {'aceita' if args.rcmd == 'accept' else 'rejeitada'} ({args.quote!r})")
+        extra, warn = "", ""
+        if args.rcmd == "accept" and b.state.proposals[args.id].kind == "framework":
+            from . import feedback
+            fid, warn = feedback.from_proposal(b, args.id)
+            if fid:
+                f = b.state.feedbacks[fid]
+                extra = f" → {fid} ({f.status})" + (f" {f.url}" if f.url else "")
+                ev = {**ev, "feedback": fid}
+        _out(args, ev, f"✓ {args.id} {'aceita' if args.rcmd == 'accept' else 'rejeitada'} ({args.quote!r}){extra}")
+        if warn:
+            print(warn, file=sys.stderr)
     elif args.rcmd == "list":
         for ev in b.sweep_proposals():
             print(f"↳ proposta {ev['id']} {ev['data'].get('outcome', 'encerrada')}: {ev['data']['reason']}", file=sys.stderr)
@@ -1066,6 +1087,8 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--target")
     x.add_argument("--into", help="descartar-acao/unificar-acao: a ação que fica (--target é a duplicada)")
     x.add_argument("--evidence")
+    x.add_argument("--issue-title", help="framework: título PÚBLICO da issue (sem dado do dono nem IDs do vault)")
+    x.add_argument("--issue-body", help="framework: corpo PÚBLICO da issue — o dono aceita vendo este texto")
     _fact_opts(x)
     for name in ("accept", "reject"):
         x = rs.add_parser(name)
@@ -1513,6 +1536,11 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("key")
     x = ws.add_parser("since", help="início da janela de leitura da fonte (o agente não calcula datas)")
     x.add_argument("key")
+    x.add_argument("--json", action="store_true")
+    x = ws.add_parser("docs", help="todas as fontes drive-doc de uma vez: ids para UMA busca de metadados no Drive; "
+                                   "com --revs, quais mudaram (só essas são exportadas)")
+    x.add_argument("--revs", metavar="ARQUIVO", help="JSON {id: modifiedTime} ou [{id, modifiedTime}] da busca no Drive "
+                                                    "('-' = stdin)")
     x.add_argument("--json", action="store_true")
     x = ws.add_parser("folders", help="de uma pasta observada, quais subpastas descer (pela data da call no nome × último pull)")
     x.add_argument("key")

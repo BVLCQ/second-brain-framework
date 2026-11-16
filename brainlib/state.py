@@ -127,6 +127,9 @@ class Proposal:
     quote: str = ""                  # fala do dono; se o sistema encerrou (superseded), o motivo que ele registrou
     seq: int = 0                     # seq do proposal.opened (eventos do dono depois dele podem torná-la obsoleta)
     into: str = ""                   # descartar-acao/unificar-acao: a ação que fica
+    issue_title: str = ""            # framework: o texto PÚBLICO que vira issue no GitHub se o dono aceitar
+    issue_body: str = ""
+    feedback: str = ""               # framework aceita: o FB-#### (issue) que ela gerou
 
 
 @dataclass
@@ -329,6 +332,7 @@ class Feedback:
     added: date | None = None
     pushed: date | None = None
     synced: date | None = None
+    proposal: str = ""             # PROP-#### framework que o dono aceitou e originou este FB (só local)
     history: list[dict] = field(default_factory=list)
 
 
@@ -547,7 +551,8 @@ def apply(st: State, ev: dict) -> None:
 
     elif t == "proposal.opened":
         st.proposals[eid] = Proposal(eid, data["kind"], data["summary"], data.get("target", ""),
-                                     data.get("evidence", ""), date=when, seq=ev.get("seq", 0), into=data.get("into", ""))
+                                     data.get("evidence", ""), date=when, seq=ev.get("seq", 0), into=data.get("into", ""),
+                                     issue_title=data.get("issue_title", ""), issue_body=data.get("issue_body", ""))
     elif t in ("proposal.accepted", "proposal.rejected"):
         p = st.proposals[eid]
         p.status = "aceita" if t.endswith("accepted") else "rejeitada"
@@ -633,7 +638,10 @@ def apply(st: State, ev: dict) -> None:
         if t == "feedback.added":
             st.feedbacks[eid] = Feedback(eid, data["kind"], data["title"], data.get("body", ""),
                                          source=ev.get("source", ""),
-                                         prov=ev.get("prov", ""), by=ev.get("by", ""), added=when)
+                                         prov=ev.get("prov", ""), by=ev.get("by", ""), added=when,
+                                         proposal=data.get("proposal", ""))
+            if data.get("proposal") in st.proposals:
+                st.proposals[data["proposal"]].feedback = eid
         f = st.feedbacks[eid]
         if t == "feedback.pushed":
             f.status, f.number, f.url, f.pushed = "criado", data["number"], data["url"], when

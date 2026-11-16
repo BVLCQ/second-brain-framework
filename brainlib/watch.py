@@ -198,6 +198,56 @@ def plan_folders(brain, key: str, folders: list[dict], margin: str = FOLDER_MARG
             "folders": rows}
 
 
+def parse_revs(data) -> dict[str, str]:
+    """A busca de metadados do Drive → {id do doc: modifiedTime}. Aceita `{id: rev}`, uma lista de
+    `{id, modifiedTime}` (ou `{files: [...]}`/`{results: [...]}`) — o formato que o MCP devolver."""
+    if isinstance(data, dict) and isinstance(data.get("files", data.get("results")), list):
+        data = data.get("files", data.get("results"))
+    if isinstance(data, dict):
+        return {str(k): str(v) for k, v in data.items() if isinstance(v, (str, int))}
+    if isinstance(data, list):
+        out = {}
+        for x in data:
+            if isinstance(x, dict) and x.get("id") and (x.get("modifiedTime") or x.get("modified_time")):
+                out[str(x["id"])] = str(x.get("modifiedTime") or x.get("modified_time"))
+        return out
+    raise util.BrainError("esperava {id: modifiedTime} ou uma lista [{id, modifiedTime}]", code=2)
+
+
+def docs(brain, revs: dict[str, str] | None = None) -> dict:
+    """Todas as fontes `drive-doc` de uma vez, para o /update checar em LOTE em vez de uma a uma.
+
+    Sem `revs`: lista cada fonte com o doc e a última revisão lida (o agente faz UMA busca de metadados
+    no Drive com esses ids). Com `revs` ({id: modifiedTime}): decide por fonte — `mudou`/`nunca-lido`
+    entram em `read` (exportar), `inalterado` não gasta leitura, `sem-metadado` (o Drive não devolveu o
+    id: removido, sem permissão) vai em `missing`, nunca vira falha silenciosa. A regra de revisão é a
+    de `snapshot --check`; nada é gravado aqui."""
+    state = util.read_json(brain.inst.state_file, {})
+    rows: list[dict] = []
+    for s in list_sources(brain.inst):
+        if s.get("kind") != DRIVE_DOC:
+            continue
+        doc = drive_doc_id(str(s.get("doc") or ""))
+        prev = state.get(f"snapshot:{s.get('key')}#{doc}") if doc else None
+        prev = prev if isinstance(prev, dict) else {}
+        row = {"key": s.get("key"), "doc": doc, "link": s.get("link") or "", "last_rev": prev.get("rev") or "",
+               "last_read": prev.get("at") or ""}
+        if not doc:
+            row["status"] = "doc-invalido"
+        elif revs is None:
+            row["status"] = "sem-checagem"
+        else:
+            rev = revs.get(doc)
+            row["rev"] = rev or ""
+            row["status"] = ("sem-metadado" if not rev else "inalterado" if rev == row["last_rev"]
+                             else "nunca-lido" if not prev else "mudou")
+        rows.append(row)
+    pick = lambda *st: [r["key"] for r in rows if r["status"] in st]   # noqa: E731
+    return {"total": len(rows), "ids": [r["doc"] for r in rows if r["doc"]], "checked": revs is not None,
+            "read": pick("mudou", "nunca-lido"), "unchanged": len(pick("inalterado")),
+            "missing": pick("sem-metadado"), "invalid": pick("doc-invalido"), "sources": rows}
+
+
 def _split_value(rhs: str) -> tuple[str, str]:
     """('"valor" # nota') → ('"valor"', ' # nota'). Só entende string entre aspas; o resto vai inteiro."""
     rhs = rhs.rstrip()
@@ -317,7 +367,7 @@ def drive_doc_id(ref: str) -> str | None:
 
 KINDS = [("gmail", "gmail · e-mails"), ("gcal", "gcal · agenda"), ("slack", "slack · canal ou DM"),
          ("drive", "drive · pasta"), (DRIVE_DOC, "drive-doc · doc, planilha ou slides"), ("jira", "jira · épico, board, projeto…"),
-         ("github", "github · clones git locais")]
+         ("github", "github · clones git locais"), ("granola", "granola · reuniões e transcrições")]
 NO_WINDOW = {DRIVE_DOC, "github"}    # relidos por modifiedTime / pelas pontas do git, não por janela
 JIRA_SCOPES = [("mine", "meus cards (atribuído, reporter ou observador)"), ("epic", "épico (os filhos dele)"),
                ("project", "projeto"), ("board", "board (o projeto do board)"), ("filter", "filtro salvo"), ("jql", "JQL livre")]
@@ -457,6 +507,28 @@ def cli(args, brain) -> None:
             print(json.dumps(r, ensure_ascii=False, indent=2))
         else:
             print(f"since={r['since']} · epoch={r['epoch']} · jql=\"{r['jql']}\" · {r['hours']}h · {r['why']}")
+    elif c == "docs":
+        revs = None
+        if args.revs:
+            raw = sys.stdin.read() if args.revs == "-" else Path(args.revs).read_text(encoding="utf-8")
+            try:
+                revs = parse_revs(json.loads(raw))
+            except json.JSONDecodeError as e:
+                raise util.BrainError(f"entrada não é JSON ({e})", code=2)
+        r = docs(brain, revs)
+        if args.json:
+            print(json.dumps(r, ensure_ascii=False, indent=2))
+        elif not r["checked"]:
+            print(f"{r['total']} fonte(s) drive-doc — passe os ids ao Drive (uma busca de metadados) e rode "
+                  "`brain watch docs --revs <json>`")
+            for x in r["sources"]:
+                print(f"{x['key']}\t{x['doc'] or '—'}\t{x['last_rev'] or 'nunca lido'}")
+        else:
+            print(f"{r['total']} fonte(s) drive-doc · ler {len(r['read'])} · inalteradas {r['unchanged']}"
+                  f" · sem metadado {len(r['missing'])} · doc inválido {len(r['invalid'])}")
+            for x in r["sources"]:
+                if x["status"] != "inalterado":
+                    print(f"{x['status']}\t{x['key']}\t{x['doc'] or '—'}\t{x.get('rev', '') or '—'}")
     elif c == "folders":
         raw = Path(args.file).read_text(encoding="utf-8") if args.file else sys.stdin.read()
         try:

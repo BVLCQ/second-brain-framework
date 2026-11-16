@@ -51,6 +51,12 @@ class WatchTest(_WatchBase):
         self.assertIn('# key = "gcal-primary"', text)             # exemplos comentados continuam
         self.assertEqual(self.keys(), ["gmail-hoje"])             # e não viram fonte
 
+    def test_granola_source_is_a_known_kind_with_window(self):
+        self.assertIn("granola", [k for k, _ in watch.KINDS])
+        self.assertNotIn("granola", watch.NO_WINDOW)
+        watch.add(self.inst, "granola-reunioes", {"kind": "granola", "window": "auto", "note": "reuniões do Granola"})
+        self.assertEqual(watch.list_sources(self.inst)[0]["kind"], "granola")
+
     def test_validation(self):
         self.seed()
         with self.assertRaises(util.BrainError) as e:
@@ -264,6 +270,74 @@ class DriveDocTest(_WatchBase):
         r = run("doc", "unlink", self.pid, "--ref", self.DOC, "--by", "owner")
         self.assertIn("fonte do watch removida", r.stdout)
         self.assertEqual(self.keys(), [])
+
+
+class DriveDocsBatchTest(_WatchBase):
+    """`brain watch docs`: a checagem dos drive-doc em lote (uma busca de metadados, não uma por fonte)."""
+    A, B, C = "1AaaaaaaaaaaaaaaaaaaaAa", "1BbbbbbbbbbbbbbbbbbbbBb", "1CcccccccccccccccccccCc"
+
+    def setUp(self):
+        super().setUp()
+        from brainlib import snapshot
+        from brainlib.core import Brain
+        self.brain = Brain(self.inst)
+        for key, doc in (("one-pager-a", self.A), ("one-pager-b", self.B), ("one-pager-c", self.C)):
+            watch.add(self.inst, key, {"kind": "drive-doc", "doc": doc})
+        watch.add(self.inst, "slack-x", {"kind": "slack", "window": "1d"})          # outra fonte: fora do lote
+        snapshot.take(self.brain, "one-pager-a", "texto a", item=self.A, rev="2026-11-01T10:00:00Z")
+        snapshot.take(self.brain, "one-pager-b", "texto b", item=self.B, rev="2026-11-02T10:00:00Z")
+        # C nunca foi lido
+
+    def test_sem_revs_lista_ids_para_uma_busca(self):
+        r = watch.docs(self.brain)
+        self.assertEqual((r["total"], r["checked"], r["ids"]), (3, False, [self.A, self.B, self.C]))
+        self.assertEqual(r["sources"][0]["last_rev"], "2026-11-01T10:00:00Z")
+        self.assertEqual(r["sources"][2]["last_rev"], "")
+        self.assertEqual(r["read"], [])                 # sem metadado não se decide nada
+
+    def test_com_revs_so_o_que_mudou_ou_nunca_foi_lido_entra(self):
+        r = watch.docs(self.brain, {self.A: "2026-11-01T10:00:00Z",       # igual → inalterado
+                                    self.B: "2026-11-09T10:00:00Z",       # mudou
+                                    self.C: "2026-11-03T10:00:00Z"})      # nunca lido
+        by = {x["key"]: x["status"] for x in r["sources"]}
+        self.assertEqual(by, {"one-pager-a": "inalterado", "one-pager-b": "mudou", "one-pager-c": "nunca-lido"})
+        self.assertEqual((r["read"], r["unchanged"], r["missing"]), (["one-pager-b", "one-pager-c"], 1, []))
+
+    def test_id_que_o_drive_nao_devolveu_vai_para_missing(self):
+        r = watch.docs(self.brain, {self.A: "2026-11-01T10:00:00Z"})
+        self.assertEqual(r["missing"], ["one-pager-b", "one-pager-c"])
+        self.assertEqual(r["read"], [])                 # sem metadado nunca vira leitura nem sucesso silencioso
+
+    def test_mesma_regra_do_snapshot_check(self):
+        from brainlib import snapshot
+        rev = "2026-11-01T10:00:00Z"
+        self.assertTrue(snapshot.unchanged(self.brain, "one-pager-a", rev, self.A))
+        self.assertEqual(watch.docs(self.brain, {self.A: rev})["sources"][0]["status"], "inalterado")
+        self.assertFalse(snapshot.unchanged(self.brain, "one-pager-b", "outra", self.B))
+        self.assertEqual(watch.docs(self.brain, {self.B: "outra"})["sources"][1]["status"], "mudou")
+
+    def test_parse_revs_aceita_os_formatos_do_mcp(self):
+        want = {self.A: "t1"}
+        self.assertEqual(watch.parse_revs({self.A: "t1"}), want)
+        self.assertEqual(watch.parse_revs([{"id": self.A, "modifiedTime": "t1"}]), want)
+        self.assertEqual(watch.parse_revs({"files": [{"id": self.A, "modifiedTime": "t1"}]}), want)
+        self.assertEqual(watch.parse_revs([{"id": self.A}, {"nome": "x"}]), {})
+        with self.assertRaises(util.BrainError):
+            watch.parse_revs("texto")
+
+    def test_cli_json_e_stdin(self):
+        env = {**os.environ, "BRAIN_HOME": str(self.root)}
+        run = lambda *a, **k: subprocess.run([sys.executable, str(ROOT / "brain"), *a], capture_output=True,  # noqa: E731
+                                             text=True, env=env, **k)
+        r = run("watch", "docs", "--json")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(json.loads(r.stdout)["ids"], [self.A, self.B, self.C])
+        r = run("watch", "docs", "--revs", "-", "--json",
+                input=json.dumps([{"id": self.B, "modifiedTime": "2026-11-09T10:00:00Z"}]))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(json.loads(r.stdout)["read"], ["one-pager-b"])
+        r = run("watch", "docs", "--revs", "-", input="não é json")
+        self.assertEqual(r.returncode, 2)
 
 
 if __name__ == "__main__":

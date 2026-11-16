@@ -47,6 +47,14 @@
 # mode = "state"
 # jql = "assignee = currentUser() AND statusCategory != Done ORDER BY key"
 
+# Granola (notas e transcrições de reunião) pelo MCP https://mcp.granola.ai/mcp. Cada reunião é um item
+# (id da reunião + `updated_at` como rev): só entra na inbox o que é novo ou mudou. Ver commands/update/SKILL.md.
+# [[source]]
+# key = "granola-reunioes"
+# kind = "granola"
+# window = "auto"
+# note = "notas e transcrições das reuniões"
+
 # Clones git locais: o CLI lê (`./brain repos pull github-repos`), não o MCP. `git fetch` em cada repo antes
 # (só baixa; `fetch = "false"` desliga); 1ª leitura = o repo inteiro, depois só commit novo → RAW/…/github/.
 # [[source]]

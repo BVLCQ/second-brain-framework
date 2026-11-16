@@ -138,7 +138,9 @@ somente-leitura para o mundo.
    aprovação; sugestão que partiu do agente só publica com um "ok". Superfícies: painel HTML (aba
    Sugestões, ponta da ponte `serve`), TUI (log › Feedback) e chat (`/feedback`). O texto é
    público: a porta recusa título/corpo com dado do dono (mesmas regras da varredura do `upstream`),
-   sem override. Token: `GITHUB_TOKEN` em `config/.env`. No noturno nada é publicado. `feedback sync`
+   sem override. **Propostas que mudam o código** do cérebro (`brain proposal add --kind framework`, com
+`--issue-title/--issue-body` públicos) viram issue **quando o dono aceita**: o `proposal accept` registra o
+`FB-####` e publica — o "aceito" aprova o texto que ele viu; rejeitada, nada sobe. Token: `GITHUB_TOKEN` em `config/.env`. No noturno nada é publicado. `feedback sync`
    relê o estado de cada issue (aberta/fechada · concluída/não será feita) e grava `feedback.synced` —
    observação de porta já aberta, roda até no noturno (passo 6 do `/update`).
 

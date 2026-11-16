@@ -58,6 +58,25 @@ def leak_guard(inst: config.Instance, *texts: str) -> None:
                               "descreva sem nomes, e-mails, caminhos ou segredos", code=4)
 
 
+VAULT_REF_RE = re.compile(r"\b(?:TASK|DEC|WIN|PROP|MSG|PUB|FOCUS|PROC|OPP|ASK|FB)-\d{3,}\b|\b(?:GOAL|PROJ)-\d+(?:\.\d+)?\b")
+
+
+def refs_guard(*texts: str) -> None:
+    """Texto que vira issue pública não cita ID do vault (TASK-####, OPP-####…): o leitor não os resolve e
+    dizem do dono. Vale para o que o AGENTE escreve para a issue (propostas `framework`); o rodapé `FB-####`
+    que a própria porta acrescenta não passa por aqui."""
+    hits = sorted({m.group(0) for t in texts for m in VAULT_REF_RE.finditer(t or "")})
+    if hits:
+        raise util.BrainError("o texto vira issue pública e cita IDs do vault (" + ", ".join(hits[:4]) +
+                              ") — descreva o problema sem referências internas", code=4)
+
+
+def public_text_guard(inst: config.Instance, title: str, body: str) -> None:
+    """As duas travas do texto público: dado do dono (regras do upstream) e IDs do vault."""
+    leak_guard(inst, title, body)
+    refs_guard(title, body)
+
+
 # ── GitHub (stdlib, token em config/.env — o valor nunca aparece em chat/log) ─
 
 def create_issue(inst: config.Instance, repo: str, title: str, body: str, labels: list[str]) -> dict:
@@ -113,7 +132,7 @@ def issue_state(inst: config.Instance, repo: str, number: int) -> dict:
 
 def add(brain: Brain, kind: str, title: str, body: str = "",
         by: str = "owner", prov: str = "declarado", source: str = "chat", date: str | None = None,
-        force: bool = False) -> dict:
+        force: bool = False, proposal: str = "") -> dict:
     """Grava `feedback.added` (FB-#### pendente). Título igual ao de um FB existente exige --force.
 
     Sem campo de contexto de propósito: o issue é público e refs do vault (TASK/PROC/OPP) não saem
@@ -125,7 +144,9 @@ def add(brain: Brain, kind: str, title: str, body: str = "",
         raise util.BrainError(f"já existe {dup} com o mesmo título e tipo — acrescente detalhe ao existente "
                               f"(`brain feedback show {dup}`) ou use --force", code=4)
     return brain.record_one({"type": "feedback.added", "by": by, "prov": prov, "source": source or "chat",
-                             "date": date, "data": {"kind": kind, "title": title, "body": body}})
+                             "date": date,
+                             "data": {"kind": kind, "title": title, "body": body,
+                                      **({"proposal": proposal} if proposal else {})}})
 
 
 def push(brain: Brain, fid: str) -> dict:
@@ -163,6 +184,31 @@ def push(brain: Brain, fid: str) -> dict:
         raise util.BrainError(f"{fid}: a issue {res['url']} foi criada mas o registro falhou — "
                               f"`brain feedback pushed {fid} --number {res['number']} --url {res['url']}`",
                               code=5)
+
+
+def from_proposal(brain: Brain, pid: str) -> tuple[str | None, str]:
+    """Proposta `framework` aceita → issue no repo do framework. → (FB-####, aviso).
+
+    O "aceito" do dono é a aprovação do texto (ele o viu na proposta). Nunca falha o aceite: sem token,
+    rede, dado do dono no texto ou título repetido, o FB fica `pendente` (ou nem nasce) e o aviso diz o
+    que falta — `brain feedback push FB-####` resolve depois."""
+    p = brain.state.proposals[pid]
+    if p.kind != "framework":
+        return None, ""
+    if p.feedback:
+        return p.feedback, ""
+    try:
+        public_text_guard(brain.inst, p.issue_title, p.issue_body)
+        fb = add(brain, "sugestao", p.issue_title, p.issue_body, by="owner", prov="declarado",
+                 source="chat", proposal=pid)
+    except util.BrainError as e:
+        return None, f"⚠ a issue não foi registrada: {e}"
+    fid = fb["id"]
+    try:
+        push(brain, fid)
+    except util.BrainError as e:
+        return fid, f"⚠ {fid} ficou pendente: {e}"
+    return fid, ""
 
 
 def line(f) -> str:

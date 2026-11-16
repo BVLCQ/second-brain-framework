@@ -607,6 +607,7 @@ class RawSortTests(unittest.TestCase):
         "gravacao.mp4": "videos",
         "audio.m4a": "videos",
         "pagina.html": "artifacts",
+        "granola-granola-meetings-2026-10-09T100000.md": "meetings",
         "print.png": "images",
         "PROJ-1-2026-10-09-note.md": "notes",
         "note-2026-10-09-note-2.md": "notes",
@@ -918,7 +919,7 @@ class DashboardAssetTests(unittest.TestCase):
         "outbox list", "proposal list", "publish list", "doctor", "search", "status", "note list", "ask list",
         "area list", "process show", "process list", "opportunity show", "opportunity list", "action dupes",
         "opportunity rubric",   # o rubric viaja no view model (portfolio.ice_rubric) e no guia gerado
-        "watch list", "watch since", "watch folders", "repos list", "raw where", "artifact",
+        "watch list", "watch since", "watch folders", "watch docs", "repos list", "raw where", "artifact",
         "feedback show", "feedback list",   # painel › Sugestões renderiza fila e ficha do payload do modelo
         "memory providers show",            # cfg/Memória renderiza a pilha do payload (o TUI roda ao vivo)
     }

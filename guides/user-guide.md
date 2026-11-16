@@ -246,6 +246,7 @@ Duas regras de ouro:
 | Google Calendar | `/calendar` | snapshot da agenda (14d) — combustível do `/focus` | conector MCP Calendar |
 | Slack | `/slack #canal` | change digest do canal (7d) | conector MCP Slack |
 | Google Drive | `/drive <doc>` | snapshot datado do doc vivo | conector MCP Drive |
+| Granola | `/update` (fonte `kind = "granola"`) | notas e transcrição de cada reunião → `/dump` como reunião | conector MCP Granola (`https://mcp.granola.ai/mcp`) |
 | Jira/GitHub/qualquer coisa com MCP de leitura | `/connect <fonte>` | snapshot na inbox + `/dump` | conector MCP correspondente |
 | Reuniões | (sem conector) | você solta a transcrição (.md/.vtt/.srt) na inbox | gravador/transcrição qualquer — o cérebro não grava nem transcreve |
 
@@ -273,6 +274,12 @@ mudou: menções a você, decisões, promessas. **Para enviar**, nada disso:
 pull — o primeiro é o "estado inicial", os seguintes mostram **só o que
 mudou** desde o último. O doc vivo continua lá fora; aqui dentro, cada
 estado ficou congelado e citável.
+
+**Granola.** Adicione o conector MCP do Granola (`https://mcp.granola.ai/mcp`, OAuth) e
+libere as ferramentas de leitura em `[runner].allow` (`list_meetings`, `get_meetings`,
+`get_meeting_transcript`, `search_meetings`). Cada reunião vira um item com hash próprio
+(id + `updated_at`): o `/update` só relê o que é novo ou foi editado, grava notas + transcrição
+em `RAW/…/meetings/` e o `/dump` processa como reunião.
 
 **O `watch.toml` — a lista do que roda sozinho.** Abra
 `config/watch.toml.example` e repare na estrutura; cada bloco é uma fonte:
@@ -597,6 +604,8 @@ em outros agentes, o texto é entendido do mesmo jeito.)
   offline fica `pendente` — `brain feedback list` mostra a fila, `push` tenta de novo.
 - O issue é público: a porta recusa texto com seu nome, e-mail ou caminhos da máquina, e não publica
   nada no noturno.
+- **Propostas de melhoria do código** (`proposal add --kind framework`): o agente escreve o texto público da
+  issue na própria proposta; ao **aceitar**, o cérebro registra o `FB-####` e publica no GitHub do framework. Rejeitada, nada sobe.
 
 #### `/backup` — o zip do vault
 - **Digita:** `/backup` (Drive, se ligado) · `/backup --local ~/Backups` ·

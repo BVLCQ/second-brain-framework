@@ -2407,7 +2407,7 @@ class CoverageTest(unittest.TestCase):
     """Todo subcomando da CLI tem tecla no TUI ou uma razão explícita para não ter."""
     READ_ONLY_VIEWS = {   # a leitura já está num painel (modelo em processo), sem precisar chamar a CLI
         "person list", "action show", "action list", "decision list", "plan show", "focus show", "outbox show",
-        "outbox list", "proposal list", "publish list", "doctor", "search", "status", "artifact", "watch list", "watch since", "watch folders",
+        "outbox list", "proposal list", "publish list", "doctor", "search", "status", "artifact", "watch list", "watch since", "watch folders", "watch docs",
         "repos list", "note list", "raw where", "ask list", "area list", "process show", "process list", "opportunity show", "opportunity list",
         "opportunity rubric",   # metodologia ICE: paleta (comando próprio abre o TextModal) e ? no formulário do ICE
         "feedback show", "feedback list",   # painel 4 › Feedback renderiza fila e ficha do estado em processo

@@ -1686,6 +1686,8 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
         def after() -> None:
             if r.kind == "mudar-plano":
                 self.log_line("Proposta aceita. Para executar a mudança do plano, use E (gate) no painel 3.", "yellow")
+            elif r.kind == "framework":
+                self.log_line("Proposta aceita. A issue vai pro GitHub do framework (porta 7) — veja o resultado no log › Feedback.", "yellow")
             elif r.kind in ("atualizar-acao", "outro"):
                 self.log_line("Proposta aceita. Aplique a mudança na ação com e (editar), se for o caso.", "yellow")
 

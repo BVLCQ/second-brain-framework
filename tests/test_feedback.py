@@ -321,6 +321,150 @@ class FeedbackFlowTests(unittest.TestCase):
         self.assertEqual(self.brain.reload() or self.brain.state.feedbacks["FB-0001"].status, "pendente")
 
 
+class FrameworkProposalTests(unittest.TestCase):
+    """Proposta `framework` aceita pelo dono → issue no GitHub (porta 7). create_issue é falso; sem rede."""
+
+    TITLE = "Checagem em lote das fontes do Drive"
+    BODY = "O /update lê cada doc vigiado um a um; uma busca de metadados em lote evitaria leituras."
+
+    def setUp(self):
+        self._td = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._td.name)
+        self.brain = _brain(self.tmp)
+        for k in ("GITHUB_TOKEN", "BRAIN_NIGHTLY"):
+            os.environ.pop(k, None)
+        self._orig = feedback.create_issue
+        self.calls: list = []
+        feedback.create_issue = lambda inst, repo, title, body, labels: (
+            self.calls.append((repo, title, body, labels)) or {"number": 12, "url": "https://github.com/o/r/issues/12"})
+
+    def tearDown(self):
+        feedback.create_issue = self._orig
+        os.environ.pop("BRAIN_NIGHTLY", None)
+        self._td.cleanup()
+
+    def _token(self):
+        (self.brain.inst.config_dir / ".env").write_text("GITHUB_TOKEN=fake-token-teste\n", encoding="utf-8")
+
+    def _propose(self, kind="framework", **extra):
+        data = {"kind": kind, "summary": "resumo interno com TASK-0001"}
+        if kind == "framework":
+            data.update(issue_title=self.TITLE, issue_body=self.BODY)
+        data.update(extra)
+        return self.brain.record_one({"type": "proposal.opened", "by": "agent", "prov": "observado",
+                                      "source": "chat", "data": data})["id"]
+
+    def _accept(self, pid):
+        self.brain.record_one({"type": "proposal.accepted", "id": pid, "by": "owner", "data": {"quote": "ok"}})
+        return feedback.from_proposal(self.brain, pid)
+
+    def test_aceitar_cria_fb_e_issue_com_o_texto_publico(self):
+        self._token()
+        pid = self._propose()
+        fid, warn = self._accept(pid)
+        self.assertEqual((fid, warn), ("FB-0001", ""))
+        f = self.brain.state.feedbacks[fid]
+        self.assertEqual((f.status, f.number, f.kind, f.by, f.proposal), ("criado", 12, "sugestao", "owner", pid))
+        self.assertEqual(self.brain.state.proposals[pid].feedback, fid)
+        repo, title, body, labels = self.calls[0]
+        self.assertEqual((title, labels), ("[sugestão] " + self.TITLE, ["sugestão"]))
+        self.assertIn(self.BODY, body)
+        self.assertNotIn("TASK-0001", body)                # o resumo interno nunca sobe
+        self.assertNotIn(pid, body)                        # nem o PROP-####
+
+    def test_sem_token_aceite_vale_e_fb_fica_pendente(self):
+        pid = self._propose()
+        fid, warn = self._accept(pid)
+        self.assertEqual(self.brain.state.proposals[pid].status, "aceita")
+        self.assertEqual(self.brain.state.feedbacks[fid].status, "pendente")
+        self.assertIn("pendente", warn)
+        self.assertEqual(self.calls, [])
+
+    def test_so_framework_gera_issue(self):
+        self._token()
+        pid = self._propose("outro")
+        self.assertEqual(self._accept(pid), (None, ""))
+        self.assertEqual(self.brain.state.feedbacks, {})
+        self.assertEqual(self.calls, [])
+
+    def test_rejeitada_nao_gera_issue(self):
+        self._token()
+        pid = self._propose()
+        self.brain.record_one({"type": "proposal.rejected", "id": pid, "by": "owner", "data": {"quote": "não"}})
+        self.assertEqual(self.brain.state.feedbacks, {})
+        self.assertEqual(self.calls, [])
+
+    def test_nao_cria_segundo_fb_para_a_mesma_proposta(self):
+        self._token()
+        pid = self._propose()
+        fid, _ = self._accept(pid)
+        self.assertEqual(feedback.from_proposal(self.brain, pid), (fid, ""))
+        self.assertEqual(len(self.brain.state.feedbacks), 1)
+        self.assertEqual(len(self.calls), 1)
+
+    def test_framework_exige_texto_publico(self):
+        for data in ({"kind": "framework", "summary": "x"},
+                     {"kind": "framework", "summary": "x", "issue_title": "t"},
+                     {"kind": "framework", "summary": "x", "issue_title": " ", "issue_body": "b"}):
+            with self.assertRaises(util.BrainError):
+                self.brain.record_one({"type": "proposal.opened", "by": "agent", "prov": "observado",
+                                       "source": "chat", "data": data})
+
+    def test_ids_do_vault_e_dado_do_dono_sao_recusados(self):
+        with self.assertRaises(util.BrainError) as cm:
+            feedback.public_text_guard(self.brain.inst, "Melhoria (ASK-0025)", "corpo")
+        self.assertIn("ASK-0025", str(cm.exception))
+        with self.assertRaises(util.BrainError):
+            feedback.public_text_guard(self.brain.inst, "ok", "ver OPP-0003 e PROJ-3.2")
+        with self.assertRaises(util.BrainError):           # nome do dono (regras do upstream)
+            feedback.public_text_guard(self.brain.inst, "Pedido da Dona", "corpo")
+        feedback.public_text_guard(self.brain.inst, self.TITLE, self.BODY)   # texto limpo passa
+
+    def test_texto_vazado_no_ledger_nao_derruba_o_aceite(self):
+        self._token()
+        pid = self._propose(issue_body="veja OPP-0001")    # gravado por fora do CLI
+        fid, warn = self._accept(pid)
+        self.assertIsNone(fid)
+        self.assertIn("OPP-0001", warn)
+        self.assertEqual(self.brain.state.proposals[pid].status, "aceita")
+        self.assertEqual(self.calls, [])
+
+    def test_noturno_nao_aceita_nem_publica(self):
+        self._token()
+        pid = self._propose()
+        os.environ["BRAIN_NIGHTLY"] = "1"
+        with self.assertRaises(util.BrainError):
+            self.brain.record_one({"type": "proposal.accepted", "id": pid, "by": "owner", "data": {"quote": "ok"}})
+        self.assertEqual(self.brain.state.proposals[pid].status, "aberta")
+        self.assertEqual(self.calls, [])
+
+    def test_cli_add_e_accept(self):
+        from brainlib import cli as cli_mod
+        self._token()
+        os.environ["BRAIN_HOME"] = str(self.tmp)
+        try:
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                rc = cli_mod.main(["proposal", "add", "--kind", "framework", "--summary", "s",
+                                   "--by", "agent", "--prov", "observado", "--source", "chat"])
+            self.assertNotEqual(rc, 0)                     # sem texto público
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                rc = cli_mod.main(["proposal", "add", "--kind", "framework", "--summary", "s",
+                                   "--issue-title", self.TITLE, "--issue-body", self.BODY,
+                                   "--by", "agent", "--prov", "observado", "--source", "chat"])
+            self.assertEqual(rc, 0)
+            self.assertIn("vira issue", out.getvalue())
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                rc = cli_mod.main(["proposal", "accept", "PROP-0001", "--quote", "ok"])
+            self.assertEqual(rc, 0)
+            self.assertIn("FB-0001 (criado)", out.getvalue())
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                rc = cli_mod.main(["proposal", "add", "--kind", "outro", "--summary", "s", "--issue-title", "x",
+                                   "--by", "agent", "--prov", "observado", "--source", "chat"])
+            self.assertNotEqual(rc, 0)                     # texto público só vale em framework
+        finally:
+            os.environ.pop("BRAIN_HOME", None)
+
+
 class FeedbackClientTests(unittest.TestCase):
     """O cliente GitHub em isolado: sem rede de verdade, urlopen falso."""
 

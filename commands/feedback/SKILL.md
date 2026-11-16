@@ -37,3 +37,9 @@ cria a issue na sequência e devolve o link. Sem pressa: `--no-push` deixa `FB-#
 9. **Acompanhar:** `./brain feedback sync` relê o estado de cada issue no GitHub (aberta/fechada · concluída/não
    será feita) e grava as mudanças — o dono vê no painel (aba Sugestões) e na TUI (log › Feedback). O `/update`
    roda no passo 6; a pedido, rode na hora. Sem `GITHUB_TOKEN`, pula com aviso (não é erro).
+10. **Proposta que muda o código do cérebro** (melhoria de `brainlib/`, `commands/`, `template/`, `guides/`…): não
+    use `--kind outro`. Abra `./brain proposal add --kind framework --summary "…" --issue-title "…" --issue-body "…"
+    --by agent --prov observado --source <origem>`. O `--summary` é interno (pode citar IDs); `--issue-title` e
+    `--issue-body` são **o texto público**: genéricos, sem pessoas, e-mails, caminhos nem IDs do vault (TASK-…, OPP-…,
+    ASK-…) — a porta recusa. O dono vê esse texto na proposta; ao **aceitar**, o `proposal accept` cria o `FB-####`
+    e publica a issue sozinho (o aceite é a aprovação). Rejeitada, nada sobe. No noturno só se abre a proposta.

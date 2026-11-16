@@ -1,3 +1,21 @@
+## 2.10.0 — propostas de código viram issue + checagem de docs em lote
+
+- **Proposta `framework`**: `brain proposal add --kind framework` é a proposta
+  que muda o código ou a estrutura do próprio cérebro. Ela carrega o texto
+  **público** da issue (`--issue-title`/`--issue-body`), que você vê ao decidir.
+  **Aceitar = aprovar a issue**: o `proposal accept` registra um `FB-####` e
+  publica no repo do framework (porta 7). Rejeitada, nada sobe; sem token ou
+  rede o aceite vale e o `FB` fica `pendente`. O texto é barrado se citar IDs
+  do vault (`TASK-…`, `OPP-…`) além das regras de dado pessoal de sempre. TUI
+  mostra "Issue pública" na proposta.
+- **`brain watch docs`**: lista as fontes `drive-doc` com o id e a última
+  revisão lida (uma busca de metadados no Drive serve a todas) e, com
+  `--revs`, diz quais ler (mudou ou nunca lida), quantas estão inalteradas e
+  quais o Drive não devolveu. O `/update` passa a checar os one-pagers em lote
+  em vez de uma fonte por vez.
+- **Fonte `granola`** no `watch.toml` (reuniões e transcrições pelo MCP do Granola, um item por
+  reunião) e o `/dump` as trata como reunião (`RAW/…/meetings/`).
+
 ## 2.9.2 — fechadas recentes sempre à vista na TUI
 
 - **Paridade com a coluna "Feita" do painel**: na aba **Minhas** da TUI, as

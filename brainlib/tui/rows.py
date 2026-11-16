@@ -610,6 +610,7 @@ EFFECT = {"fechar-acao": "brain action close {t} --how … --by owner", "reestim
           "atualizar-acao": "aplique a mudança na ação {t} (e para editar: e)",
           "unificar-acao": "brain action merge {t} --into {i} --by owner (pessoas, link, prazo e bloqueios passam para {i})",
           "descartar-acao": "brain action drop {t} --duplicate-of {i} --reason … --by owner", "mudar-plano": "abre o gate: edite o goals.md com E",
+          "framework": "abre uma issue no GitHub do framework com o texto abaixo (porta 7: o seu aceite é a aprovação)",
           "outro": "só registra a resposta"}
 
 
@@ -620,6 +621,10 @@ def d_prop(store, it) -> Doc:
     if r.into:
         kv.append(("fica", titled(store, r.into)))
     doc.kv(kv + [("evidência", Text(r.evidence or "—"))])
+    if r.kind == "framework":
+        doc.sec("Issue pública (o que sobe no GitHub)").p(Text(r.issue_title, "bold")).p(r.issue_body)
+        if r.feedback:
+            doc.p((f"  issue registrada: {r.feedback}", DIM))
     doc.sec("Se você aceitar").cmd(f"brain proposal accept {r.id} --quote \"…\"")
     doc.p(("  depois: " + EFFECT.get(r.kind, EFFECT["outro"]).format(t=r.target or "TASK-####", i=r.into or "TASK-####"), DIM))
     doc.blank().p(("O cérebro não fecha nem altera nada sozinho. Rejeitada, a proposta só volta com evidência nova.", DIM))

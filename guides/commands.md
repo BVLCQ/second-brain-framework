@@ -240,6 +240,7 @@ nada é escrito. Quem *lê* as fontes é o agente (`/update`, `/connect`); o `br
 | `list [--json]` | fontes cadastradas |
 | `since KEY [--json]` | início da janela de leitura da fonte (`since`, `epoch`, `jql`) — é o que o agente usa; ele não calcula datas |
 | `folders KEY [--file F] [--margin 3d] [--full] [--json]` | de uma pasta do Drive, quais subpastas descer: lê `[{id, name, modifiedTime?}]` (arquivo ou stdin) e compara a data da call no nome com o carimbo do último pull, menos a folga. Nome sem data ou pasta modificada desde o pull sempre desce; `--full` desce em todas |
+| `docs [--revs F] [--json]` | todas as fontes `drive-doc` de uma vez. Sem `--revs`: lista cada uma com o doc e a última revisão lida (os ids para **uma** busca de metadados no Drive). Com `--revs` (`{id: modifiedTime}` ou `[{id, modifiedTime}]`, arquivo ou `-` para stdin): diz quais ler (`read`: mudou ou nunca lida), quantas estão inalteradas e quais o Drive não devolveu (`missing`). Mesma regra do `snapshot --check`; não grava nada |
 | `add KEY --kind K` | `--window auto\|12h\|1d\|2w` · `--note "…"` · `--set campo=valor` (ex.: `channel=#time-dados`, `jql=…`; repita a opção) |
 | `edit KEY` | mesmas opções, mais `--rename NOVA_KEY` e `--unset CAMPO`. `key` e `kind` não saem |
 | `remove KEY` | tira do watch; snapshots já gravados e o ledger ficam |
@@ -612,11 +613,12 @@ O agente sugere; só você aceita ou rejeita. O noturno nunca aprova nada: ele c
 ### `brain proposal add --kind TIPO --summary TEXTO`
 | Opção | Uso |
 |---|---|
-| `--kind fechar-acao\|atualizar-acao\|descartar-acao\|unificar-acao\|mudar-plano\|reestimar\|outro` | **obrigatório** |
+| `--kind fechar-acao\|atualizar-acao\|descartar-acao\|unificar-acao\|mudar-plano\|reestimar\|framework\|outro` | **obrigatório** |
 | `--summary TEXTO` | **obrigatório** |
 | `--target ID` | alvo (ex.: `TASK-0012`, `PROJ-1`); em `descartar-acao`/`unificar-acao`, a duplicada (sai) |
 | `--into ID` | `descartar-acao`/`unificar-acao`: a ação que fica |
 | `--evidence TEXTO` | por que sugerir agora |
+| `--issue-title TEXTO` / `--issue-body TEXTO` | **obrigatórios em `framework`**, proibidos nos outros: o texto **público** da issue (sem nomes, e-mails, caminhos nem IDs do vault) |
 | + opções de registro | |
 
 ```bash
@@ -630,7 +632,10 @@ brain proposal add --kind fechar-acao --target TASK-0012 --summary "Heitor-demo 
 brain proposal accept PROP-0001 --quote "ok, pode fechar"
 brain proposal reject PROP-0002 --quote "não, ainda falta o México"
 ```
-Rejeitada não volta sem evidência nova. `descartar-acao`/`unificar-acao` se encerram sozinhas quando o dono descarta a
+Rejeitada não volta sem evidência nova. **`framework`** é a proposta que muda o código ou a estrutura do próprio
+cérebro (`brainlib/`, `commands/`, `guides/`, `template/`…): o texto público fica na proposta, você o vê ao decidir, e
+**aceitar = aprovar a issue** — o cérebro registra um `FB-####` e a publica no repo do framework (porta 7). Sem token ou
+sem rede o aceite vale e o `FB` fica `pendente` (`brain feedback push FB-####`). Rejeitada, nada sobe. `descartar-acao`/`unificar-acao` se encerram sozinhas quando o dono descarta a
 duplicada (aceita) ou quando uma das duas fecha por outro caminho (rejeitada).
 
 ### `brain proposal list`

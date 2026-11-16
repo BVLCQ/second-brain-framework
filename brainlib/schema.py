@@ -20,7 +20,7 @@ DELIVERABLE_STATUS = {"nao-iniciado", "em-andamento", "feito", "cancelado"}
 ARTIFACT_KINDS = {"reuniao", "documento", "nota", "conector"}
 QUESTION_KINDS = {"identidade", "classificacao", "permissao", "confirmacao", "outro"}
 FEEDBACK_KINDS = {"sugestao", "bug"}
-PROPOSAL_KINDS = {"fechar-acao", "atualizar-acao", "descartar-acao", "unificar-acao", "mudar-plano", "reestimar", "outro"}
+PROPOSAL_KINDS = {"fechar-acao", "atualizar-acao", "descartar-acao", "unificar-acao", "mudar-plano", "reestimar", "framework", "outro"}
 RECURRENCE = {"diaria", "semanal", "quinzenal", "mensal", "trimestral", "sob-demanda", "por-evento"}
 RECURRENCE_NEEDS_COUNT = {"sob-demanda", "por-evento"}     # exigem per_month (execuções/mês)
 OPP_STATUS = {"ideia", "triagem", "em-espera", "descartada", "priorizada", "em-andamento", "piloto",
@@ -277,6 +277,10 @@ def validate(ev: dict, state, plan) -> None:
                   f"link: {data['link']!r} não existe (PROC-… ou OPP-…)")
     if t == "proposal.opened":
         _need(data["kind"] in PROPOSAL_KINDS, f"kind de proposta inválido: {data['kind']!r}")
+        if data["kind"] == "framework":
+            for k in ("issue_title", "issue_body"):
+                _need(isinstance(data.get(k), str) and data[k].strip(),
+                      f"framework: {k} obrigatório — o texto público (sem dado do dono) que vira a issue se o dono aceitar")
         if data["kind"] in {"descartar-acao", "unificar-acao"}:
             tgt, into = data.get("target") or "", data.get("into") or ""
             _need(tgt in state.actions and into in state.actions and tgt != into,
@@ -341,6 +345,8 @@ def _validate_feedback(t: str, ev: dict, data: dict, state) -> None:
     if t == "feedback.added":
         _need(data["kind"] in FEEDBACK_KINDS, f"kind de feedback inválido: {data['kind']!r} — {sorted(FEEDBACK_KINDS)}")
         _need(isinstance(data.get("context", []), list), "context deve ser lista de referências")
+        if data.get("proposal"):
+            _need(data["proposal"] in state.proposals, f"proposal: {data['proposal']!r} não existe")
         return
     f = state.feedbacks[eid]
     if t == "feedback.pushed":
