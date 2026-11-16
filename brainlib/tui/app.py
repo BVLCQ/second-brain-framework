@@ -279,12 +279,25 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
         return self._nv["win"]
 
     @property
-    def filt(self) -> tuple[int, int, str] | None:
+    def filt(self) -> tuple | None:
+        """(painel, aba, filtro 1, filtro 2, …): filtros em cascata de UMA lista — cada um refina o anterior."""
         return self._nv["filt"]
 
     @filt.setter
     def filt(self, v) -> None:
         self._nv["filt"] = v
+
+    def filt_levels(self, key: tuple[int, int] | None = None) -> list[str]:
+        """Os filtros em cascata aplicados à lista `key` (padrão: a atual), do primeiro ao último; [] se não há."""
+        key = key or (self.p, self.tab[self.p])
+        return [f for f in self.filt[2:] if f] if self.filt and tuple(self.filt[:2]) == tuple(key) else []
+
+    def set_filt_levels(self, key: tuple[int, int], levels: list[str]) -> None:
+        self.filt = (*key, *levels) if levels else None
+
+    @staticmethod
+    def filt_label(levels: list[str]) -> str:
+        return " › ".join(levels)
 
     @property
     def zoom(self) -> bool:
@@ -375,8 +388,7 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
             if self.store is None:
                 self._items[key] = []
             else:
-                f = self.filt[2] if self.filt and self.filt[:2] == key else ""
-                self._items[key] = self.store.items(self.face, p, t, self.show_all, f, self.collapsed,
+                self._items[key] = self.store.items(self.face, p, t, self.show_all, self.filt_levels(key), self.collapsed,
                                               self.view if p == 2 and self.face == 0 else 0, self.sort if p == 2 and self.face == 0 else 0)
         return self._items[key]
 
@@ -422,9 +434,9 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
             return self._summary()
         its = self.items(pid)
         if not its:
-            f = self.filt[2] if self.filt and self.filt[:2] == (pid, t) else ""
+            f = self.filt_label(self.filt_levels((pid, t)))
             if f:
-                return Text(f'nada para "{f}"', "dim")
+                return Text(f'nada para "{f}"  ·  esc tira o último filtro', "dim")
             if (pid, t) == (6, 1):
                 return Text("vazio — n registra sugestão/bug (vira issue no GitHub)", "dim")
             return Text("vazio", "dim")
@@ -515,6 +527,9 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
             t.append(f" · vista {ACTION_VIEWS[self.view]}", "bold magenta")
         if pid == 2 and self.face == 0 and self.sort:
             t.append(f" · ordem {ACTION_SORTS[self.sort].lower()}", "bold magenta")
+        lv = self.filt_levels((pid, self.tab[pid]))
+        if lv:
+            t.append(f" · ⌕ filtro: {self.filt_label(lv)}", "bold magenta")
         t.append(" ")
         self.query_one(f"#p{pid}", ListPanel).tab_spans = spans
         return t
@@ -560,7 +575,7 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
             panel.set_class(live and pid == fill and not compact, "-fill")
             panel.border_title = self._title(pid)
             n = len(self.items(pid)) if self.store and live and not compact else 0
-            panel.border_subtitle = f" {self.sel_index(pid) + 1} de {n} " if n else ""
+            panel.border_subtitle = self._panel_subtitle(pid, n)
             panel.refresh(layout=True)
         self.query_one("#detail", Static).update(rows.detail(self.store, self.cur()) if self.store else Text(""))
         self.query_one("#detailwrap").scroll_home(animate=False)
@@ -579,18 +594,31 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
             fbp.set_class(True, "-on")
             fbp.border_title = self._title(6)
             n = len(self.items(6)) if self.store else 0
-            fbp.border_subtitle = f" {self.sel_index(6) + 1} de {n} " if n else ""
+            fbp.border_subtitle = self._panel_subtitle(6, n)
             fbp.refresh(layout=True)
         self.set_class(self.zoom, "-zoom")
         self.refresh_faces()
         self.refresh_hints()
 
+    def _panel_subtitle(self, pid: int, n: int) -> Text | str:
+        """`3 de 12`; com filtro em cascata, `3 de 12 · de 80 sem filtro` — o total sem filtro deixa claro que há corte."""
+        if not n:
+            return ""
+        t = Text(f" {self.sel_index(pid) + 1} de {n} ")
+        key = (pid, self.tab[pid])
+        if self.store and self.filt_levels(key):
+            total = len(self.store.items(self.face, pid, key[1], self.show_all, "", self.collapsed,
+                                         self.view if pid == 2 and self.face == 0 else 0, self.sort if pid == 2 and self.face == 0 else 0))
+            t.append(f"· filtrado de {total} ", "bold magenta")
+        return t
+
     def _detail_subtitle(self) -> str:
         bits = []
         if self.zoom:
             bits.append("ampliado · esc volta")
-        if self.filt and self.filt[2]:
-            bits.append(f"filtro: {self.filt[2]}")
+        lv = self.filt_levels()
+        if lv:
+            bits.append(f"filtro: {self.filt_label(lv)}")
         if self.busy:
             bits.append(self.busy)
         return " · ".join(bits)
@@ -625,7 +653,8 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
             hint(left, k.k, k.label, "magenta" if k.agent else ("yellow" if k.gate else "cyan"), "⚡ " if k.agent else "◆ " if k.gate else "")
         right = Text(no_wrap=True)
         local = {k.k for k in self.ctx_keys()}
-        for k, lab in (("?", "ajuda"), (":", "comandos"), ("N", "nota"), ("/", "filtrar"), ("g", "buscar"),
+        lv = self.filt_levels()
+        for k, lab in ((("esc", f"tira filtro ({len(lv)})"),) if lv else ()) + (("?", "ajuda"), (":", "comandos"), ("N", "nota"), ("/", "refinar filtro" if lv else "filtrar"), ("g", "buscar"),
                        ("r", "resposta ao agente" if self.pending_reply else "render"), ("q", "sair")):
             if k not in local:                     # a tecla de contexto vence: não anuncia o global que ela esconde
                 hint(right, k, lab, "cyan")
@@ -689,7 +718,7 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
         self.move(d)
 
     def action_hint(self, key: str) -> None:
-        self.handle(key)
+        self.handle("escape" if key == "esc" else key)
 
     def action_jump(self, node: str) -> None:
         self.jump(node)
@@ -760,8 +789,8 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
             if self.zoom:
                 self.zoom = False
                 self.redraw()
-            elif self.filt:
-                self.filt = None
+            elif self.filt:                         # esc tira um filtro por vez: o último aplicado primeiro
+                self.filt = (*self.filt[:-1],) if len(self.filt) > 3 else None
                 self.redraw()
         else:
             return self.press(k)
@@ -2277,11 +2306,12 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
         if self.p == 6 or self._summary_on():
             return
         key = (self.p, self.tab[self.p])
+        base = self.filt_levels(key)               # "/" de novo não reabre o filtro: abre um NOVO, sobre o que sobrou
 
         def change(text: str) -> None:
-            self.filt = (*key, text) if text else None
+            self.set_filt_levels(key, base + ([text] if text else []))
             self.redraw()
-        self.push_screen(FilterModal(self.filt[2] if self.filt and self.filt[:2] == key else "", change))
+        self.push_screen(FilterModal("", change, base=base))
 
     def help(self) -> None:
         name, tabs = self.panels[self.p]
@@ -2296,7 +2326,7 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
             body.append(f"  {k:<9}", "bold cyan")
             body.append(d + "\n")
         body.append("\nEm qualquer tela\n", "dim")
-        for k, d in (("?", "esta ajuda — dentro do formulário do ICE, a metodologia de pontuação"), (":", "paleta de comandos"), ("/", "filtrar a lista"), ("g", "buscar em tudo"), ("N", "nova nota na inbox"), ("r", "regenerar views"),
+        for k, d in (("?", "esta ajuda — dentro do formulário do ICE, a metodologia de pontuação"), (":", "paleta de comandos"), ("/", "filtrar a lista — de novo, refina o que sobrou; esc tira um filtro por vez"), ("g", "buscar em tudo"), ("N", "nova nota na inbox"), ("r", "regenerar views"),
                      ("ctrl+t", "tema claro / escuro"), ("q", "sair")):
             body.append(f"  {k:<9}", "bold cyan")
             body.append(d + "\n")

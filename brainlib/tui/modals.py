@@ -392,17 +392,20 @@ class TextModal(ModalScreen):
 
 
 class FilterModal(ModalScreen):
+    """Um nível de filtro. `base` são os níveis já aplicados: este refina o que sobrou deles."""
     BINDINGS = [Binding("escape", "clear", "Limpar")]
 
-    def __init__(self, value: str, on_change: Callable[[str], None]):
+    def __init__(self, value: str, on_change: Callable[[str], None], base: list[str] | None = None):
         super().__init__()
-        self.value, self.on_change = value, on_change
+        self.value, self.on_change, self.base = value, on_change, list(base or [])
 
     def compose(self) -> ComposeResult:
         with Vertical(id="dialog"):
-            yield Static(Text("Filtrar lista", "bold"), id="mt")
-            yield Input(value=self.value, placeholder="texto, id ou projeto", id="fq")
-            yield Static(Text("enter mantém · esc limpa", "dim"), id="mf")
+            yield Static(Text(f"Filtrar lista — filtro {len(self.base) + 1}" if self.base else "Filtrar lista", "bold"), id="mt")
+            if self.base:
+                yield Static(Text("sobre: " + " › ".join(self.base), "magenta"), id="mb")
+            yield Input(value=self.value, placeholder="refinar o que sobrou…" if self.base else "texto, id ou projeto", id="fq")
+            yield Static(Text("enter mantém · esc desfaz só este filtro", "dim"), id="mf")
 
     def on_mount(self) -> None:
         self.query_one("#fq").focus()

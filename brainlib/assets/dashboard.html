@@ -229,6 +229,21 @@ a.card:hover{text-decoration:none;border-color:var(--accent)}
 .kkey.gate kbd{background:var(--warnbg);color:var(--warn)}
 .kbd-bar .knone{color:var(--muted);font-size:12px;padding:6px 2px}
 
+/* ── filtro de lista em cascata ── */
+.flt-off{display:none !important}
+.lfbar{position:sticky;top:0;z-index:30;display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center;margin:0 0 14px;padding:8px 12px;
+  background:var(--warnbg);border:1px solid color-mix(in srgb,var(--warn) 40%,transparent);border-radius:10px;font-size:13px}
+.lflab{font-weight:700;color:var(--warn);white-space:nowrap}
+.lfchip{display:inline-flex;align-items:center;gap:4px;background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:2px 4px 2px 10px}
+.lfchip button{border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:15px;line-height:1;padding:0 5px;border-radius:50%}
+.lfchip button:hover{color:var(--risk);background:var(--chip)}
+.lfsep{color:var(--muted)}
+.lfbar input{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--accent);border-radius:8px;padding:3px 9px;min-width:190px;outline:0}
+.lfcount{margin-left:auto;font-weight:600;color:var(--ink);white-space:nowrap}
+.lfcount.none{color:var(--risk)}
+.lfhint{color:var(--muted);font-size:12px;white-space:nowrap}
+.kkey.lfon kbd{background:var(--warnbg);color:var(--warn)}
+
 /* ── teclado (mesmas teclas da TUI) ── */
 .kbd-sel{outline:2px solid var(--accent);outline-offset:1px}
 .khelp td,.khelp th{padding:4px 10px}
@@ -1226,7 +1241,9 @@ window.afterRoute = function(view){
       b.onclick = () => runCommand("brain doctor --online"); row.appendChild(b); head.appendChild(row); }
   }
   wireP0();
+  if (LF.key !== lfKey()) { LF.key = lfKey(); LF.draft = null; }   // outra página: o campo aberto não vai junto; os filtros aplicados de cada página ficam
   collectSel();
+  if (lfLevels().length || LF.draft !== null) lfApply();           // re-render da mesma página (ponte): reaplica sem perder o que se digitava
   document.querySelectorAll("#view .card").forEach(el => {
     if (el.querySelector(".qa")) return;
     const idEl = el.querySelector(".idchip"); if (!idEl) return;
@@ -1289,12 +1306,80 @@ const burger = $("#burger");
 if (burger) burger.onclick = () => { burger.classList.toggle("open"); $("#side").classList.toggle("open"); };
 
 const SEL = {items: [], i: -1};
+const SEL_QUERY = "#view .kanban .card, #view .pf-kanban .pf-card, #view table tbody tr, #view .blk.prop, #view .msgrow, #view ul.feed li, #view li[data-deliv]";
+const selable = el => el.querySelector('a[href^="#"]') || el.classList.contains("blk") || el.classList.contains("pf-card") || el.hasAttribute("data-deliv");
 function collectSel(){
-  SEL.items = [...document.querySelectorAll(
-    "#view .kanban .card, #view .pf-kanban .pf-card, #view table tbody tr, #view .blk.prop, #view .msgrow, #view ul.feed li, #view li[data-deliv]"
-  )].filter(el => el.querySelector('a[href^="#"]') || el.classList.contains("blk") || el.classList.contains("pf-card") || el.hasAttribute("data-deliv"));
+  SEL.items = [...document.querySelectorAll(SEL_QUERY)].filter(selable).filter(el => !el.classList.contains("flt-off"));   // filtrado some da navegação j/k
   SEL.i = -1; paintSel();
-  SEL.items.forEach(el => el.addEventListener("mouseenter", () => { const n = SEL.items.indexOf(el); if (n >= 0) { SEL.i = n; paintSel(); } }));
+  SEL.items.forEach(el => { if (el._selWired) return; el._selWired = true;                      // o filtro recoleta a cada tecla: ligar o mouse uma vez só
+    el.addEventListener("mouseenter", () => { const n = SEL.items.indexOf(el); if (n >= 0) { SEL.i = n; paintSel(); } }); });
+}
+
+// ── filtro de lista em cascata ("/", como a TUI) ────────────────────────
+// "/" abre um filtro sobre a lista da página; "/" de novo abre OUTRO, que refina o que sobrou do primeiro.
+// Esc dentro do campo desfaz só aquele filtro; Esc na página tira o último aplicado, um por vez.
+// Cada página lembra os seus (como a TUI lembra por aba); a barra no topo mostra a corrente inteira.
+const LF = {map: {}, draft: null};
+const lfKey = () => location.hash.slice(1).split("?")[0] || "home";
+const lfLevels = () => LF.map[lfKey()] || (LF.map[lfKey()] = []);
+const lfCands = () => [...document.querySelectorAll(SEL_QUERY)].filter(selable);
+function lfText(el){
+  if (el._lft == null) {
+    const c = el.cloneNode(true);
+    c.querySelectorAll(".qa, button, script, style").forEach(x => x.remove());                  // rótulos de botão não são conteúdo da linha
+    el._lft = norm(c.textContent);
+  }
+  return el._lft;
+}
+function lfApply(){
+  const all = [...lfLevels(), ...(LF.draft ? [LF.draft] : [])].map(norm).filter(Boolean);
+  const cands = lfCands();
+  cands.forEach(el => el.classList.toggle("flt-off", !all.every(f => lfText(el).includes(f))));
+  document.querySelectorAll("#view .col").forEach(col => {                                      // contador da coluna acompanha o corte
+    const n = col.querySelector("h3 .count"); if (!n) return;
+    if (n.dataset.n0 == null) n.dataset.n0 = n.textContent;
+    n.textContent = all.length ? col.querySelectorAll(".card:not(.flt-off)").length : n.dataset.n0;
+  });
+  collectSel();
+  lfRender(cands.length, cands.filter(el => !el.classList.contains("flt-off")).length);
+}
+function lfRender(total, shown){
+  let bar = document.getElementById("lfbar");
+  const levels = lfLevels(), editing = LF.draft !== null;
+  if (!levels.length && !editing) { if (bar) bar.remove(); renderKeyBar(); return; }
+  const view = document.getElementById("view");
+  if (!bar) { bar = document.createElement("div"); bar.id = "lfbar"; bar.className = "lfbar"; view.prepend(bar); }
+  if (total == null) { const c = lfCands(); total = c.length; shown = c.filter(el => !el.classList.contains("flt-off")).length; }
+  const chips = levels.map((f, i) => '<span class="lfchip" title="tirar este filtro"><b>' + esc(f) + '</b><button data-x="' + i + '" aria-label="tirar o filtro ' + esc(f) + '">×</button></span>');
+  const typing = editing ? '<input id="lfin" type="text" autocomplete="off" spellcheck="false" placeholder="' +
+    (levels.length ? "refinar o que sobrou…" : "texto, id ou projeto") + '" value="' + esc(LF.draft) + '">' : "";
+  bar.innerHTML = '<span class="lflab">⌕ filtro' + (levels.length > 1 ? "s" : "") + '</span>' + chips.concat(typing ? [typing] : []).join('<span class="lfsep">›</span>') +
+    '<span class="lfcount' + (shown ? "" : " none") + '">' + (shown ? shown + " de " + total : "nada encontrado — “não consta”") + '</span>' +
+    '<span class="lfhint">' + (editing ? "enter mantém · esc desfaz só este filtro" : "esc tira o último · / refina") + "</span>";
+  bar.querySelectorAll("[data-x]").forEach(b => b.onclick = () => { lfLevels().splice(+b.dataset.x, 1); lfApply(); });
+  const inp = bar.querySelector("#lfin");
+  if (inp) {
+    if (document.activeElement !== inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
+    inp.oninput = () => { LF.draft = inp.value; lfApply(); };
+    inp.onkeydown = ev => {
+      if (ev.key === "Enter" || ev.key === "Escape") {
+        ev.preventDefault(); ev.stopPropagation();
+        const v = ev.key === "Enter" ? inp.value.trim() : "";
+        LF.draft = null; if (v) lfLevels().push(v);
+        inp.blur(); lfApply();
+      }
+    };
+  }
+  renderKeyBar();
+}
+function lfOpen(){
+  if (!lfCands().length && !lfLevels().length) { toast("nada para filtrar nesta página"); return; }
+  LF.draft = ""; lfApply();
+}
+function lfPop(){                                   // esc na página: tira o último filtro aplicado (ou fecha o campo que ficou aberto)
+  if (LF.draft !== null) { LF.draft = null; lfApply(); return true; }
+  const l = lfLevels(); if (!l.length) return false;
+  l.pop(); lfApply(); return true;
 }
 function paintSel(){ SEL.items.forEach((el, i) => el.classList.toggle("kbd-sel", i === SEL.i)); if (typeof renderKeyBar === "function") renderKeyBar(); }
 function selEl(){ return SEL.items[SEL.i] || null; }
@@ -1894,7 +1979,9 @@ function helpOverlay(){
   const rows = [
     ["globais", ""],
     ["tab / shift+tab", "próxima / anterior face (Execução · Portfólio)"],
-    ["/", "busca e comandos (paleta)"],
+    ["/", "filtrar a lista da página — de novo: refina o que sobrou (cascata)"],
+    ["esc", "tira o último filtro, um por vez (dentro do campo: desfaz só aquele)"],
+    ["g · ⌘K", "busca e comandos (paleta)"],
     ["j k ↑ ↓", "mover na lista · enter abre a ficha"],
     ["[ ] ← → (h l)", "aba anterior / próxima"],
     ["`", "console da ponte (abre/fecha)"],
@@ -1961,7 +2048,9 @@ document.addEventListener("keydown", e => {
     }
     return;
   }
-  if (k === "/") { e.preventDefault(); openPal(); return; }
+  if (k === "/") { e.preventDefault(); lfOpen(); return; }
+  if (k === "g") { e.preventDefault(); openPal(); return; }                // busca (paleta), como o g da TUI
+  if (k === "Escape" && lfPop()) { e.preventDefault(); return; }
   if (k === "?") { e.preventDefault(); helpOverlay(); return; }
   if (k === "j" || k === "ArrowDown") { e.preventDefault(); selMove(1); return; }
   if (k === "k" || k === "ArrowUp") { e.preventDefault(); selMove(-1); return; }
@@ -2053,12 +2142,16 @@ function renderKeyBar(){
     '" data-k="' + esc(x.k) + '" title="' + (x.gate ? "gate — precisa do seu ok literal · " : "") + "tecla " + esc(x.k) + '">' +
     "<kbd>" + esc(x.k) + "</kbd>" + esc(x.label) + "</button>").join("");
   bar.innerHTML = '<div class="kctx">' + (ctx || '<span class="knone">sem teclas de contexto nesta página — j/k navega, enter abre</span>') + "</div>" +
-    '<div class="kglobal"><button class="kkey" data-g="/" title="paleta de busca e comandos"><kbd>/</kbd>busca</button>' +
+    '<div class="kglobal">' + (lfLevels().length ? '<button class="kkey lfon" data-g="esc" title="tira o último filtro da lista"><kbd>esc</kbd>tira filtro (' + lfLevels().length + ')</button>' : "") +
+    '<button class="kkey" data-g="/" title="filtrar a lista desta página; de novo refina o filtro"><kbd>/</kbd>' + (lfLevels().length ? "refinar" : "filtrar") + '</button>' +
+    '<button class="kkey" data-g="g" title="paleta de busca e comandos (⌘K)"><kbd>g</kbd>busca</button>' +
     '<button class="kkey" data-g="tab" title="trocar de face"><kbd>tab</kbd>face</button>' +
     '<button class="kkey" data-g="?" title="mapa de teclas"><kbd>?</kbd>ajuda</button></div>';
   bar.querySelectorAll("[data-k]").forEach(b => b.onclick = () => ctxKeys(b.dataset.k));
   bar.querySelectorAll("[data-g]").forEach(b => b.onclick = () => {
-    if (b.dataset.g === "/") openPal();
+    if (b.dataset.g === "/") lfOpen();
+    else if (b.dataset.g === "g") openPal();
+    else if (b.dataset.g === "esc") lfPop();
     else if (b.dataset.g === "?") helpOverlay();
     else location.hash = "#face/" + (location.hash.startsWith("#pf/") ? "execucao" : "portfolio");
   });

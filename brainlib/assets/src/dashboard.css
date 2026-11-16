@@ -223,6 +223,21 @@ a.card:hover{text-decoration:none;border-color:var(--accent)}
 .kkey.gate kbd{background:var(--warnbg);color:var(--warn)}
 .kbd-bar .knone{color:var(--muted);font-size:12px;padding:6px 2px}
 
+/* ── filtro de lista em cascata ── */
+.flt-off{display:none !important}
+.lfbar{position:sticky;top:0;z-index:30;display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center;margin:0 0 14px;padding:8px 12px;
+  background:var(--warnbg);border:1px solid color-mix(in srgb,var(--warn) 40%,transparent);border-radius:10px;font-size:13px}
+.lflab{font-weight:700;color:var(--warn);white-space:nowrap}
+.lfchip{display:inline-flex;align-items:center;gap:4px;background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:2px 4px 2px 10px}
+.lfchip button{border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:15px;line-height:1;padding:0 5px;border-radius:50%}
+.lfchip button:hover{color:var(--risk);background:var(--chip)}
+.lfsep{color:var(--muted)}
+.lfbar input{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--accent);border-radius:8px;padding:3px 9px;min-width:190px;outline:0}
+.lfcount{margin-left:auto;font-weight:600;color:var(--ink);white-space:nowrap}
+.lfcount.none{color:var(--risk)}
+.lfhint{color:var(--muted);font-size:12px;white-space:nowrap}
+.kkey.lfon kbd{background:var(--warnbg);color:var(--warn)}
+
 /* ── teclado (mesmas teclas da TUI) ── */
 .kbd-sel{outline:2px solid var(--accent);outline-offset:1px}
 .khelp td,.khelp th{padding:4px 10px}

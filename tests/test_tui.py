@@ -1064,6 +1064,93 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             await pilot.press("escape", "escape")                    # esc desfaz zoom e depois o filtro
             self.assertEqual((app.filt, app.zoom), (None, False))
 
+    async def test_cascading_filters_refine_and_esc_removes_one_at_a_time(self):
+        app = self.app()
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause(0.4)
+            self.assertEqual(app.p, 2)
+            ids = lambda: sorted(i.id for i in app.items(2))  # noqa: E731
+            everything = ids()
+            plain = lambda: str(app.query_one("#p2").border_title)  # noqa: E731
+            self.assertNotIn("filtro", plain())                       # sem filtro, nada de indicador
+            await pilot.press("slash")
+            await pilot.press(*"proj-")
+            await pilot.press("enter")
+            await pilot.pause(0.2)
+            first = ids()
+            self.assertTrue(0 < len(first) < len(everything))
+            self.assertEqual(app.filt, (2, 0, "proj-"))
+            # "/" de novo abre um filtro NOVO (vazio) que refina o que sobrou do primeiro
+            await pilot.press("slash")
+            await pilot.pause(0.2)
+            self.assertEqual(type(app.screen).__name__, "FilterModal")
+            self.assertEqual(app.screen.query_one("#fq").value, "")
+            await pilot.press(*"com")
+            await pilot.press("enter")
+            await pilot.pause(0.2)
+            second = ids()
+            self.assertEqual(app.filt, (2, 0, "proj-", "com"))
+            self.assertTrue(set(second) < set(first))                 # estritamente dentro do primeiro resultado
+            self.assertTrue(all("com" in i.q.lower() for i in app.items(2)))
+            self.assertIn("proj- › com", plain())                     # o indicador mostra a corrente inteira
+            sub = app.query_one("#p2").border_subtitle
+            self.assertIn(f"filtrado de {len(everything)}", str(sub))
+            # terceiro nível; esc DENTRO do modal desfaz só esse nível
+            await pilot.press("slash")
+            await pilot.press(*"cardapio")                            # sem acento: o filtro dobra acentos
+            await pilot.pause(0.2)
+            self.assertEqual(len(ids()), 1)
+            await pilot.press("escape")
+            await pilot.pause(0.2)
+            self.assertEqual(app.filt, (2, 0, "proj-", "com"))
+            self.assertEqual(ids(), second)
+            # esc na tela tira um filtro por vez, o último aplicado primeiro
+            await pilot.press("escape")
+            self.assertEqual((app.filt, ids()), ((2, 0, "proj-"), first))
+            self.assertNotIn("com", plain())
+            await pilot.press("escape")
+            self.assertIsNone(app.filt)
+            self.assertEqual(ids(), everything)
+            self.assertNotIn("filtro", plain())
+            # enter com o campo vazio não cria nível fantasma
+            await pilot.press("slash")
+            await pilot.press("enter")
+            self.assertIsNone(app.filt)
+
+    async def test_cascading_filter_empty_state_names_the_whole_chain(self):
+        app = self.app()
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause(0.4)
+            await pilot.press("slash")
+            await pilot.press(*"proj-")
+            await pilot.press("enter")
+            await pilot.press("slash")
+            await pilot.press(*"zzzz")
+            await pilot.press("enter")
+            await pilot.pause(0.2)
+            self.assertEqual(app.items(2), [])
+            self.assertIn("proj- › zzzz", app.panel_body(2, 80, 8).plain)
+            await pilot.press("escape")                               # volta ao primeiro nível
+            self.assertTrue(app.items(2))
+
+    async def test_cascading_filter_is_per_list_and_store_accepts_a_stack(self):
+        app = self.app()
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause(0.4)
+            st = app.store
+            base = {i.id for i in st.items(0, 2, 0, False, "demo")}
+            by_id = {i.id for i in st.items(0, 2, 0, False, ["demo", "TASK-0001"])}   # id exato no 2º nível: o que se liga a ele
+            self.assertIn("TASK-0001", by_id)
+            self.assertTrue(by_id <= base)
+            self.assertEqual({i.id for i in st.items(0, 2, 0, False, ["proj-", "", "com"])},
+                             {i.id for i in st.items(0, 2, 0, False, ["proj-", "com"])})   # nível vazio é ignorado
+            app.set_filt_levels((2, 0), ["proj-", "com"])
+            app._items = {}
+            app.tab[2] = 1                                             # outra aba não herda o filtro
+            self.assertEqual(app.filt_levels(), [])
+            self.assertEqual(app.filt_levels((2, 0)), ["proj-", "com"])
+            app.tab[2] = 0
+
     async def test_tab_inside_a_modal_still_moves_the_form_field(self):
         app = self.app()
         async with app.run_test(size=(140, 44)) as pilot:

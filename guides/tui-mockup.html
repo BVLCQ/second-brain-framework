@@ -202,7 +202,7 @@ td code,.kb{font:500 12px var(--mono);background:var(--code);border:1px solid va
       <div><span class="kb ag">1</span> <span class="kb ag">d</span><p>Processe a inbox com o agente e observe as ações novas aparecerem nas listas.</p></div>
       <div><span class="kb">1</span> <span class="kb">]</span> <span class="kb">]</span><p>Veja as fontes do <code>watch.toml</code>: <span class="kb">n</span> adiciona, <span class="kb">e</span> edita, <span class="kb">x</span> remove e <span class="kb ag">c</span> puxa só a selecionada.</p></div>
       <div><span class="kb ag">1</span> <span class="kb ag">u</span><p>Atualize tudo: o agente lê cada fonte do <code>watch.toml</code> e você acompanha pelo log.</p></div>
-      <div><span class="kb">?</span> <span class="kb">g</span> <span class="kb">/</span><p>Ajuda do contexto, busca em tudo e filtro da lista. <span class="kb">⏎</span> amplia o detalhe e <span class="kb">esc</span> volta. O duplo clique numa linha faz o mesmo que <span class="kb">⏎</span>.</p></div>
+      <div><span class="kb">?</span> <span class="kb">g</span> <span class="kb">/</span><p>Ajuda do contexto, busca em tudo e filtro da lista (<span class="kb">/</span> de novo refina; <span class="kb">esc</span> tira um por vez). <span class="kb">⏎</span> amplia o detalhe e <span class="kb">esc</span> volta. O duplo clique numa linha faz o mesmo que <span class="kb">⏎</span>.</p></div>
     </div>
   </section>
 
@@ -1087,7 +1087,7 @@ function buildKeymap(){
   var sp=S.p,st=Object.assign({},S.tab);
   ctx.forEach(function(c){S.p=c[0];S.tab[c[0]]=c[1];out+='<section><h3>'+c[2]+'</h3>'+keys(true).map(function(k){return '<div class="kr"><span class="kb '+(k.ag?'ag':'')+'">'+(k.k===' '?'space':k.k==='enter'?'⏎':k.k)+'</span><span>'+(k.ag?'⚡ ':k.gate?'◆ ':'')+esc(k.l)+'</span></div>'}).join('')+'</section>'});
   S.p=sp;S.tab=st;
-  out+='<section><h3>Em qualquer tela</h3>'+[['1-5','ir ao painel'],['clique','seleciona; duplo clique = ⏎'],['j k','mover na lista (↑ ↓ também)'],['[ ] ← →','trocar de aba (h l também)'],['⏎','ampliar o detalhe'],['esc','voltar'],['/','filtrar a lista'],['g','buscar em tudo'],[':','paleta de comandos'],['?','ajuda do contexto'],['r','regenerar views'],['q','sair']].map(function(k){return '<div class="kr"><span class="kb">'+k[0]+'</span><span>'+k[1]+'</span></div>'}).join('')+'<div class="kr dim" style="margin-top:6px">⚡ roda o agente · ◆ pede aprovação digitada</div></section>';
+  out+='<section><h3>Em qualquer tela</h3>'+[['1-5','ir ao painel'],['clique','seleciona; duplo clique = ⏎'],['j k','mover na lista (↑ ↓ também)'],['[ ] ← →','trocar de aba (h l também)'],['⏎','ampliar o detalhe'],['esc','voltar'],['/','filtrar a lista (de novo: refina em cascata)'],['g','buscar em tudo'],[':','paleta de comandos'],['?','ajuda do contexto'],['r','regenerar views'],['q','sair']].map(function(k){return '<div class="kr"><span class="kb">'+k[0]+'</span><span>'+k[1]+'</span></div>'}).join('')+'<div class="kr dim" style="margin-top:6px">⚡ roda o agente · ◆ pede aprovação digitada</div></section>';
   $('#kmap').innerHTML=out;
 }
 buildKeymap();draw();

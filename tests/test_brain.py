@@ -1009,6 +1009,18 @@ class DashboardAssetTests(unittest.TestCase):
         self.assertIn("window.PF_ONLY = true;", pf)                     # portfolio: só a face Portfólio
         self.assertIn("window.PF_ONLY = false;", dash)
 
+    def test_slash_is_a_cascading_list_filter_in_both_panels(self):
+        """Paridade com a TUI: "/" filtra a lista da página e de novo refina; esc tira um nível por vez; a barra mostra a corrente.
+        A paleta fica em g / ⌘K. (Comportamento conferido no navegador; aqui trava as ligações para ninguém religar "/" na paleta.)"""
+        for name in ("dashboard.html", "portfolio.html"):
+            html = (ROOT / "brainlib/assets" / name).read_text(encoding="utf-8")
+            self.assertIn('if (k === "/") { e.preventDefault(); lfOpen(); return; }', html, name)
+            self.assertIn('if (k === "g") { e.preventDefault(); openPal(); return; }', html, name)
+            self.assertIn('if (k === "Escape" && lfPop())', html, name)
+            for marker in ("function lfApply", "function lfPop", 'id = "lfbar"', ".flt-off{display:none", "esc desfaz só este filtro"):
+                self.assertIn(marker, html, f"{name}: {marker}")
+            self.assertNotIn('if (k === "/") { e.preventDefault(); openPal(); return; }', html, name)
+
 
 class ShareMcpRenderTests(unittest.TestCase):
     def test_share_and_mcp_and_render(self):

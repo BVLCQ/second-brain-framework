@@ -734,7 +734,7 @@ aposenta) e **Áreas** (`n` nova;
 clicar numa área abre a página da área com processos, oportunidades e
 pessoas dela).
 
-`/` busca em tudo; `?` mostra o mapa de teclas. O mapa de oportunidades
+`/` filtra a lista da página — de novo, refina o que sobrou (filtros em cascata, `esc` tira um por vez, igual à TUI; uma barra no topo mostra a corrente e quantos itens restam); `g` ou ⌘K busca em tudo; `?` mostra o mapa de teclas. O mapa de oportunidades
 também sai como arquivo próprio — `vault/FRESH/dashboard/portfolio.html`,
 só o recorte do portfólio, feito para circular (`brain share portfolio`).
 

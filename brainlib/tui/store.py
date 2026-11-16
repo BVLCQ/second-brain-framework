@@ -7,6 +7,7 @@ from __future__ import annotations
 import re
 import tomllib
 from collections import defaultdict
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from pathlib import Path
@@ -528,8 +529,28 @@ class Store:
         return None
 
     # ── listas por painel ──────────────────────────────────────────────────
-    def items(self, face: int, panel: int, tab: int, show_all: bool = False, filt: str = "",
+    def items(self, face: int, panel: int, tab: int, show_all: bool = False, filt: str | Sequence[str] = "",
               collapsed: set[str] | None = None, view: int = 0, sort: int = 0) -> list[Item]:
+        """A lista de um painel/aba. `filt` é um texto ou uma pilha de textos (filtros em cascata): o primeiro age
+        sobre a lista inteira e cada seguinte, só sobre o que sobrou do anterior."""
+        levels = [f for f in ([filt] if isinstance(filt, str) else list(filt)) if f]
+        out = self._items(face, panel, tab, show_all, levels[0] if levels else "", collapsed, view, sort)
+        for f in levels[1:]:
+            out = self.refine(face, out, f)
+        return out
+
+    def refine(self, face: int, out: list[Item], filt: str) -> list[Item]:
+        """Mais um nível de filtro sobre uma lista já filtrada. Na Execução, um id exato mostra o que está associado a
+        ele (dentro do que sobrou); no mais, e em texto livre, é substring — a mesma regra do primeiro nível."""
+        f = util.fold(filt)
+        node = self.node_for(filt) if face == 0 else None
+        if node:
+            rel = self.related(node)
+            return [i for i in out if self._shown(i, rel, f)]
+        return [i for i in out if f in util.fold(i.q)]
+
+    def _items(self, face: int, panel: int, tab: int, show_all: bool = False, filt: str = "",
+               collapsed: set[str] | None = None, view: int = 0, sort: int = 0) -> list[Item]:
         if panel == 6 and tab == 1:          # aba Feedback do painel do log: fila do que vira issue — comum a TODAS as faces
             fbs = [f for f in self.brain.state.feedbacks.values() if show_all or f.status != "criado"]
             order = {"pendente": 0, "falhou": 1, "criado": 2}      # acionável no topo

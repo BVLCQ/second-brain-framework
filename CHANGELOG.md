@@ -1,3 +1,20 @@
+## 2.12.0 — filtros em cascata (TUI e painel)
+
+- **`/` empilha filtros**: o primeiro `/` filtra a lista; `/` de novo abre um filtro
+  novo que refina **o que sobrou** do anterior, quantos você quiser. `esc` tira um
+  por vez, o último aplicado primeiro (dentro do campo, `esc` desfaz só aquele
+  nível). Enter com o campo vazio não cria nível. Cada lista (painel/aba na TUI,
+  página no painel) guarda os seus.
+- **Filtro à vista**: na TUI o título do painel mostra `⌕ filtro: a › b`, o rodapé
+  diz `N de M · filtrado de T`, a lista vazia nomeia a corrente inteira e a barra
+  de dicas ganha `esc tira filtro (n)`. Antes só aparecia no detalhe ampliado.
+- **Painel HTML com a mesma tecla**: `/` agora filtra os cartões e linhas da página
+  (antes abria a paleta), com a mesma cascata e o mesmo `esc`; uma barra no topo
+  mostra as fichas de cada filtro (clicáveis para tirar), a contagem `N de M` e o
+  "não consta". A paleta de busca e comandos segue em **⌘K** e ganhou o **`g`**,
+  como na TUI. Na TUI, um id exato no 2º nível continua mostrando o que se liga a
+  ele (dentro do que sobrou); no painel o filtro é por texto.
+
 ## 2.11.0 — molde das issues e validadores de dado sensível
 
 - **Molde por tipo** para tudo que o cérebro publica no GitHub: `sugestao`, `bug` e `framework` (proposta de

@@ -225,8 +225,12 @@ Abas:
 | **Mensagens** | rascunhos, aprovadas, enviadas, falhas |
 | **Saúde** | o mesmo que `./brain doctor` |
 
-Busca no topo: duas letras já filtram ações, decisões, projetos, pessoas,
+Busca (`g` ou ⌘K): duas letras já filtram ações, decisões, projetos, pessoas,
 entregas e artefatos. "Não consta" é uma resposta da busca.
+
+Filtro da lista (`/`): filtra os cartões e linhas da página; `/` de novo refina o
+que sobrou (em cascata) e `esc` tira um filtro por vez. A barra no topo mostra a
+corrente e quantos itens restam. É o mesmo comportamento da TUI.
 
 Clicar num `TASK-####` ou `DEC-####` abre a ficha: histórico, bloqueio, fonte,
 proveniência. O painel não edita nada. Fechar ação é no chat, no checkbox
