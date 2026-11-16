@@ -274,7 +274,7 @@ rodam o agente de `[runner]` em modo headless. O TUI se recusa a abrir com `BRAI
 brain tui --setup     # uma vez
 brain tui             # abre; usa a .venv-tui sozinho
 ```
-Sem o extra, `brain tui` sai com código 3 e a instrução. A aba **Fontes** do painel 1 gerencia o `watch.toml` (`n` adiciona, `e` edita, `x` remove, `w` inclui um pull avulso) e mostra o
+Sem o extra, `brain tui` sai com código 3 e a instrução. A aba **Fontes** do painel 1 gerencia o `watch.toml` (`n` adiciona, `e` edita, `d` remove, `w` inclui um pull avulso) e mostra o
 último pull e as falhas de cada fonte. `u` (`/update`) atualiza tudo e `c` (`/connect`) puxa uma fonte: rodam o agente de `[runner]`,
 que precisa de permissão para as ferramentas MCP de leitura (`[runner].allow`, ou `[runner].command`). Teclas: `?` ajuda do contexto · `:` paleta de
 comandos · `g` busca · `/` filtro (com um id exato, `TASK-####`, `GOAL-#`, `PROJ-#`, `PROJ-#.#`, `DEC-####`…, mostra tudo que está associado a ele: o plano acima e abaixo, ações, decisões, entregas, pessoas; texto livre continua sendo busca no texto) · `N` nova nota (veja `brain note`) · `1`–`6` painéis (só pelos números; `6` é o log: `j` `k` rolam, `c` limpa) · `[` `]` ou `←` `→` abas · `⏎` ou duplo clique amplia o detalhe · `ctrl+t` troca o tema · `q` sai. O mouse também funciona: clique nas abas, nas linhas e nas dicas da barra, e a roda rola a lista. O TUI relê o vault sozinho quando ele muda fora dele (agente, outro terminal). O mapa

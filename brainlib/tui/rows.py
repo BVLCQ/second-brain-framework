@@ -642,7 +642,7 @@ def d_ask(store, it) -> Doc:
         ("aplicada", Text(q.how)) if q.how else None,
         ("descartada", Text(q.reason)) if q.reason else None])
     if q.status == "aberta":
-        doc.sec("O que fazer").p(("enter", "bold cyan"), " responder (escolha uma opção ou escreva outra)  ·  ", ("x", "bold cyan"), " descartar")
+        doc.sec("O que fazer").p(("a", "bold cyan"), " responder (escolha uma opção ou escreva outra)  ·  ", ("d", "bold cyan"), " descartar")
         doc.p(("O agente aplica a resposta no passo 0 do próximo /dump ou /update; ", DIM), ("R", "bold cyan"), (" retoma o agente agora.", DIM))
     elif q.status == "respondida":
         doc.sec("Aguardando o agente").p("A resposta está na fila de reserva: o passo 0 do próximo /dump ou /update a aplica. ", ("R", "bold cyan"),

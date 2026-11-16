@@ -197,3 +197,28 @@ def cli(args, brain) -> None:
         print(f"{icon[c['level']]} {c['title']}: {c['detail']}")
     if any(c["level"] == "error" for c in res):
         raise SystemExit(1)
+
+
+def fix_for(c: dict) -> dict | None:
+    """O que dá para fazer a respeito de um aviso (tecla f no TUI e no painel). `go` = (painel, aba) do TUI;
+    `page` = a página equivalente do painel HTML."""
+    if c["level"] == "ok" and not c["title"].startswith("fonte "):
+        return None
+    t = c["title"]
+    if t == "inbox":
+        return {"label": "processar com o agente", "agent": "dump"}
+    if t == "noturno":
+        return {"label": "agendar o noturno", "sys": "sys:schedule"}
+    if t == "ações sem prazo":
+        return {"label": "ir às ações e dar prazo", "go": (2, 0), "page": "todo"}
+    if t.startswith("fonte "):
+        return {"label": "puxar agora com o agente", "agent": "connect", "key": t.split(" ", 1)[1]}
+    if t == "mensagens":
+        return {"label": "ir ao outbox", "go": (4, 2), "page": "outbox"}
+    if t == "foco":
+        return {"label": "ir ao plano de foco", "go": (4, 3), "page": "focus"}
+    if t == "propostas":
+        return {"label": "ir às propostas", "go": (4, 1), "page": "ask"}
+    if t == "perguntas":
+        return {"label": "ir às perguntas do agente", "go": (4, 0), "page": "ask"}
+    return None

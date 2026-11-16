@@ -149,20 +149,20 @@ class ReviewTuiTest(unittest.IsolatedAsyncioTestCase):
         from brainlib.core import Brain
         return Brain(self.inst).state
 
-    async def test_r_rejects_the_selected_proposal(self):
+    async def test_d_rejects_the_selected_proposal(self):
         app = self.app()
         async with app.run_test(size=(140, 44)) as pilot:
             await pilot.pause(0.4)
             await pilot.press("4", "]")
             rid = app.cur().id
-            self.assertNotIn("render", str(app.query_one("#globals").render()))      # o global r não aparece escondido
-            app.action_hint("r")                                                       # clicar na dica "r rejeitar"
+            self.assertIn("render", str(app.query_one("#globals").render()))         # r é só render: nenhuma tecla de contexto o esconde mais
+            app.action_hint("d")                                                       # clicar na dica "d rejeitar"
             await pilot.pause(0.2)
             self.assertEqual(type(app.screen).__name__, "FormModal")
             self.assertIn(f"Rejeitar {rid}", app.screen.spec.title)
             await pilot.press("escape")
             await pilot.pause(0.1)
-            await pilot.press("r")                                                     # e a tecla
+            await pilot.press("d")                                                     # e a tecla
             await pilot.pause(0.2)
             self.assertIn(f"Rejeitar {rid}", app.screen.spec.title)
             await pilot.press(*"nao", "enter")

@@ -33,10 +33,10 @@ class PortfolioKeys:
             add("n", "novo", self.f_proc_new)
             if w(it and it.kind == "proc"):
                 add("e", "editar", self.f_proc_edit)
-                add("l", "ligar doc", lambda: self.f_doc_link(it.id))
+                add("L", "ligar doc", lambda: self.f_doc_link(it.id))
                 add("o", "abrir playbook", self.open_playbook)
                 add("a", "nova oportunidade", self.f_opp_from_proc)
-                add("x", "aposentar", self.f_proc_retire)
+                add("d", "aposentar", self.f_proc_retire)
         elif p == 3:
             add("n", "nova", lambda: self.f_opp_new())
             if w(it and it.kind == "opp"):
@@ -45,13 +45,13 @@ class PortfolioKeys:
                 add("i", "ICE", self.f_ice)
                 if w(it and it.data["ice_suggested"]):
                     add("c", "confirmar ICE", self.confirm_ice)
-                add("l", "ligar doc", lambda: self.f_doc_link(it.id))
+                add("L", "ligar doc", lambda: self.f_doc_link(it.id))
                 add("v", "evidência", self.f_evidence)
                 add("O", "one-pager", self.agent_onepager, agent=True)
                 if w(it and not it.data.get("promoted")):
                     add("p", "promover", self.f_promote, gate=True)
                 if w(it and it.data["status"] not in ("descartada", "entregue")):
-                    add("x", "descartar", self.f_opp_discard)
+                    add("d", "descartar", self.f_opp_discard)
         elif p == 4 and t == 1:
             if w(it and it.kind == "opp"):
                 add("s", "status", self.pick_status)
@@ -63,7 +63,7 @@ class PortfolioKeys:
                     add("e", "editar", self.f_area_edit)
             elif w(it):
                 add("enter", "abrir", self.open_current_doc)
-                add("u", "desligar", self.f_doc_unlink)
+                add("d", "desligar", self.f_doc_unlink)
 
     # ── apoio ──────────────────────────────────────────────────────────────
     def _area_ids(self) -> list[str]:
@@ -195,7 +195,7 @@ class PortfolioKeys:
         p = self.cur().data
         pb = p["playbook"]
         if not pb:
-            self.log_line(f"{p['id']} não tem playbook ligado (tecla l, tipo playbook).", "yellow")
+            self.log_line(f"{p['id']} não tem playbook ligado (tecla L, tipo playbook).", "yellow")
             return
         n = next((n for n, d in enumerate(p["docs"]) if d["ref"] == pb["ref"]), None)
         if n is None:      # playbook aponta pra um ref que saiu da lista de docs: o CLI não deixa, mas drift não derruba a tecla

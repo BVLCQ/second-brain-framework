@@ -1,3 +1,17 @@
+## 2.10.0 — mesmas teclas no TUI e no painel
+
+- **Um verbo, uma tecla.** `d` descarta, remove, cancela, aposenta, desliga ou rejeita em toda tela (antes era `D`
+  em Ações, `x` em quase tudo, `u` em Documentos, `r` em Propostas). `e` edita (Pessoas deixa de usar `u`),
+  `T` alterna só abertas ↔ todas (Ações deixa de usar `a`), `L` liga documento (o `l` volta a ser só navegação
+  de abas), `p` publica na aba Publicar (o `P` fica só para progresso), `r` é só render e `enter` só abre a ficha
+  (responder pergunta é `a`). As teclas antigas `D`, `a` (Ações) e `u` (Pessoas) seguem valendo, escondidas, por uma versão.
+- **Lacunas de paridade fechadas.** Painel: página **Fontes** (`n e d w`), página **Documentos** (`L d enter`),
+  `L`/`v` em Oportunidades, `L`/`o` em Processos, `f` corrige o aviso em Saúde, `R` "quem é…?" em Pessoas,
+  `T` em Perguntas/Mensagens/Sugestões, `N` nota em qualquer página, `E` mudar árvore, teclas do agente no Início
+  (mostram o comando do chat) e `g`/`:`/ctrl+P como a paleta. TUI: `M` mescla ação duplicada e `` ` `` abre/fecha o log.
+  A ponte do painel ganhou `doc link|unlink`, `watch add|edit|remove`, `opportunity evidence` e `person resolve`.
+- `doctor.fix_for` passa a ser a única regra de "o que fazer com este aviso" (TUI e painel).
+
 ## 2.9.2 — fechadas recentes sempre à vista na TUI
 
 - **Paridade com a coluna "Feita" do painel**: na aba **Minhas** da TUI, as
