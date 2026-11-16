@@ -465,6 +465,62 @@ class FrameworkProposalTests(unittest.TestCase):
             os.environ.pop("BRAIN_HOME", None)
 
 
+class FeedbackSetupTests(unittest.TestCase):
+    """Token no setup e no doctor (sem rede: urlopen falso)."""
+
+    def setUp(self):
+        self._td = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._td.name)
+        self.brain = _brain(self.tmp)
+        os.environ.pop("GITHUB_TOKEN", None)
+
+    def tearDown(self):
+        self._td.cleanup()
+
+    def _fake(self, payload=None, code=None):
+        from brainlib import setup as setup_mod
+
+        class R:
+            def __enter__(s): return s
+            def __exit__(s, *a): return False
+            def read(s): return json.dumps(payload or {}).encode()
+
+        def urlopen(req, timeout=0):
+            if code:
+                raise urllib.error.HTTPError(req.full_url, code, "x", {}, None)
+            return R()
+        orig = setup_mod.urllib.request.urlopen
+        setup_mod.urllib.request.urlopen = urlopen
+        self.addCleanup(lambda: setattr(setup_mod.urllib.request, "urlopen", orig))
+        return setup_mod
+
+    def test_repo_visivel_e_com_issues(self):
+        m = self._fake({"has_issues": True, "archived": False})
+        self.assertEqual(m.github_repo_access("t", "o/r")[0], True)
+
+    def test_repo_404_diz_como_corrigir_sem_vazar_token(self):
+        m = self._fake(code=404)
+        ok, why = m.github_repo_access("segredo-fake", "o/r")
+        self.assertFalse(ok)
+        self.assertIn("404", why)
+        self.assertNotIn("segredo-fake", why)
+
+    def test_repo_arquivado_ou_sem_issues_e_recusado(self):
+        self.assertFalse(self._fake({"archived": True}).github_repo_access("t", "o/r")[0])
+        self.assertFalse(self._fake({"has_issues": False}).github_repo_access("t", "o/r")[0])
+
+    def test_doctor_avisa_fila_sem_token_e_com_token(self):
+        from brainlib import doctor
+        feedback.add(self.brain, "sugestao", "Algo a publicar")
+        rows = [c for c in doctor.checks(self.brain) if c["title"] == "feedback"]
+        self.assertEqual((len(rows), rows[0]["level"]), (1, "warn"))
+        self.assertIn("GITHUB_TOKEN", rows[0]["detail"])
+        (self.brain.inst.config_dir / ".env").write_text("GITHUB_TOKEN=fake-token-teste\n", encoding="utf-8")
+        rows = [c for c in doctor.checks(self.brain) if c["title"] == "feedback"]
+        self.assertEqual(len(rows), 1)
+        self.assertNotIn("GITHUB_TOKEN", rows[0]["detail"])
+
+
 class FeedbackClientTests(unittest.TestCase):
     """O cliente GitHub em isolado: sem rede de verdade, urlopen falso."""
 

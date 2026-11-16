@@ -83,6 +83,13 @@ def checks(brain, online: bool = False) -> list[dict]:
             "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_REFRESH_TOKEN")):
         out.append(_c("error", "calendário", "focus.mode = google, mas faltam GOOGLE_* no config/.env "
                                              "(guides/google-oauth.md) — use mode = \"ics\" até lá"))
+    fb_wait = [f for f in st.feedbacks.values() if f.status in ("pendente", "falhou")]
+    has_token = bool(config.load_env(inst).get("GITHUB_TOKEN"))
+    if fb_wait and not has_token:
+        out.append(_c("warn", "feedback", f"{len(fb_wait)} sugestão(ões) aguardando publicação e sem GITHUB_TOKEN no "
+                                          "config/.env — `./brain setup --only portas`, depois `brain feedback push FB-####`"))
+    elif fb_wait:
+        out.append(_c("warn", "feedback", f"{len(fb_wait)} sugestão(ões) ainda não publicadas — `brain feedback list`"))
     open_props = [p for p in st.proposals.values() if p.status == "aberta"]
     if open_props:
         out.append(_c("warn", "propostas", f"{len(open_props)} aguardando sua resposta"))

@@ -1,3 +1,12 @@
+## 2.10.1 — token do GitHub no setup
+
+- **Setup › Portas** explica como criar o token da porta 7 (fine-grained: Issues
+  Read and write no repo do framework; clássico `public_repo` para quem não é
+  colaborador), valida o token e confere que o repo está visível e com Issues
+  ligadas. O valor continua indo só para `config/.env`, mascarado.
+- **`brain doctor`** avisa quando há sugestão (`FB-####`) na fila sem
+  `GITHUB_TOKEN`, ou ainda não publicada.
+
 ## 2.10.0 — propostas de código viram issue + checagem de docs em lote
 
 - **Proposta `framework`**: `brain proposal add --kind framework` é a proposta

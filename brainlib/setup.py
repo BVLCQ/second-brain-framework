@@ -219,6 +219,26 @@ def github_token_ok(token: str) -> bool:
         return False
 
 
+def github_repo_access(token: str, repo: str) -> tuple[bool, str]:
+    """O token enxerga o repo do framework e ele aceita issues? → (ok, motivo). Criar uma issue de teste
+    seria publicar: o que dá para checar sem isso é leitura do repo (200) e `has_issues`."""
+    req = urllib.request.Request(f"https://api.github.com/repos/{repo}", headers={
+        "Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json", "User-Agent": "brain-setup"})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as r:
+            data = json.loads(r.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        return False, ("o token não enxerga o repositório (404): na criação, escolha o dono do repo e marque "
+                       "este repo" if e.code == 404 else f"GitHub respondeu {e.code}")
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError) as e:
+        return False, f"sem contato com o GitHub ({e})"
+    if data.get("archived"):
+        return False, "o repositório está arquivado — não aceita issues"
+    if data.get("has_issues") is False:
+        return False, "o repositório está com Issues desligadas"
+    return True, "repo visível e com Issues ligadas"
+
+
 def nightly_installed() -> bool:
     try:
         from . import runner
@@ -636,14 +656,25 @@ def _run_portas(brain, ui) -> None:
             config.set_keys(brain.inst, "backup", {"enabled": True})
             brain.inst = config.load(brain.inst.root)
             ui.say("✓ backup ligado (porta 4)")
-    if ui.confirm("Porta feedback (issues no GitHub — token fine-grained)?", False):
+    if ui.confirm("Porta feedback (sugestões e bugs do cérebro viram issues no GitHub do framework)?", False):
+        repo = brain.inst.cfg["feedback"]["repo"]
+        if not env.get("GITHUB_TOKEN"):
+            ui.say(f"  Crie um token em https://github.com/settings/personal-access-tokens/new (fine-grained):\n"
+                   f"   · Resource owner: o dono de {repo} · Repository access: só {repo}\n"
+                   f"   · Permissions › Issues: Read and write (Metadata: Read vem junto) · validade a gosto\n"
+                   f"   Sem ser colaborador do repo, o fine-grained não escreve em repo público: use um token clássico\n"
+                   f"   com o escopo public_repo. O valor vai só para config/.env — nunca para o chat.")
         token = env.get("GITHUB_TOKEN") or ui.secret("GITHUB_TOKEN")
         if token:
-            if github_token_ok(token):
-                set_env(brain.inst, {"GITHUB_TOKEN": token})
-                ui.say("✓ token validado (GET /user = 200); feedback ligado (porta 7)")
+            if not github_token_ok(token):
+                ui.say("✗ token não validou (GET /user ≠ 200) — confira se copiou inteiro e se não expirou")
             else:
-                ui.say("✗ token não validou (GET /user ≠ 200) — confira o escopo (issues: RW no repo do framework)")
+                set_env(brain.inst, {"GITHUB_TOKEN": token})
+                ok, why = github_repo_access(token, repo)
+                ui.say("✓ token válido e gravado em config/.env — feedback ligado (porta 7)")
+                ui.say(f"  {'✓' if ok else '⚠'} {repo}: {why}" +
+                       ("" if ok else " — a primeira issue vai dizer se falta permissão (`brain feedback push`)"))
+                ui.say("  (permissão de escrever issue só se prova criando uma; ela não é testada aqui)")
     if ui.confirm("Configurar destinatários do outbox/publish agora?", False):
         allow = ui.ask("[outbound].allow (ids de pessoa ou #canal, separados por vírgula)", "")
         dest = ui.ask("[publish].destinations (ex.: slack:#seu-canal; vazio pula)", "")

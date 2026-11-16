@@ -602,6 +602,11 @@ em outros agentes, o texto é entendido do mesmo jeito.)
   se a ideia partiu do agente, ele mostra o texto antes e espera o "ok".
 - **Por trás:** `feedback add` → issue no GitHub (`GITHUB_TOKEN` em `config/.env`). Sem token ou
   offline fica `pendente` — `brain feedback list` mostra a fila, `push` tenta de novo.
+- **Token (uma vez, no `./brain setup`, passo Portas — ou `./brain setup --only portas`):** token fine-grained em
+  github.com/settings/personal-access-tokens/new, dono do repo do framework, só esse repo, **Issues: Read and write**.
+  Quem não é colaborador do repo usa um token clássico com `public_repo`. O wizard pede o valor mascarado (nunca no
+  chat), valida (`GET /user`), confere que o repo está visível e com Issues ligadas, e grava em `config/.env`.
+  O `brain doctor` avisa quando há sugestão na fila e falta o token.
 - O issue é público: a porta recusa texto com seu nome, e-mail ou caminhos da máquina, e não publica
   nada no noturno.
 - **Propostas de melhoria do código** (`proposal add --kind framework`): o agente escreve o texto público da
