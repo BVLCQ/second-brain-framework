@@ -13,7 +13,7 @@ comandos, use o cockpit de terminal (`brain tui`); o guia interativo está em [`
 
 1. [Como chamar](#1-como-chamar)
 2. [Conceitos que aparecem em todo comando](#2-conceitos-que-aparecem-em-todo-comando)
-3. [Instância e saúde](#3-instância-e-saúde) — `init` · `demo` · `doctor` · `validate` · `status` · `update` · `upstream` · `watch` · `tui`
+3. [Instância e saúde](#3-instância-e-saúde) — `init` · `demo` · `doctor` · `validate` · `status` · `update` · `upstream` · `watch` · `tui` · `app`
 4. [Pessoas](#4-pessoas--person) — `person`
 5. [Ações](#5-ações--action) — `action`
 6. [Decisões](#6-decisões--decision) — `decision`
@@ -357,6 +357,19 @@ No TUI, `N` abre o formulário (caixa grande, vínculo opcional já preenchido c
 Códigos de saída: `3` vínculo inexistente, nota vazia ou nota fora da inbox; `4` com `BRAIN_NIGHTLY=1` (nota é do dono). Não escreve no ledger.
 
 ---
+
+### `brain app install|uninstall`
+Ícone clicável do painel: clique duplo = `brain render --open`. No macOS cria
+`~/Applications/Segundo Cérebro.app` (Launchpad/Spotlight; arraste para o Dock); no Linux, uma entrada
+`.desktop` no menu de aplicativos. Só escreve na pasta de destino (nada no vault/ledger) e só remove o que
+ele mesmo criou. O app guarda o caminho da instância e do framework — se mudar a pasta, reinstale.
+```bash
+brain app install                       # padrão: ~/Applications
+brain app install --dest ~/Desktop      # em outra pasta
+brain app install --name "Meu Cérebro"  # outro nome (várias instâncias)
+brain app uninstall
+```
+Se a abertura falhar, o app mostra um aviso; o detalhe da última tentativa fica em `vault/logs/app.log`.
 
 ## 4. Pessoas — `person`
 

@@ -648,6 +648,7 @@ Já coberto na seção 3. Gatilho: PROFILE e PLANNING vazios.
 | Comando | Para quê |
 |---|---|
 | `./brain render --open` | regenerar tudo e abrir o painel |
+| `./brain app install` | criar o **ícone clicável** do painel (clique duplo faz o `render --open`) |
 | `./brain status` | contagens rápidas |
 | `./brain search "termo"` | busca sem LLM no ledger + artefatos |
 | `./brain doctor [--online]` | saúde da instância (inclui memória) |
@@ -661,6 +662,13 @@ Já coberto na seção 3. Gatilho: PROFILE e PLANNING vazios.
 ---
 
 ## 8. O painel — um passeio
+
+**Abrir com dois cliques:** `./brain app install` cria o app **Segundo Cérebro** em `~/Applications`
+(macOS — aparece no Launchpad e no Spotlight; arraste para o Dock) ou uma entrada no menu de aplicativos
+(Linux). `--dest ~/Desktop` coloca em outra pasta e `--name` troca o nome. Cada clique faz o mesmo que o
+terminal: regenera as views, sobe a ponte se preciso e abre o painel vivo. Se algo falhar, aparece um aviso
+e o detalhe fica em `vault/logs/app.log`. Mudou a pasta do Brain de lugar? Rode `app install` de novo.
+`./brain app uninstall` remove — e só remove o que ele mesmo criou.
 
 `./brain render --open` abre `vault/FRESH/dashboard/index.html` — **um
 arquivo** que funciona em qualquer navegador, com dois modos:

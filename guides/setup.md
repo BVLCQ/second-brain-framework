@@ -22,6 +22,7 @@ Os três terminam no mesmo lugar: `./brain doctor` verde (no máximo ⚠ normais
 | 1 | identidade | dono no ledger (`person.added`) | `brain.person` no state |
 | 2 | rotina | fuso + expediente + almoço (`[work]`) | parse |
 | 3 | comando | **`brain` no PATH** (symlink `~/.local/bin/brain` → repo) | `which brain` resolve |
+| 3b | painel | **ícone do painel** (`brain app install`; interativo pergunta, `--yes` cria — como o passo `comando`) | app/entrada existe |
 | 4 | foco | `ics` (default, zero config) ou `google` com OAuth inline (loopback; token gravado no `.env`, nunca impresso) | chaves no `.env` |
 | 5 | noturno | `schedule install --time` | `schedule status` |
 | 6 | tui | cria `.venv-tui` (hashes travados) | venv existe |

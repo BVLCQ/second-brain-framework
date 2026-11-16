@@ -416,6 +416,25 @@ def _run_comando(brain, ui) -> None:
     install_brain_command(brain.inst.root, ui)
 
 
+def _st_painel(brain) -> str:
+    from . import launcher
+    if sys.platform not in launcher.SUPPORTED:
+        return "off"                                    # sem ícone nesta plataforma: `render --open` segue valendo
+    return "done" if launcher.is_installed(brain.inst.root) else "pending"
+
+
+def _run_painel(brain, ui) -> None:
+    from . import launcher
+    if sys.platform not in launcher.SUPPORTED:
+        ui.say("ícone do painel: só macOS/Linux — use `brain render --open`")
+        return
+    if launcher.is_installed(brain.inst.root):
+        ui.say("✓ ícone do painel já instalado (reinstale com `brain app install` se mudou a pasta)")
+        return
+    if ui.confirm("Criar o ícone do painel (clique duplo abre o Segundo Cérebro, sem terminal)?", True):
+        ui.say(f"✓ ícone criado: {launcher.install(brain.inst)}")
+
+
 def _st_foco(brain) -> str:
     cfg = brain.inst.cfg
     if cfg["focus"]["mode"] != "google":
@@ -730,6 +749,7 @@ STEPS: list[dict] = [
     {"id": "identidade", "title": "Identidade do dono (ledger)", "status": _st_identidade, "run": _run_identidade},
     {"id": "rotina", "title": "Rotina (fuso, expediente)", "status": _st_rotina, "run": _run_rotina},
     {"id": "comando", "title": "Comando `brain` no PATH", "status": _st_comando, "run": _run_comando},
+    {"id": "painel", "title": "Ícone do painel (clique duplo)", "status": _st_painel, "run": _run_painel},
     {"id": "foco", "title": "Foco (ics | google)", "status": _st_foco, "run": _run_foco},
     {"id": "noturno", "title": "Noturno (agendamento)", "status": _st_noturno, "run": _run_noturno},
     {"id": "tui", "title": "TUI (venv Textual)", "status": _st_tui, "run": _run_tui},

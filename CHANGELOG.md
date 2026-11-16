@@ -1,3 +1,19 @@
+## 2.13.0 — ícone clicável do painel
+
+- **`brain app install`**: cria o app **Segundo Cérebro** — clique duplo faz o
+  `brain render --open` (regenera as views, sobe a ponte se preciso e abre o
+  painel vivo), sem abrir terminal. macOS: `~/Applications/Segundo Cérebro.app`
+  (Launchpad, Spotlight, arrastável para o Dock); Linux: entrada `.desktop`.
+- Ícone desenhado em Python puro (PNG + `.icns` montados à mão): sem
+  dependência nova e sem binário no repo. Se a abertura falhar, o app mostra um
+  aviso e o detalhe fica em `vault/logs/app.log`.
+- `--dest` (ex.: `~/Desktop`) e `--name` (várias instâncias). `brain app
+  uninstall` só remove o que o próprio comando criou — recusa pasta de outro app.
+- O wizard (`brain setup`) ganhou o passo **painel**: o modo interativo
+  pergunta (padrão sim) e o `--yes` cria direto, como o passo `comando`.
+  Refazer o passo (`--only painel`) é idempotente.
+- O app guarda o caminho da instância e do framework: mudou a pasta, reinstale.
+
 ## 2.12.1 — o chat do Claude Code não pede mais licença
 
 - **Sessão interativa pré-autorizada.** Antes só o agente headless (noturno e
