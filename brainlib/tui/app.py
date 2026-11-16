@@ -2,7 +2,7 @@
 
 Cinco painéis numerados à esquerda, detalhe à direita, o log de comandos (painel 6) embaixo dele e a barra
 de teclas contextual no rodapé. Leitura é em processo (view model); toda escrita é `./brain <args>` como
-subprocesso, e a linha exata aparece no log. O desenho está em guides/tui-mockup.html.
+subprocesso, e a linha exata aparece no log.
 """
 from __future__ import annotations
 

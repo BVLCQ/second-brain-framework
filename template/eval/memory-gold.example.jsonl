@@ -1,4 +1,4 @@
-# Exemplo do conjunto-ouro do eval de memória (Fase 0 do plano guides/plans/memory-setups.md).
+# Exemplo do conjunto-ouro do eval de memória.
 # Copie para vault/eval/memory-gold.jsonl (zona curada do dono, FORA do git), troque os
 # IDs/documentos pelos reais da sua instância e complete ~60 perguntas nesta proporção:
 #   estado 12 · contexto 12 · decisao 8 · detalhe 12 · literal 8 · conclusao 8 · nada 6

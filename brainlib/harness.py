@@ -1,6 +1,6 @@
 """Harnesses de código com memória no MESMO servidor do cérebro.
 
-Plano: guides/plans/memory-harness-wizard.md. Um serviço, dois mundos:
+Um serviço, dois mundos:
 
   brain        ← derivado do vault (embed e full) — `memory rebuild` apaga e recria
   harness_bank ← memória dos agentes (default "hermes", decisão do dono 2026-11-05):

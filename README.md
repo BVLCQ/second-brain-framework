@@ -6,11 +6,9 @@ no mundo exterior — salvo quatro portas estreitas, cada uma com aprovação
 explícita: blocos de foco no calendário, mensagem no Slack, publicação no
 espaço do time, backup no Drive.
 
-A constituição é `AGENTS.md`. O manual completo é `guides/manual.md`.
-O guia de uso A a Z — cada comando, cada conexão, a rotina normal — é
+A constituição é `AGENTS.md`. O guia de uso A a Z — cada comando, cada conexão, a rotina normal — é
 `guides/user-guide.md`. A instalação completa do stack local de IA
-(LM Studio + Hindsight) é `setup.md`. O desenho da futura TUI, para
-experimentar no navegador com dados fictícios, é `guides/tui-mockup.html`.
+(LM Studio + Hindsight) é `setup.md`.
 
 ## Como ele funciona
 

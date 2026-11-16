@@ -48,7 +48,7 @@ Os três terminam no mesmo lugar: `./brain doctor` verde (no máximo ⚠ normais
   verde antes de confiar. Medidor mensal: `brain memory cost` (sem teto — decisão do
   dono). Voltar ao embed é primeira classe: `brain memory setup --mode embed` + rebuild.
 
-Detalhes por modo: `guides/memory.md`. Plano: `guides/plans/memory-setups.md`.
+Detalhes por modo: `guides/memory.md`.
 
 ## Régua e conserto
 

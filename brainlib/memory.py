@@ -1,6 +1,6 @@
 """Camada de memória para IA — Hindsight, alimentado SÓ pelo vault (mão única) e reconstruível.
 
-Dois setups (guides/memory.md · guides/plans/memory-setups.md), escolha livre e reversível,
+Dois setups (guides/memory.md), escolha livre e reversível,
 com BANCO ÚNICO `brain` nos dois modos (decisão 8 do dono, 2026-11-05):
 
   embed · sem LLM em qualquer operação — chunks no `bank`: RAW (a letra exata) +

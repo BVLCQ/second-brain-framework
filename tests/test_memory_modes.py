@@ -1,4 +1,4 @@
-"""Modos de memória embed/full (plano guides/plans/memory-setups.md) — stdlib unittest, sem rede."""
+"""Modos de memória embed/full (guides/memory.md) — stdlib unittest, sem rede."""
 from __future__ import annotations
 
 import json
