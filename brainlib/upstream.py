@@ -799,6 +799,9 @@ def cli_update(args, _b) -> None:
     if args.check:                                     # verifica (com cache de 24h) ANTES de decidir
         check_update(inst, force=False)
     res = update(inst, check=args.check, rebase=args.rebase, remote=args.remote, branch=args.branch)
+    if not args.check:
+        from . import perms
+        perms.try_sync(config.load(inst.root))   # settings.json novo desceu com o pull: o local acompanha
     if args.check and res.get("behind") and not res.get("news"):
         res["news"] = check_update(inst, force=True).get("news", [])
     if args.json:

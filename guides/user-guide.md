@@ -799,6 +799,15 @@ liberados. Permissão negada de MCP vira uma pergunta com o comando exato;
 "liberar sempre" grava a regra (`brain agent allow`, em `[tui].agent_allow`, ou em `[runner].allow` para MCP de leitura). Ferramenta de
 **escrita** no mundo exterior (enviar, postar, criar, mover) nunca é liberada por ali: passa pelas portas (`/outbox`, `/publish`).
 
+**O chat do Claude Code também nasce autorizado.** O repo traz `.claude/settings.json` com as ferramentas nativas liberadas (`Bash`
+inteiro incluído) e, em `deny`, os limites da Constituição (livro-razão, `config/.env`, `git push --force`, `--no-verify`).
+`./brain agent permissions` gera `.claude/settings.local.json` (não vai ao git) com os MCP de leitura de `[runner].allow`, a porta
+oppdrive, os extras de `[tui].agent_allow` e as pastas da instância (`additionalDirectories`: raiz, vault, repos do `watch.toml`).
+Roda sozinho no `init`, no `agent allow`, no `update` e no noturno; `./brain doctor` avisa se estiver desatualizado. Se ainda
+aparecer pergunta: (1) a sessão foi aberta antes do arquivo existir — abra uma nova; (2) o seletor de modo de permissão do app
+pode estar em "perguntar sempre" e sobrepõe o arquivo; (3) o Claude Code sempre pergunta ao editar os próprios arquivos de
+configuração (`.claude/settings*.json`); (4) MCP de escrita (enviar, postar…) pergunta de propósito — é a porta.
+
 Regra geral: **estrutura vive no chat** (com gate), **fato vivo no chat ou
 checkbox**, e `FRESH/` é só leitura prática.
 

@@ -95,6 +95,8 @@ def cmd_init(args, b: Brain) -> None:
                                    "aliases": util.split_csv(args.alias), "email": args.email or "",
                                    "relation": "dono do cérebro"}})
             created.append(f"pessoa: {owner_id}")
+    from . import perms
+    perms.try_sync(config.load(inst.root))
     print("✓ instância pronta" + (":\n  " + "\n  ".join(created) if created else " (nada a criar)"))
 
 
@@ -869,10 +871,23 @@ def cmd_migrate(args, b) -> None:
 
 
 def cmd_agent(args, b) -> None:
-    from . import config
+    from . import config, perms
+    if args.agcmd == "permissions":
+        if args.check:
+            st = perms.status(b.inst)
+            _out(args, st, f"estático: {st['static']} · local: {st['local']}"
+                 + (f" · faltam {len(st['missing'])}: {', '.join(st['missing'][:4])}" if st["missing"] else ""))
+            if st["static"] != "ok" or st["local"] != "ok":
+                raise SystemExit(1)
+            return
+        res = perms.sync(b.inst)
+        _out(args, res, f"{'✓ gravado' if res['changed'] else '= já em dia'}: .claude/settings.local.json — "
+             f"{res['allow']} MCP liberadas · {res['directories']} pastas (sessões novas do Claude Code leem na abertura)")
+        return
     if os.environ.get("BRAIN_NIGHTLY") == "1":
         raise util.BrainError("agent allow: proibido no noturno — liberar permissão é decisão do dono, presente", code=4)
     rule, existed = config.add_allow(b.inst, args.rule, args.scope)
+    perms.try_sync(config.load(b.inst.root))   # a regra vale também no chat: um "liberar sempre" só
     table = config.ALLOW_SCOPES[args.scope]
     _out(args, {"rule": rule, "scope": args.scope, "existed": existed},
          f"= {rule} já estava em [{table[0]}].{table[1]}" if existed else f"✓ {rule} liberada em [{table[0]}].{table[1]} (config/brain.toml)")
@@ -1508,6 +1523,9 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("rule", help='Bash(./brain:*) · mcp__servidor__ferramenta_de_leitura · Read…')
     x.add_argument("--scope", choices=["tui", "runner"], default="tui",
                    help="tui = [tui].agent_allow (só as ações ⚡) · runner = [runner].allow (leitura MCP: noturno e TUI)")
+    x.add_argument("--json", action="store_true")
+    x = asub.add_parser("permissions", help="pré-autoriza a sessão interativa do Claude Code (MCP de leitura e pastas da instância → .claude/settings.local.json)")
+    x.add_argument("--check", action="store_true", help="só confere (saída 1 se desatualizado)")
     x.add_argument("--json", action="store_true")
     p.set_defaults(fn=cmd_agent)
 

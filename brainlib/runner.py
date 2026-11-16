@@ -100,6 +100,8 @@ def nightly(brain, skip_agent: bool = False) -> dict:
             steps[name] = f"falhou: {e}"
             _log(brain, f"✗ {name}: {e}\n{traceback.format_exc(limit=3)}")
 
+    from . import perms
+    perms.try_sync(brain.inst)    # o brain.toml pode ter mudado desde a última vez: o chat do dono acompanha
     step("render", lambda: render.summary(render.render_all(brain)).splitlines()[0])
     if not skip_agent:
         cmd = agent_command(brain.inst.cfg)

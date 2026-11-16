@@ -2509,7 +2509,7 @@ class CoverageTest(unittest.TestCase):
         "action not-dup",     # julgamento do agente sobre um par de candidatas; o dono decide pela proposta
         "feedback revise", "feedback pushed", "feedback failed",   # revise = corrigir texto no terminal; recuperação manual (o push morreu depois de criar) — agente/terminal
     }
-    NOT_IN_TUI = {"demo", "tui", "migrate ids", "serve", "memory cost",
+    NOT_IN_TUI = {"demo", "tui", "migrate ids", "agent permissions", "serve", "memory cost",
                   "query actions", "query decisions", "query person", "query entity", "query sql",
                   "index rebuild", "index update", "index status", "route", "memory dossier", "memory eval",
                   "memory models list", "memory models show", "memory models sync", "memory models refresh"}   # query/index/route/dossier = ferramenta do agente + doctor   # migração única no terminal; serve é a ponte do painel HTML; custo = doctor/CLI; models = CLI do dono/agente (full-only)

@@ -944,6 +944,7 @@ class DashboardAssetTests(unittest.TestCase):
         "memory dossier",                                      # agente//ask — montado na leitura (Fase 5)
         "memory models list", "memory models show", "memory models sync", "memory models refresh",   # Fase 8: full-only, CLI do dono/agente
         "memory eval",                                         # Fase 0: harness do conjunto-ouro
+        "agent permissions",                                   # gera .claude/settings.local.json: terminal/update/init cuidam; o painel não abre sessão do Claude
     }
     DYNAMIC = {"memory recall", "memory reflect",       # formulário do TUI monta; o painel busca no índice
                "decision supersede"}                     # o painel emite `decision add … --supersedes` (tecla S)

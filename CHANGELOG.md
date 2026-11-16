@@ -1,3 +1,20 @@
+## 2.12.1 — o chat do Claude Code não pede mais licença
+
+- **Sessão interativa pré-autorizada.** Antes só o agente headless (noturno e
+  ações ⚡) tinha as ferramentas liberadas; o chat do terminal/app perguntava a
+  cada `ls`, `cat`, pasta fora do cwd e MCP de leitura. Agora o repo traz
+  `.claude/settings.json` (git, genérico): `Bash` inteiro, Read, Edit, Write,
+  Glob, Grep, NotebookEdit, WebFetch, WebSearch e Task liberados, modo
+  `acceptEdits`, e os limites da Constituição em `deny` — livro-razão, `.env`,
+  `git push --force`/`-f` e `--no-verify`.
+- **`brain agent permissions`** gera `.claude/settings.local.json` (gitignorado)
+  com o que é da instância: MCP de leitura (`[runner].allow`), porta oppdrive,
+  extras do `[tui].agent_allow` e `additionalDirectories` (raiz da instância,
+  vault e pastas de repos do `watch.toml` — a sessão num worktree enxerga o
+  vault). Roda sozinho em `init`, `agent allow`, `update` e no noturno; o
+  `doctor` avisa se ficou para trás. `--check` só confere.
+- MCP de **escrita** no mundo exterior continua fora: só pelas portas.
+
 ## 2.12.0 — filtros em cascata (TUI e painel)
 
 - **`/` empilha filtros**: o primeiro `/` filtra a lista; `/` de novo abre um filtro
