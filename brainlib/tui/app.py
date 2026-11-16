@@ -1359,7 +1359,7 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
     def f_new_action(self, pre: dict | None = None) -> None:
         pre = pre or {}
         lst = ["mine", "waiting", "watching"][self.tab[2]] if self.p == 2 else "mine"
-        owner = ""
+        owner = "eu" if lst == "mine" else ""          # mine é sempre sua: o dono já vem preenchido
 
         def dup_res(v: str) -> str:
             """Aviso ao digitar o título: a ação parecida aparece aqui, antes de gravar (gravar é o seu "é outra")."""
@@ -1410,7 +1410,7 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
             *self._goal_project_fields(pre.get("project", "—")),
             Field("prio", "prioridade", choice=["normal", "alta", "baixa"]),
             Field("list", "lista", choice=["mine", "waiting", "watching"], value=lst),
-            Field("owner", "dono", ph="você (ou id/alias da pessoa)", value=owner),
+            Field("owner", "dono", ph="eu (ou id/alias da pessoa)", value=owner, fill=("list", self._owner_for_list)),
             Field("deliv", "entregável", ph="9 (do projeto escolhido) ou PROJ-#.# · opcional", value=pre.get("deliv", ""),
                   check=self._deliv_check, res=self._deliv_res),
             Field("people", "pessoas", ph="marina-demo, heitor-demo (opcional)"),
@@ -1495,13 +1495,21 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
             Field("outcome", "resultado", ph="opcional: resultado observável (vira entrega WIN-####)")],
             build, sub=a["title"]))
 
+    @staticmethod
+    def _owner_for_list(v: dict) -> str | None:
+        """Lista mine preenche o dono com "eu"; sair de mine limpa o "eu" (outra lista não nasce com o dono já escolhido)."""
+        if v["list"] == "mine":
+            return "eu"
+        return "" if v["owner"].lower() == "eu" else None
+
     def f_edit_action(self) -> None:
         a = self.cur().data
         eff0 = util.fmt_duration(a["effort_min"]) if a["effort_min"] else ""
         deliv0, blocked0 = a["deliverable"] or "", ",".join(a["blocked_by_all"] or [])
         proj0 = a["project"] or "—"
         deliv_shown = deliv0.split(".", 1)[1] if proj0 != "—" and deliv0.startswith(proj0 + ".") else deliv0   # PROJ-1.9 aparece como 9
-        owner0 = "" if a["mine"] else a["owner"]
+        owner0 = "eu" if a["mine"] else a["owner"]       # o dono como o formulário o mostra: você aparece como "eu"
+        owner_shown = "eu" if a["mine"] or a["list"] == "mine" else a["owner"]     # mine é sempre sua: já vem preenchido (repara dono errado ao salvar)
 
         def build(v):
             c = ["action", "update", a["id"]]
@@ -1525,7 +1533,7 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
                 c += ["--people", ",".join(new_people)]
             if v["list"] != a["list"]:
                 c += ["--list", v["list"]]
-            if v["owner"] and v["owner"] != owner0:
+            if v["owner"] and v["owner"].lower() != owner0:
                 c += ["--owner", v["owner"]]
             if v["note"]:
                 c += ["--note", v["note"]]
@@ -1542,7 +1550,7 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
             Field("blocked", "bloqueada por", value=blocked0, ph="TASK-#### (a CLI não remove bloqueio)"),
             Field("people", "pessoas", ph="adiciona: marina-demo, heitor-demo"),
             Field("list", "lista", choice=["mine", "waiting", "watching"], value=a["list"]),
-            Field("owner", "dono", value=owner0, ph="reatribui: id ou alias"),
+            Field("owner", "dono", value=owner_shown, ph="reatribui: eu, id ou alias", fill=("list", self._owner_for_list)),
             Field("note", "nota", ph="vai para o histórico da ação")], build))
 
     def f_due(self) -> None:

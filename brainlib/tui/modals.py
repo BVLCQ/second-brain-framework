@@ -38,6 +38,7 @@ class Field:
     res: Callable[..., str] | None = None            # (valor) ou (valor, campos) → texto de apoio (ex.: data resolvida)
     multi: bool = False                              # caixa de texto grande (várias linhas); enter quebra a linha
     show: Callable[[dict], bool] | None = None       # (campos) → aparece? Escondido não conta: valor "", sem req nem check
+    fill: tuple[str, Callable[[dict], str | None]] | None = None   # (id do campo, (campos) → valor): preenche sozinho quando aquele campo muda (None não mexe)
 
 
 def _pairs(f: Field, vals: dict) -> list[tuple[str, str]]:
@@ -169,6 +170,10 @@ class FormModal(ModalScreen):
         for f in self.spec.fields:
             if f.options and f.depends == changed:
                 self._refresh_options(f)
+            if f.fill and f.fill[0] == changed:
+                val = f.fill[1](self.vals())
+                if val is not None:
+                    self.query_one(f"#f_{f.id}").value = val           # Input.Changed repinta o preview
         self._update()
 
     def _refresh_options(self, f: Field) -> None:

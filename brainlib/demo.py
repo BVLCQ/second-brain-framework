@@ -260,7 +260,7 @@ def build(target: Path) -> Path:
          "data": {"title": "Entregar fechamento mensal revisado", "owner": "sonia-demo", "list": "waiting", "due": d(3),
                   "people": ["sonia-demo"]}},
         {"type": "action.opened", "date": d(-12), **agent("vistoria-imovel"),
-         "data": {"title": "Concluir alvenaria da esquina", "owner": "caio-demo", "list": "mine", "project": "PROJ-1",
+         "data": {"title": "Concluir alvenaria da esquina", "owner": "voce", "list": "mine", "project": "PROJ-1",
                   "people": ["caio-demo"]}},
         {"type": "action.opened", "date": d(-6), **agent("1a1-marina-demo"),
          "data": {"title": "Aprovar as 8 receitas novas para escala", "owner": "marina-demo", "list": "waiting",

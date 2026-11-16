@@ -861,7 +861,8 @@ edita `events.jsonl` à mão — com backup, uma linha.
 - **Gate** — ponto onde o agente para e espera sua aprovação literal.
 - **Portas** — as 4 únicas escritas no mundo: foco (Calendar), mensagem
   (Slack), publicação (canvas/Drive), backup (Drive).
-- **mine / waiting / watching** — as três listas: eu devo, me devem, é contexto.
+- **mine / waiting / watching** — as três listas: eu devo, me devem, é contexto. `mine` é sempre do dono do Brain:
+  escolher `mine` preenche o dono (`eu`) e o TODO do painel mostra essa lista.
 - **Proposta (`PROP-####`)** — sugestão do agente esperando seu veredito.
 - **Entrega (`WIN-####`)** — trabalho concluído com resultado observável.
 - **Noturno** — rotina das 05:00: render → `/update` → memória → backup

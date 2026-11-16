@@ -139,6 +139,78 @@ class PlanningTests(unittest.TestCase):
             self.assertIn("peso 2/3", planning.format_progress(plan.progress("PROJ-1")))
 
 
+def _brain_owner_dona(tmp: Path) -> Brain:
+    """Instância cujo dono tem id próprio (`dona`): prova que "eu" resolve ao dono do Brain, não a uma pessoa de id `eu`."""
+    _inst(tmp)
+    (tmp / "config" / "brain.toml").write_text(
+        '[owner]\nid = "dona"\nname = "Dona"\n\n[outbound]\nallow = ["marina-demo"]\n', encoding="utf-8")
+    b = Brain(config.load(tmp))
+    b.record_one({"type": "person.added", "id": "dona", "by": "owner", "data": {"name": "Dona", "relation": "dono"}})
+    b.record_one({"type": "person.added", "id": "marina-demo", "by": "owner", "data": {"name": "Marina-demo"}})
+    return b
+
+
+class MineIsAlwaysTheBrainOwnerTests(unittest.TestCase):
+    """Lista mine é sempre do dono do Brain: preenche sozinha, "eu" (qualquer caixa) vale o dono, e outra pessoa é waiting."""
+
+    def _open(self, b, **data):
+        return b.record_one({"type": "action.opened", "by": "owner", "data": {"title": "Fazer", **data}})
+
+    def test_mine_fills_the_owner_and_eu_means_the_brain_owner(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain_owner_dona(Path(td))
+            for i, who in enumerate(["", "eu", "Eu", "EU"]):
+                ev = self._open(b, **({"owner": who} if who else {}), list="mine")
+                self.assertEqual(b.state.actions[ev["id"]].owner, "dona", who)
+                self.assertEqual(b.state.actions[ev["id"]].list, "mine")
+            self.assertEqual(self._open(b)["data"]["owner"], "dona")        # sem lista nem dono: mine, do dono
+
+    def test_mine_with_someone_else_is_refused_and_someone_else_defaults_to_waiting(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain_owner_dona(Path(td))
+            with self.assertRaises(util.BrainError) as cm:
+                self._open(b, owner="marina-demo", list="mine")
+            self.assertIn("waiting", str(cm.exception))
+            ev = self._open(b, owner="marina-demo")                            # sem lista: nasce waiting, não mine
+            self.assertEqual(b.state.actions[ev["id"]].list, "waiting")
+            self.assertFalse(b.state.actions[ev["id"]].owner == "dona")
+
+    def test_updating_the_list_to_mine_fills_the_owner_and_handing_off_needs_waiting(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain_owner_dona(Path(td))
+            a = self._open(b, owner="marina-demo", list="waiting")["id"]
+            b.record_one({"type": "action.updated", "id": a, "by": "owner", "data": {"list": "mine"}})
+            self.assertEqual((b.state.actions[a].list, b.state.actions[a].owner), ("mine", "dona"))
+            with self.assertRaises(util.BrainError):                           # dar a outra pessoa sem mudar a lista
+                b.record_one({"type": "action.updated", "id": a, "by": "owner", "data": {"owner": "marina-demo"}})
+            b.record_one({"type": "action.updated", "id": a, "by": "owner",
+                          "data": {"owner": "marina-demo", "list": "waiting"}})
+            self.assertEqual((b.state.actions[a].list, b.state.actions[a].owner), ("waiting", "marina-demo"))
+            with self.assertRaises(util.BrainError):
+                b.record_one({"type": "action.updated", "id": a, "by": "owner",
+                              "data": {"list": "mine", "owner": "marina-demo"}})
+            self.assertEqual(b.validate_all(), [])
+
+    def test_cli_accepts_eu_in_owner_and_people(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain_owner_dona(Path(td))
+            env = {**os.environ, "BRAIN_HOME": td}
+            env.pop("BRAIN_NIGHTLY", None)
+
+            def run(*a):
+                return subprocess.run([sys.executable, str(ROOT / "brain"), *a], capture_output=True, text=True, env=env)
+            r = run("action", "open", "Do dono", "--owner", "EU", "--list", "mine", "--people", "Eu,marina-demo",
+                    "--by", "owner", "--due", "2026-12-01")
+            self.assertEqual(r.returncode, 0, r.stderr)
+            b.reload()
+            a = b.state.actions["TASK-0001"]
+            self.assertEqual((a.owner, a.list, a.people), ("dona", "mine", ["dona", "marina-demo"]))
+            r = run("action", "open", "De outro", "--owner", "marina-demo", "--list", "mine", "--by", "owner",
+                    "--due", "2026-12-01")
+            self.assertEqual(r.returncode, 4)
+            self.assertIn("waiting", r.stderr)
+
+
 class LedgerTests(unittest.TestCase):
     def test_ids_and_close_cascade(self):
         with tempfile.TemporaryDirectory() as td:
@@ -1008,6 +1080,15 @@ class DashboardAssetTests(unittest.TestCase):
             self.assertIn("offlineCmd", html)                           # modo retrato: comando copiado p/ o terminal
         self.assertIn("window.PF_ONLY = true;", pf)                     # portfolio: só a face Portfólio
         self.assertIn("window.PF_ONLY = false;", dash)
+
+    def test_todo_board_is_the_mine_list_and_forms_prefill_the_owner(self):
+        core = (ROOT / "brainlib" / "assets" / "src" / "core.js").read_text(encoding="utf-8")
+        extra = (ROOT / "brainlib" / "assets" / "src" / "extra.js").read_text(encoding="utf-8")
+        self.assertIn('M.actions.filter(a => a.list === "mine" && (!proj', core)       # o quadro é a lista, não o dono
+        self.assertNotIn('a.list === "mine" && a.mine', core)
+        self.assertEqual(extra.count("fill: ownerFill(M)"), 2)                           # nova ação e editar
+        for name in ("dashboard.html", "portfolio.html"):
+            self.assertIn("const ownerFill = M =>", (ROOT / "brainlib" / "assets" / name).read_text(encoding="utf-8"))
 
     def test_slash_is_a_cascading_list_filter_in_both_panels(self):
         """Paridade com a TUI: "/" filtra a lista da página e de novo refina; esc tira um nível por vez; a barra mostra a corrente.

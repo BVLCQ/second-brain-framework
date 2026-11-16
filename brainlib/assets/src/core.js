@@ -114,7 +114,7 @@ function card(a){
   return '<article class="card' + (a.overdue_days ? " is-late" : "") + (a.status === "bloqueada" ? " is-blocked" : "") + '">' +
     '<header><span class="ids">' + aL(a.id) + "</span>" +
     (a.priority === "alta" ? " " + chip("em-risco", "alta") : "") +
-    (a.list !== "mine" ? " " + chip("info", a.owner_name) : "") + "</header>" +
+    (a.list !== "mine" || !a.mine ? " " + chip("info", a.owner_name) : "") + "</header>" +
     '<h3 class="card-title">' + esc(a.title) + "</h3>" +
     '<p class="card-meta">' + dueTxt(a) + (a.effort_min ? " · " + dur(a.effort_min) : "") + (a.project ? " · " + pL(a.project) : "") + "</p>" +
     (a.blocked_by.length ? '<p class="card-block">⛔ ' + a.blocked_by.map(b => aL(b) + " (" + esc((A[b] || {}).owner_name || "") + ")").join(", ") + "</p>" : "") +
@@ -200,7 +200,7 @@ V.todo = (q) => {
   const view = q.get("v") || "todas", sortK = q.get("o") || "prazo", showAll = q.get("a") === "1";
   const end = new Date(M.today + "T12:00:00"); { const d = end.getDay(); end.setDate(end.getDate() + (d === 0 ? 0 : 7 - d)); }
   const endS = end.toISOString().slice(0, 10);
-  let mine = M.actions.filter(a => a.list === "mine" && a.mine && (!proj || a.project === proj));
+  let mine = M.actions.filter(a => a.list === "mine" && (!proj || a.project === proj));      // a lista mine é a sua; o dono não filtra
   if (view === "semana") mine = mine.filter(a => a.open && ((a.due && a.due <= endS) || a.status === "fazendo"));
   else if (view === "depois") mine = mine.filter(a => a.open && !a.parked && !((a.due && a.due <= endS) || a.status === "fazendo"));
   else if (view === "nao-agora") mine = mine.filter(a => a.open && a.parked);
