@@ -65,7 +65,7 @@ diagnóstico — se funcionar, o problema é o PATH do shell (revise a seção 1
 
 ```bash
 ./brain tui --setup     # cria .venv-tui com o Textual (versões e hashes travados)
-./brain tui             # cockpit de terminal; guia: guides/tui-mockup.html
+./brain tui             # cockpit de terminal (`?` abre a ajuda do contexto)
 ```
 
 O núcleo do brain não depende disso. Sem o extra, `./brain tui` explica como instalar.
@@ -248,4 +248,4 @@ nunca aceite o gate por ele. Memória via OrbStack/compose em vez do daemon loca
 
 - **Google OAuth** (foco no calendário + backup no Drive): `guides/google-oauth.md`.
 - **Fontes Slack/Gmail/Calendar**: conectores MCP no agente + `config/watch.toml`
-  — `guides/manual.md` §Update.
+  — `guides/user-guide.md` §4.

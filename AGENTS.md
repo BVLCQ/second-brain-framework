@@ -337,7 +337,7 @@ apontar, trate como pista e confirme no arquivo.
 - **TUI** — `./brain tui` (extra opcional, Textual). Cockpit de teclado: lê em processo
   e escreve **só chamando `./brain`**, com a linha exata no log. Gates e portas pedem a
   resposta literal do dono; ações do agente (⚡) rodam o runner configurado. Recusa abrir
-  com `BRAIN_NIGHTLY=1`. Guia: `guides/tui-mockup.html`. **Faces:** Tab / Shift+Tab giram
+  com `BRAIN_NIGHTLY=1`. **Faces:** Tab / Shift+Tab giram
   entre `Execução` (painéis de hoje), `Portfólio` (Visão, Processos, Oportunidades, Matriz,
   Registro) e `Configurações` (Memória: Provedores, Harnesses · Instância: Saúde); cada face
   lembra onde estava.

@@ -3,7 +3,7 @@
 > Este guia assume que você **nunca viu a ferramenta**. Ele cobre o que ela é,
 > como pensar sobre ela, como ligar cada fonte externa, cada comando (o que
 > você digita, o que acontece, o que volta pra você) e a rotina normal de uso.
-> A referência profunda é `guides/manual.md`; a lei do agente é `AGENTS.md`;
+> A referência de todos os comandos é `guides/commands.md`; a lei do agente é `AGENTS.md`;
 > a instalação completa está no `setup.md`. Se algo aqui contradisser o
 > `AGENTS.md`, o `AGENTS.md` vence.
 
@@ -766,8 +766,7 @@ quão fresco é o que está vendo e de onde derivou.
 Prefere o teclado ao navegador? `./brain tui` abre o mesmo retrato num cockpit de
 terminal (painéis, atalhos contextuais, paleta de comandos) e executa as escritas pelo
 `./brain`, mostrando a linha exata antes de confirmar. É opcional: `./brain tui --setup`
-instala o Textual numa venv à parte. Para experimentar com dados fictícios, abra
-`guides/tui-mockup.html` no navegador.
+instala o Textual numa venv à parte.
 
 **Vistas do painel Ações (`v`).** A tecla `v` gira entre quatro vistas: **Todas** → **Esta semana**
 (até o domingo corrente, mais tudo que já está atrasado; sem prazo só entra se estiver em andamento) →
@@ -826,6 +825,35 @@ configuração (`.claude/settings*.json`); (4) MCP de escrita (enviar, postar…
 
 Regra geral: **estrutura vive no chat** (com gate), **fato vivo no chat ou
 checkbox**, e `FRESH/` é só leitura prática.
+
+### A sintaxe do `PLANNING/goals.md`
+
+O arquivo é Markdown **estrito**. Fora deste formato a linha é ignorada ou vira aviso no `./brain doctor` / `./brain validate`:
+
+```markdown
+## GOAL-1 — Título do goal
+- status: ativo
+- horizonte: AAAA-MM-DD
+- por quê: o que isto destrava
+
+### PROJ-1 — Título do projeto
+- status: ativo
+- dono: seu-id
+- [ ] PROJ-1.1 Nome do entregável · prazo: AAAA-MM-DD · peso: 2
+- [x] PROJ-1.2 Já feito · prazo: AAAA-MM-DD · feito: AAAA-MM-DD
+- [ ] PROJ-1.3 Em curso · prazo: AAAA-MM-DD · estado: em-andamento
+- [-] PROJ-1.4 Cancelado
+```
+
+- Caixas: `[ ]` não iniciado · `[x]` feito · `[-]` cancelado. `estado: em-andamento` marca trabalho em curso sem marcar feito.
+- `?` no prazo = sem prazo. Progresso = peso dos entregáveis feitos ÷ peso dos não cancelados.
+- Comentário HTML `<!-- -->` e bloco cercado por três crases não entram na árvore (por isso o template explica a sintaxe sem criar goal fantasma).
+- `dono:` é o **id** da pessoa no livro-razão, não o apelido, se você quer que a ficha do projeto a reconheça.
+- Os nomes antigos (`G1`, `P3`, `P3.2`) ainda são aceitos na leitura. Editar o checkbox à mão funciona: o próximo `./brain render` grava um evento seu (`[declarado]`). Mudar a **árvore** (criar, renomear, fechar) continua sendo o gate do `/goal`.
+
+### Onde ficam as chaves de configuração
+
+`config/brain.toml` (dono, expediente, foco, allowlist, memória, noturno, backup, runner, TUI): o modelo comentado, chave a chave, é `config/brain.toml.example`. O que você omitir fica no padrão. `config/watch.toml` lista as fontes (`./brain watch`), e `config/.env` guarda segredos — o agente nunca os imprime e eles não entram no backup.
 
 ---
 

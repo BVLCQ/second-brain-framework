@@ -2,7 +2,7 @@
 
 Dependência OPCIONAL: o núcleo do brain segue só com a stdlib. `./brain tui --setup` cria a venv
 `.venv-tui` com as versões e hashes travados em requirements-tui.txt; `./brain tui` usa essa venv
-sozinho. O desenho e o guia de uso: guides/tui-mockup.html.
+sozinho.
 """
 from __future__ import annotations
 

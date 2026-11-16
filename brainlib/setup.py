@@ -1,4 +1,4 @@
-"""Setup assistido — `brain setup` (guides/setup.md · plano guides/plans/setup-wizard.md).
+"""Setup assistido — `brain setup` (guides/setup.md).
 
 Um motor de passos, três frentes (CLI agora; TUI e painel depois): cada passo é declarativo —
 id, título, `status()` derivado de config/doctor (sem arquivo de estado novo), `run()`.

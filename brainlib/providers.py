@@ -1,4 +1,4 @@
-"""Provedores da memória — LLM · embeddings · reranker (plano guides/plans/memory-providers.md).
+"""Provedores da memória — LLM · embeddings · reranker.
 
 Escolha do dono, gravada em três lugares coerentes:
   • config/.env  — o segredo e a "wire" (HINDSIGHT_API_*) que o compose lê (nunca volta em output);

@@ -2,8 +2,8 @@
 
 Todos os comandos do CLI, com todas as opções, variações e exemplos testados.
 Para o *porquê* do sistema, veja [`user-guide.md`](user-guide.md); para o
-detalhe de cada fluxo, [`manual.md`](manual.md). Para operar sem decorar
-comandos, use o cockpit de terminal (`brain tui`); o guia interativo está em [`tui-mockup.html`](tui-mockup.html).
+detalhe de cada fluxo, a seção 7 do user-guide. Para operar sem decorar
+comandos, use o cockpit de terminal (`brain tui`);
 
 > Esta referência foi gerada a partir do parser real do CLI (`brain 2.0.0`):
 > 32 comandos, com seus subcomandos. Se uma versão nova acrescentar algo,
@@ -278,9 +278,8 @@ brain tui             # abre; usa a .venv-tui sozinho
 Sem o extra, `brain tui` sai com código 3 e a instrução. A aba **Fontes** do painel 1 gerencia o `watch.toml` (`n` adiciona, `e` edita, `d` remove, `w` inclui um pull avulso) e mostra o
 último pull e as falhas de cada fonte. `u` (`/update`) atualiza tudo e `c` (`/connect`) puxa uma fonte: rodam o agente de `[runner]`,
 que precisa de permissão para as ferramentas MCP de leitura (`[runner].allow`, ou `[runner].command`). Teclas: `?` ajuda do contexto · `:` paleta de
-comandos · `g` busca · `/` filtro (com um id exato, `TASK-####`, `GOAL-#`, `PROJ-#`, `PROJ-#.#`, `DEC-####`…, mostra tudo que está associado a ele: o plano acima e abaixo, ações, decisões, entregas, pessoas; texto livre continua sendo busca no texto). **Filtros em cascata:** `/` de novo abre um filtro NOVO que refina o que sobrou do anterior (quantos quiser); `esc` tira um por vez, o último primeiro (dentro do campo, `esc` desfaz só aquele). Enquanto há filtro, o título do painel mostra a corrente (`⌕ filtro: a › b`), o rodapé do painel diz `N de M · filtrado de T` e a barra de dicas ganha `esc tira filtro (n)`. O painel HTML faz o mesmo (veja o guia do usuário) · `N` nova nota (veja `brain note`) · `1`–`6` painéis (só pelos números; `6` é o log: `j` `k` rolam, `c` limpa) · `[` `]` ou `←` `→` abas · `⏎` ou duplo clique amplia o detalhe · `ctrl+t` troca o tema · `q` sai. O mouse também funciona: clique nas abas, nas linhas e nas dicas da barra, e a roda rola a lista. O TUI relê o vault sozinho quando ele muda fora dele (agente, outro terminal). O mapa
-completo por contexto, a legenda e uma versão para experimentar com dados fictícios estão em
-[`tui-mockup.html`](tui-mockup.html). Fora do TUI ficam só o que é do agente (`init`, `snapshot`, `add`,
+comandos · `g` busca · `/` filtro (com um id exato, `TASK-####`, `GOAL-#`, `PROJ-#`, `PROJ-#.#`, `DEC-####`…, mostra tudo que está associado a ele: o plano acima e abaixo, ações, decisões, entregas, pessoas; texto livre continua sendo busca no texto) · `N` nova nota (veja `brain note`) · `1`–`6` painéis (só pelos números; `6` é o log: `j` `k` rolam, `c` limpa) · `[` `]` ou `←` `→` abas · `⏎` ou duplo clique amplia o detalhe · `ctrl+t` troca o tema · `q` sai. O mouse também funciona: clique nas abas, nas linhas e nas dicas da barra, e a roda rola a lista. O TUI relê o vault sozinho quando ele muda fora dele (agente, outro terminal). O mapa
+completo por contexto está na ajuda da própria TUI (`?`). Fora do TUI ficam só o que é do agente (`init`, `snapshot`, `add`,
 `proposal add`; `outbox sent` e `publish done` ele registra ao enviar e publicar) e `demo`; o teste
 `tests/test_tui.py::CoverageTest` garante que nenhum subcomando novo da CLI fique sem lugar ou sem justificativa. `[runner].allow` do `brain.toml` lista as ferramentas MCP de leitura do agente headless (noturno e TUI). Em `[tui]`, `model` e `effort` escolhem o modelo e o esforço do claude nas ações ⚡ (ex.: `haiku` · `high`; vazio = padrão; não valem com `[runner].command`), e `agent_allow` lista ferramentas extras, só do TUI, que o
 agente pode usar nas ações ⚡ (por exemplo as de escrita do MCP do Slack, só para enviar uma mensagem aprovada).
