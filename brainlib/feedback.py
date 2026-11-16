@@ -3,7 +3,7 @@
 Porta estreita (AGENTS.md, porta 7): cada sugestão/bug registrado cria uma issue no repo público do
 framework listado em `[feedback].repo` (padrão: o upstream). `add` grava o item e empurra a issue na
 sequência — sem token, de noite ou com texto carregando dado do dono, o item fica `pendente` e o `push`
-resolve depois. Título `[sugestão]`/`[bug]` + label do tipo; `feedback.pushed` guarda número e URL,
+resolve depois. Título `[Sugestão]`/`[Bug]`/`[Proposta]` (sem id local) + label do tipo; `feedback.pushed` guarda número e URL,
 `feedback.failed` a última tentativa que não subiu. O texto do issue é público: a porta recusa
 título/corpo com dado pessoal (as mesmas regras da varredura do `upstream`), sem override.
 """
@@ -22,25 +22,31 @@ from .core import Brain
 
 KINDS = ("sugestao", "bug")
 KIND_LABEL = {"sugestao": "sugestão", "bug": "bug"}          # label do issue no GitHub
-KIND_TAG = {"sugestao": "[sugestão]", "bug": "[bug]"}        # tag do título (GiftHub: [request: …]/[bug])
 API = "https://api.github.com"
 TIMEOUT_S = 20
 
 
 # ── o issue que a porta publica ──────────────────────────────────────────────
 
+def issue_kind(f) -> str:
+    """Molde da issue: proposta de código aceita → `framework`; senão o tipo do FB."""
+    return issues.resolve_kind(f.kind, bool(f.proposal))
+
+
 def issue_title(f) -> str:
-    return f"{KIND_TAG[f.kind]} {f.title}"
+    """`[Sugestão] …` · `[Bug] …` · `[Proposta] …` — a origem e o assunto à primeira vista. Nunca leva o id local
+    (`FB-####`) nem tag escrita à mão: id de instância no repo público gera duplicidade entre instâncias."""
+    return f"{issues.tag(issue_kind(f))} {issues.strip_tag(f.title)}"
 
 
 def issue_body(f) -> str:
-    """O issue é público: tipo, o corpo no molde (`issues.py`) e o id do FB — nada do vault sai (nem refs a
-    TASK/PROC/OPP/PROP, que o leitor público não resolve e são dado do dono)."""
-    kind = issues.resolve_kind(f.kind, bool(f.proposal))
+    """O issue é público: tipo, o corpo no molde (`issues.py`) e um rodapé — nada local sai: nem refs do vault
+    (TASK/PROC/OPP/PROP) nem o id do próprio FB, que é numeração da instância e geraria duplicidade."""
+    kind = issue_kind(f)
     tipo = "🧩 proposta de código do cérebro" if kind == "framework" else \
         ("💡 sugestão" if f.kind == "sugestao" else "🐞 bug")
     lines = [f"**Tipo:** {tipo}", "", issues.render_body(kind, f.body, f.title), "", "---",
-             f"`{f.id}` · registrado pelo Segundo Cérebro (`brain feedback`)"]
+             "Registrado pelo Segundo Cérebro (`brain feedback`)"]
     return "\n".join(lines)
 
 
@@ -124,9 +130,9 @@ def issue_state(inst: config.Instance, repo: str, number: int) -> dict:
 # ── fluxo da entidade ────────────────────────────────────────────────────────
 
 def _dup(brain: Brain, kind: str, title: str, skip: str = "") -> str | None:
-    key = (kind, " ".join(util.fold(title).split()))
+    norm = lambda t: " ".join(util.fold(issues.strip_tag(t)).split())  # noqa: E731
     return next((f.id for f in brain.state.feedbacks.values()
-                 if f.id != skip and (f.kind, " ".join(util.fold(f.title).split())) == key), None)
+                 if f.id != skip and (f.kind, norm(f.title)) == (kind, norm(title))), None)
 
 
 def revise(brain: Brain, fid: str, title: str | None = None, body: str | None = None, proposal: str = "",
@@ -184,6 +190,7 @@ def push(brain: Brain, fid: str) -> dict:
     repo = brain.inst.cfg["feedback"]["repo"]
     public_text_guard(brain.inst, f.title, f.body)    # público: regra dura, sem override (título e corpo CRUS)
     title, body = issue_title(f), issue_body(f)
+    refs_guard(title, body)            # o que realmente sobe: nenhum id local (FB-####, TASK-####…), nem do rodapé
     if not config.load_env(brain.inst).get("GITHUB_TOKEN"):
         raise util.BrainError("GITHUB_TOKEN ausente no config/.env — grave um token com permissão de criar "
                               "issues no repo de [feedback] e tente de novo (o valor nunca aparece no chat)", code=4)
@@ -236,7 +243,7 @@ def from_proposal(brain: Brain, pid: str) -> tuple[str | None, str]:
 
 
 def line(f) -> str:
-    bits = [f.id, f.status, KIND_TAG[f.kind] + " " + f.title]
+    bits = [f.id, f.status, issue_title(f)]
     if f.status == "criado":
         issue = f"#{f.number}"
         if f.issue_state:

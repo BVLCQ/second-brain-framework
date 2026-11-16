@@ -133,7 +133,7 @@ somente-leitura para o mundo.
      `oppdrive synced`, `oppdrive suggested`); o CLI recusa pasta fora da raiz e segundo one-pager.
 7. **Sugestões e bugs (GitHub issues)** — `brain feedback`. Toda sugestão ou bug do
    próprio cérebro vira uma issue no repo público do framework (`[feedback].repo`), com o
-   tipo no título (`[sugestão]`/`[bug]`) e label própria; `FB-####` no ledger guarda número e
+   tipo no título (`[Sugestão]` · `[Bug]` · `[Proposta]`, nunca com o id local `FB-####`, que é da instância e geraria duplicidade) e label própria; `FB-####` no ledger guarda número e
    URL. `add` registra e publica na sequência — o pedido do dono no chat **ou no painel/TUI** é a
    aprovação; sugestão que partiu do agente só publica com um "ok". Superfícies: painel HTML (aba
    Sugestões, ponta da ponte `serve`), TUI (log › Feedback) e chat (`/feedback`). O texto é

@@ -598,7 +598,7 @@ em outros agentes, o texto é entendido do mesmo jeito.)
 
 - **Digita:** `/feedback` (ou no meio da conversa: "isso é um bug", "deveria ter…")
 - **O que acontece:** a sugestão ou bug do próprio cérebro vira `FB-####` no ledger e uma issue no repo
-  público do framework (`[sugestão]`/`[bug]` no título), com o link de volta. Seu pedido é a aprovação;
+  público do framework (`[Sugestão]`/`[Bug]`/`[Proposta]` no título, sem o id local), com o link de volta. Seu pedido é a aprovação;
   se a ideia partiu do agente, ele mostra o texto antes e espera o "ok".
 - **Por trás:** `feedback add` → issue no GitHub (`GITHUB_TOKEN` em `config/.env`). Sem token ou
   offline fica `pendente` — `brain feedback list` mostra a fila, `push` tenta de novo.

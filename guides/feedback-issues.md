@@ -4,6 +4,15 @@ O Segundo Cérebro abre issues no repositório **público** do framework (porta 
 Tudo que sobe é público e fica indexado: por isso o texto segue um molde e passa por validadores
 que **recusam** o que não pode sair da máquina. Não há override.
 
+## Título e o que nunca sobe
+
+O título sobe sempre como **`[Sugestão] …`**, **`[Bug] …`** ou **`[Proposta] …`** (proposta de código aceita) — a
+origem e o assunto à primeira vista. Tag escrita à mão no título é removida e substituída pela oficial.
+
+**O id local (`FB-####`, `TASK-####`, `PROP-####`…) nunca vai ao repositório**, nem no título, nem no corpo, nem
+no rodapé: ele é numeração da instância (outra instância tem outro `FB-0001`) e geraria issues duplicadas e
+confusas. O `feedback push` confere o texto final antes de publicar e recusa se achar algum.
+
 ## Os três moldes
 
 Cada campo vira `### <Título>` — o mesmo que o GitHub escreve quando alguém envia o formulário em

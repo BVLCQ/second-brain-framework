@@ -62,7 +62,7 @@ class FeedbackFlowTests(unittest.TestCase):
         self.assertEqual(ev["id"], "FB-0001")
         f = self.brain.state.feedbacks["FB-0001"]
         self.assertEqual((f.kind, f.status, f.title), ("bug", "pendente", "Painel demora a abrir"))
-        self.assertIn("FB-0001 · pendente · [bug] Painel demora a abrir", feedback.line(f))
+        self.assertIn("FB-0001 · pendente · [Bug] Painel demora a abrir", feedback.line(f))
 
     def test_add_dupe_recusado_force_passa(self):
         feedback.add(self.brain, "sugestao", "Exportar para PDF")
@@ -118,9 +118,9 @@ class FeedbackFlowTests(unittest.TestCase):
                          ("criado", 7, "https://github.com/BVLCQ/second-brain-framework/issues/7"))
         repo, title, body, labels = calls[0]
         self.assertEqual(repo, "BVLCQ/second-brain-framework")
-        self.assertEqual(title, "[sugestão] Modo escuro no painel")
+        self.assertEqual(title, "[Sugestão] Modo escuro no painel")
         self.assertEqual(labels, ["sugestão"])
-        self.assertIn("`FB-0001`", body)
+        self.assertNotIn("FB-0001", body)                   # id local nunca sobe
         with self.assertRaises(util.BrainError):          # issue já criada: não empurra duas vezes
             feedback.push(self.brain, "FB-0001")
 
@@ -207,11 +207,11 @@ class FeedbackFlowTests(unittest.TestCase):
     def test_issue_render(self):
         feedback.add(self.brain, "bug", "Dashboard quebra", "StackTrace tal")
         f = self.brain.state.feedbacks["FB-0001"]
-        self.assertEqual(feedback.issue_title(f), "[bug] Dashboard quebra")
+        self.assertEqual(feedback.issue_title(f), "[Bug] Dashboard quebra")
         body = feedback.issue_body(f)
         self.assertIn("🐞 bug", body)
         self.assertIn("### Resumo\nStackTrace tal", body)
-        self.assertIn("`FB-0001`", body)
+        self.assertNotIn("FB-0001", body)                   # id local nunca sobe
 
     def test_issue_nao_carrega_refs_do_vault_nem_de_evento_antigo(self):
         """O issue é público: refs de contexto (TASK/PROC/OPP) nunca saem — nem de evento antigo que
@@ -382,7 +382,7 @@ class FrameworkProposalTests(unittest.TestCase):
         self.assertEqual((f.status, f.number, f.kind, f.by, f.proposal), ("criado", 12, "sugestao", "owner", pid))
         self.assertEqual(self.brain.state.proposals[pid].feedback, fid)
         repo, title, body, labels = self.calls[0]
-        self.assertEqual((title, labels), ("[sugestão] " + self.TITLE, ["sugestão"]))
+        self.assertEqual((title, labels), ("[Proposta] " + self.TITLE, ["sugestão"]))
         self.assertIn(self.BODY, body)
         self.assertNotIn("TASK-0001", body)                # o resumo interno nunca sobe
         self.assertNotIn(pid, body)                        # nem o PROP-####

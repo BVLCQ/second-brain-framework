@@ -128,6 +128,42 @@ class TemplateTest(unittest.TestCase):
             self.assertIn("padaria", text.lower())          # o aviso do exemplo fictício está no formulário
 
 
+class TitleTest(unittest.TestCase):
+    def setUp(self):
+        self._td = tempfile.TemporaryDirectory()
+        self.addCleanup(self._td.cleanup)
+        self.brain = _brain(Path(self._td.name))
+
+    def test_tags_oficiais_por_origem(self):
+        feedback.add(self.brain, "sugestao", "Avisar a fornada", PADARIA_SUGESTAO)
+        feedback.add(self.brain, "bug", "Painel demora")
+        f1, f2 = self.brain.state.feedbacks["FB-0001"], self.brain.state.feedbacks["FB-0002"]
+        self.assertEqual(feedback.issue_title(f1), "[Sugestão] Avisar a fornada")
+        self.assertEqual(feedback.issue_title(f2), "[Bug] Painel demora")
+        f1.proposal = "PROP-0001"                                    # veio de proposta de código aceita
+        self.assertEqual(feedback.issue_title(f1), "[Proposta] Avisar a fornada")
+
+    def test_tag_escrita_a_mao_e_id_local_na_frente_saem_do_titulo(self):
+        for raw in ("[bug] Painel demora", "[Bug]  Painel demora", "FB-0003: Painel demora", "FB-0003 · [sugestão] Painel demora"):
+            self.assertEqual(issues.strip_tag(raw), "Painel demora", raw)
+        self.assertEqual(issues.strip_tag("Painel [novo] demora"), "Painel [novo] demora")   # só prefixo
+        feedback.add(self.brain, "bug", "[bug] FB-0009 Painel demora")
+        self.assertEqual(feedback.issue_title(self.brain.state.feedbacks["FB-0001"]), "[Bug] Painel demora")
+
+    def test_titulo_com_tag_diferente_conta_como_duplicado(self):
+        feedback.add(self.brain, "bug", "Painel demora")
+        with self.assertRaises(util.BrainError):
+            feedback.add(self.brain, "bug", "[bug] painel DEMORA")
+
+    def test_o_que_sobe_nao_carrega_nenhum_id_local(self):
+        feedback.add(self.brain, "bug", "FB-0004 Painel demora", "### Resumo\nr\n\n### O que aconteceu\na\n\n"
+                     "### O que era esperado\ne\n\n### Como reproduzir\n1. abrir")
+        f = self.brain.state.feedbacks["FB-0001"]
+        for text in (feedback.issue_title(f), feedback.issue_body(f)):
+            self.assertEqual(feedback.VAULT_REF_RE.findall(text), [], text)
+        feedback.refs_guard(feedback.issue_title(f), feedback.issue_body(f))     # a trava final do push passa
+
+
 class FlowTest(unittest.TestCase):
     def setUp(self):
         self._td = tempfile.TemporaryDirectory()
@@ -193,7 +229,7 @@ class FlowTest(unittest.TestCase):
         self.assertEqual((f.title, f.proposal), ("Titulo novo", pid))
         self.assertEqual(self.brain.state.proposals[pid].feedback, "FB-0001")
         self.assertIn("🧩 proposta de código", feedback.issue_body(f))
-        self.assertIn("[sugestão] Titulo novo", feedback.issue_title(f))
+        self.assertIn("[Proposta] Titulo novo", feedback.issue_title(f))
 
     def test_revise_liga_proposta_antiga_do_tipo_outro_se_aceita(self):
         pid = self.brain.record_one({"type": "proposal.opened", "by": "agent", "prov": "observado", "source": "chat",

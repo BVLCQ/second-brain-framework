@@ -1,6 +1,6 @@
 name: 'Bug'
 description: 'Algo do Segundo Cérebro não funciona como deveria'
-title: '[bug] '
+title: '[Bug] '
 labels: ['bug']
 body:
   - type: markdown

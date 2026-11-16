@@ -20,7 +20,7 @@ from . import util
 TEMPLATES: dict[str, dict] = {
     "sugestao": {
         "label": "sugestão",
-        "tag": "[sugestão]",
+        "tag": "[Sugestão]",
         "title": "Sugestão",
         "fields": [
             ("resumo", "Resumo", "Uma ou duas frases: o que melhoraria.", True),
@@ -33,7 +33,7 @@ TEMPLATES: dict[str, dict] = {
     },
     "bug": {
         "label": "bug",
-        "tag": "[bug]",
+        "tag": "[Bug]",
         "title": "Bug",
         "fields": [
             ("resumo", "Resumo", "Uma frase: o que quebra.", True),
@@ -47,7 +47,7 @@ TEMPLATES: dict[str, dict] = {
     },
     "framework": {
         "label": "sugestão",
-        "tag": "[sugestão]",
+        "tag": "[Proposta]",
         "title": "Proposta de código do cérebro",
         "fields": [
             ("resumo", "Resumo", "Uma ou duas frases: o que muda no framework.", True),
@@ -107,6 +107,24 @@ def require(kind: str, body: str, what: str = "o corpo da issue") -> None:
     if ps:
         raise util.BrainError(f"{what} não segue o molde '{kind}': " + "; ".join(ps) +
                               f". Veja o molde: `brain feedback template --kind {kind}`", code=4)
+
+
+TAG_PREFIX_RE = re.compile(r"^\s*(?:\[[^\]]{1,24}\]|\b[A-Z]{2,5}-\d+\b)[\s:·-]*", re.I)
+
+
+def strip_tag(title: str) -> str:
+    """Título sem tag nem id local na frente (`[bug] x`, `FB-0003: x`): a tag oficial é posta na hora de publicar,
+    e o id é dado local — publicado, geraria duplicidade entre instâncias."""
+    out = (title or "").strip()
+    while True:
+        new = TAG_PREFIX_RE.sub("", out, count=1).strip()
+        if new == out or not new:
+            return out
+        out = new
+
+
+def tag(kind: str) -> str:
+    return template(kind)["tag"]
 
 
 def resolve_kind(fb_kind: str, from_proposal: bool) -> str:

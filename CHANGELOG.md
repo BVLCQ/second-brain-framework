@@ -11,6 +11,9 @@
 - **`brain feedback revise FB-####`** corrige título/corpo de um FB que ainda não virou issue (evento
   `feedback.revised`; o ledger continua append-only) e liga o FB à proposta que o originou.
 - `[feedback].allow_hosts` libera hosts extras em links do texto público.
+- **Título padronizado**: `[Sugestão] …`, `[Bug] …`, `[Proposta] …` (proposta de código aceita). O **id local
+  (`FB-####`) não sobe mais** — nem no título nem no rodapé da issue: é numeração da instância e geraria
+  duplicidade no repo público. Tag escrita à mão é trocada pela oficial; o `push` recusa qualquer id local no texto final.
 
 ## 2.10.1 — token do GitHub no setup
 

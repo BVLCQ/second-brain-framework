@@ -1,6 +1,6 @@
 name: 'Proposta de código'
 description: 'Mudança de código ou estrutura do framework'
-title: '[sugestão] '
+title: '[Proposta] '
 labels: ['sugestão', 'enhancement']
 body:
   - type: markdown

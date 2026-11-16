@@ -958,12 +958,12 @@ Depois: `/dump` no agente para processar.
 ## 17. Sugestões e bugs — `feedback`
 
 O próprio cérebro tem uma porta de melhoria: cada sugestão ou bug registrado vira uma issue no
-repo público do framework (`[feedback].repo` no `brain.toml`). Título `[sugestão] …` / `[bug] …`
+repo público do framework (`[feedback].repo` no `brain.toml`). Título `[Sugestão] …` / `[Bug] …` / `[Proposta] …` (sem o id local)
 + label do tipo; o número e a URL do issue voltam para o ledger (`FB-####`).
 
 ```bash
 brain feedback add "Painel demora a abrir" --kind bug --body "Abre em ~2s" --by owner
-# ✓ FB-0001 · criado · [bug] Painel demora a abrir · #12 https://github.com/…
+# ✓ FB-0001 · criado · [Bug] Painel demora a abrir · #12 https://github.com/…
 ```
 
 | Comando | O que faz |

@@ -12,7 +12,7 @@ description: "Registra sugestão ou bug do próprio cérebro e cria a issue no r
    canais, caminhos, prints, links internos (Drive, Slack, Jira…), IDs do vault (`TASK-…`, `OPP-…`), telefones
    ou números reais. A porta recusa sozinha (`publicguard`) e diz o tipo e a linha — descreva o problema, não o
    caso. Exemplos **sempre** com a padaria fictícia (`marina-demo`, "Padaria Pão Quente", `contato@example.com`).
-   O corpo segue o molde do tipo: `./brain feedback template --kind sugestao|bug` imprime os campos (guia:
+   Não escreva tag nem `FB-####` no título (a porta põe `[Sugestão]`/`[Bug]`/`[Proposta]` e nunca publica id local). O corpo segue o molde do tipo: `./brain feedback template --kind sugestao|bug` imprime os campos (guia:
    `guides/feedback-issues.md`). Escreva o corpo num arquivo e passe `--body-file` (headless não passa heredoc).
 3. Registre e publique:
 

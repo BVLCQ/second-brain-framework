@@ -1,6 +1,6 @@
 name: 'Sugestão'
 description: 'Uma ideia de melhoria para o Segundo Cérebro'
-title: '[sugestão] '
+title: '[Sugestão] '
 labels: ['sugestão']
 body:
   - type: markdown
