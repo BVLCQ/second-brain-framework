@@ -165,9 +165,8 @@ def open_dashboard(brain, panel: str = "execucao", spawn: bool = True) -> None:
         webbrowser.open(live)
         return
     path = brain.inst.fresh / "dashboard" / PANELS[panel]
-    opener = shutil.which("xdg-open") or shutil.which("open")
-    if opener:
-        subprocess.run([opener, str(path)], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    # via webbrowser (e não subprocess `open`): um só ponto de abertura, que os testes conseguem interceptar
+    if webbrowser.open(path.as_uri()):
         print("retrato file:// — ./brain serve liga os comandos (e o --open passa a abrir o vivo)")
     else:
         print(f"abra no navegador: file://{path}\n(retrato — ./brain serve liga os comandos)")

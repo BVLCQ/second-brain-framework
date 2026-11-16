@@ -9,6 +9,7 @@ import sys
 import tempfile
 import threading
 import unittest
+from unittest import mock
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -242,7 +243,10 @@ class ServeTests(unittest.TestCase):
         import brainlib.render as _r
         from brainlib import serve as _serve
         opened = {}
-        _r.webbrowser.open = lambda url: opened.setdefault("url", url)
+        # mock.patch restaura no fim — e NENHUM caminho pode abrir navegador de verdade durante o teste
+        patcher = mock.patch.object(_r.webbrowser, "open", lambda url: opened.update(url=url) or True)
+        patcher.start()
+        self.addCleanup(patcher.stop)
         with tempfile.TemporaryDirectory() as td:
             import argparse, contextlib, io as _io
             with contextlib.redirect_stdout(_io.StringIO()):
