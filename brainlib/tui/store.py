@@ -506,27 +506,8 @@ class Store:
 
     @staticmethod
     def _fix_for(c: dict) -> dict | None:
-        """O que o TUI sabe fazer a respeito de um aviso do doctor (tecla f)."""
-        if c["level"] == "ok" and not c["title"].startswith("fonte "):
-            return None
-        t = c["title"]
-        if t == "inbox":
-            return {"label": "processar com o agente", "agent": "dump"}
-        if t == "noturno":
-            return {"label": "agendar o noturno", "sys": "sys:schedule"}
-        if t == "ações sem prazo":
-            return {"label": "ir às ações e dar prazo", "go": (2, 0)}
-        if t.startswith("fonte "):
-            return {"label": "puxar agora com o agente", "agent": "connect", "key": t.split(" ", 1)[1]}
-        if t == "mensagens":
-            return {"label": "ir ao outbox", "go": (4, 2)}
-        if t == "foco":
-            return {"label": "ir ao plano de foco", "go": (4, 3)}
-        if t == "propostas":
-            return {"label": "ir às propostas", "go": (4, 1)}
-        if t == "perguntas":
-            return {"label": "ir às perguntas do agente", "go": (4, 0)}
-        return None
+        """O que o TUI sabe fazer a respeito de um aviso do doctor (tecla f) — a regra mora em doctor.fix_for."""
+        return doctor.fix_for(c)
 
     # ── listas por painel ──────────────────────────────────────────────────
     def items(self, face: int, panel: int, tab: int, show_all: bool = False, filt: str | Sequence[str] = "",

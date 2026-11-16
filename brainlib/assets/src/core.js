@@ -9,6 +9,7 @@ function normalizeBrain(m){
   m.counts = m.counts || {}; m.questions = m.questions || []; m.proposals = m.proposals || [];
   m.outbox = m.outbox || []; m.health = m.health || []; m.deliveries = m.deliveries || [];
   m.feedback = m.feedback || [];
+  m.sources = m.sources || []; m.source_kinds = m.source_kinds || []; m.doc_kinds = m.doc_kinds || [];   // Fontes e Documentos (ausentes em instância antiga)
   m.providers = m.providers || {}; m.harnesses = m.harnesses || [];   // face Configurações (ausente em instância antiga)
   m.actions = m.actions || []; m.publishes = m.publishes || []; m.focus = m.focus || null;
   m.deliverables_done = m.deliverables_done || [];
@@ -393,8 +394,10 @@ V.focus = () => {
   if (f.consumed.length) h += panel("Esforço consumido e ainda aberta — reestimar?", f.consumed.map(aL).join(", "));
   return h;
 };
-V.outbox = () => {
-  const groups = [["Aguardando sua aprovação", ["rascunho"]], ["Aprovadas, não enviadas", ["aprovada"]], ["Enviadas", ["enviada"]], ["Falhas / canceladas", ["falhou", "cancelada"]]];
+V.outbox = (q) => {
+  const all = !!(q && q.get("a") === "1");                      // T: só pendentes (padrão, como o TUI) ↔ todas
+  const groups = [["Aguardando sua aprovação", ["rascunho"]], ["Aprovadas, não enviadas", ["aprovada"]], ["Enviadas", ["enviada"]], ["Falhas / canceladas", ["falhou", "cancelada"]]]
+    .filter((g, i) => all || i < 2);
   let h = '<div class="pagehead"><div><h1>Mensagens</h1><p class="sub">Nada é enviado sem sua aprovação do texto exato. Todo envio fica registrado.</p></div></div>';
   return h + groups.map(([t, s]) => {
     const l = M.outbox.filter(m => s.includes(m.status));
@@ -402,7 +405,8 @@ V.outbox = () => {
       (m.sent ? ' <span class="muted">· enviada ' + fmtD(m.sent) + "</span>" : "") + "</header>" + '<div class="msg">' + esc(m.text) + "</div></div>").join("") || empty("—")), ' style="margin-top:14px"');
   }).join("");
 };
-V.feedback = () => {
+V.feedback = (q) => {
+  const all = !!(q && q.get("a") === "1");                      // T: só pendentes (padrão, como o TUI) ↔ todas
   const glyph = {sugestao: "💡", bug: "🐞"};
   const issueChip = f => {
     if (f.status !== "criado") return "";
@@ -426,10 +430,10 @@ V.feedback = () => {
   const doneTitle = 'Já no GitHub · ' + done.length + ' <button class="btn tiny" data-fbsync title="relê o estado dos issues no GitHub">s sincronizar</button>';
   return '<div class="pagehead"><div><h1>Sugestões e bugs</h1><p class="sub">Porta 7 — cada registro vira uma issue pública no repo do framework. O texto não carrega nada seu: nomes, e-mails e caminhos ficam fora.</p></div></div>' +
     panel("Pendente de publicar · " + pend.length, pend.map(row).join("") || empty("nada pendente — n para sugerir ou reportar"), ' style="margin-top:14px"') +
-    panel(doneTitle, done.map(row).join("") || empty("—"), ' style="margin-top:14px"');
+    (all ? panel(doneTitle, done.map(row).join("") || empty("—"), ' style="margin-top:14px"') : "");
 };
 V.health = () => '<div class="pagehead"><div><h1>Saúde</h1><p class="sub">Checagens do brain doctor.</p></div></div>' +
-  panel("", '<ul class="feed health">' + (M.health || []).map(c => '<li class="' + c.level + '"><span class="hicon">' + ({ok: "✓", warn: "⚠", error: "✗"}[c.level]) + "</span> <b>" + esc(c.title) + "</b> — " + esc(c.detail) + "</li>").join("") + "</ul>");
+  panel("", '<ul class="feed health">' + (M.health || []).map((c, i) => '<li class="' + c.level + '" data-sel="health:' + i + '"><span class="hicon">' + ({ok: "✓", warn: "⚠", error: "✗"}[c.level]) + "</span> <b>" + esc(c.title) + "</b> — " + esc(c.detail) + (c.fix ? ' <span class="muted small">· f ' + esc(c.fix.label) + "</span>" : "") + "</li>").join("") + "</ul>");
 V["cfg/saude"] = V.health;                      // face Configurações: a mesma régua do doctor
 V["cfg/memoria"] = () => {
   const rows = [["llm", "LLM"], ["embeddings", "Embeddings"], ["reranker", "Reranker"]].map(([k, icon]) => {
@@ -505,6 +509,32 @@ function oppRow(o, i){
       : o.promoted === "goal" ? esc(o.goal) + ' <span class="muted">(goal)</span>'
       : '<span class="muted">—</span>') + '</td><td class="num">' + hrs(o.hours_saved) + "</td></tr>";
 }
+// ── Fontes (watch.toml) — a aba Fontes do TUI ──
+V.sources = () => {
+  const S = M.sources || [], when = x => x ? esc(x.slice(0, 16).replace("T", " ")) : '<span class="muted">nunca</span>';
+  return '<div class="pagehead"><div><h1>Fontes</h1><p class="sub">O universo observável: fonte que não está no watch.toml não é puxada pelo /update nem pelo noturno.</p></div></div>' +
+    panel("", S.length ? '<div class="twrap"><table><tr><th>Key</th><th>Tipo</th><th>Janela</th><th>Último pull</th><th>Estado</th></tr>' +
+      S.map(s => '<tr data-sel="src:' + esc(s.key) + '"><td><b>' + esc(s.key) + "</b></td><td>" + esc(s.kind || "—") + "</td><td>" + esc(s.window || "—") + "</td><td>" + when(s.last_ok) + "</td><td>" +
+        (!s.in_watch ? chip("atencao", "fora do watch") + ' <span class="muted small">w inclui</span>'
+          : s.failures ? '<span class="late">⚠ ' + s.failures + " falha(s) · " + esc((s.last_error || "").slice(0, 80)) + "</span>" : '<span class="ok">✓</span>') + "</td></tr>").join("") + "</table></div>"
+      : empty("Nenhuma fonte no watch.toml — n adiciona."));
+};
+V["pf/docs"] = () => {
+  const rows = [];
+  PF.processes.forEach(p => p.docs.forEach((d, n) => rows.push({t: p.id, title: p.title, d, n})));
+  PF.opportunities.forEach(o => o.docs.forEach((d, n) => rows.push({t: o.id, title: o.title, d, n})));
+  return '<div class="pagehead"><div><h1>Documentos</h1><p class="sub">Playbooks, one-pagers e planilhas ligados a processos e oportunidades.</p></div></div>' +
+    panel("", rows.length ? '<div class="twrap"><table><tr><th>Ligado a</th><th>Tipo</th><th>Documento</th><th>Vigiado</th></tr>' +
+      rows.map(r => '<tr data-sel="doc:' + esc(r.t) + ":" + r.n + '" data-url="' + esc(docUrl(r.d.ref)) + '"><td>' + idc(r.t) + " " + esc(r.title) + "</td><td>" + chip("info", r.d.kind) + "</td><td>" +
+        esc(r.d.title || r.d.ref) + "</td><td>" + (r.d.watch ? "sim" : "—") + "</td></tr>").join("") + "</table></div>"
+      : empty("Nenhum documento ligado — L liga a um processo ou oportunidade."));
+};
+function docUrl(ref){                                 // URL do doc: http direto; id cru do Drive vira o link genérico; caminho do vault não tem URL
+  if (/^https?:\/\//.test(ref)) return ref;
+  if (/^[A-Za-z0-9_-]{20,}$/.test(ref)) return "https://drive.google.com/file/d/" + ref + "/view";
+  return "";
+}
+
 // ── face Portfólio: pf/visao · pf/opps (kanban) · pf/matrix · pf/procs · pf/areas ──
 const STAGES_PIPE = ["ideia", "triagem", "priorizada", "em-andamento", "piloto", "validando", "entregue"];
 const STAGES_LAT = ["em-espera", "descartada"];
@@ -653,7 +683,8 @@ V.portfolio = () => { location.hash = "#pf/visao"; return ""; };   // compat: li
 
 
 // ── perguntas do agente (ASK-####) e propostas (PROP-####) ──────────────
-V.ask = () => {
+V.ask = (q) => {
+  const all = !!(q && q.get("a") === "1");                      // T: só abertas (padrão, como o TUI) ↔ todas
   const qs = M.questions || [], abertas = qs.filter(q => q.status === "aberta"), feitas = qs.filter(q => q.status !== "aberta");
   let h = '<div class="pagehead"><div><h1>Perguntas e propostas</h1><p class="sub">O agente pergunta (ASK-####) — só o dono responde. Propostas PROP-#### o dono aceita/rejeita com a resposta literal.</p></div></div>';
   h += panel("Perguntas abertas · " + abertas.length, abertas.length ? abertas.map(q =>
@@ -673,7 +704,7 @@ V.ask = () => {
     "evidência: " + esc(pr.evidence || "—") + "</p>" +
     '<div class="ask-opts"><button class="btn primary" data-acc>aceitar (gate)</button><button class="btn" data-rej>rejeitar</button></div></div>').join("")
     : empty("nenhuma proposta aberta"), ' style="margin-top:14px"');
-  const pubs = M.publishes || [];
+  const pubs = (M.publishes || []).filter(x => all || x.status !== "publicada");
   if (pubs.length) h += panel("Publicar (porta 3) · " + pubs.filter(x => x.status !== "publicada").length + " aguardando",
     pubs.map(x => '<div class="card" style="margin:0 0 10px"><header><span class="ids">' + idc(x.id) + "</span>" +
       chip(x.status === "solicitada" ? "atencao" : x.status === "publicada" ? "em-dia" : "info", x.status) +
@@ -685,18 +716,19 @@ V.ask = () => {
       (x.status === "aprovada" ? '<button class="btn primary" data-pub="done:' + esc(x.id) + '">publicar (agente)</button><button class="btn" data-pub="cancel:' + esc(x.id) + '">cancelar</button>' : "") +
       (x.status === "publicada" ? '<a class="btn" href="' + esc(x.link || "#") + '">abrir ↗</a>' : "") +
       "</div></div>").join("") + '<p class="muted small">pedir nova: tecla n · o export sai de brain share; o agente posta na porta 3</p>', ' style="margin-top:14px"');
-  if (feitas.length) h += panel("Respondidas", '<ul class="feed">' + feitas.map(q =>
+  if (all && feitas.length) h += panel("Respondidas", '<ul class="feed">' + feitas.map(q =>
     "<li>" + idc(q.id) + ' <span class="muted">' + esc(q.text.slice(0, 90)) + "…</span> → <b>" + esc(q.answer || "") + "</b></li>").join("") + "</ul>", ' style="margin-top:14px"');
   return h;
 };
 
 // ── router + faces (mesma lógica da TUI: Execução | Portfólio, cada face lembra onde estava) ──
-const TABS_EXEC = [["home", "Início"], ["todo", "TODO", () => M.counts.mine_overdue], ["projects", "Projetos"], ["decisions", "Decisões"], ["ask", "Perguntas", () => ((M.questions || []).filter(q => q.status === "aberta").length + M.proposals.length) || 0], ["wins", "Conquistas"],
+const TABS_EXEC = [["home", "Início"], ["sources", "Fontes", () => (M.sources || []).filter(s => s.failures).length || 0], ["todo", "TODO", () => M.counts.mine_overdue], ["projects", "Projetos"], ["decisions", "Decisões"], ["ask", "Perguntas", () => ((M.questions || []).filter(q => q.status === "aberta").length + M.proposals.length) || 0], ["wins", "Conquistas"],
   ["people", "Pessoas"], ["timeline", "Linha do tempo"], ["focus", "Foco", () => M.focus && M.focus.status === "proposto" ? 1 : 0],
   ["outbox", "Mensagens", () => M.counts.outbox_pending], ["feedback", "Sugestões", () => (M.feedback || []).filter(f => f.status !== "criado").length || 0]];
   // (Saúde saiu daqui com a face Configurações — mesma decisão da TUI: mora só lá, com o badge de avisos)
 const TABS_PF = [["pf/visao", "Visão geral"], ["pf/opps", "Oportunidades", () => PF.opportunities.filter(o => o.status !== "descartada").length],
-  ["pf/matrix", "Matriz"], ["pf/procs", "Processos", () => PF.processes.filter(p => p.status === "ativo").length], ["pf/areas", "Áreas", () => PF.areas.length]];
+  ["pf/matrix", "Matriz"], ["pf/procs", "Processos", () => PF.processes.filter(p => p.status === "ativo").length], ["pf/areas", "Áreas", () => PF.areas.length],
+  ["pf/docs", "Documentos", () => PF.processes.concat(PF.opportunities).reduce((n, x) => n + x.docs.length, 0)]];
 const TABS_CFG = [["cfg/memoria", "Memória"], ["cfg/saude", "Saúde", () => (M.health || []).filter(c => c.level !== "ok").length]];
 const FACES = [["execucao", "Execução", TABS_EXEC], ["portfolio", "Portfólio", TABS_PF], ["configuracoes", "Configurações", TABS_CFG]];
 if (window.PF_ONLY) { FACES.length = 0; FACES.push(["portfolio", "Portfólio", TABS_PF]); }
@@ -729,7 +761,7 @@ function route(){
   if (typeof window.afterRoute === "function") window.afterRoute(view, q, arg);
   window.scrollTo(0, 0);
 }
-window.BRAIN = {M, A, D, P, G, PE, OPP, PROC, AREA, go, route, chip, aL, dL, pL, peL, fmtD, fmtDW, donut, bar, esc,
+window.BRAIN = {M, A, D, P, G, PE, OPP, PROC, AREA, docUrl, go, route, chip, aL, dL, pL, peL, fmtD, fmtDW, donut, bar, esc,
   refresh: function(nm){                       // ponte CLI (./brain serve): novo view model → índices + views
     normalizeBrain(nm);
     for (const k of Object.keys(M)) delete M[k];

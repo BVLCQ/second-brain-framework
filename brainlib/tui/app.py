@@ -57,7 +57,7 @@ CMD_CATALOG = [               # paleta de comandos: nome, linha da CLI, (face, p
     ("Fechar ação", 'brain action close TASK-#### --how "…"', (0, 2, 0, "c")),
     ("Editar ação", "brain action update TASK-#### …", (0, 2, 0, "e")),
     ("Prazo da ação", "brain action update TASK-#### --due …", (0, 2, 0, "t")),
-    ("Descartar ação", 'brain action drop TASK-#### --reason "…"', (0, 2, 0, "D")),
+    ("Descartar ação", 'brain action drop TASK-#### --reason "…"', (0, 2, 0, "d")),
     ("Reabrir ação", 'brain action reopen TASK-#### --reason "…"', (0, 2, 0, "o")),
     ("O que me devem", "brain action list --list waiting", (0, 2, 1, None)),
     ("Cobrar alguém", 'brain outbox draft --to … --text "…"', (0, 2, 1, "m")),
@@ -71,12 +71,12 @@ CMD_CATALOG = [               # paleta de comandos: nome, linha da CLI, (face, p
     ("Exportar para colega", "brain share project PROJ-1", (0, 3, 0, "S")),
     ("Perguntas do agente", "brain ask list --open", (0, 4, 0, None)),
     ("Responder pergunta do agente", 'brain ask answer ASK-#### "…" --by owner', (0, 4, 0, "a")),
-    ("Descartar pergunta do agente", 'brain ask drop ASK-#### --reason "…"', (0, 4, 0, "x")),
+    ("Descartar pergunta do agente", 'brain ask drop ASK-#### --reason "…"', (0, 4, 0, "d")),
     ("Retomar o agente com as respostas", "agente: claude -p --resume <sessão> (respostas dos ASK)", (0, 4, 0, "R")),
     ("Resposta livre ao agente", "agente: claude -p --resume <sessão> \"…\"", (None, None, None, "r")),
     ("Propostas pendentes", "brain proposal list", (0, 4, 1, None)),
     ("Aceitar proposta", 'brain proposal accept PROP-#### --quote "…"', (0, 4, 1, "a")),
-    ("Rejeitar proposta", 'brain proposal reject PROP-#### --quote "…"', (0, 4, 1, "r")),
+    ("Rejeitar proposta", 'brain proposal reject PROP-#### --quote "…"', (0, 4, 1, "d")),
     ("Rascunhar mensagem", 'brain outbox draft --to … --text "…"', (0, 4, 2, "n")),
     ("Aprovar mensagem", 'brain outbox approve MSG-#### --quote "enviar N"', (0, 4, 2, "A")),
     ("Enviar mensagem aprovada", "agente → Slack MCP → brain outbox sent", (0, 4, 2, "S")),
@@ -110,7 +110,7 @@ CMD_CATALOG = [               # paleta de comandos: nome, linha da CLI, (face, p
     ("Wizard da memória", "brain setup --only memoria", (2, 1, 0, "w", "sys:wizmem")),
     ("Conectar harness", "brain memory harness install claude-code|cursor-cli|codex|hermes", (2, 1, 1, "i")),
     ("Verificar harnesses", "brain memory harness verify", (2, 1, 1, "v")),
-    ("Editar pessoa", "brain person update ID …", (0, 5, 2, "u")),
+    ("Editar pessoa", "brain person update ID …", (0, 5, 2, "e")),
     ("Quem é…?", 'brain person resolve "…"', (0, 5, 2, "R")),
     ("Sincronizar o foco", "brain focus sync [--dry-run]", (0, 4, 3, "s")),
     ("Primeira entrevista", "agente: /init", (0, 1, 0, "i")),
@@ -126,7 +126,7 @@ CMD_CATALOG = [               # paleta de comandos: nome, linha da CLI, (face, p
     ("Fontes do watch.toml", "brain watch list", (0, 1, 2, None)),
     ("Adicionar fonte", "brain watch add KEY --kind …", (0, 1, 2, "n")),
     ("Editar fonte", "brain watch edit KEY …", (0, 1, 2, "e")),
-    ("Remover fonte", "brain watch remove KEY", (0, 1, 2, "x")),
+    ("Remover fonte", "brain watch remove KEY", (0, 1, 2, "d")),
     ("Processar a inbox", "agente: /dump", (0, 1, 0, "d")),
     ("Brief do dia", "agente: /brief", (0, 1, 0, "b")),
     ("Buscar no ledger", 'brain search "…"', (None, None, None, "g")),
@@ -139,9 +139,9 @@ CMD_CATALOG = [               # paleta de comandos: nome, linha da CLI, (face, p
     ("Processos com lacuna", "brain process list --gaps", (1, 2, 2, None)),
     ("Novo processo", 'brain process add "…" --area … --owner …', (1, 2, 0, "n")),
     ("Editar processo", "brain process update PROC-#### …", (1, 2, 0, "e")),
-    ("Ligar documento", "brain doc link PROC-####|OPP-#### --kind … --ref …", (1, 2, 0, "l")),
+    ("Ligar documento", "brain doc link PROC-####|OPP-#### --kind … --ref …", (1, 2, 0, "L")),
     ("Abrir playbook", "abre o doc do playbook do processo", (1, 2, 0, "o")),
-    ("Aposentar processo", 'brain process retire PROC-#### --reason "…"', (1, 2, 0, "x")),
+    ("Aposentar processo", 'brain process retire PROC-#### --reason "…"', (1, 2, 0, "d")),
     ("Oportunidades", "brain opportunity list", (1, 3, 0, None)),
     ("Nova oportunidade", 'brain opportunity add "…" --area …', (1, 3, 0, "n")),
     ("Editar oportunidade", "brain opportunity update OPP-#### …", (1, 3, 0, "e")),
@@ -152,14 +152,21 @@ CMD_CATALOG = [               # paleta de comandos: nome, linha da CLI, (face, p
     ("Evidência da oportunidade", "brain opportunity evidence OPP-#### --source …", (1, 3, 0, "v")),
     ("One-pager da oportunidade", "agente: /opportunity onepager OPP-####", (1, 3, 0, "O")),
     ("Promover oportunidade (gate)", 'brain opportunity promote OPP-#### --level goal|project|deliverable … --approval "ok"', (1, 3, 0, "p")),
-    ("Descartar oportunidade", 'brain opportunity status OPP-#### descartada --reason "…"', (1, 3, 0, "x")),
+    ("Descartar oportunidade", 'brain opportunity status OPP-#### descartada --reason "…"', (1, 3, 0, "d")),
     ("Matriz impacto × facilidade", "brain opportunity list --sort score", (1, 4, 0, None)),
     ("Áreas", "brain area list", (1, 5, 0, None)),
     ("Nova área", 'brain area add <slug> --name "…"', (1, 5, 0, "n")),
     ("Editar área", "brain area update <slug> …", (1, 5, 0, "e")),
     ("Documentos ligados", "brain doc link … · brain doc unlink …", (1, 5, 1, None)),
-    ("Desligar documento", "brain doc unlink PROC-####|OPP-#### --ref …", (1, 5, 1, "u")),
+    ("Desligar documento", "brain doc unlink PROC-####|OPP-#### --ref …", (1, 5, 1, "d")),
 ]
+
+
+# Teclas que mudaram na padronização (2.10): ainda funcionam, escondidas, por uma versão. (face, painel, aba|None) → {antiga: nova}
+KEY_ALIASES = {
+    (0, 2, None): {"D": "d", "a": "T"},          # Ações: descartar e alternar "todas"
+    (0, 5, 2): {"u": "e"},                       # Registro › Pessoas: editar
+}
 
 
 @dataclass
@@ -752,8 +759,6 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
             self.move(8 if k == "pagedown" else -8)
         elif k in "123456" and len(k) == 1:
             self.goto_panel(int(k))
-        elif k in ("l", "h") and any(key.k == k for key in self.ctx_keys()):
-            return self.press(k)                   # tecla de contexto vence o atalho de aba (Portfólio: l liga documento); ← → seguem trocando de aba
         elif k in ("l", "right"):                  # trocar de painel é só pelos números 1-5
             self.tab_move(1)
         elif k in ("h", "left"):
@@ -770,12 +775,12 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
             self.search()
         elif k == "/":
             self.open_filter()
-        elif k == "r" and any(key.k == "r" for key in self.ctx_keys()):
-            return self.press(k)                   # tecla de contexto vence o atalho global (Propostas: r rejeita)
         elif k == "r":
             self.free_reply() if self.pending_reply else self.do_render()
         elif k == "N":
             self.f_note()
+        elif k == "`":                             # console: abre/fecha o log (o painel HTML tem a mesma tecla)
+            self.toggle_log()
         elif k == "q":
             if self.busy and not self._quit_armed:
                 self._quit_armed = True
@@ -804,11 +809,25 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
             if key.k == k:
                 key.fn()
                 return True
+        new = self.key_alias(k)
+        if new:                                    # tecla antiga, ainda aceita (e escondida) por uma versão
+            for key in self.ctx_keys():
+                if key.k == new:
+                    key.fn()
+                    return True
         if k == "enter":
             self.zoom = not self.zoom
             self.redraw()
             return True
         return False
+
+    def key_alias(self, k: str) -> str:
+        """Teclas que mudaram na padronização (2.10) e que ainda funcionam, sem aparecer nas dicas nem na ajuda:
+        antigo → novo, por contexto (face, painel, aba; None = qualquer aba). Saem na versão seguinte."""
+        for (face, p, t), table in KEY_ALIASES.items():
+            if face == self.face and p == self.p and t in (None, self.tab[self.p]) and k in table:
+                return table[k]
+        return ""
 
     def face_move(self, d: int) -> None:
         """Tab / Shift+Tab: próxima / anterior face, em carrossel. Cada face guarda onde estava (painel, aba, seleção, zoom, filtro)."""
@@ -837,6 +856,13 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
             self.face_move(-1)
         else:
             super().action_focus_previous()
+
+    def toggle_log(self) -> None:
+        if self.p == 6:
+            self.goto_panel(getattr(self, "_before_log", 0) or 2)
+        else:
+            self._before_log = self.p
+            self.goto_panel(6)
 
     def goto_panel(self, p: int) -> None:
         self.p = ((p - 1) % 6) + 1
@@ -933,7 +959,7 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
                 add("n", "adicionar", self.f_source_add)
                 if w(it and it.data["in_watch"]):
                     add("e", "editar", self.f_source_edit)
-                    add("x", "remover", self.f_source_remove)
+                    add("d", "remover", self.f_source_remove)
                 if w(it and not it.data["in_watch"]):
                     add("w", "incluir no watch", self.f_source_include)
                 if w(it):
@@ -950,7 +976,8 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
                 add("e", "editar", self.f_edit_action)
                 add("s", "status", self.cycle_status)
                 add("t", "prazo", self.f_due)
-                add("D", "descartar", self.f_drop)
+                add("d", "descartar", self.f_drop)
+                add("M", "mesclar", self.f_merge)
             if t == 1 and w(it):
                 add("m", "cobrar", self.f_chase)
             if w(it and not it.data["open"]):
@@ -960,7 +987,7 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
             add("v", f"vista: {ACTION_VIEWS[self.view].lower()}", self.cycle_view)
             add("O", f"ordem: {ACTION_SORTS[self.sort].lower()}", self.cycle_sort)
             # aba Minhas: fechadas ≤14d sempre visíveis (coluna Feita do painel) — voltar é "só recentes"
-            add("a", ("só recentes" if t == 0 else "só abertas") if self.show_all else "todas", self.toggle_all)
+            add("T", ("só recentes" if t == 0 else "só abertas") if self.show_all else "todas", self.toggle_all)
             add("enter", "ficha", self.toggle_zoom)
         elif p == 3:
             kind = it.kind if it else ""
@@ -980,15 +1007,14 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
         elif p == 4:
             if t == 0:
                 if w(it and it.data.status == "aberta"):
-                    add("enter", "responder", self.f_answer)
                     add("a", "responder", self.f_answer)
-                    add("x", "descartar", self.f_ask_drop)
+                    add("d", "descartar", self.f_ask_drop)
                 add("R", "retomar o agente", self.resume_with_answers, agent=True)
                 add("T", "só abertas" if self.show_all else "todas", self.toggle_all)
             elif t == 1:
                 if w(it and it.data.status == "aberta"):
                     add("a", "aceitar", self.f_accept, gate=True)
-                    add("r", "rejeitar", self.f_reject)
+                    add("d", "rejeitar", self.f_reject)
                 add("T", "só abertas" if self.show_all else "todas", self.toggle_all)
             elif t == 2:
                 add("n", "rascunhar", lambda: self.f_draft())
@@ -997,7 +1023,7 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
                 if w(it and it.data["status"] == "aprovada"):
                     add("S", "enviar", self.agent_send, agent=True)
                 if w(it and it.data["status"] in ("rascunho", "aprovada")):
-                    add("x", "cancelar", self.f_cancel_msg)
+                    add("d", "cancelar", self.f_cancel_msg)
                 add("T", "só pendentes" if self.show_all else "todas", self.toggle_all)
             elif t == 3:
                 add("p", "planejar", self.f_focus_plan)
@@ -1012,9 +1038,9 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
                 if w(it and it.data["status"] == "solicitada"):
                     add("A", "aprovar", self.f_pub_approve, gate=True)
                 if w(it and it.data["status"] == "aprovada"):
-                    add("P", "publicar", self.agent_publish, agent=True)
+                    add("p", "publicar", self.agent_publish, agent=True)
                 if w(it and it.data["status"] in ("solicitada", "aprovada")):
-                    add("x", "cancelar", self.pub_cancel)
+                    add("d", "cancelar", self.pub_cancel)
         elif p == 6:
             if t == 1:
                 add("n", "nova", self.f_feedback_new)
@@ -1034,7 +1060,7 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
             elif t == 2:
                 add("n", "nova", self.f_person)
                 if w(it):
-                    add("u", "editar", self.f_person_update)
+                    add("e", "editar", self.f_person_update)
                     add("a", "alias", self.f_alias)
                 add("R", "resolver nome", self.f_resolve)
             else:
@@ -1571,6 +1597,24 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
         self.form(FormSpec(f"Descartar {a['id']}", [Field("reason", "motivo", req=True, ph="projeto cancelado")],
                            lambda v: [["action", "drop", a["id"], "--reason", v["reason"] or "…", "--by", "owner"]],
                            sub="Não foi feita e não será. O histórico fica no ledger."))
+
+    def f_merge(self) -> None:
+        """Mescla a ação selecionada (duplicada, que sai) em outra que fica — o mesmo `action merge` do painel."""
+        a = self.cur().data
+
+        def into_check(v: str) -> str:
+            t = self.store.brain.state.actions.get(idmod.normalize(v)) if v else None
+            if not v:
+                return ""
+            if t is None or t.id == a["id"]:
+                return "informe outra ação existente (TASK-####)"
+            return "" if t.status in ("aberta", "fazendo", "aguardando") else f"{t.id} precisa estar aberta"
+
+        self.form(FormSpec(f"Mesclar {a['id']}", [Field("into", "mesclar em (TASK)", req=True, ph="TASK-####", check=into_check),
+                                                  Field("reason", "motivo", ph="opcional")],
+                           lambda v: [["action", "merge", a["id"], "--into", idmod.normalize(v["into"]) or "…", "--by", "owner",
+                                       *(["--reason", v["reason"]] if v["reason"] else [])]],
+                           sub=f"“{a['title']}” é duplicada: o que ela tem (pessoas, link, prazo, bloqueios) passa para a que fica."))
 
     def f_reopen(self) -> None:
         a = self.cur().data
@@ -2321,12 +2365,12 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
             body.append(f"  {('space' if k.k == ' ' else k.k):<7}", "bold cyan")
             body.append(("⚡ " if k.agent else "◆ " if k.gate else "") + k.label + "\n")
         body.append("\nNavegação\n", "dim")
-        for k, d in (("j k ↑ ↓", "mover na lista"), ("tab / shift+tab", "próxima / anterior face (Execução · Portfólio)"), ("1-6", "ir ao painel (6 = log)"), ("[ ] ← →", "aba anterior / próxima (h l também)"),
+        for k, d in (("j k ↑ ↓", "mover na lista"), ("tab / shift+tab", "próxima / anterior face (Execução · Portfólio · Configurações)"), ("1-6", "ir ao painel (6 = log)"), ("[ ] ← →", "aba anterior / próxima (h l também)"),
                      ("enter", "ampliar o detalhe"), ("esc", "voltar")):
             body.append(f"  {k:<9}", "bold cyan")
             body.append(d + "\n")
         body.append("\nEm qualquer tela\n", "dim")
-        for k, d in (("?", "esta ajuda — dentro do formulário do ICE, a metodologia de pontuação"), (":", "paleta de comandos"), ("/", "filtrar a lista — de novo, refina o que sobrou; esc tira um filtro por vez"), ("g", "buscar em tudo"), ("N", "nova nota na inbox"), ("r", "regenerar views"),
+        for k, d in (("?", "esta ajuda — dentro do formulário do ICE, a metodologia de pontuação"), (":", "paleta de comandos"), ("/", "filtrar a lista — de novo, refina o que sobrou; esc tira um filtro por vez"), ("g", "buscar em tudo"), ("N", "nova nota na inbox"), ("`", "abre / fecha o log"), ("r", "regenerar views"),
                      ("ctrl+t", "tema claro / escuro"), ("q", "sair")):
             body.append(f"  {k:<9}", "bold cyan")
             body.append(d + "\n")

@@ -30,10 +30,12 @@ ALLOWED: dict[str, set[str] | None] = {
     "outbox": {"draft", "approve", "cancel"},
     "decision": {"add"},
     "delivery": None,                                   # posicional, sem subcomando
-    "person": {"add", "alias", "update"},
+    "person": {"add", "alias", "update", "resolve"},   # resolve: só lê (quem é…?)
     "process": {"add", "update", "retire"},
     "area": {"add", "update"},
-    "opportunity": {"status", "score", "update", "add", "promote"},
+    "opportunity": {"status", "score", "update", "add", "promote", "evidence"},
+    "doc": {"link", "unlink"},                     # documentos ligados a processo/oportunidade (Portfólio)
+    "watch": {"add", "edit", "remove"},            # aba Fontes: o watch.toml é validado antes de gravar
     "plan": {"deliverable", "log", "add-goal", "add-project", "add-deliverable", "edit"},
     "progress": None,
     "publish": {"request", "approve", "cancel"},

@@ -479,7 +479,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             app.set_sel(3, [i.id for i in app.items(3)].index(ids["sugerida"]))
             app.redraw()
             keys = {k.k for k in app.ctx_keys()}
-            self.assertEqual({"n", "e", "s", "i", "c", "l", "v", "O", "p", "x"}, keys)
+            self.assertEqual({"n", "e", "s", "i", "c", "L", "v", "O", "p", "d"}, keys)
             # c: confirmar ICE sugerido → o mesmo ICE, agora do dono
             await pilot.press("c")
             self.assertEqual(got[-1][0], [["opportunity", "score", ids["sugerida"], "--impact", "4", "--confidence", "3", "--ease", "4", "--by", "owner"]])
@@ -521,7 +521,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             await pilot.press("ctrl+s")
             await pilot.pause(0.2)
             self.assertEqual(got[-1][0], [["opportunity", "evidence", ids["sugerida"], "--source", "PROCESSED/2026/10/reuniao.md", "--by", "owner"]])
-            await pilot.press("l")
+            await pilot.press("L")
             await pilot.pause(0.3)
             await self.fill(pilot, ref="https://example.com/x", watch="sim")
             await pilot.press("ctrl+s")
@@ -644,11 +644,11 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             await pilot.press("tab", "2")
             app.set_sel(2, [i.id for i in app.items(2)].index(ids["p1"]))
             app.redraw()
-            self.assertEqual({k.k for k in app.ctx_keys()}, {"n", "e", "l", "o", "a", "x"})
+            self.assertEqual({k.k for k in app.ctx_keys()}, {"n", "e", "L", "o", "a", "d"})
             with mock.patch("webbrowser.open", side_effect=opened.append):
                 await pilot.press("o")
             self.assertEqual(opened, ["https://example.com/playbook"])
-            await pilot.press("x")
+            await pilot.press("d")
             await pilot.pause(0.3)
             await self.fill(pilot, reason="acabou")
             await pilot.press("ctrl+s")
@@ -688,8 +688,8 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             app.set_sel(5, [i.id for i in app.items(5)].index(f"{ids['p1']}#0"))
             app.redraw()
             keys = {k.k for k in app.ctx_keys()}
-            self.assertEqual(keys, {"enter", "u"})
-            await pilot.press("u")
+            self.assertEqual(keys, {"enter", "d"})
+            await pilot.press("d")
             await pilot.pause(0.3)
             self.assertEqual(type(app.screen).__name__, "ConfirmModal")
             await pilot.press("enter")
@@ -794,7 +794,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
                 self.assertIn(it.id, rows.detail(app.store, it).plain)
             self.assertIn("marina-demo", rows.detail(app.store, app.items(4)[0]).plain)
             keys = {k.k for k in app.ctx_keys()}
-            self.assertEqual({"enter", "a", "x", "R", "T"}, keys)
+            self.assertEqual({"a", "d", "R", "T"}, keys)
             app.jump(c)
             self.assertEqual((app.p, app.tab[4], app.cur().id), (4, 0, c))
             self.assertNotIn("a", {k.k for k in app.ctx_keys()})                                      # respondida: sem responder
@@ -814,7 +814,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             q = self.state(app).questions[a]
             self.assertEqual((q.status, q.answer, q.free), ("respondida", "mari-demo", False))
             self.assertEqual(app.cur().id, c)                                                          # abertas primeiro: a próxima é a outra
-            await pilot.press("enter")                                                                 # sem opções: texto livre direto
+            await pilot.press("a")                                                                     # sem opções: texto livre direto (enter só abre a ficha)
             await pilot.pause(0.3)
             self.assertEqual(type(app.screen).__name__, "FormModal")
             await self.fill(pilot, answer="é uma ata de reunião")
@@ -849,7 +849,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
         app = self.app()
         async with app.run_test(size=(140, 44)) as pilot:
             await pilot.pause(0.4)
-            await pilot.press("4", "x")
+            await pilot.press("4", "d")
             await pilot.pause(0.3)
             await pilot.press("ctrl+s")
             await pilot.pause(0.2)
@@ -1208,13 +1208,13 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             await pilot.press("1")
             self.assertEqual({"n", "u", "c", "d", "b", "o"}, keys())   # resumo: nota + agente e painel (n = paridade com o painel)
             every = {k.k for k in app.ctx_keys(every=True, panel=4, tab=2)}
-            self.assertEqual({"n", "A", "S", "x", "T"}, every)
+            self.assertEqual({"n", "A", "S", "d", "T"}, every)
 
     async def test_click_on_hint_and_tab(self):
         app = self.app()
         async with app.run_test(size=(140, 44)) as pilot:
             await pilot.pause(0.4)
-            app.press("a")
+            app.press("T")
             await pilot.pause(0.1)
             self.assertTrue(app.show_all)
             panel = app.query_one("#p4")
@@ -1743,13 +1743,13 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             await pilot.press("enter")
             await self.settle(app, pilot)
             self.assertEqual(self.state(app).actions[target].due, util.today() + (date(2026, 10, 18) - date(2026, 10, 9)))
-            await pilot.press("D")
+            await pilot.press("d")
             await pilot.pause(0.2)
             await self.typ(pilot, "mudou de ideia")
             await pilot.press("enter")
             await self.settle(app, pilot)
             self.assertEqual(self.state(app).actions[target].status, "descartada")
-            await pilot.press("a")                                  # mostra todas; a descartada ainda aparece
+            await pilot.press("T")                                  # mostra todas; a descartada ainda aparece
             app.jump(target)
             await pilot.press("o")
             await pilot.pause(0.2)
@@ -1804,6 +1804,47 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             await self.settle(app, pilot)
             self.assertFalse(self.state(app).actions[target].parked)
 
+    async def test_standardized_keys_and_hidden_aliases(self):
+        """2.10: d descarta, T alterna "todas", M mescla — e as teclas antigas (D, a) ainda valem, escondidas."""
+        app = self.app()
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause(0.4)
+            keys = {k.k for k in app.ctx_keys(every=True)}
+            self.assertTrue({"d", "T", "M"} <= keys)
+            self.assertFalse({"D", "a", "x"} & keys)                    # as antigas não aparecem nas dicas nem na ajuda
+            target = app.cur().id
+            await pilot.press("M")
+            await pilot.pause(0.2)
+            self.assertIn(f"Mesclar {target}", app.screen.spec.title)
+            await pilot.press("escape")
+            await pilot.pause(0.1)
+            await pilot.press("D")                                       # alias antigo abre o mesmo formulário do d
+            await pilot.pause(0.2)
+            self.assertIn(f"Descartar {target}", app.screen.spec.title)
+            await pilot.press("escape")
+            await pilot.pause(0.1)
+            self.assertFalse(app.show_all)
+            await pilot.press("a")                                       # alias antigo do T
+            self.assertTrue(app.show_all)
+            await pilot.press("T")
+            self.assertFalse(app.show_all)
+            await pilot.press("`")                                       # console: abre o log e volta ao painel de onde veio
+            self.assertEqual(app.p, 6)
+            await pilot.press("`")
+            self.assertEqual(app.p, 2)
+
+    async def test_l_and_h_stay_navigation_in_the_portfolio(self):
+        """Antes, `l` ligava documento em Processos/Oportunidades e deixava de avançar a aba (h voltava, l não)."""
+        app = self.app()
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause(0.4)
+            await pilot.press("tab", "2")
+            self.assertEqual(app.tab[2], 0)
+            await pilot.press("l")
+            self.assertEqual(app.tab[2], 1)
+            await pilot.press("h")
+            self.assertEqual(app.tab[2], 0)
+
     async def test_recent_closed_actions_stay_visible(self):
         """Aba Minhas mostra as fechadas dos últimos 14 dias por padrão (paridade com a coluna
         Feita do painel); descartadas e fechadas antigas só com `a` (todas). Aguardando/observando
@@ -1828,16 +1869,16 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             self.assertIn("TASK-0010", ids)                     # fechada há 7 dias: idem
             self.assertNotIn("TASK-0006", ids)                  # descartada: só com `a`
             self.assertNotIn(old, ids)                          # fechada há 37 dias: só com `a`
-            await pilot.press("a")                              # todas
+            await pilot.press("T")                              # todas
             ids = [i.id for i in app.items(2)]
             self.assertIn(old, ids)
             self.assertIn("TASK-0006", ids)
-            await pilot.press("a")                              # de volta a só recentes
+            await pilot.press("T")                              # de volta a só recentes
             self.assertNotIn(old, [i.id for i in app.items(2)])
             await pilot.press("]")                              # aguardando: fechada recente continua oculta
             ids = [i.id for i in app.items(2)]
             self.assertNotIn(wait_closed, ids)
-            await pilot.press("a")
+            await pilot.press("T")
             self.assertIn(wait_closed, [i.id for i in app.items(2)])
 
     async def test_registry_forms_and_share_publish_flow(self):
@@ -1865,7 +1906,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             await self.settle(app, pilot)
             self.assertIn("lia-prado", self.state(app).people)
             self.assertEqual(app.cur().id, "lia-prado")            # a nova pessoa já vem selecionada
-            await pilot.press("u")                                  # editar pessoa
+            await pilot.press("e")                                  # editar pessoa
             await pilot.pause(0.3)
             await pilot.press("tab")
             await self.typ(pilot, "Analista")
@@ -1895,7 +1936,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             await pilot.press("enter")
             await self.settle(app, pilot)
             self.assertEqual(self.state(app).shares[sid].status, "aprovada")
-            await pilot.press("P")
+            await pilot.press("p")
             await pilot.pause(0.3)
             await pilot.press("enter")
             await self.settle(app, pilot, n=150)
@@ -1943,12 +1984,12 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual((edited["window"], "x" in edited, edited["label"]), ("7d", False, "inbox"))
             self.assertNotIn("gmail-hoje", [x["key"] for x in watch.list_sources(self.inst)])
             self.assertIn("$ brain watch edit gmail-hoje --rename gmail-dia", self.log_text(app))
-            await pilot.press("x")                                  # remover pede confirmação
+            await pilot.press("d")                                  # remover pede confirmação
             await pilot.pause(0.3)
             self.assertEqual(type(app.screen).__name__, "ConfirmModal")
             await pilot.press("escape")
             self.assertIn("gmail-dia", [x["key"] for x in watch.list_sources(self.inst)])
-            await pilot.press("x")
+            await pilot.press("d")
             await pilot.pause(0.3)
             await pilot.press("enter")
             await self.settle(app, pilot)

@@ -690,6 +690,11 @@ as teclas do contexto — clicáveis, com os gates em destaque. A face
 **Configurações** mostra provedores da memória, harnesses e saúde — e o
 formulário de trocar provedor roda a mesma linha da TUI e do CLI.
 
+**As mesmas teclas no TUI e no painel.** `n` novo · `e` editar · `d` descartar, remover, cancelar, aposentar,
+desligar ou rejeitar (sempre `d`, em toda tela) · `s` status · `A` aprovar (gate) · `T` alterna só abertas ↔ todas ·
+`enter` abre a ficha · `h`/`l` só navegam. Teclas antigas (`D`, `a` em Ações, `u` em Pessoas) ainda funcionam, escondidas,
+por uma versão.
+
 **Execução** — páginas:
 
 - **Início** — o `/brief` visual: goals com barras de progresso (calculado
@@ -699,9 +704,9 @@ formulário de trocar provedor roda a mesma linha da TUI e do CLI.
   feita) com **arrastar-e-soltar**: soltar roda o comando (marcar fazendo,
   fechar, reabrir); bloqueadas recusam citando o `blocked_by`. Abaixo, a
   lista de aguardando-de-outros. Teclas: `n` nova, `e` editar, `c` fechar,
-  `s` status, `t` prazo, `D` descartar, `z` não agora, `o` reabrir,
-  `m` rascunhar cobrança. A ficha da ação tem os mesmos botões e
-  `m` mescla duplicada (`action merge`).
+  `s` status, `t` prazo, `d` descartar, `z` não agora, `o` reabrir,
+  `m` rascunhar cobrança, `M` mescla duplicada (`action merge`), `v`/`O`/`T`
+  vista · ordem · todas. A ficha da ação tem os mesmos botões.
 - **Projetos** — ficha por projeto: entregáveis com peso, próximos marcos,
   saúde com motivo, decisões e ações ligadas. O círculo do entregável
   marca feito (`space`) ou muda estado (`s`) — é a colheita do checkbox.
@@ -711,7 +716,7 @@ formulário de trocar provedor roda a mesma linha da TUI e do CLI.
 - **Decisões** — quem decidiu, quando, com base em quê, cadeia de
   supersedes. `n` nova, `S` supera a selecionada.
 - **Conquistas** — wins por semana. `n` registra uma entrega.
-- **Pessoas** — ficha por pessoa. `n` nova pessoa, `u/e` edita, `a` alias.
+- **Pessoas** — ficha por pessoa. `n` nova pessoa, `e` edita, `a` alias, `R` "quem é…?" (resolve um nome ou alias, sem gravar).
 - **Linha do tempo** — o que aconteceu e o que vem.
 - **Foco** (badge: plano proposto) — o plano da semana **com o seu
   calendário real**: eventos ocupados em cinza, blocos propostos em azul,
@@ -720,29 +725,32 @@ formulário de trocar provedor roda a mesma linha da TUI e do CLI.
   com o horizonte em dias; clicar num bloco proposto reserva o plano.
 - **Mensagens** (badge: rascunhos) — o outbox: rascunhos, enviadas,
   falhas. `n` rascunha, `A` aprova o texto exato (gate — o diálogo mostra a
-  mensagem e espera seu `enviar N`), `x` cancela (rascunho ou aprovada).
+  mensagem e espera seu `enviar N`), `d` cancela (rascunho ou aprovada); `T` mostra também as enviadas.
 - **Perguntas** — a caixa de aprovação: ASKs, propostas (aceitar/rejeitar
   com quote) e a seção **Publicar** (porta 3). `n` pede publicação,
-  `A` aprova (gate) e `x` cancela a publicação selecionada.
-- **Sugestões** (badge: pendentes) — a fila do que vira issue no GitHub.
+  `A` aprova (gate) e `d` cancela a publicação selecionada; `a` responde pergunta / aceita proposta e `d`
+  descarta pergunta / rejeita proposta; `T` mostra também as respondidas.
+- **Sugestões** (badge: pendentes) — a fila do que vira issue no GitHub; `p` publica, `s` sincroniza, `T` mostra também as criadas.
+- **Fontes** — o `watch.toml` e o último pull de cada fonte: `n` adiciona, `e` edita, `d` remove, `w` inclui um pull
+  avulso; `c`/`u` pedem ao agente (o painel não roda o agente — ele diz o comando do chat). `N` abre a nota rápida em qualquer página.
 
 **Configurações** — páginas: **Memória** (provedores, harnesses; `s` troca
 provedor, `v` verifica os harnesses, `i` conecta o selecionado) e **Saúde**
-(badge: avisos) — o `doctor` visual + `o` testa online de novo; desde a face
+(badge: avisos) — o `doctor` visual + `f` corrige o aviso selecionado (leva à página, ou diz o comando do agente) + `o` testa online de novo; desde a face
 Configurações a Saúde mora só aqui, como na TUI (a paleta também leva só
 aqui — o link antigo `#health` redireciona).
 
 **Portfólio** — páginas: **Visão geral** (funil, horas/mês por área,
 lacunas), **Oportunidades** (kanban por estágio — arrastar muda status;
 `em-espera`/`descartada` pedem motivo digitado; `i` pontua ICE, `c`
-confirma o sugerido, `p` promover = gate estrutural — na ficha as mesmas
-teclas), **Matriz** impacto × facilidade (`s` status, `i` ICE no selecionado),
-**Processos** (`n` novo, `e` edita, `a` abre a opp a partir daqui, `x`
-aposenta) e **Áreas** (`n` nova;
+confirma o sugerido, `p` promover = gate estrutural, `d` descarta, `L` liga documento, `v` junta evidência — na
+ficha as mesmas teclas), **Matriz** impacto × facilidade (`s` status, `i` ICE no selecionado),
+**Processos** (`n` novo, `e` edita, `a` abre a opp a partir daqui, `d`
+aposenta, `L` liga documento, `o` abre o playbook), **Áreas** (`n` nova;
 clicar numa área abre a página da área com processos, oportunidades e
-pessoas dela).
+pessoas dela) e **Documentos** (tudo que está ligado a processos e oportunidades: `L` liga, `d` desliga, `enter` abre).
 
-`/` filtra a lista da página — de novo, refina o que sobrou (filtros em cascata, `esc` tira um por vez, igual à TUI; uma barra no topo mostra a corrente e quantos itens restam); `g` ou ⌘K busca em tudo; `?` mostra o mapa de teclas. O mapa de oportunidades
+`/` filtra a lista da página — de novo, refina o que sobrou (filtros em cascata, `esc` tira um por vez, igual à TUI; uma barra no topo mostra a corrente e quantos itens restam); `g`, `:` ou ⌘K busca em tudo; `?` mostra o mapa de teclas; `` ` `` abre o console. O mapa de oportunidades
 também sai como arquivo próprio — `vault/FRESH/dashboard/portfolio.html`,
 só o recorte do portfólio, feito para circular (`brain share portfolio`).
 
@@ -767,11 +775,11 @@ instala o Textual numa venv à parte. Para experimentar com dados fictícios, ab
 "não agora" (adiada de propósito; é decisão sua, o agente não marca) e `z` de novo a traz de volta. Ação em
 "não agora" sai do planejador de foco e ganha seção própria no `todo.md`. Nas vistas de prazo só as abertas.
 
-**Fechadas recentes sempre à vista (`a`).** Na aba **Minhas**, as ações fechadas nos últimos 14 dias
-ficam sempre no fim da lista — a mesma regra da coluna "Feita" do painel. `a` alterna entre
+**Fechadas recentes sempre à vista (`T`).** Na aba **Minhas**, as ações fechadas nos últimos 14 dias
+ficam sempre no fim da lista — a mesma regra da coluna "Feita" do painel. `T` alterna entre
 **só recentes** (abertas + fechadas de 14 dias; descartadas fora) e **todas** (inclusive fechadas
-antigas e descartadas). Nas abas Aguardando/Observando o padrão continua só abertas; `a` lá mostra
-tudo.
+antigas e descartadas). Nas abas Aguardando/Observando o padrão continua só abertas; `T` lá mostra
+tudo. (`a` ainda funciona, escondida, por uma versão.)
 
 **Ordem do painel Ações (`O`).** A tecla `O` alterna entre **Prazo** (padrão: atrasadas primeiro, sem prazo por
 último; empate pelo ID) e **ID** (`TASK-0001`, `TASK-0002`…). As duas são crescentes. Vale para as três listas
@@ -797,7 +805,7 @@ append-only) e regenera o FRESH. Nunca roda no noturno; só uma vez por instânc
 
 **O agente precisa de você? Ele pergunta.** Dúvida que bloqueia uma rodada ⚡ (identidade ambígua, pessoa sem ficha, classificação,
 permissão negada) vira uma pergunta `ASK-####` no ledger, não uma linha que rola no log. No TUI (`./brain tui`), painel 4, aba
-**Perguntas** (a primeira, com o contador): `enter` responde (uma das opções ou "outra resposta…" em texto livre), `x` descarta com
+**Perguntas** (a primeira, com o contador): `a` responde (uma das opções ou "outra resposta…" em texto livre; `enter` só abre a ficha), `d` descarta com
 motivo, `R` retoma o agente na mesma sessão com as respostas (`claude -p --resume`). Ao responder a última pergunta de uma rodada, a TUI
 oferece retomar na hora; se não der (sessão expirada, outro agente), as respostas ficam na fila e o **passo 0** do próximo `/dump` ou
 `/update` as aplica. Quando uma rodada deixa algo para você, o log mostra "⚠ o agente deixou … · r resposta livre": `r` continua a
@@ -963,8 +971,9 @@ literal. A oportunidade vira `em-andamento` e fica ligada ao nó criado (o progr
 onde você estava; dentro de formulários o Tab continua mudando de campo). Painéis do Portfólio: **1 Visão** (funil,
 top 5 por ICE, lacunas; por área; por goal) · **2 Processos** (todos, por área, lacunas) · **3 Oportunidades**
 (triagem, priorizadas, em curso, arquivo) · **4 Matriz** (impacto × facilidade em 2×2, ranking) · **5 Registro**
-(áreas, documentos). Teclas: `o` na Visão e na Matriz abre o mapa de oportunidades em HTML; processos `n e l o a x`; oportunidades `n e s i c l v p x` (`O` pede o one-pager ao agente);
-áreas `n e`; documentos `enter` abre e `u` desliga.
+(áreas, documentos). Teclas: `o` na Visão e na Matriz abre o mapa de oportunidades em HTML; processos `n e L o a d`; oportunidades `n e s i c L v p d` (`O` pede o one-pager ao agente);
+áreas `n e`; documentos `enter` abre e `d` desliga. Em Processos e Oportunidades, `L` (maiúsculo) liga documento — `h`/`l`
+continuam trocando de aba em todas as telas.
 
 **Nos outros lugares:** `FRESH/processes.md`, `FRESH/opportunities.md` e as fichas em `FRESH/records/processes|opportunities/`
 (editar `status:` na ficha da oportunidade é colhido), a aba **Portfólio** do painel HTML, o **mapa de oportunidades**

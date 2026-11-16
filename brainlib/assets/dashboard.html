@@ -622,11 +622,11 @@ async function serveRun(cmd){
   return true;
 }
 // fatos do dono levam --by owner — a mesma convenção das linhas que o TUI dispara
-const NEEDS_BY = ["action ", "area ", "decision add", "delivery ", "person ", "process ",
-  "opportunity add", "opportunity update", "opportunity score", "opportunity status", "plan deliverable"];
+const NEEDS_BY = ["action ", "area ", "decision add", "delivery ", "person ", "process ", "doc ",
+  "opportunity add", "opportunity update", "opportunity score", "opportunity status", "opportunity evidence", "plan deliverable"];
 function ownerCmd(cmd){
   const bare = cmd.replace(/^brain /, "");
-  return NEEDS_BY.some(x => bare.startsWith(x)) && !/\s--by(\s|=)/.test(bare) ? cmd + " --by owner" : cmd;
+  return NEEDS_BY.some(x => bare.startsWith(x)) && !/^person resolve/.test(bare) && !/\s--by(\s|=)/.test(bare) ? cmd + " --by owner" : cmd;
 }
 function runCommand(cmd, mut){
   cmd = ownerCmd(cmd);
@@ -639,13 +639,13 @@ const pal = {open: false, sel: 0, items: [], confirmCmd: null, confirmMut: null}
 function navEntries(){
   const pfOnly = !!window.PF_ONLY;                     // portfolio.html: só a face Portfólio existe
   const tabs = pfOnly ? [["face/portfolio", "→ face Portfólio"],
-    ["pf/visao", "Portfólio · Visão"], ["pf/opps", "Portfólio · Oportunidades"], ["pf/matrix", "Portfólio · Matriz"], ["pf/procs", "Portfólio · Processos"], ["pf/areas", "Portfólio · Áreas"]]
+    ["pf/visao", "Portfólio · Visão"], ["pf/opps", "Portfólio · Oportunidades"], ["pf/matrix", "Portfólio · Matriz"], ["pf/procs", "Portfólio · Processos"], ["pf/areas", "Portfólio · Áreas"], ["pf/docs", "Portfólio · Documentos"]]
     : [["face/execucao", "→ face Execução"], ["face/portfolio", "→ face Portfólio"], ["face/configuracoes", "→ face Configurações"],
-    ["home", "Início"], ["todo", "TODO"], ["projects", "Projetos"], ["decisions", "Decisões"], ["wins", "Conquistas"],
+    ["home", "Início"], ["sources", "Fontes"], ["todo", "TODO"], ["projects", "Projetos"], ["decisions", "Decisões"], ["wins", "Conquistas"],
     ["people", "Pessoas"], ["timeline", "Linha do tempo"], ["focus", "Foco"], ["outbox", "Mensagens"], ["feedback", "Sugestões"],
     ["cfg/memoria", "Configurações · Memória"], ["cfg/saude", "Configurações · Saúde"],
     ["pf/visao", "Portfólio · Visão"], ["pf/opps", "Portfólio · Oportunidades"], ["pf/matrix", "Portfólio · Matriz"],
-    ["pf/procs", "Portfólio · Processos"], ["pf/areas", "Portfólio · Áreas"]];
+    ["pf/procs", "Portfólio · Processos"], ["pf/areas", "Portfólio · Áreas"], ["pf/docs", "Portfólio · Documentos"]];
   return tabs.map(t => ({group: t[0].startsWith("face/") ? "faces" : "ir para", label: t[1], view: t[0]}));
 }
 function entEntries(){
@@ -1307,7 +1307,7 @@ if (burger) burger.onclick = () => { burger.classList.toggle("open"); $("#side")
 
 const SEL = {items: [], i: -1};
 const SEL_QUERY = "#view .kanban .card, #view .pf-kanban .pf-card, #view table tbody tr, #view .blk.prop, #view .msgrow, #view ul.feed li, #view li[data-deliv]";
-const selable = el => el.querySelector('a[href^="#"]') || el.classList.contains("blk") || el.classList.contains("pf-card") || el.hasAttribute("data-deliv");
+const selable = el => el.querySelector('a[href^="#"]') || el.classList.contains("blk") || el.classList.contains("pf-card") || el.hasAttribute("data-deliv") || el.hasAttribute("data-sel");
 function collectSel(){
   SEL.items = [...document.querySelectorAll(SEL_QUERY)].filter(selable).filter(el => !el.classList.contains("flt-off"));   // filtrado some da navegação j/k
   SEL.i = -1; paintSel();
@@ -1387,13 +1387,19 @@ function selMove(d){ if (!SEL.items.length) return; SEL.i = (SEL.i + d + SEL.ite
 function selOpen(){
   const el = selEl(); if (!el) return;
   if (el.classList.contains("blk")) { el.click(); return; }
+  if (el.dataset.sel && el.dataset.sel.startsWith("doc:")) {          // Documentos: enter abre o link (ou diz onde está no vault)
+    if (el.dataset.url) window.open(el.dataset.url, "_blank", "noopener"); else toast("documento do vault: " + (el.children[2] ? el.children[2].textContent : ""));
+    return; }
   const a = el.querySelector('a[href^="#"]'); if (a) location.hash = a.getAttribute("href");
 }
 function selId(){
   const el = selEl(); if (!el) return null;
   if (el.dataset.opp) return el.dataset.opp;
+  if (el.dataset.sel) return el.dataset.sel;
   const i = el.querySelector(".idchip");
-  return i ? i.textContent.trim() : null;
+  if (i) return i.textContent.trim();
+  const pa = el.querySelector('a[href^="#person/"]');              // lista de Pessoas: a linha não tem chip de id, o link tem
+  return pa ? decodeURIComponent(pa.getAttribute("href").slice(8)) : null;
 }
 function navStep(dir){
   const links = [...document.querySelectorAll("#tabs a")];
@@ -1786,6 +1792,88 @@ function supersedeForm(d){
         supersedes: d.id, superseded_by: null, source_label: "declarado no painel", prov: "declarado"}); }});
 }
 
+// ── lacunas de paridade com a TUI: documentos, evidência, quem é…?, fontes, correção de saúde ──
+function docLinkForm(target){
+  const M = window.BRAIN.M;
+  const targets = [["", "—"]].concat(M.portfolio.processes.map(p => [p.id, p.id + " " + p.title]), M.portfolio.opportunities.map(o => [o.id, o.id + " " + o.title]));
+  formDialog({title: "Ligar documento" + (target ? " a " + target : ""), sub: "Playbook vigiado do Drive: o /update só relê quando o modifiedTime muda.",
+    fields: (target ? [] : [{k: "target", label: "Ligar a", options: targets}]).concat([
+      {k: "kind", label: "Tipo", options: (M.doc_kinds || ["playbook"]).map(x => [x, x]), value: "playbook"},
+      {k: "ref", label: "Ref", ph: "URL, id do Drive ou caminho do vault"},
+      {k: "title", label: "Título", ph: "opcional"},
+      {k: "watch", label: "Vigiar", options: [["não", "não"], ["sim", "sim (só playbook do Drive)"]]}]),
+    preview: v => { const tg = target || v.target; if (!tg || !v.ref) return null;
+      return "brain doc link " + tg + " --kind " + v.kind + " --ref " + q(v.ref) + (v.title ? " --title " + q(v.title) : "") + (v.watch === "sim" ? " --watch" : ""); },
+    run: (v, m) => {}});
+}
+function docUnlinkForm(target, n){
+  const x = window.BRAIN.PROC[target] || window.BRAIN.OPP[target]; const d = x && x.docs[n]; if (!d) { needSel(); return; }
+  formDialog({title: "Desligar o documento de " + target, sub: d.title || d.ref, fields: [],
+    preview: () => "brain doc unlink " + target + " --ref " + q(d.ref), run: (v, m) => {}});
+}
+function evidenceForm(o){
+  formDialog({title: "Evidência de " + o.id, sub: "Artefato ou RAW que reforça esta oportunidade.",
+    fields: [{k: "source", label: "Fonte", ph: "PROCESSED/2026/10/reuniao.md"}],
+    preview: v => v.source ? "brain opportunity evidence " + o.id + " --source " + q(v.source) : null, run: (v, m) => {}});
+}
+function resolveForm(){
+  formDialog({title: "Quem é…?", sub: "Diz a quem o texto se refere, sem gravar nada. Ambíguo vira erro: a pergunta é sua.",
+    fields: [{k: "text", label: "Nome ou alias", ph: "a Marina-demo"}],
+    preview: v => v.text ? "brain person resolve " + q(v.text) : null, run: (v, m) => {}});
+}
+const SRC_META = ["key", "kind", "in_watch", "last_ok", "last_error", "failures", "pulls", "last_changed", "window", "note"];
+const srcOther = s => Object.entries(s || {}).filter(([k]) => !SRC_META.includes(k)).map(([k, v]) => k + "=" + v).join("; ");
+function parseOther(t){ const out = {}; String(t || "").split(/;\s*/).forEach(p => { const i = p.indexOf("="); if (i > 0) out[p.slice(0, i).trim()] = p.slice(i + 1).trim(); }); return out; }
+function srcFields(old){
+  const M = window.BRAIN.M;
+  return [{k: "key", label: "Key", value: old ? old.key : "", ph: "slack-time-dados"},
+    {k: "kind", label: "Tipo", options: (M.source_kinds || []).map(x => [x[0], x[1]]), value: (old && old.kind) || "gmail"},
+    {k: "window", label: "Janela", value: (old && old.window) || "", ph: "7d"},
+    {k: "note", label: "Nota", value: (old && old.note) || ""},
+    {k: "other", label: "Outros campos", value: srcOther(old), ta: true, rows: 3, ph: "channel=#canal; query=…; doc=<url do Drive>"}];
+}
+function srcAddForm(pre){
+  formDialog({title: "Adicionar fonte ao watch.toml", sub: "Fonte que não está no watch.toml não é puxada pelo /update nem pelo noturno. Os campos do tipo vão em “Outros” (k=v; k=v).",
+    fields: srcFields(pre),
+    preview: v => { if (!v.key || !v.kind) return null;
+      let c = "brain watch add " + v.key + " --kind " + v.kind + (v.window ? " --window " + q(v.window) : "") + (v.note ? " --note " + q(v.note) : "");
+      Object.entries(parseOther(v.other)).forEach(([k, x]) => { c += " --set " + q(k + "=" + x); });
+      return c; },
+    run: (v, m) => {}});
+}
+function srcEditForm(old){
+  formDialog({title: "Editar a fonte " + old.key, sub: "Mudar a key renomeia a fonte; o histórico de pulls fica na key antiga.", fields: srcFields(old),
+    preview: v => { if (!v.key || !v.kind) return null;
+      const parts = [];
+      if (v.key !== old.key) parts.push("--rename " + v.key);
+      if (v.kind !== old.kind) parts.push("--kind " + v.kind);
+      const oldO = parseOther(srcOther(old)), newO = parseOther(v.other);
+      [["window", v.window, old.window], ["note", v.note, old.note]].forEach(([k, nv, ov]) => {
+        if ((nv || "") !== (ov || "")) parts.push(nv ? (k === "window" ? "--window " : "--note ") + q(nv) : "--unset " + k); });
+      Object.entries(newO).forEach(([k, x]) => { if (oldO[k] !== x) parts.push("--set " + q(k + "=" + x)); });
+      Object.keys(oldO).forEach(k => { if (!(k in newO)) parts.push("--unset " + k); });
+      return parts.length ? "brain watch edit " + old.key + " " + parts.join(" ") : null; },
+    run: (v, m) => {}});
+}
+function srcRemoveForm(s){
+  formDialog({title: "Remover a fonte " + s.key, sub: "O /update e o noturno deixam de puxá-la. Snapshots já gravados e o ledger ficam como estão.", fields: [],
+    preview: () => "brain watch remove " + s.key, run: (v, m) => {}});
+}
+function agentToast(what, how){ toast("(agente) " + what + " — rode " + how + " no chat; o painel não roda o agente"); }
+function healthFix(fix){
+  if (fix.agent === "dump") agentToast("processar a inbox", "/dump");
+  else if (fix.agent === "connect") agentToast("puxar " + fix.key, "/connect " + fix.key);
+  else if (fix.sys) toast("agendar o noturno: no terminal, “schedule install --time 05:00” (pelo ./brain)");
+  else if (fix.page) location.hash = "#" + fix.page;
+}
+function toggleAllParam(){
+  const parts = location.hash.slice(1).split("?"), qs = new URLSearchParams(parts[1] || "");
+  qs.get("a") === "1" ? qs.delete("a") : qs.set("a", "1");
+  location.hash = parts[0] + (qs.toString() ? "?" + qs.toString() : "");
+}
+const docUrl = r => window.BRAIN.docUrl(r);
+const hashAll = () => new URLSearchParams((location.hash.split("?")[1]) || "").get("a") === "1";
+
 // ── mapa de teclas por contexto (espelha ctx_keys da TUI) ───────────────
 function ctxKeys(k){
   const h = location.hash, M = window.BRAIN.M;
@@ -1794,9 +1882,24 @@ function ctxKeys(k){
   const selDec = () => { const id = selId(); const d = id && id.startsWith("DEC-") ? M.decisions.find(x => x.id === id) : null; if (!d) needSel(); return d; };
   const goOrSel = (hash, fn) => { const el = selEl(); if (el && (fn || true) && SEL.i >= 0 && fn) fn(); else location.hash = hash; };
 
-  if (h.startsWith("#home")) { if (k === "n") { noteForm(); return true; } return false; }
+  if (k === "T" && /^#(ask|outbox|feedback)/.test(h)) { toggleAllParam(); return true; }     // só abertas ↔ todas
+  if (h.startsWith("#home")) {
+    if (k === "n") { noteForm(); return true; }
+    const AG = {u: ["atualizar tudo", "/update"], d: ["processar a inbox", "/dump"], b: ["brief do dia", "/brief"], c: ["puxar uma fonte", "/connect <fonte>"], i: ["primeira entrevista", "/init"]};
+    if (AG[k]) { agentToast(AG[k][0], AG[k][1]); return true; }
+    return false; }
+  if (h.startsWith("#sources")) {
+    if (k === "n") { srcAddForm(); return true; }
+    const sid = selId() || "", src = sid.startsWith("src:") ? (M.sources || []).find(x => x.key === sid.slice(4)) : null;
+    if (k === "u") { agentToast("atualizar tudo", "/update"); return true; }
+    if (!["e", "d", "w", "c"].includes(k)) return false;
+    if (!src) { needSel(); return true; }
+    if (k === "e") { if (src.in_watch) srcEditForm(src); else toast(src.key + " é pull avulso — w inclui no watch.toml"); return true; }
+    if (k === "d") { if (src.in_watch) srcRemoveForm(src); else toast(src.key + " não está no watch.toml"); return true; }
+    if (k === "w") { if (!src.in_watch) srcAddForm({key: src.key}); else toast(src.key + " já está no watch.toml"); return true; }
+    agentToast("puxar " + src.key, "/connect " + src.key); return true; }
   if (h.startsWith("#projects")) {
-    if (k === "n" || k === "G") { planForm(); return true; }   // G = novo goal: o gate estrutural mora no formulário
+    if (k === "n" || k === "G" || k === "E") { planForm(); return true; }   // E = mudar árvore: o gate estrutural mora no formulário   // G = novo goal: o gate estrutural mora no formulário
     if (k === "P") { const id = selId() || "";
       if (id.startsWith("GOAL-")) progressForm(id);
       else if (id) toast("P declara progresso de goal — selecione um goal");
@@ -1806,12 +1909,22 @@ function ctxKeys(k){
     return false; }
   if (h.startsWith("#todo") || h.startsWith("#action/")) {
     const a = h.startsWith("#action/") ? A_OF(decodeURIComponent(h.slice(8))) : null;
+    if (k === "D") k = "d";                                // teclas antigas (2.10): ainda valem, escondidas
+    if (k === "a" && h.startsWith("#todo")) k = "T";
     if (k === "n" && h.startsWith("#todo")) { newAction(); return true; }
+    if (["v", "O", "T"].includes(k) && h.startsWith("#todo")) {        // vista · ordem · todas: da página, não do cartão
+      const qs = new URLSearchParams((location.hash.split("?")[1]) || "");
+      if (k === "v") { const order = ["todas", "semana", "depois", "nao-agora"];
+        const cur = qs.get("v") || "todas"; qs.set("v", order[(order.indexOf(cur) + 1) % order.length]); }
+      if (k === "O") qs.set("o", (qs.get("o") || "prazo") === "prazo" ? "id" : "prazo");
+      if (k === "T") qs.get("a") === "1" ? qs.delete("a") : qs.set("a", "1");
+      location.hash = "todo" + (qs.toString() ? "?" + qs.toString() : "");
+      return true; }
     const t = a || selTask(); if (!t) return k === "n";
-    const mut = ["e", "c", "s", "t", "D", "z"];          // como o TUI: mutação só em ação aberta
+    const mut = ["e", "c", "s", "t", "d", "z"];          // como o TUI: mutação só em ação aberta
     if (mut.includes(k) && !t.open) { toast(t.id + " está " + (t.status === "descartada" ? "descartada" : "fechada") + " — reabra com o antes"); return true; }
     if (k === "e") { editAction(t); return true; }
-    if (k === "m" && h.startsWith("#action/")) { mergeForm(t); return true; }
+    if (k === "M") { mergeForm(t); return true; }
     if (k === "c") { closeForm(t); return true; }
     if (k === "s") {
       if (t.blocked_by && t.blocked_by.length) { toast(t.id + " segue bloqueada por " + t.blocked_by.join(", ")); return true; }
@@ -1820,7 +1933,7 @@ function ctxKeys(k){
     if (k === "t") { formDialog({title: "Prazo · " + t.id, sub: t.title, fields: [{k: "due", label: "Prazo", type: "date", value: t.due || ""}],
       preview: v => v.due ? "brain action update " + t.id + " --due " + v.due : null,
       run: (v, m) => { A_OF(t.id).due = v.due; }}); return true; }
-    if (k === "D") { formDialog({title: "Descartar " + t.id, fields: [{k: "reason", label: "Motivo", value: ""}],
+    if (k === "d") { formDialog({title: "Descartar " + t.id, fields: [{k: "reason", label: "Motivo", value: ""}],
       preview: v => v.reason ? "brain action drop " + t.id + ' --reason "' + v.reason.replace(/"/g, "'") + '"' : null,
       run: (v, m) => { const x = A_OF(t.id); x.open = false; x.status = "descartada"; }}); return true; }
     if (k === "z") { const park = !t.parked;
@@ -1828,15 +1941,7 @@ function ctxKeys(k){
     if (k === "o" && !t.open) { reopenForm(t); return true; }
     if (k === "m") { const w = (t.open && t.list === "waiting") ? t : null;
       if (w) chaseDraft(w); else toast("m cobrar: selecione uma ação aguardando outra pessoa (waiting)"); return true; }
-    if (["v", "O", "a"].includes(k)) {                 // vista · ordem · todas, como o TUI (v/O/a)
-      const qs = new URLSearchParams((location.hash.split("?")[1]) || "");
-      if (k === "v") { const order = ["todas", "semana", "depois", "nao-agora"];
-        const cur = qs.get("v") || "todas"; qs.set("v", order[(order.indexOf(cur) + 1) % order.length]); }
-      if (k === "O") qs.set("o", (qs.get("o") || "prazo") === "prazo" ? "id" : "prazo");
-      if (k === "a") qs.get("a") === "1" ? qs.delete("a") : qs.set("a", "1");
-      location.hash = "todo" + (qs.toString() ? "?" + qs.toString() : "");
-      return true; }
-    return mut.includes(k) || k === "o" || ["v", "O", "a"].includes(k);
+    return mut.includes(k) || k === "o" || k === "M";
   }
   if (h.startsWith("#project/")) { const p = window.BRAIN.P[decodeURIComponent(h.slice(9))];
     if (k === "e" && p) { editPlanNode("project", p.id, p); return true; }
@@ -1846,6 +1951,7 @@ function ctxKeys(k){
     return false; }
   if (h.startsWith("#people")) {
     if (k === "n") { nbForm("person"); return true; }
+    if (k === "R") { resolveForm(); return true; }
     const id = selId() || ""; const pe = id && window.BRAIN.PE[id] ? window.BRAIN.PE[id] : null;
     if ((k === "u" || k === "e") && pe) { editPerson(pe); return true; }
     if (k === "a" && pe) { personAliasForm(pe); return true; }
@@ -1861,17 +1967,17 @@ function ctxKeys(k){
     const q = id.startsWith("ASK-") ? M.questions.find(x => x.id === id) : null;
     const pr = id.startsWith("PROP-") ? M.proposals.find(x => x.id === id) : null;
     const pu = id.startsWith("PUB-") ? (M.publishes || []).find(x => x.id === id) : null;
-    if (!q && !pr && !pu) { if (k === "a" || k === "x" || k === "r" || k === "A") needSel(); return k === "R"; }
+    if (!q && !pr && !pu) { if (k === "a" || k === "d" || k === "A") needSel(); return k === "R"; }
     if (k === "A" && pu) { if (pu.status === "solicitada") pubAction("approve", pu.id); else toast(pu.id + " está " + pu.status); return true; }
-    if (k === "x" && pu) { if (pu.status === "solicitada" || pu.status === "aprovada") pubAction("cancel", pu.id); else toast(pu.id + " está " + pu.status); return true; }
+    if (k === "d" && pu) { if (pu.status === "solicitada" || pu.status === "aprovada") pubAction("cancel", pu.id); else toast(pu.id + " está " + pu.status); return true; }
     if (k === "a" && q) { if (q.status !== "aberta") { toast(q.id + " já está " + q.status); return true; }
       formDialog({title: "Responder " + q.id, sub: q.text,
       fields: [{k: "answer", label: "Resposta", value: (q.options && q.options[0]) || ""}],
       preview: v => v.answer ? "brain ask answer " + q.id + ' "' + v.answer.replace(/"/g, "'") + '"' : null,
       run: (v, m) => { const x = m.questions.find(y => y.id === q.id); x.status = "respondida"; x.answer = v.answer; }}); return true; }
     if (k === "a" && pr) { if (pr.status !== "aberta") { toast(pr.id + " já está " + pr.status); return true; } propQuote(pr.id, true); return true; }
-    if (k === "r" && pr) { if (pr.status !== "aberta") { toast(pr.id + " já está " + pr.status); return true; } propQuote(pr.id, false); return true; }
-    if (k === "x" && q) { if (q.status !== "aberta") { toast(q.id + " já está " + q.status); return true; }
+    if (k === "d" && pr) { if (pr.status !== "aberta") { toast(pr.id + " já está " + pr.status); return true; } propQuote(pr.id, false); return true; }
+    if (k === "d" && q) { if (q.status !== "aberta") { toast(q.id + " já está " + q.status); return true; }
       const el = selEl(); const d = el && el.querySelector("[data-drop]"); if (d) d.click(); return true; }
     if (k === "R") { toast("(agente) retoma a sessão com as respostas aplicadas — claude -p --resume"); return true; }
     return false;
@@ -1893,7 +1999,7 @@ function ctxKeys(k){
       else toast(m0.id + " está " + m0.status + " — aprovar vale para rascunho");
       return true; }
     if (k === "S") { toast("(agente) envio pelo MCP do Slack como o dono — porta 2, após aprovação do texto exato"); return true; }
-    if (k === "x") {
+    if (k === "d") {
       if (m0 && (m0.status === "rascunho" || m0.status === "aprovada")) cancelMsgForm(m0);
       else if (!m0) needSel();
       else toast(m0.id + " está " + m0.status + " — cancelar vale para rascunho ou aprovada");
@@ -1924,25 +2030,40 @@ function ctxKeys(k){
     if (k === "i") { iceForm(o); return true; }
     if (k === "c" && o.ice_suggested) { confirmIce(o); return true; }
     if (k === "e") { editOpp(o); return true; }
-    if (k === "x") { if (["descartada", "entregue"].includes(o.status)) { toast(o.id + " está " + o.status); return true; }
+    if (k === "d") { if (["descartada", "entregue"].includes(o.status)) { toast(o.id + " está " + o.status); return true; }
       oppReasonDialog(o.id, "descartada"); return true; }
     if (k === "p" && !(o.project || o.promoted)) { promoteDialog(o); return true; }
+    if (k === "L") { docLinkForm(o.id); return true; }
+    if (k === "v") { evidenceForm(o); return true; }
     if (k === "O") { toast("(agente) one-pager: brain share opportunity → publica na porta 6"); return true; }
-    return ["s", "i", "c", "x", "p", "O"].includes(k); }
+    return ["s", "i", "c", "d", "p", "O", "L", "v"].includes(k); }
   if (h.startsWith("#pf/opp/")) { const o = window.BRAIN.OPP[decodeURIComponent(h.slice(8))];
     if (k === "e" && o) { editOpp(o); return true; }
     if (k === "s" && o) { statusPicker(o); return true; }
     if (k === "i" && o) { iceForm(o); return true; }
     if (k === "c" && o && o.ice_suggested) { confirmIce(o); return true; }
-    if (k === "x" && o && !["descartada", "entregue"].includes(o.status)) { oppReasonDialog(o.id, "descartada"); return true; }
+    if (k === "d" && o && !["descartada", "entregue"].includes(o.status)) { oppReasonDialog(o.id, "descartada"); return true; }
     if (k === "p" && o && !(o.project || o.promoted)) { promoteDialog(o); return true; }
+    if (k === "L" && o) { docLinkForm(o.id); return true; }
+    if (k === "v" && o) { evidenceForm(o); return true; }
+    return false; }
+  if (h.startsWith("#pf/docs")) {
+    if (k === "L") { docLinkForm(""); return true; }
+    if (k === "d") { const id = selId() || ""; if (!id.startsWith("doc:")) { needSel(); return true; }
+      const parts = id.split(":"); docUnlinkForm(parts[1], +parts[2]); return true; }
     return false; }
   if (h.startsWith("#pf/procs")) {
     if (k === "n") { nbForm("process"); return true; }
     const id = selId(); const pc = id && id.startsWith("PROC-") ? M.portfolio.processes.find(x => x.id === id) : null;
     if (k === "e" && pc) { editProc(pc); return true; }
     if (k === "a" && pc) { oppAddForm({process: pc.id}); return true; }
-    if (k === "x" && pc) { formDialog({title: "Aposentar " + pc.id, fields: [{k: "reason", label: "Motivo", value: ""}],
+    if (k === "L" && pc) { docLinkForm(pc.id); return true; }
+    if (k === "o" && pc) { const pb = pc.playbook, url = pb ? docUrl(pb.ref) : "";
+      if (!pb) toast(pc.id + " não tem playbook ligado (L, tipo playbook)");
+      else if (url) window.open(url, "_blank", "noopener"); else toast("playbook no vault: " + pb.ref);
+      return true; }
+    if ((k === "L" || k === "o") && !pc) { needSel(); return true; }
+    if (k === "d" && pc) { formDialog({title: "Aposentar " + pc.id, fields: [{k: "reason", label: "Motivo", value: ""}],
       preview: v => v.reason ? "brain process retire " + pc.id + ' --reason "' + v.reason.replace(/"/g, "'") + '"' : null,
       run: (v, m) => { m.portfolio.processes.find(x => x.id === pc.id).status = "aposentado"; }}); return true; }
     return false; }
@@ -1957,6 +2078,9 @@ function ctxKeys(k){
     return false; }
   if (h.startsWith("#cfg/saude")) {
     if (k === "o") { runCommand("brain doctor --online"); return true; }   // re-check ao vivo; a régua da página é do render
+    if (k === "f") { const id = selId() || ""; const c = id.startsWith("health:") ? (M.health || [])[+id.slice(7)] : null;
+      if (!c) needSel(); else if (!c.fix) toast("sem correção automática para este aviso"); else healthFix(c.fix);
+      return true; }
     return false; }
   if (h.startsWith("#pf/areas") || h.startsWith("#pf/area/")) {
     if (k === "n" && h.startsWith("#pf/areas")) { nbForm("area"); return true; }
@@ -1978,37 +2102,44 @@ function helpOverlay(){
   const ov = document.createElement("div"); ov.className = "pal-back open";
   const rows = [
     ["globais", ""],
-    ["tab / shift+tab", "próxima / anterior face (Execução · Portfólio)"],
+    ["tab / shift+tab", "próxima / anterior face (Execução · Portfólio · Configurações)"],
     ["/", "filtrar a lista da página — de novo: refina o que sobrou (cascata)"],
     ["esc", "tira o último filtro, um por vez (dentro do campo: desfaz só aquele)"],
-    ["g · ⌘K", "busca e comandos (paleta)"],
+    ["g : ctrl+k", "busca e comandos (paleta)"],
+    ["N", "nota rápida na inbox"],
     ["j k ↑ ↓", "mover na lista · enter abre a ficha"],
     ["[ ] ← → (h l)", "aba anterior / próxima"],
+    ["T", "alterna só abertas ↔ todas (TODO, Perguntas, Mensagens, Sugestões)"],
     ["`", "console da ponte (abre/fecha)"],
     ["?", "esta ajuda"],
     ["? (dentro do ICE)", "metodologia de pontuação — as notas com critério e regras"],
+    ["padrão em todas as telas", ""],
+    ["n", "novo"], ["e", "editar"], ["d", "descartar · remover · cancelar · aposentar · desligar · rejeitar"],
+    ["s", "status / estado"], ["A", "aprovar (gate)"],
+    ["Início", ""], ["n", "nota"], ["u d b c", "(agente) atualizar tudo · processar inbox · brief · puxar fonte"],
+    ["Fontes", ""], ["n", "adicionar"], ["e", "editar"], ["d", "remover"], ["w", "incluir no watch"], ["c u", "(agente) puxar · atualizar tudo"],
     ["TODO (com cartão selecionado)", ""],
     ["n", "nova ação"], ["e", "editar"], ["c", "fechar"], ["s", "status (ciclo)"], ["t", "prazo"],
-    ["D", "descartar"], ["z", "não agora / voltar"], ["o", "reabrir"], ["m", "cobrar (rascunho de msg)"],
-    ["v / O / a", "vista · ordem · todas (como o TUI)"],
+    ["d", "descartar"], ["z", "não agora / voltar"], ["o", "reabrir"], ["m", "cobrar (rascunho de msg)"], ["M", "mesclar duplicada"],
+    ["v / O / T", "vista · ordem · todas (como o TUI)"],
     ["Foco", ""], ["A", "aprovar plano (gate)"], ["a", "aplicar no calendário (gate · ics ou google)"], ["s", "sync (dry-run ou aplicar)"], ["p", "planejar (focus plan --days)"],
-    ["Mensagens", ""], ["A", "aprovar rascunho (gate)"], ["S", "enviar (agente)"], ["x", "cancelar"],
+    ["Mensagens", ""], ["A", "aprovar rascunho (gate)"], ["S", "enviar (agente)"], ["d", "cancelar"],
     ["Decisões", ""], ["S", "superar (nova decisão)"],
     ["Perguntas e propostas", ""], ["a", "responder pergunta / aceitar proposta (gate)"],
-    ["r", "rejeitar proposta"], ["x", "descartar pergunta"], ["R", "retomar o agente"],
+    ["d", "descartar pergunta · rejeitar proposta · cancelar publicação"], ["R", "retomar o agente"],
+    ["Publicar (porta 3)", ""], ["n", "pedir publicação"], ["A", "aprovar (gate)"],
+    ["Sugestões", ""], ["n", "nova"], ["p", "publicar"], ["s", "sincronizar issues"],
     ["Portfólio · Oportunidades", ""], ["n", "nova"], ["s", "status"], ["i", "ICE"], ["c", "confirmar ICE sugerido"],
-    ["e", "editar"], ["x", "descartar"], ["p", "promover (gate)"], ["O", "one-pager (agente)"],
-    ["Portfólio · Processos", ""], ["n", "novo"], ["e", "editar"], ["a", "nova oportunidade daqui"], ["x", "aposentar"],
+    ["e", "editar"], ["d", "descartar"], ["p", "promover (gate)"], ["O", "one-pager (agente)"], ["L", "ligar documento"], ["v", "evidência"],
+    ["Portfólio · Processos", ""], ["n", "novo"], ["e", "editar"], ["a", "nova oportunidade daqui"], ["d", "aposentar"], ["L", "ligar documento"], ["o", "abrir playbook"],
     ["Portfólio · Matriz", ""], ["s", "status"], ["i", "ICE"],
+    ["Portfólio · Documentos", ""], ["L", "ligar"], ["d", "desligar"], ["enter", "abrir"],
     ["Configurações · Memória", ""], ["s", "trocar provedor"], ["v", "verificar harnesses"], ["i", "conectar selecionado"],
-    ["Configurações · Saúde", ""], ["o", "testar online (doctor --online)"],
-    ["Publicar (porta 3)", ""], ["A", "aprovar (gate)"], ["x", "cancelar"],
+    ["Configurações · Saúde", ""], ["f", "corrigir o aviso selecionado"], ["o", "testar online (doctor --online)"],
     ["Ficha de projeto", ""], ["space", "entregável feito"], ["s", "estado do entregável"],
-    ["Publicar (porta 3)", ""], ["n", "pedir publicação"],
     ["Outros n", ""], ["n", "nota (Início) · estrutura do plano (Projetos) · rascunhar msg · nova decisão · nova entrega · nova pessoa · novo processo · nova área"],
-    ["Ficha de ação", ""], ["m", "mesclar duplicada"],
-    ["Pessoas / fichas", ""], ["u ou e", "editar pessoa"], ["a", "alias"],
-    ["Projetos / Goals", ""], ["e", "editar (gate estrutural: brain plan log)"], ["G", "novo goal (gate)"],
+    ["Pessoas / fichas", ""], ["e", "editar pessoa"], ["a", "alias"], ["R", "quem é…?"],
+    ["Projetos / Goals", ""], ["e", "editar (gate estrutural: brain plan log)"], ["G", "novo goal (gate)"], ["E", "mudar árvore (gate)"],
     ["P", "declarar progresso do goal"], ["S", "exportar (share)"],
   ];
   ov.innerHTML = '<div class="palette"><div class="pin"><b>Teclas — as mesmas da TUI</b><span class="hint">? fecha</span></div>' +
@@ -2022,7 +2153,7 @@ function helpOverlay(){
 
 // handler único de teclado: paleta primeiro, depois teclas de página
 document.addEventListener("keydown", e => {
-  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); pal.open ? closePal() : openPal(); return; }
+  if ((e.metaKey || e.ctrlKey) && ["k", "p"].includes(e.key.toLowerCase())) { e.preventDefault(); pal.open ? closePal() : openPal(); return; }
   if (pal.open) {
     if (e.key === "Escape") closePal();
     if (e.key === "ArrowDown") { e.preventDefault(); pal.sel = Math.min(pal.items.length - 1, pal.sel + 1); renderPal(); }
@@ -2049,8 +2180,9 @@ document.addEventListener("keydown", e => {
     return;
   }
   if (k === "/") { e.preventDefault(); lfOpen(); return; }
-  if (k === "g") { e.preventDefault(); openPal(); return; }                // busca (paleta), como o g da TUI
+  if (k === "g" || k === ":") { e.preventDefault(); openPal(); return; }      // busca/paleta: g e : (como a TUI)
   if (k === "Escape" && lfPop()) { e.preventDefault(); return; }
+  if (k === "N") { e.preventDefault(); noteForm(); return; }                  // nota rápida em qualquer página
   if (k === "?") { e.preventDefault(); helpOverlay(); return; }
   if (k === "j" || k === "ArrowDown") { e.preventDefault(); selMove(1); return; }
   if (k === "k" || k === "ArrowUp") { e.preventDefault(); selMove(-1); return; }
@@ -2073,19 +2205,23 @@ function keyLegend(){
   if (h.startsWith("#todo")) {
     add("n", "nova");
     add("e", "editar", !t || !t.open); add("c", "fechar", !t || !t.open); add("s", "status", !t || !t.open);
-    add("t", "prazo", !t || !t.open); add("D", "descartar", !t || !t.open); add("z", t && t.parked ? "voltar" : "não agora", !t || !t.open);
+    add("t", "prazo", !t || !t.open); add("d", "descartar", !t || !t.open); add("z", t && t.parked ? "voltar" : "não agora", !t || !t.open);
     add("o", "reabrir", !(t && !t.open)); add("m", "cobrar", !(t && t.open && t.list === "waiting"));
     const qs0 = new URLSearchParams((location.hash.split("?")[1]) || "");
     const vl = {todas: "todas", semana: "esta semana", depois: "depois", "nao-agora": "não agora"}[qs0.get("v") || "todas"];
     add("v", "vista: " + vl); add("O", "ordem: " + ((qs0.get("o") || "prazo") === "prazo" ? "prazo" : "id"));
-    add("a", qs0.get("a") === "1" ? "só recentes" : "todas");
-  } else if (h.startsWith("#action/")) { add("e", "editar"); add("c", "fechar"); add("m", "mesclar"); }
-  else if (h.startsWith("#home")) add("n", "nota");
-  else if (h.startsWith("#projects")) { add("n", "estrutura"); add("G", "novo goal (gate)");
+    add("T", qs0.get("a") === "1" ? "só recentes" : "todas");
+  } else if (h.startsWith("#action/")) { add("e", "editar"); add("c", "fechar"); add("d", "descartar"); add("M", "mesclar"); }
+  else if (h.startsWith("#home")) { add("n", "nota"); add("u", "⚡ atualizar tudo"); add("d", "⚡ processar inbox"); add("b", "⚡ brief"); add("c", "⚡ puxar fonte"); }
+  else if (h.startsWith("#sources")) {
+    const sid = SEL.i >= 0 ? (selId() || "") : "", src = sid.startsWith("src:") ? (M.sources || []).find(x => x.key === sid.slice(4)) : null;
+    add("n", "adicionar"); add("e", "editar", !(src && src.in_watch)); add("d", "remover", !(src && src.in_watch));
+    add("w", "incluir no watch", !(src && !src.in_watch)); add("c", "⚡ puxar", !src); add("u", "⚡ atualizar tudo"); }
+  else if (h.startsWith("#projects")) { add("n", "estrutura"); add("G", "novo goal (gate)"); add("E", "mudar árvore (gate)");
     add("P", "progresso do goal", !id.startsWith("GOAL-")); add("S", "exportar"); }
   else if (h.startsWith("#project/")) { add("e", "editar (gate)");
     add("space", "marcar feito", !(selEl() && selEl().dataset.deliv)); add("s", "estado", !(selEl() && selEl().dataset.deliv)); }
-  else if (h.startsWith("#person/")) { add("u", "editar"); add("a", "alias"); }
+  else if (h.startsWith("#person/")) { add("e", "editar"); add("a", "alias"); }
   else if (h.startsWith("#ask")) {
     const id = SEL.i >= 0 ? (selId() || "") : "";
     const qs = id.startsWith("ASK-") ? (M.questions || []).find(x => x.id === id) : null;
@@ -2093,11 +2229,10 @@ function keyLegend(){
     add("n", "pedir publicação");
     const pu = id.startsWith("PUB-") ? (M.publishes || []).find(x => x.id === id) : null;
     add("A", "aprovar publicação (gate)", !(pu && pu.status === "solicitada"), true);
-    add("x", "cancelar publicação", !!pu ? !(pu.status === "solicitada" || pu.status === "aprovada") : true);
     add("a", id.startsWith("PROP-") ? "aceitar (gate)" : "responder", !(qs ? qs.status === "aberta" : ps ? ps.status === "aberta" : false));
-    add("r", "rejeitar proposta", !(ps && ps.status === "aberta"));
-    add("x", "descartar pergunta", !(qs && qs.status === "aberta"));
-    add("R", "retomar o agente");
+    add("d", pu ? "cancelar publicação" : ps ? "rejeitar proposta" : "descartar pergunta",
+      pu ? !(pu.status === "solicitada" || pu.status === "aprovada") : ps ? ps.status !== "aberta" : !(qs && qs.status === "aberta"));
+    add("R", "retomar o agente"); add("T", hashAll() ? "só abertas" : "todas");
   }
   else if (h.startsWith("#focus")) {
     const f = M.focus;
@@ -2109,29 +2244,31 @@ function keyLegend(){
     const m0 = mid.startsWith("MSG-") ? M.outbox.find(x => x.id === mid) : null;
     add("n", "rascunhar");
     add("A", "aprovar", !(m0 && m0.status === "rascunho"), true);
-    add("S", "enviar", !(m0 && m0.status === "aprovada"));
-    add("x", "cancelar", !(m0 && (m0.status === "rascunho" || m0.status === "aprovada")));
+    add("S", "enviar", !(m0 && m0.status === "aprovada")); add("T", hashAll() ? "só pendentes" : "todas");
+    add("d", "cancelar", !(m0 && (m0.status === "rascunho" || m0.status === "aprovada")));
   } else if (h.startsWith("#feedback")) {
     const fid = SEL.i >= 0 ? (selId() || "") : "";
     const fb = fid.startsWith("FB-") ? (M.feedback || []).find(x => x.id === fid) : null;
-    add("n", "sugerir/corrigir"); add("p", "publicar", !(fb && (fb.status === "pendente" || fb.status === "falhou"))); add("s", "sincronizar");
+    add("n", "sugerir/corrigir"); add("p", "publicar", !(fb && (fb.status === "pendente" || fb.status === "falhou"))); add("s", "sincronizar"); add("T", hashAll() ? "só pendentes" : "todas");
   } else if (h.startsWith("#decisions")) { add("n", "nova"); add("S", "superar", !id.startsWith("DEC-")); }
   else if (h.startsWith("#pf/matrix")) { add("s", "status", !o); add("i", "ICE", !o); }
   else if (h.startsWith("#pf/opps")) {
     add("n", "nova");
     add("s", "status", !o); add("i", "ICE", !o); add("c", "confirmar ICE", !(o && o.ice_suggested));
-    add("e", "editar", !o); add("x", "descartar", !o);
-    add("p", "promover", !(o && !(o.project || o.promoted)), true); add("O", "one-pager", !o);
+    add("e", "editar", !o); add("d", "descartar", !o);
+    add("p", "promover", !(o && !(o.project || o.promoted)), true); add("O", "one-pager", !o); add("L", "ligar doc", !o); add("v", "evidência", !o);
   } else if (h.startsWith("#pf/opp/")) { add("e", "editar"); add("s", "status"); add("i", "ICE");
     add("c", "confirmar ICE", !(o && o.ice_suggested)); add("p", "promover (gate)", !!(o && (o.project || o.promoted)), true);
-    add("x", "descartar", !o || ["descartada", "entregue"].includes(o.status)); }
+    add("d", "descartar", !o || ["descartada", "entregue"].includes(o.status)); add("L", "ligar doc"); add("v", "evidência"); }
   else if (h.startsWith("#pf/procs")) { add("n", "novo"); add("e", "editar", !id.startsWith("PROC-"));
-    add("a", "nova oportunidade daqui", !id.startsWith("PROC-")); add("x", "aposentar", !id.startsWith("PROC-")); }
+    add("a", "nova oportunidade daqui", !id.startsWith("PROC-")); add("d", "aposentar", !id.startsWith("PROC-")); add("L", "ligar doc", !id.startsWith("PROC-")); add("o", "abrir playbook", !id.startsWith("PROC-")); }
+  else if (h.startsWith("#pf/docs")) { add("L", "ligar"); add("d", "desligar", !id.startsWith("doc:")); add("enter", "abrir", !id.startsWith("doc:")); }
   else if (h.startsWith("#cfg/memoria")) { add("s", "provedor"); add("v", "verificar harnesses"); add("i", "conectar", !id); }
-  else if (h.startsWith("#cfg/saude")) { add("o", "testar online"); }
+  else if (h.startsWith("#cfg/saude")) { const hc = id.startsWith("health:") ? (M.health || [])[+id.slice(7)] : null;
+    add("f", "corrigir", !(hc && hc.fix)); add("o", "testar online"); }
   else if (h.startsWith("#pf/areas")) { add("n", "nova"); add("e", "editar", !sel); }
   else if (h.startsWith("#wins")) add("n", "nova entrega");
-  else if (h.startsWith("#people")) { add("n", "nova pessoa"); add("u", "editar", !id); add("a", "alias", !id); }
+  else if (h.startsWith("#people")) { add("n", "nova pessoa"); add("e", "editar", !id); add("a", "alias", !id); add("R", "quem é…?"); }
   else if (h.startsWith("#pf/area/")) add("e", "editar");
   return out;
 }
@@ -2170,6 +2307,7 @@ function normalizeBrain(m){
   m.counts = m.counts || {}; m.questions = m.questions || []; m.proposals = m.proposals || [];
   m.outbox = m.outbox || []; m.health = m.health || []; m.deliveries = m.deliveries || [];
   m.feedback = m.feedback || [];
+  m.sources = m.sources || []; m.source_kinds = m.source_kinds || []; m.doc_kinds = m.doc_kinds || [];   // Fontes e Documentos (ausentes em instância antiga)
   m.providers = m.providers || {}; m.harnesses = m.harnesses || [];   // face Configurações (ausente em instância antiga)
   m.actions = m.actions || []; m.publishes = m.publishes || []; m.focus = m.focus || null;
   m.deliverables_done = m.deliverables_done || [];
@@ -2554,8 +2692,10 @@ V.focus = () => {
   if (f.consumed.length) h += panel("Esforço consumido e ainda aberta — reestimar?", f.consumed.map(aL).join(", "));
   return h;
 };
-V.outbox = () => {
-  const groups = [["Aguardando sua aprovação", ["rascunho"]], ["Aprovadas, não enviadas", ["aprovada"]], ["Enviadas", ["enviada"]], ["Falhas / canceladas", ["falhou", "cancelada"]]];
+V.outbox = (q) => {
+  const all = !!(q && q.get("a") === "1");                      // T: só pendentes (padrão, como o TUI) ↔ todas
+  const groups = [["Aguardando sua aprovação", ["rascunho"]], ["Aprovadas, não enviadas", ["aprovada"]], ["Enviadas", ["enviada"]], ["Falhas / canceladas", ["falhou", "cancelada"]]]
+    .filter((g, i) => all || i < 2);
   let h = '<div class="pagehead"><div><h1>Mensagens</h1><p class="sub">Nada é enviado sem sua aprovação do texto exato. Todo envio fica registrado.</p></div></div>';
   return h + groups.map(([t, s]) => {
     const l = M.outbox.filter(m => s.includes(m.status));
@@ -2563,7 +2703,8 @@ V.outbox = () => {
       (m.sent ? ' <span class="muted">· enviada ' + fmtD(m.sent) + "</span>" : "") + "</header>" + '<div class="msg">' + esc(m.text) + "</div></div>").join("") || empty("—")), ' style="margin-top:14px"');
   }).join("");
 };
-V.feedback = () => {
+V.feedback = (q) => {
+  const all = !!(q && q.get("a") === "1");                      // T: só pendentes (padrão, como o TUI) ↔ todas
   const glyph = {sugestao: "💡", bug: "🐞"};
   const issueChip = f => {
     if (f.status !== "criado") return "";
@@ -2587,10 +2728,10 @@ V.feedback = () => {
   const doneTitle = 'Já no GitHub · ' + done.length + ' <button class="btn tiny" data-fbsync title="relê o estado dos issues no GitHub">s sincronizar</button>';
   return '<div class="pagehead"><div><h1>Sugestões e bugs</h1><p class="sub">Porta 7 — cada registro vira uma issue pública no repo do framework. O texto não carrega nada seu: nomes, e-mails e caminhos ficam fora.</p></div></div>' +
     panel("Pendente de publicar · " + pend.length, pend.map(row).join("") || empty("nada pendente — n para sugerir ou reportar"), ' style="margin-top:14px"') +
-    panel(doneTitle, done.map(row).join("") || empty("—"), ' style="margin-top:14px"');
+    (all ? panel(doneTitle, done.map(row).join("") || empty("—"), ' style="margin-top:14px"') : "");
 };
 V.health = () => '<div class="pagehead"><div><h1>Saúde</h1><p class="sub">Checagens do brain doctor.</p></div></div>' +
-  panel("", '<ul class="feed health">' + (M.health || []).map(c => '<li class="' + c.level + '"><span class="hicon">' + ({ok: "✓", warn: "⚠", error: "✗"}[c.level]) + "</span> <b>" + esc(c.title) + "</b> — " + esc(c.detail) + "</li>").join("") + "</ul>");
+  panel("", '<ul class="feed health">' + (M.health || []).map((c, i) => '<li class="' + c.level + '" data-sel="health:' + i + '"><span class="hicon">' + ({ok: "✓", warn: "⚠", error: "✗"}[c.level]) + "</span> <b>" + esc(c.title) + "</b> — " + esc(c.detail) + (c.fix ? ' <span class="muted small">· f ' + esc(c.fix.label) + "</span>" : "") + "</li>").join("") + "</ul>");
 V["cfg/saude"] = V.health;                      // face Configurações: a mesma régua do doctor
 V["cfg/memoria"] = () => {
   const rows = [["llm", "LLM"], ["embeddings", "Embeddings"], ["reranker", "Reranker"]].map(([k, icon]) => {
@@ -2666,6 +2807,32 @@ function oppRow(o, i){
       : o.promoted === "goal" ? esc(o.goal) + ' <span class="muted">(goal)</span>'
       : '<span class="muted">—</span>') + '</td><td class="num">' + hrs(o.hours_saved) + "</td></tr>";
 }
+// ── Fontes (watch.toml) — a aba Fontes do TUI ──
+V.sources = () => {
+  const S = M.sources || [], when = x => x ? esc(x.slice(0, 16).replace("T", " ")) : '<span class="muted">nunca</span>';
+  return '<div class="pagehead"><div><h1>Fontes</h1><p class="sub">O universo observável: fonte que não está no watch.toml não é puxada pelo /update nem pelo noturno.</p></div></div>' +
+    panel("", S.length ? '<div class="twrap"><table><tr><th>Key</th><th>Tipo</th><th>Janela</th><th>Último pull</th><th>Estado</th></tr>' +
+      S.map(s => '<tr data-sel="src:' + esc(s.key) + '"><td><b>' + esc(s.key) + "</b></td><td>" + esc(s.kind || "—") + "</td><td>" + esc(s.window || "—") + "</td><td>" + when(s.last_ok) + "</td><td>" +
+        (!s.in_watch ? chip("atencao", "fora do watch") + ' <span class="muted small">w inclui</span>'
+          : s.failures ? '<span class="late">⚠ ' + s.failures + " falha(s) · " + esc((s.last_error || "").slice(0, 80)) + "</span>" : '<span class="ok">✓</span>') + "</td></tr>").join("") + "</table></div>"
+      : empty("Nenhuma fonte no watch.toml — n adiciona."));
+};
+V["pf/docs"] = () => {
+  const rows = [];
+  PF.processes.forEach(p => p.docs.forEach((d, n) => rows.push({t: p.id, title: p.title, d, n})));
+  PF.opportunities.forEach(o => o.docs.forEach((d, n) => rows.push({t: o.id, title: o.title, d, n})));
+  return '<div class="pagehead"><div><h1>Documentos</h1><p class="sub">Playbooks, one-pagers e planilhas ligados a processos e oportunidades.</p></div></div>' +
+    panel("", rows.length ? '<div class="twrap"><table><tr><th>Ligado a</th><th>Tipo</th><th>Documento</th><th>Vigiado</th></tr>' +
+      rows.map(r => '<tr data-sel="doc:' + esc(r.t) + ":" + r.n + '" data-url="' + esc(docUrl(r.d.ref)) + '"><td>' + idc(r.t) + " " + esc(r.title) + "</td><td>" + chip("info", r.d.kind) + "</td><td>" +
+        esc(r.d.title || r.d.ref) + "</td><td>" + (r.d.watch ? "sim" : "—") + "</td></tr>").join("") + "</table></div>"
+      : empty("Nenhum documento ligado — L liga a um processo ou oportunidade."));
+};
+function docUrl(ref){                                 // URL do doc: http direto; id cru do Drive vira o link genérico; caminho do vault não tem URL
+  if (/^https?:\/\//.test(ref)) return ref;
+  if (/^[A-Za-z0-9_-]{20,}$/.test(ref)) return "https://drive.google.com/file/d/" + ref + "/view";
+  return "";
+}
+
 // ── face Portfólio: pf/visao · pf/opps (kanban) · pf/matrix · pf/procs · pf/areas ──
 const STAGES_PIPE = ["ideia", "triagem", "priorizada", "em-andamento", "piloto", "validando", "entregue"];
 const STAGES_LAT = ["em-espera", "descartada"];
@@ -2814,7 +2981,8 @@ V.portfolio = () => { location.hash = "#pf/visao"; return ""; };   // compat: li
 
 
 // ── perguntas do agente (ASK-####) e propostas (PROP-####) ──────────────
-V.ask = () => {
+V.ask = (q) => {
+  const all = !!(q && q.get("a") === "1");                      // T: só abertas (padrão, como o TUI) ↔ todas
   const qs = M.questions || [], abertas = qs.filter(q => q.status === "aberta"), feitas = qs.filter(q => q.status !== "aberta");
   let h = '<div class="pagehead"><div><h1>Perguntas e propostas</h1><p class="sub">O agente pergunta (ASK-####) — só o dono responde. Propostas PROP-#### o dono aceita/rejeita com a resposta literal.</p></div></div>';
   h += panel("Perguntas abertas · " + abertas.length, abertas.length ? abertas.map(q =>
@@ -2834,7 +3002,7 @@ V.ask = () => {
     "evidência: " + esc(pr.evidence || "—") + "</p>" +
     '<div class="ask-opts"><button class="btn primary" data-acc>aceitar (gate)</button><button class="btn" data-rej>rejeitar</button></div></div>').join("")
     : empty("nenhuma proposta aberta"), ' style="margin-top:14px"');
-  const pubs = M.publishes || [];
+  const pubs = (M.publishes || []).filter(x => all || x.status !== "publicada");
   if (pubs.length) h += panel("Publicar (porta 3) · " + pubs.filter(x => x.status !== "publicada").length + " aguardando",
     pubs.map(x => '<div class="card" style="margin:0 0 10px"><header><span class="ids">' + idc(x.id) + "</span>" +
       chip(x.status === "solicitada" ? "atencao" : x.status === "publicada" ? "em-dia" : "info", x.status) +
@@ -2846,18 +3014,19 @@ V.ask = () => {
       (x.status === "aprovada" ? '<button class="btn primary" data-pub="done:' + esc(x.id) + '">publicar (agente)</button><button class="btn" data-pub="cancel:' + esc(x.id) + '">cancelar</button>' : "") +
       (x.status === "publicada" ? '<a class="btn" href="' + esc(x.link || "#") + '">abrir ↗</a>' : "") +
       "</div></div>").join("") + '<p class="muted small">pedir nova: tecla n · o export sai de brain share; o agente posta na porta 3</p>', ' style="margin-top:14px"');
-  if (feitas.length) h += panel("Respondidas", '<ul class="feed">' + feitas.map(q =>
+  if (all && feitas.length) h += panel("Respondidas", '<ul class="feed">' + feitas.map(q =>
     "<li>" + idc(q.id) + ' <span class="muted">' + esc(q.text.slice(0, 90)) + "…</span> → <b>" + esc(q.answer || "") + "</b></li>").join("") + "</ul>", ' style="margin-top:14px"');
   return h;
 };
 
 // ── router + faces (mesma lógica da TUI: Execução | Portfólio, cada face lembra onde estava) ──
-const TABS_EXEC = [["home", "Início"], ["todo", "TODO", () => M.counts.mine_overdue], ["projects", "Projetos"], ["decisions", "Decisões"], ["ask", "Perguntas", () => ((M.questions || []).filter(q => q.status === "aberta").length + M.proposals.length) || 0], ["wins", "Conquistas"],
+const TABS_EXEC = [["home", "Início"], ["sources", "Fontes", () => (M.sources || []).filter(s => s.failures).length || 0], ["todo", "TODO", () => M.counts.mine_overdue], ["projects", "Projetos"], ["decisions", "Decisões"], ["ask", "Perguntas", () => ((M.questions || []).filter(q => q.status === "aberta").length + M.proposals.length) || 0], ["wins", "Conquistas"],
   ["people", "Pessoas"], ["timeline", "Linha do tempo"], ["focus", "Foco", () => M.focus && M.focus.status === "proposto" ? 1 : 0],
   ["outbox", "Mensagens", () => M.counts.outbox_pending], ["feedback", "Sugestões", () => (M.feedback || []).filter(f => f.status !== "criado").length || 0]];
   // (Saúde saiu daqui com a face Configurações — mesma decisão da TUI: mora só lá, com o badge de avisos)
 const TABS_PF = [["pf/visao", "Visão geral"], ["pf/opps", "Oportunidades", () => PF.opportunities.filter(o => o.status !== "descartada").length],
-  ["pf/matrix", "Matriz"], ["pf/procs", "Processos", () => PF.processes.filter(p => p.status === "ativo").length], ["pf/areas", "Áreas", () => PF.areas.length]];
+  ["pf/matrix", "Matriz"], ["pf/procs", "Processos", () => PF.processes.filter(p => p.status === "ativo").length], ["pf/areas", "Áreas", () => PF.areas.length],
+  ["pf/docs", "Documentos", () => PF.processes.concat(PF.opportunities).reduce((n, x) => n + x.docs.length, 0)]];
 const TABS_CFG = [["cfg/memoria", "Memória"], ["cfg/saude", "Saúde", () => (M.health || []).filter(c => c.level !== "ok").length]];
 const FACES = [["execucao", "Execução", TABS_EXEC], ["portfolio", "Portfólio", TABS_PF], ["configuracoes", "Configurações", TABS_CFG]];
 if (window.PF_ONLY) { FACES.length = 0; FACES.push(["portfolio", "Portfólio", TABS_PF]); }
@@ -2890,7 +3059,7 @@ function route(){
   if (typeof window.afterRoute === "function") window.afterRoute(view, q, arg);
   window.scrollTo(0, 0);
 }
-window.BRAIN = {M, A, D, P, G, PE, OPP, PROC, AREA, go, route, chip, aL, dL, pL, peL, fmtD, fmtDW, donut, bar, esc,
+window.BRAIN = {M, A, D, P, G, PE, OPP, PROC, AREA, docUrl, go, route, chip, aL, dL, pL, peL, fmtD, fmtDW, donut, bar, esc,
   refresh: function(nm){                       // ponte CLI (./brain serve): novo view model → índices + views
     normalizeBrain(nm);
     for (const k of Object.keys(M)) delete M[k];

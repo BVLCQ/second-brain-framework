@@ -7,7 +7,7 @@ import webbrowser
 import subprocess
 from pathlib import Path
 
-from . import doctor, model, render_md, render_portfolio, util
+from . import doctor, model, render_md, render_portfolio, schema, util, watch
 from . import harvest as harvest_mod
 
 ASSET = Path(__file__).resolve().parent / "assets" / "dashboard.html"
@@ -48,11 +48,35 @@ def _cleanup(fresh: Path, keep: set[Path]) -> list[str]:
     return removed
 
 
+def _sources(brain) -> list[dict]:
+    """Fontes do watch.toml + o que o ledger sabe de cada pull (a mesma conta da aba Fontes do TUI); pulls avulsos
+    (/connect) aparecem fora do watch."""
+    try:
+        listed = watch.list_sources(brain.inst)
+    except util.BrainError:
+        listed = []
+    conns, out, seen = brain.state.connectors, [], set()
+    for s in listed:
+        c = conns.get(s.get("key", ""))
+        seen.add(s.get("key"))
+        out.append({**s, "in_watch": True, "last_ok": c.last_ok if c else "", "last_error": c.last_error if c else "",
+                    "failures": c.consecutive_failures if c else 0, "pulls": c.pulls if c else 0,
+                    "last_changed": c.last_changed if c else ""})
+    for k, c in conns.items():
+        if k not in seen:
+            out.append({"key": k, "kind": "", "in_watch": False, "last_ok": c.last_ok, "last_error": c.last_error,
+                        "failures": c.consecutive_failures, "pulls": c.pulls, "last_changed": c.last_changed})
+    return out
+
+
 def view_model(brain) -> dict:
     """O view model completo (o que o render injeta no painel e o serve devolve em /api/data):
     modelo + checagens de saúde + notas do agente — mesmas chaves nos dois caminhos."""
     m = model.build(brain)
-    m["health"] = doctor.checks(brain)
+    m["health"] = [{**c, "fix": doctor.fix_for(c)} for c in doctor.checks(brain)]
+    m["sources"] = _sources(brain)
+    m["source_kinds"] = [list(k) for k in watch.KINDS]
+    m["doc_kinds"] = sorted(schema.DOC_KINDS)
     m["notes"] = _notes(brain.inst.fresh)
     from . import upstream as _up                              # versão + aviso de atualização (cache, sem rede)
     from . import __version__ as _ver
