@@ -215,25 +215,35 @@ class CliAndSetupTests(unittest.TestCase):
                 else:
                     os.environ["BRAIN_HOME"] = old
 
-    def test_setup_step_never_writes_in_auto_mode(self):
+    def test_setup_step_installs_in_auto_mode_and_is_idempotent(self):
+        if sys.platform not in launcher.SUPPORTED:
+            self.skipTest("plataforma sem ícone")
         step = next(s for s in setup.STEPS if s["id"] == "painel")
-        said = []
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            inst = _inst(tmp / "home")
+            said, calls = [], []
 
-        class _UI(setup.AutoUI):
-            def say(self, msg):
-                said.append(msg)
+            class _UI(setup.AutoUI):
+                def say(self, msg):
+                    said.append(msg)
 
-        class _B:
-            class inst:
-                root = Path("/nonexistent-brain-home")
-
-        orig = launcher.is_installed
-        launcher.is_installed = lambda *a, **k: False
-        try:
-            step["run"](_B, _UI())
-        finally:
-            launcher.is_installed = orig
-        self.assertTrue(said and ("pulado" in said[0] or "só macOS/Linux" in said[0]), said)
+            class _B:
+                pass
+            _B.inst = inst
+            orig_default, orig_install = launcher.default_dest, launcher.install
+            launcher.default_dest = lambda platform=None: tmp / "apps"          # nada na máquina real
+            launcher.install = lambda i, *a, **k: calls.append(1) or orig_install(i, tmp / "apps", **k)
+            try:
+                self.assertEqual(step["status"](_B), "pending")
+                step["run"](_B, _UI())                                          # --yes: cria
+                self.assertEqual(calls, [1])
+                self.assertEqual(step["status"](_B), "done")
+                step["run"](_B, _UI())                                          # de novo: não recria
+                self.assertEqual(calls, [1])
+                self.assertIn("já instalado", said[-1])
+            finally:
+                launcher.default_dest, launcher.install = orig_default, orig_install
 
 
 if __name__ == "__main__":

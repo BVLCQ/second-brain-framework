@@ -9,8 +9,9 @@
   aviso e o detalhe fica em `vault/logs/app.log`.
 - `--dest` (ex.: `~/Desktop`) e `--name` (várias instâncias). `brain app
   uninstall` só remove o que o próprio comando criou — recusa pasta de outro app.
-- O wizard (`brain setup`) ganhou o passo **painel**, só no modo interativo —
-  com `--yes` é pulado: nada escrito fora da instância sem você pedir.
+- O wizard (`brain setup`) ganhou o passo **painel**: o modo interativo
+  pergunta (padrão sim) e o `--yes` cria direto, como o passo `comando`.
+  Refazer o passo (`--only painel`) é idempotente.
 - O app guarda o caminho da instância e do framework: mudou a pasta, reinstale.
 
 ## 2.9.2 — fechadas recentes sempre à vista na TUI

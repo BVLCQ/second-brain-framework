@@ -411,9 +411,6 @@ def _run_painel(brain, ui) -> None:
     if launcher.is_installed(brain.inst.root):
         ui.say("✓ ícone do painel já instalado (reinstale com `brain app install` se mudou a pasta)")
         return
-    if not ui.interactive:                              # --yes não escreve fora da instância sem você pedir
-        ui.say("• ícone do painel pulado — crie com `brain app install` (clique duplo abre o painel)")
-        return
     if ui.confirm("Criar o ícone do painel (clique duplo abre o Segundo Cérebro, sem terminal)?", True):
         ui.say(f"✓ ícone criado: {launcher.install(brain.inst)}")
 
