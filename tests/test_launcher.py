@@ -41,10 +41,22 @@ class IconTests(unittest.TestCase):
         png = launcher.icon_png()
         self.assertEqual(png[:8], b"\x89PNG\r\n\x1a\n")
         self.assertEqual(struct.unpack(">II", png[16:24]), (512, 512))         # IHDR: 512×512
-        svg = launcher.ICON_SVG.read_text(encoding="utf-8")
-        self.assertTrue(svg.lstrip().startswith("<svg"))
-        for bad in ("<script", "onload=", "<image", "href=\"http"):               # SVG versionado: sem script nem rede
-            self.assertNotIn(bad, svg)
+        for f in (launcher.ICON_SVG, launcher.ICON_MARK, launcher.ICON_HERO):
+            svg = f.read_text(encoding="utf-8")
+            self.assertTrue(svg.lstrip().startswith("<svg"), f.name)
+            for bad in ("<script", "onload=", "<image", "href=\"http"):           # SVG versionado: sem script nem rede
+                self.assertNotIn(bad, svg, f.name)
+
+    def test_dashboard_brand_uses_the_mark_and_no_demo_tag(self):
+        import base64
+        from brainlib import render
+        html = render.ASSET.read_text(encoding="utf-8")
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("build_assets", Path(launcher.__file__).parent.parent / "scripts" / "build_assets.py")
+        ba = importlib.util.module_from_spec(spec); spec.loader.exec_module(ba)
+        mark = "data:image/svg+xml;base64," + base64.b64encode(ba.mark_svg()).decode("ascii")
+        self.assertIn(f'class="mark" src="{mark}"', html)                        # embutida: o painel abre offline
+        self.assertNotIn('id="gen"', html)                                       # o "demo" ao lado do nome saiu
 
     def test_icns_container(self):
         png = launcher.icon_png()

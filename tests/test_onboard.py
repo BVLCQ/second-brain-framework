@@ -131,6 +131,34 @@ class StepTests(unittest.TestCase):
         with self.assertRaises(util.BrainError):
             onboard.save_keys(self.b, {"GITHUB_TOKEN": "com espaço"})
 
+    def test_setup_status_comes_from_real_state_not_from_skipped_steps(self):
+        """A Visão geral de Configurações: pular um passo o marca como visto, mas ele segue "depois"."""
+        for step in ("sobre", "conectores", "memoria", "chaves"):
+            onboard.run_action(self.b, "skip", {"step": step})
+        st = onboard.state(self.b)["setup"]
+        self.assertEqual({k: st[k] for k in ("perfil", "conectores", "memoria", "integracoes")},
+                         {"perfil": False, "conectores": False, "memoria": False, "integracoes": False})
+        onboard.save_about(self.b, {"name": "Marina Demo"})
+        (self.tmp / "vault/PROFILE/profile.md").write_text("# PROFILE\n\n## Papel\n\nPadeira.\n", encoding="utf-8")
+        onboard.enable_connectors(self.b, {"connectors": ["gmail"]})
+        onboard.save_keys(self.b, {"GITHUB_TOKEN": "github_pat_FAKE"})
+        st = onboard.state(self.b)["setup"]
+        self.assertTrue(st["perfil"] and st["conectores"] and st["integracoes"] and st["rotina"])
+        self.assertFalse(st["memoria"])                                   # nenhuma memória = depois, não erro
+
+    def test_panel_hosts_the_setup_steps_in_configuracoes(self):
+        """Os passos moram em abas de Configurações (Visão geral primeiro); o atalho solto nas faces saiu."""
+        from brainlib import render
+        html = render.ASSET.read_text(encoding="utf-8")
+        self.assertNotIn('id="onboard"', html)
+        tabs = html.split("const TABS_CFG = [", 1)[1].split("];", 1)[0]
+        order = [t for t in ("cfg/inicio", "cfg/perfil", "cfg/rotina", "cfg/conectores", "cfg/memoria",
+                             "cfg/integracoes", "cfg/saude")]
+        self.assertEqual(sorted(order, key=tabs.index), order)
+        self.assertIn('"cfg/" + (seg[1] || "inicio")', html)               # #face/configuracoes cai na Visão geral
+        for step in ("inicio", "perfil", "rotina", "conectores", "integracoes"):
+            self.assertIn(f'V["cfg/{step}"]', html)
+
     def test_memory_later_and_full_needs_consent(self):
         self.assertEqual(onboard.apply_memory(self.b, {"mode": "full", "later": True}), {"later": True})
         self.assertEqual(onboard.progress(self.b.inst)["memory_later"], "full")
@@ -297,6 +325,29 @@ class OpenTests(unittest.TestCase):
         f.write_text(json.dumps({"url": "http://127.0.0.1:1/#t=x", "port": 1, "pid": 999999}), encoding="utf-8")
         self.assertFalse(serve.stop_stale(self.b.inst))           # versão antiga, mas morta: nada a encerrar
 
+    def test_second_bridge_never_orphans_the_first(self):
+        """Uma segunda ponte (outra porta, teste) não sobrescreve nem apaga o registro da que está no ar —
+        senão a principal fica viva ocupando a porta, invisível para o app, e o app cai no retrato."""
+        import os
+        import socket
+        f = serve.live_url_file(self.b.inst)
+        f.parent.mkdir(parents=True, exist_ok=True)
+        live = socket.socket()
+        live.bind(("127.0.0.1", 0))
+        live.listen(1)
+        self.addCleanup(live.close)
+        port = live.getsockname()[1]
+        first = {"url": f"http://127.0.0.1:{port}/#t=x", "port": port, "pid": os.getpid() + 1}
+        f.write_text(json.dumps(first), encoding="utf-8")
+        self.assertFalse(serve.register(self.b.inst, "http://127.0.0.1:2/#t=y", 2))
+        serve.unregister(self.b.inst)                              # a segunda encerra: o registro da primeira fica
+        self.assertEqual(json.loads(f.read_text(encoding="utf-8")), first)
+        live.close()                                               # a primeira morreu: a próxima ponte assume
+        self.assertTrue(serve.register(self.b.inst, "http://127.0.0.1:2/#t=y", 2))
+        self.assertEqual(f.stat().st_mode & 0o777, 0o600)
+        serve.unregister(self.b.inst)                              # o registro é dela: sai com ela
+        self.assertFalse(f.exists())
+
 
 class BridgeTests(unittest.TestCase):
     @classmethod
@@ -337,7 +388,9 @@ class BridgeTests(unittest.TestCase):
         code, html = self._req("/onboarding", token=False)
         self.assertEqual(code, 200)
         self.assertIn("Vamos montar o seu Brain", html)
-        self.assertEqual(self._req("/brain.svg", token=False)[0], 200)
+        for icon in ("/brain.svg", "/brain-mark.svg", "/brain-hero.svg"):    # ícone do app, marca ≤32 px, arte da boas-vindas
+            self.assertEqual(self._req(icon, token=False)[0], 200)
+        self.assertIn('src="/brain-hero.svg"', html)
         self.assertEqual(self._req("/api/onboard/state", token=False)[0], 401)
         self.assertEqual(self._req("/api/onboard/about", {"name": "X"}, token=False)[0], 401)
 

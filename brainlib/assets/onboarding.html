@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Brain — configuração</title>
-<link rel="icon" href="/brain.svg" type="image/svg+xml">
+<link rel="icon" href="/brain-mark.svg" type="image/svg+xml">
 <style>
 :root{
   --bg:#060a1f; --bg2:#0b1230; --panel:rgba(20,28,66,.72); --panel2:rgba(30,40,90,.55);
@@ -246,7 +246,7 @@ V.inicio = () => {
         <div><b>Seus dados são seus</b>Tudo fica nesta máquina. Nada é enviado sem você aprovar.</div>
         <div><b>Ele observa, você decide</b>O Brain sugere; enviar, publicar e mudar objetivos é sempre com o seu "ok".</div>
       </div>
-    </div><img src="/brain.svg" alt=""></div>
+    </div><img src="/brain-hero.svg" alt=""></div>
     ${nav({main: "Começar"})}`;
   bindNav(() => next());
 };
@@ -427,8 +427,8 @@ V.memoria = () => {
   $("#view").innerHTML = `${head("Passo 6", "Memória do Brain", "A memória deixa o Brain responder perguntas pelo <b>significado</b> — \"o que decidimos sobre o orçamento?\" acha a reunião certa mesmo que a palavra exata não apareça. Sem ela, o Brain continua funcionando com busca por palavras.")}
     <div class="grid3">
       <div class="opt" data-m="none"><span class="tag">Grátis · já funciona</span><h3>Sem memória</h3><ul><li>Busca por palavras</li><li>Nada a instalar</li><li>Dá para ligar depois</li></ul></div>
-      <div class="opt" data-m="lite"><span class="tag">Grátis · 100% local</span><h3>Lite</h3><ul><li>Busca por significado</li><li>Nada sai do seu computador</li><li>Precisa de 2 apps gratuitos</li></ul></div>
-      <div class="opt" data-m="full"><span class="tag">Com sua API key · pago por uso</span><h3>Full</h3><ul><li>Tudo do Lite, e mais:</li><li>Extrai fatos e liga assuntos entre reuniões</li><li>O texto vai para a IA com a sua chave</li></ul></div>
+      <div class="opt" data-m="lite"><span class="tag">Grátis · 100% local</span><h3>Embed</h3><ul><li>Busca por significado</li><li>Nada sai do seu computador</li><li>Precisa de 2 apps gratuitos</li></ul></div>
+      <div class="opt" data-m="full"><span class="tag">Com sua API key · pago por uso</span><h3>Full</h3><ul><li>Tudo do Embed, e mais:</li><li>Extrai fatos e liga assuntos entre reuniões</li><li>O texto vai para a IA com a sua chave</li></ul></div>
     </div>
     <div class="card" id="det" style="margin-top:16px"></div>
     <div class="log" id="log"></div><div class="msg" id="m"></div>
@@ -439,7 +439,7 @@ V.memoria = () => {
         ${pre(m.docker, "<b>OrbStack</b> (roda o banco de memória)", "https://orbstack.dev")}
         ${pre(m.lmstudio, "<b>LM Studio</b> com o modelo <code>text-embedding-bge-m3</code>", "https://lmstudio.ai")}</ul>`;
     if (sel === "none") $("#det").innerHTML = `<h2>Sem memória por enquanto</h2><p style="color:var(--tx2);margin:6px 0 0">O Brain usa o índice de palavras. Quando quiser, volte aqui (ou rode <code>brain setup --only memoria</code>).</p>`;
-    if (sel === "lite") $("#det").innerHTML = `<h2>Lite — no seu computador</h2>${prereq}`;
+    if (sel === "lite") $("#det").innerHTML = `<h2>Embed — no seu computador</h2>${prereq}`;
     if (sel === "full") $("#det").innerHTML = `<h2>Full — com IA na nuvem</h2>${prereq}
       <div class="grid2" style="margin-top:16px">
         <label class="f"><span>Provedor</span><select id="prov"><option value="anthropic">Anthropic (Claude)</option><option value="openai">OpenAI</option></select></label>
@@ -607,7 +607,7 @@ V.pronto = () => {
     <div class="card"><ul class="summary" style="list-style:none;margin:0;padding:0">
       ${row("voce", "Você", S.owner.name)}${row("sobre", "Perfil")}${row("rotina", "Rotina", S.routine.start + "–" + S.routine.end)}
       ${row("conectores", "Conectores", S.connectors.filter(c => c.enabled).map(c => c.label).join(", "))}
-      ${row("permissoes", "Permissões")}${row("memoria", "Memória", {none: "sem memória", lite: "lite", full: "full"}[S.memory.mode])}
+      ${row("permissoes", "Permissões")}${row("memoria", "Memória", {none: "sem memória", lite: "embed", full: "full"}[S.memory.mode])}
       ${row("chaves", "Integrações", S.keys.GITHUB_TOKEN.set ? "GitHub" : "")}
       ${row("planejamento", "Goals e projetos", S.planning.goals ? S.planning.goals + " goal(s)" : "")}</ul></div>
     <div class="card soft"><h2>Primeiros passos</h2><ol class="howto">

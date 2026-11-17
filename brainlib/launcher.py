@@ -2,7 +2,8 @@
 instância não está configurada; depois, o painel).
 
 macOS → `/Applications/Brain.app` (ou `~/Applications` sem permissão; aparece no Launchpad/Spotlight e arrasta para o Dock);
-Linux → entrada `.desktop` no menu de aplicativos. Ícone: `assets/icon/brain.svg` (o "Sinapse"). No macOS o `.icns` é
+Linux → entrada `.desktop` no menu de aplicativos. Ícone: `assets/icon/brain.svg` (o "Sinapse", traço grosso para ler no
+Dock; até 32 px usa a marca simplificada `brain-mark.svg`; a arte detalhada `brain-hero.svg` é só da boas-vindas). No macOS o `.icns` é
 montado na instalação com as ferramentas do sistema (`sips` rasteriza o SVG, `iconutil` empacota); sem elas, cai no
 PNG de 512 px (`assets/icon/brain-512.png`, também o ícone do Linux) embutido num `.icns` montado à mão.
 
@@ -29,7 +30,9 @@ BUNDLE_ID = "app.segundo-cerebro.painel"
 DEFAULT_NAME = "Brain"
 LEGACY_NAMES = ("Segundo Cérebro",)              # nome antigo do app: a reinstalação remove a cópia que nós criamos
 ICON_DIR = Path(__file__).resolve().parent / "assets" / "icon"
-ICON_SVG = ICON_DIR / "brain.svg"
+ICON_SVG = ICON_DIR / "brain.svg"                 # ícone do app (Dock, Aplicativos, marca do onboarding)
+ICON_MARK = ICON_DIR / "brain-mark.svg"           # ≤ 32 px: barra lateral do painel, favicon, 16/32 do .icns
+ICON_HERO = ICON_DIR / "brain-hero.svg"           # arte detalhada: só a ilustração grande da boas-vindas
 ICON_PNG = ICON_DIR / "brain-512.png"
 SUPPORTED = ("darwin", "linux")
 
@@ -50,8 +53,9 @@ def build_icns(pngs: dict[int, bytes]) -> bytes:
     return b"icns" + struct.pack(">I", 8 + len(body)) + body
 
 
-def _icns_from_svg(svg: Path) -> bytes | None:
-    """`.icns` completo (16→1024) a partir do SVG com `sips` + `iconutil` (vêm com o macOS). None se não der."""
+def _icns_from_svg(svg: Path, small: Path | None = None) -> bytes | None:
+    """`.icns` completo (16→1024) a partir do SVG com `sips` + `iconutil` (vêm com o macOS). Até 32 px usa `small`
+    (a marca simplificada), se dada. None se não der."""
     if not (shutil.which("sips") and shutil.which("iconutil")):
         return None
     with tempfile.TemporaryDirectory() as td:
@@ -61,7 +65,8 @@ def _icns_from_svg(svg: Path) -> bytes | None:
             for size, scale in ICONSET:
                 px = size * scale
                 out = iconset / (f"icon_{size}x{size}" + ("@2x" if scale == 2 else "") + ".png")
-                subprocess.run(["sips", "-s", "format", "png", "-z", str(px), str(px), str(svg), "--out", str(out)],
+                src = small if (small is not None and px <= 32) else svg
+                subprocess.run(["sips", "-s", "format", "png", "-z", str(px), str(px), str(src), "--out", str(out)],
                                check=True, capture_output=True, timeout=60)
             icns = Path(td) / "Brain.icns"
             subprocess.run(["iconutil", "-c", "icns", str(iconset), "-o", str(icns)],
@@ -72,7 +77,7 @@ def _icns_from_svg(svg: Path) -> bytes | None:
 
 
 def icon_icns() -> bytes:
-    return _icns_from_svg(ICON_SVG) or build_icns({512: icon_png()})
+    return _icns_from_svg(ICON_SVG, ICON_MARK) or build_icns({512: icon_png()})
 
 
 # ── o script que roda no clique ──────────────────────────────────────────────

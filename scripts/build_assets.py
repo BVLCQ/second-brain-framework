@@ -6,6 +6,7 @@ __DATA__, que o render.py substitui pelo view model (render_html) em cada `brain
 Rodar depois de editar as fontes:
     python3 scripts/build_assets.py
 """
+import base64
 import re
 import sys
 from pathlib import Path
@@ -13,6 +14,17 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "brainlib" / "assets" / "src"
 OUT = ROOT / "brainlib" / "assets"
+MARK = OUT / "icon" / "brain-mark.svg"            # marca ≤ 32 px: barra lateral + favicon (embutida: o painel abre offline)
+
+
+def mark_svg() -> bytes:
+    """A marca recortada no ladrilho: o arquivo guarda a margem da grade de ícones da Apple (vale para o .icns),
+    mas na barra lateral essa margem só encolhia o desenho."""
+    svg = MARK.read_text(encoding="utf-8")
+    cropped = svg.replace('viewBox="0 0 1024 1024"', 'viewBox="96 112 832 832"', 1)
+    if cropped == svg:
+        raise SystemExit("brain-mark.svg sem o viewBox 1024 esperado")
+    return cropped.encode("utf-8")
 
 
 def assemble(pf_only: bool, title: str) -> str:
@@ -22,6 +34,7 @@ def assemble(pf_only: bool, title: str) -> str:
     extra = (SRC / "extra.js").read_text(encoding="utf-8")
     html = shell.replace("<title>Brain</title>", f"<title>{title}</title>", 1)
     html = html.replace("__CSS__", css, 1)
+    html = html.replace("__MARK__", "data:image/svg+xml;base64," + base64.b64encode(mark_svg()).decode("ascii"))
     # um ÚNICO bloco <script> (os testes extraem o JS com split("<script>")/rsplit("</script>"))
     # na ordem do mockup: extras primeiro, core depois; a flag da variante vem antes de tudo
     js = f'window.PF_ONLY = {"true" if pf_only else "false"};\n' + extra + "\n" + core
