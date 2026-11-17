@@ -1,3 +1,13 @@
+## 2.17.1 — o clone sempre sabe o que o upstream tem
+
+- **Passo `framework` no `brain setup`.** Confere a regra de fetch do `origin` (`remote.origin.fetch`) e o hook
+  pre-push, e conserta o que faltar (`brain setup --only framework`). Sem a regra, o `git fetch` comum só atualiza o
+  `FETCH_HEAD`: o `origin/main` local fica velho e o `ahead/behind` do `update`, do `doctor` e da conferência antes
+  do push mentem — o que parecia "o upstream não andou" era um espelho parado. Um `git clone` normal já traz a
+  regra; ela falta em clones montados à mão.
+- `brain init` (que o `install.sh` já roda) aplica o mesmo reparo, e o `brain doctor` avisa quando a regra falta.
+  Uma regra que já existe, inclusive a de um clone de um ramo só, nunca é alterada.
+
 ## 2.17.0 — a configuração guiada mora na face Configurações
 
 - **Um passo por aba.** A face Configurações passa a ter Visão geral, Perfil, Rotina, Conectores, Memória,

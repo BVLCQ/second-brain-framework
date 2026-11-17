@@ -738,6 +738,31 @@ def _hook_path(root: Path) -> Path:
     return (root / rel) if not os.path.isabs(rel) else Path(rel)
 
 
+FETCH_REFSPEC = "+refs/heads/*:refs/remotes/origin/*"
+
+
+def fetch_refspec_state(inst: config.Instance) -> str:
+    """'ok' | 'ausente' | 'sem-origin' | 'sem-git'. Sem `remote.origin.fetch` um `git fetch` comum só atualiza o
+    FETCH_HEAD: o `origin/main` local fica velho e ahead/behind (update, doctor, a checagem antes do push) mentem.
+    Um `git clone` normal já traz a regra; falta em clones montados à mão (`git init` + config)."""
+    if not (inst.root / ".git").exists():
+        return "sem-git"
+    if "origin" not in _git(inst.root, "remote", check=False).stdout.split():
+        return "sem-origin"
+    r = _git(inst.root, "config", "--get-all", "remote.origin.fetch", check=False)
+    return "ok" if r.stdout.strip() else "ausente"
+
+
+def ensure_fetch_refspec(inst: config.Instance) -> str:
+    """Repara o que `fetch_refspec_state` achou ausente (só acrescenta; regra já existente, inclusive a de um clone
+    de um ramo só, nunca é tocada). Devolve o estado: 'ok' | 'corrigido' | 'sem-origin' | 'sem-git'."""
+    state = fetch_refspec_state(inst)
+    if state != "ausente":
+        return state
+    _git(inst.root, "config", "--add", "remote.origin.fetch", FETCH_REFSPEC)
+    return "corrigido"
+
+
 def hook_state(inst: config.Instance) -> str:
     """'instalado' | 'ausente' | 'de-outro' (já existe um pre-push que não é nosso) | 'sem-git'."""
     if not (inst.root / ".git").exists():
@@ -784,6 +809,9 @@ def doctor_checks(inst: config.Instance) -> list[dict]:
                               f"{len(st['changed']) + len(st['new'])} arquivo(s)) — commite e dê push (AGENTS.md)"})
     else:
         out.append({"level": "ok", "title": "framework", "detail": "em dia com o upstream (sem rede)"})
+    if fetch_refspec_state(inst) == "ausente":
+        out.append({"level": "warn", "title": "git fetch",
+                    "detail": "o clone não tem remote.origin.fetch: o origin/<ramo> local fica velho — `brain setup --only framework`"})
     state = hook_state(inst)
     if state == "ausente":
         out.append({"level": "warn", "title": "hook pre-push", "detail": "não instalado — `brain upstream hook install`"})

@@ -229,7 +229,9 @@ python -m unittest tests.test_brain | tail -3   # OK
 O wizard (`guides/setup.md`) é idempotente e deriva o estado de cada passo do
 `doctor` — rode-o ao final para o dono responder o que falta (identidade, modo de
 memória, portas). Passos mecânicos você pode fechar com `./brain setup --yes
---only comando,tui,noturno` e validar com `./brain doctor`. Modo `full` de memória
+--only framework,comando,tui,noturno` e validar com `./brain doctor`. O passo `framework` confere que o clone
+tem a regra de fetch do `origin` (sem ela o `git fetch` não atualiza o `origin/main` e o `update`/`doctor`
+mentem) e instala o hook de varredura do push. Modo `full` de memória
 (extração com a chave do dono): **sempre** o dono digita o "ok" no terminal dele —
 nunca aceite o gate por ele. Memória via OrbStack/compose em vez do daemon local:
 `services/compose.yaml` (+ `compose.full.yaml` no full) — `guides/memory.md`.

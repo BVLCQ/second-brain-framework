@@ -420,6 +420,30 @@ def _run_rotina(brain, ui) -> None:
     ui.say(f"✓ rotina: {tz} · {start}–{end} (almoço e detalhes finos: config/brain.toml [work])")
 
 
+def _st_framework(brain) -> str:
+    """Clone git em dia com o upstream: regra de fetch do origin + hook pre-push (a varredura antes do push)."""
+    from . import upstream
+    inst = brain.inst
+    if upstream.fetch_refspec_state(inst) == "sem-git":
+        return "off"                                    # instância sem git: nada a sincronizar
+    if upstream.fetch_refspec_state(inst) == "ausente" or upstream.hook_state(inst) == "ausente":
+        return "pending"
+    return "done"
+
+
+def _run_framework(brain, ui) -> None:
+    from . import upstream
+    inst = brain.inst
+    refspec = upstream.ensure_fetch_refspec(inst)
+    ui.say({"corrigido": "✓ regra de fetch do origin restaurada (git fetch volta a atualizar o origin/<ramo>)",
+            "ok": "✓ regra de fetch do origin presente", "sem-origin": "⚠ sem remote `origin` — nada a buscar (git remote add origin <url>)",
+            "sem-git": "– sem git: nada a sincronizar"}[refspec])
+    state = upstream.hook(inst, "install")
+    ui.say({"instalado": "✓ hook pre-push instalado (a varredura roda antes de cada push)",
+            "de-outro": "⚠ já existe um pre-push que não é do brain — a varredura não roda no push",
+            "sem-git": "– sem git: sem hook"}.get(state, f"hook pre-push: {state}"))
+
+
 def _st_comando(brain) -> str:
     return "done" if brain_command_status(brain.inst.root) else "pending"
 
@@ -763,6 +787,7 @@ STEPS: list[dict] = [
     {"id": "instancia", "title": "Instância (vault + config)", "status": _st_instancia, "run": _run_instancia},
     {"id": "identidade", "title": "Identidade do dono (ledger)", "status": _st_identidade, "run": _run_identidade},
     {"id": "rotina", "title": "Rotina (fuso, expediente)", "status": _st_rotina, "run": _run_rotina},
+    {"id": "framework", "title": "Framework (git: regra de fetch + hook pre-push)", "status": _st_framework, "run": _run_framework},
     {"id": "comando", "title": "Comando `brain` no PATH", "status": _st_comando, "run": _run_comando},
     {"id": "painel", "title": "Ícone do painel (clique duplo)", "status": _st_painel, "run": _run_painel},
     {"id": "foco", "title": "Foco (ics | google)", "status": _st_foco, "run": _run_foco},

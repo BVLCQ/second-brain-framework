@@ -1523,6 +1523,40 @@ class UpstreamTests(unittest.TestCase):
         self._commit(self.a, "v1.1")
         self._git(self.a, "push", "-q", "origin", "HEAD:main")
 
+    def test_clone_without_fetch_rule_is_detected_and_repaired(self):
+        """Sem remote.origin.fetch o `git fetch` não atualiza o origin/main e o ahead/behind mente: o setup, o init e o
+        doctor tratam isso. Um clone normal e um clone de um ramo só não são tocados."""
+        self.assertEqual(upstream.fetch_refspec_state(self.inst), "ok")                 # git clone traz a regra
+        self.assertEqual(upstream.ensure_fetch_refspec(self.inst), "ok")
+        self._git(self.b, "config", "--unset-all", "remote.origin.fetch")               # clone montado à mão
+        self.assertEqual(upstream.fetch_refspec_state(self.inst), "ausente")
+        self.assertTrue([c for c in upstream.doctor_checks(self.inst) if c["title"] == "git fetch"])
+        from brainlib import setup
+        brain = Brain(self.inst)
+        self.assertEqual(setup._st_framework(brain), "pending")
+        self._upstream_release()
+        self._git(self.b, "fetch", "-q", "origin")                                      # o fetch comum não enxerga o novo commit
+        self.assertNotEqual(self._git(self.b, "rev-parse", "origin/main"), self._git(self.a, "rev-parse", "HEAD"))
+        self.assertEqual(upstream.ensure_fetch_refspec(self.inst), "corrigido")
+        self.assertEqual(upstream.ensure_fetch_refspec(self.inst), "ok")                # idempotente
+        self._git(self.b, "fetch", "-q", "origin")
+        self.assertEqual(self._git(self.b, "rev-parse", "origin/main"), self._git(self.a, "rev-parse", "HEAD"))
+        self.assertFalse([c for c in upstream.doctor_checks(self.inst) if c["title"] == "git fetch"])
+        self._git(self.b, "config", "--unset-all", "remote.origin.fetch")               # um ramo só: regra própria é respeitada
+        self._git(self.b, "config", "--add", "remote.origin.fetch", "+refs/heads/main:refs/remotes/origin/main")
+        self.assertEqual(upstream.ensure_fetch_refspec(self.inst), "ok")
+        self.assertEqual(self._git(self.b, "config", "--get-all", "remote.origin.fetch").split(),
+                         ["+refs/heads/main:refs/remotes/origin/main"])
+
+    def test_init_repairs_the_fetch_rule(self):
+        self._git(self.b, "config", "--unset-all", "remote.origin.fetch")
+        from brainlib import cli
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            cli.cmd_init(argparse.Namespace(owner_id=None, owner_name="Fulana Quiteria", alias=None, email=None),
+                         Brain(self.inst))
+        self.assertIn("regra de fetch", out.getvalue())
+        self.assertEqual(upstream.fetch_refspec_state(self.inst), "ok")
+
     def test_update_check_does_nothing_then_apply_seeds_without_overwriting(self):
         self._upstream_release()
         res = upstream.update(self.inst, check=True)
