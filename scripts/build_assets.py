@@ -14,7 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "brainlib" / "assets" / "src"
 OUT = ROOT / "brainlib" / "assets"
-MARK = OUT / "icon" / "brain-mark.svg"            # marca ≤ 32 px: barra lateral + favicon (embutida: o painel abre offline)
+MARK = OUT / "icon" / "brain.svg"                 # o MESMO ícone do app (Dock): barra lateral + favicon (embutido: o painel abre offline)
 
 
 def mark_svg() -> bytes:
@@ -23,7 +23,7 @@ def mark_svg() -> bytes:
     svg = MARK.read_text(encoding="utf-8")
     cropped = svg.replace('viewBox="0 0 1024 1024"', 'viewBox="96 112 832 832"', 1)
     if cropped == svg:
-        raise SystemExit("brain-mark.svg sem o viewBox 1024 esperado")
+        raise SystemExit("brain.svg sem o viewBox 1024 esperado")
     return cropped.encode("utf-8")
 
 

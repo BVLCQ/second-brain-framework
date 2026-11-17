@@ -23,6 +23,9 @@
   abre à toa) e só o padrão (o macOS pede uma permissão de automação por app, na primeira vez). Sem permissão, sem
   aba ou em outro navegador (Firefox), abre como antes. Os testes interceptam `webbrowser.open`: nunca mexem nas abas
   do dono.
+- **Painel com o mesmo ícone do Dock.** A barra lateral e o favicon do painel usavam a marca simplificada
+  (`brain-mark.svg`, com dois nós por lado) e destoavam do ícone do app; agora usam o `brain.svg`, o mesmo do Dock.
+  A marca simplificada segue só nos tamanhos de 16/32 px do `.icns` e no favicon do onboarding.
 - **Trava:** `tests/test_forms.py` recusa campo escrito à mão fora do `forms.py`, exige que todo formulário abra
   nas duas pontas (ou diga por que não) e roda ~1.000 combinações de valores pelo Python e pelo node comparando
   comando, validação, dicas, listas e valor inicial. As coberturas da CLI (TUI e painel) passam a ler os comandos
