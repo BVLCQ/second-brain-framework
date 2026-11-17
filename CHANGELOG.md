@@ -1,3 +1,28 @@
+## 2.16.0 — o app Brain: instalação e configuração guiada no navegador
+
+- **App Brain.** O app (e o painel) passam a se chamar **Brain** — Segundo Cérebro segue como nome do framework.
+  Ícone novo, o "Sinapse" (`brainlib/assets/icon/brain.svg`): no macOS o `.icns` é montado na instalação com
+  `sips` + `iconutil` (vêm com o sistema); sem eles, cai no PNG de 512 px versionado. `brain app install` instala
+  em `/Applications` (a pasta Aplicativos) quando a conta escreve lá, senão `~/Applications`, e remove a cópia
+  antiga (`~/Applications`, nome "Segundo Cérebro") que ele mesmo criou.
+- **Configuração guiada no navegador** (`/onboarding` na ponte local, `brainlib/onboard.py`): você · sobre você
+  (prévia do PROFILE antes de gravar) · rotina · conectores (estado pelo `claude mcp list`, em segundo plano;
+  ligar um conector libera só as ferramentas de LEITURA em `[runner].allow` e cria as fontes simples no
+  `watch.toml`) · permissões (`.claude/settings.local.json`) · memória (nenhuma, lite, full — a API key vai direto
+  para o `config/.env` e o full exige o aceite explícito do envio) · integrações (token do GitHub) · goals e
+  projetos (texto e documentos entram na `RAW/inbox/`; o agente propõe a árvore; o dono aprova no navegador e ela
+  nasce pelo gate do `brain plan`). Rotas novas com as travas da ponte (host, origin, token); o corpo nunca vai
+  para o log; upload com nome saneado, tipo e tamanho limitados, só na inbox.
+- **`brain open`**: o que o clique no app faz — a configuração guiada enquanto ela não terminou, depois o painel.
+  O `install.sh` agora semeia a instância, cria o app e abre a configuração no navegador (o wizard de terminal
+  `brain setup` continua para quem prefere e para IAs).
+- **Sem id para inventar.** `brain init --owner-name "…"` gera o id do nome (`Marina Demo` → `marina-demo`);
+  `--owner-id` vira opcional. O wizard de terminal pergunta só o nome. `doctor` aponta para `./brain setup`.
+- A ponte relê o `brain.toml` a cada pedido (`config.reload`, que preserva `BRAIN_VAULT`/`BRAIN_CONFIG`): o
+  onboarding e o painel mudam a config com a ponte no ar.
+- A abertura do navegador passa por `util.open_url` (no macOS, `/usr/bin/open`).
+- README revisado: portas conforme o `AGENTS.md`, comando de testes que o CI roda, instalação pelo app.
+
 ## 2.15.0 — mesmas teclas no TUI e no painel
 
 - **Um verbo, uma tecla.** `d` descarta, remove, cancela, aposenta, desliga ou rejeita em toda tela (antes era `D`

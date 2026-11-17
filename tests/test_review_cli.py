@@ -209,6 +209,30 @@ class InitTests(unittest.TestCase):
             shutil.rmtree(td, ignore_errors=True)
 
 
+    def test_owner_id_is_generated_from_the_name(self):
+        td = Path(tempfile.mkdtemp())
+        try:
+            (td / "config").mkdir()
+            for name in ("brain.toml.example", "watch.toml.example", ".env.example"):
+                shutil.copy(ROOT / "config" / name, td / "config" / name)
+            shutil.copytree(ROOT / "template", td / "template")
+            (td / "vault").mkdir()
+            r = _run(td, "init", "--owner-name", "Marina Demo")          # sem --owner-id
+            self.assertEqual(r.returncode, 0, r.stderr)
+            cfg = tomllib.loads((td / "config" / "brain.toml").read_text(encoding="utf-8"))
+            self.assertEqual(cfg["owner"]["id"], "marina-demo")
+            self.assertEqual(cfg["owner"]["name"], "Marina Demo")
+            self.assertIn("pessoa: marina-demo", r.stdout)
+        finally:
+            shutil.rmtree(td, ignore_errors=True)
+
+    def test_owner_slug_fallbacks(self):
+        from brainlib import util
+        self.assertEqual(util.owner_slug("Maria"), "maria")
+        self.assertEqual(util.owner_slug("田中"), "dono")                        # sem letra latina: nunca "item"
+        self.assertLessEqual(len(util.owner_slug("x" * 80)), 32)
+
+
 class NotesArchivedTests(unittest.TestCase):
     def test_inbox_dir_above_vault_does_not_mark_raw_notes_as_inbox(self):
         td = Path(tempfile.mkdtemp())

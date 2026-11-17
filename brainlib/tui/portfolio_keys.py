@@ -6,7 +6,6 @@ ledger por conta própria. Promover é o gate estrutural: mostra o diff do goals
 from __future__ import annotations
 
 import re
-import webbrowser
 
 from rich.text import Text
 
@@ -502,6 +501,6 @@ class PortfolioKeys:
             return
         self.log_line(f"abrindo {url}", "dim")
         try:
-            webbrowser.open(url)
+            util.open_url(url)
         except Exception as e:  # noqa: BLE001 — abrir navegador nunca derruba o TUI
             self.log_line(f"não consegui abrir o navegador: {e}", "red")

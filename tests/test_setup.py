@@ -167,8 +167,10 @@ class RunTests(unittest.TestCase):
             b = Brain(_inst(Path(td)))                          # sem dono no ledger
             ui = ScriptedUI(["Dona Teste"])
             setup._run_identidade(b, ui)
-            self.assertIn("eu", b.state.people)
-            self.assertEqual(b.state.people["eu"].name, "Dona Teste")
+            self.assertEqual(b.owner, "dona-teste")                 # id gerado do nome, não "eu"
+            self.assertIn("dona-teste", b.state.people)
+            self.assertEqual(b.state.people["dona-teste"].name, "Dona Teste")
+            self.assertEqual(b.inst.cfg["owner"]["id"], "dona-teste")  # e gravado no brain.toml
 
     def test_memoria_full_gate_requires_literal_ok(self):
         with tempfile.TemporaryDirectory() as td:

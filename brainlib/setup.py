@@ -367,12 +367,22 @@ def _run_instancia(brain, ui) -> None:
                 src.rename(archived / "config-do-demo" / name)
         ui.say(f"demo arquivado em {archived.name} (+ config do demo)")
     if not (inst.config_dir / "brain.toml").exists() or "(demo)" in inst.cfg["owner"]["name"]:
-        owner_id = ui.ask("Seu id (slug, ex.: brian)", util.slugify(inst.cfg["owner"]["id"], 32))
-        owner_name = ui.ask("Seu nome", owner_id)
-        args = argparse.Namespace(owner_id=owner_id, owner_name=owner_name, alias=None, email=None)
+        # só o nome: o id é gerado dele (a instância é de uma pessoa só — id é detalhe interno)
+        owner_name = ui.ask("Seu nome", _system_full_name())
+        args = argparse.Namespace(owner_id=None, owner_name=owner_name, alias=None, email=None)
         _cli.cmd_init(args, brain)
     else:
         ui.say("✓ instância já semeada")
+
+
+def _system_full_name() -> str:
+    """Nome de partida da pergunta "Seu nome": o nome completo da conta do sistema (macOS/Linux), senão o login."""
+    try:
+        import pwd
+        full = pwd.getpwnam(getpass.getuser()).pw_gecos.split(",")[0].strip()
+    except Exception:  # noqa: BLE001 — sem pwd (Windows) ou conta sem gecos: cai no login
+        full = ""
+    return full or getpass.getuser()
 
 
 def _st_identidade(brain) -> str:
@@ -383,7 +393,12 @@ def _run_identidade(brain, ui) -> None:
     if brain.owner in brain.state.people:
         ui.say("✓ dono já registrado no ledger")
         return
-    name = ui.ask("Nome do dono (para o ledger)", brain.inst.cfg["owner"]["name"])
+    cur = brain.inst.cfg["owner"]["name"]
+    name = ui.ask("Seu nome", _system_full_name() if cur == "Dono do cérebro" else cur)
+    if brain.owner == "eu":                      # id-placeholder do template (init sem nome): gera o id do nome
+        config.set_keys(brain.inst, "owner", {"id": util.owner_slug(name), "name": name})
+        brain.inst = config.load(brain.inst.root)
+        brain.reload()
     brain.record_one({"type": "person.added", "id": brain.owner, "by": "owner",
                       "data": {"name": name, "aliases": [], "relation": "dono do cérebro"}})
     ui.say(f"✓ pessoa {brain.owner} registrada")
@@ -431,7 +446,7 @@ def _run_painel(brain, ui) -> None:
     if launcher.is_installed(brain.inst.root):
         ui.say("✓ ícone do painel já instalado (reinstale com `brain app install` se mudou a pasta)")
         return
-    if ui.confirm("Criar o ícone do painel (clique duplo abre o Segundo Cérebro, sem terminal)?", True):
+    if ui.confirm("Criar o app Brain (clique duplo abre o Brain, sem terminal)?", True):
         ui.say(f"✓ ícone criado: {launcher.install(brain.inst)}")
 
 

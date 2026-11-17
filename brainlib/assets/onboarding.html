@@ -1,0 +1,638 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Brain — configuração</title>
+<link rel="icon" href="/brain.svg" type="image/svg+xml">
+<style>
+:root{
+  --bg:#060a1f; --bg2:#0b1230; --panel:rgba(20,28,66,.72); --panel2:rgba(30,40,90,.55);
+  --line:rgba(120,140,255,.18); --line2:rgba(120,140,255,.32);
+  --tx:#e8ecff; --tx2:#aab3dc; --tx3:#7d87b8;
+  --cy:#67e8f9; --vi:#a78bfa; --in:#6366f1; --ok:#4ade80; --warn:#fbbf24; --bad:#f87171;
+  --r:16px; --r2:10px;
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Inter, Roboto, sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;background:var(--bg);color:var(--tx);font:15px/1.55 var(--font);-webkit-font-smoothing:antialiased}
+body{background:radial-gradient(1200px 700px at 70% -10%,rgba(99,102,241,.28),transparent 60%),
+  radial-gradient(900px 600px at -10% 110%,rgba(103,232,249,.12),transparent 60%),var(--bg);min-height:100vh}
+a{color:var(--cy);text-decoration:none} a:hover{text-decoration:underline}
+.app{display:grid;grid-template-columns:280px 1fr;min-height:100vh}
+aside{padding:28px 22px;border-right:1px solid var(--line);background:rgba(6,10,31,.55);backdrop-filter:blur(10px);position:sticky;top:0;height:100vh;display:flex;flex-direction:column}
+.brand{display:flex;align-items:center;gap:12px;margin-bottom:30px}
+.brand img{width:44px;height:44px;border-radius:11px;box-shadow:0 0 24px rgba(103,232,249,.25)}
+.brand b{font-size:20px;letter-spacing:.2px} .brand span{display:block;color:var(--tx3);font-size:12px}
+.steps{list-style:none;margin:0;padding:0;flex:1}
+.steps li{display:flex;align-items:center;gap:12px;padding:9px 10px;border-radius:10px;color:var(--tx3);cursor:pointer;font-size:14px;transition:.15s}
+.steps li:hover{background:rgba(120,140,255,.08);color:var(--tx2)}
+.steps li.cur{background:rgba(99,102,241,.18);color:var(--tx)}
+.steps .dot{width:24px;height:24px;border-radius:50%;border:1.5px solid var(--line2);display:grid;place-items:center;font-size:11px;flex:none}
+.steps li.done .dot{background:linear-gradient(135deg,var(--cy),var(--vi));border:none;color:#081028;font-weight:700}
+.steps li.cur .dot{border-color:var(--cy);color:var(--cy);box-shadow:0 0 0 4px rgba(103,232,249,.12)}
+.side-foot{font-size:12px;color:var(--tx3);border-top:1px solid var(--line);padding-top:14px}
+main{padding:48px 56px 80px;max-width:920px;width:100%}
+.bar{height:4px;background:rgba(120,140,255,.12);border-radius:4px;margin-bottom:34px;overflow:hidden}
+.bar i{display:block;height:100%;background:linear-gradient(90deg,var(--cy),var(--vi));transition:width .4s}
+.kicker{color:var(--cy);font-size:12px;letter-spacing:1.4px;text-transform:uppercase;font-weight:600}
+h1{font-size:32px;line-height:1.2;margin:8px 0 10px;letter-spacing:-.4px}
+h2{font-size:18px;margin:0 0 6px}
+.lead{color:var(--tx2);font-size:16px;margin:0 0 26px;max-width:640px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:22px;margin:0 0 16px;backdrop-filter:blur(8px)}
+.card.soft{background:var(--panel2)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+label.f{display:block;margin-bottom:16px}
+label.f > span{display:block;font-size:13px;font-weight:600;margin-bottom:6px;color:var(--tx)}
+label.f > small{display:block;color:var(--tx3);font-size:12.5px;margin-top:5px}
+input[type=text],input[type=email],input[type=password],input[type=time],input[type=date],select,textarea{
+  width:100%;background:rgba(6,10,31,.6);border:1px solid var(--line2);color:var(--tx);border-radius:var(--r2);padding:11px 13px;font:inherit;outline:none;transition:.15s}
+textarea{min-height:110px;resize:vertical}
+input:focus,select:focus,textarea:focus{border-color:var(--cy);box-shadow:0 0 0 3px rgba(103,232,249,.15)}
+.req{color:var(--cy)}
+.actions{display:flex;gap:12px;align-items:center;margin-top:26px;flex-wrap:wrap}
+.btn{appearance:none;border:1px solid var(--line2);background:rgba(120,140,255,.08);color:var(--tx);padding:11px 20px;border-radius:999px;font:600 14px var(--font);cursor:pointer;transition:.15s;display:inline-flex;align-items:center;gap:8px}
+.btn:hover{background:rgba(120,140,255,.16)}
+.btn.pri{background:linear-gradient(135deg,#22d3ee,#8b5cf6);border:none;color:#060a1f;box-shadow:0 8px 24px rgba(99,102,241,.35)}
+.btn.pri:hover{filter:brightness(1.08)}
+.btn.ghost{background:transparent;border-color:transparent;color:var(--tx2)}
+.btn.ghost:hover{color:var(--tx);background:rgba(120,140,255,.08)}
+.btn:disabled{opacity:.5;cursor:default;filter:none}
+.btn.sm{padding:7px 14px;font-size:13px}
+.spacer{flex:1}
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:3px 10px;border-radius:999px;border:1px solid var(--line2);color:var(--tx2);white-space:nowrap}
+.pill::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.pill.ok{color:var(--ok);border-color:rgba(74,222,128,.35)} .pill.warn{color:var(--warn);border-color:rgba(251,191,36,.35)}
+.pill.bad{color:var(--bad);border-color:rgba(248,113,113,.35)} .pill.muted{color:var(--tx3)}
+.msg{border-radius:var(--r2);padding:12px 14px;font-size:14px;margin:14px 0 0;display:none}
+.msg.show{display:block} .msg.err{background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.35);color:#fecaca}
+.msg.ok{background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.3);color:#bbf7d0}
+.msg.info{background:rgba(103,232,249,.07);border:1px solid rgba(103,232,249,.25);color:#cffafe}
+.conn{display:grid;grid-template-columns:1fr auto;gap:6px 14px;align-items:center;padding:14px 0;border-top:1px solid var(--line)}
+.conn:first-of-type{border-top:none}
+.conn b{font-size:15px} .conn p{margin:2px 0 0;color:var(--tx3);font-size:13px;grid-column:1}
+.conn .right{display:flex;align-items:center;gap:12px;grid-row:1/3;grid-column:2}
+.toggle{position:relative;width:42px;height:24px;flex:none}
+.toggle input{opacity:0;width:0;height:0}
+.toggle span{position:absolute;inset:0;background:rgba(120,140,255,.2);border-radius:999px;cursor:pointer;transition:.2s}
+.toggle span::after{content:"";position:absolute;width:18px;height:18px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.2s}
+.toggle input:checked + span{background:linear-gradient(135deg,#22d3ee,#8b5cf6)}
+.toggle input:checked + span::after{transform:translateX(18px)}
+.toggle input:disabled + span{opacity:.4;cursor:default}
+ol.howto{margin:8px 0 0;padding-left:20px;color:var(--tx2)} ol.howto li{margin:6px 0}
+.opt{border:1.5px solid var(--line2);border-radius:var(--r);padding:18px;cursor:pointer;transition:.15s;background:rgba(6,10,31,.4);position:relative}
+.opt:hover{border-color:rgba(103,232,249,.5)}
+.opt.sel{border-color:var(--cy);background:rgba(103,232,249,.07);box-shadow:0 0 0 3px rgba(103,232,249,.1)}
+.opt h3{margin:0 0 4px;font-size:16px} .opt .tag{font-size:12px;color:var(--cy);font-weight:600}
+.opt ul{margin:10px 0 0;padding-left:18px;color:var(--tx2);font-size:13.5px} .opt li{margin:3px 0}
+.check{display:flex;gap:10px;align-items:flex-start;font-size:14px;color:var(--tx2);margin:12px 0}
+.check input{margin-top:3px;accent-color:var(--cy);width:16px;height:16px}
+.log{background:#040716;border:1px solid var(--line);border-radius:var(--r2);padding:12px 14px;font:12.5px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--tx2);max-height:220px;overflow:auto;white-space:pre-wrap;margin-top:12px;display:none}
+.log.show{display:block}
+.preview{background:rgba(6,10,31,.6);border:1px solid var(--line);border-radius:var(--r2);padding:18px 22px;max-height:420px;overflow:auto}
+.preview h1{font-size:20px;margin:0 0 6px} .preview h2{font-size:15px;color:var(--cy);margin:18px 0 6px} .preview p{margin:6px 0;color:var(--tx2)} .preview em{color:var(--tx3)}
+.drop{border:1.5px dashed var(--line2);border-radius:var(--r);padding:26px;text-align:center;color:var(--tx2);transition:.15s;cursor:pointer}
+.drop.over{border-color:var(--cy);background:rgba(103,232,249,.06)}
+.drop b{color:var(--tx)}
+.files{list-style:none;padding:0;margin:12px 0 0} .files li{display:flex;justify-content:space-between;padding:7px 0;border-top:1px solid var(--line);font-size:13.5px;color:var(--tx2)}
+.tabs{display:inline-flex;background:rgba(6,10,31,.6);border:1px solid var(--line);border-radius:999px;padding:4px;margin-bottom:18px}
+.tabs button{border:none;background:none;color:var(--tx2);padding:8px 16px;border-radius:999px;font:600 13.5px var(--font);cursor:pointer}
+.tabs button.on{background:rgba(99,102,241,.35);color:var(--tx)}
+.tree .goal{border:1px solid var(--line2);border-radius:var(--r);padding:16px;margin-bottom:14px;background:rgba(6,10,31,.4)}
+.tree .row{display:flex;gap:10px;align-items:center;margin-bottom:8px}
+.tree .row input{flex:1}
+.tree .lvl{font-size:11px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;width:86px;flex:none}
+.tree .lvl.g{color:var(--cy)} .tree .lvl.p{color:var(--vi)} .tree .lvl.d{color:var(--tx3)}
+.tree .proj{margin:10px 0 0 22px;padding-left:14px;border-left:2px solid rgba(167,139,250,.35)}
+.tree .del{margin-left:22px}
+.x{background:none;border:none;color:var(--tx3);cursor:pointer;font-size:18px;padding:0 6px}
+.x:hover{color:var(--bad)}
+.add{background:none;border:none;color:var(--cy);cursor:pointer;font:600 13px var(--font);padding:4px 0}
+.hier{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:6px 0 4px;font-size:13.5px;color:var(--tx2)}
+.hier span{padding:6px 12px;border-radius:999px;border:1px solid var(--line2)}
+.hier span.g{color:var(--cy)} .hier span.p{color:var(--vi)}
+.welcome{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:30px;align-items:center}
+.welcome img{width:240px;height:240px;filter:drop-shadow(0 20px 50px rgba(99,102,241,.45))}
+.feat{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-top:8px}
+.feat div{background:var(--panel2);border:1px solid var(--line);border-radius:var(--r2);padding:14px;font-size:13.5px;color:var(--tx2)}
+.feat b{display:block;color:var(--tx);margin-bottom:4px;font-size:14px}
+.summary li{display:flex;gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line);font-size:14.5px}
+.summary li:first-child{border-top:none}
+.summary .s{margin-left:auto}
+.spin{width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:sp 0.8s linear infinite;display:inline-block}
+@keyframes sp{to{transform:rotate(360deg)}}
+.hidden{display:none!important}
+.fatal{max-width:560px;margin:15vh auto;text-align:center;padding:30px}
+@media (max-width:900px){
+  .app{grid-template-columns:1fr} aside{position:static;height:auto;border-right:none;border-bottom:1px solid var(--line)}
+  .steps{display:flex;overflow-x:auto;gap:4px} .steps li span.t{display:none} .side-foot{display:none}
+  main{padding:28px 18px 60px} .grid2,.grid3,.feat,.welcome{grid-template-columns:1fr} .welcome img{width:150px;height:150px}
+}
+</style>
+</head>
+<body>
+<div class="app hidden" id="app">
+  <aside>
+    <div class="brand"><img src="/brain.svg" alt=""><div><b>Brain</b><span>configuração guiada</span></div></div>
+    <ol class="steps" id="steps"></ol>
+    <div class="side-foot">Tudo fica no seu computador. Você pode voltar a qualquer passo e mudar depois.</div>
+  </aside>
+  <main>
+    <div class="bar"><i id="bar"></i></div>
+    <section id="view"></section>
+  </main>
+</div>
+<div class="fatal hidden" id="fatal">
+  <img src="/brain.svg" alt="" width="96" height="96">
+  <h1>Abra o Brain pelo aplicativo</h1>
+  <p class="lead" style="margin:auto">Esta página precisa da chave de acesso que o aplicativo cria. Feche esta aba e
+    abra o <b>Brain</b> de novo (Aplicativos, Launchpad ou Spotlight).</p>
+</div>
+<script>
+"use strict";
+// ── infraestrutura ─────────────────────────────────────────────────────────
+let TOK = "";
+(function () {
+  const m = location.hash.match(/[#&]t=([^&]+)/);
+  if (m) { TOK = decodeURIComponent(m[1]); try { localStorage.setItem("brain-serve-token", TOK); } catch (e) {} }
+  if (!TOK) { try { TOK = localStorage.getItem("brain-serve-token") || ""; } catch (e) {} }
+})();
+const $ = (s, r) => (r || document).querySelector(s);
+const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+async function api(path, body) {
+  const opt = {headers: {"X-Brain-Token": TOK}};
+  if (body !== undefined) { opt.method = "POST"; opt.headers["Content-Type"] = "application/json"; opt.body = JSON.stringify(body); }
+  const r = await fetch(path, opt);
+  let j = {};
+  try { j = await r.json(); } catch (e) {}
+  if (r.status === 401) { showFatal(); throw new Error("sem acesso"); }
+  if (!r.ok || j.ok === false) throw new Error(j.error || ("erro " + r.status));
+  return j;
+}
+const act = (name, body) => api("/api/onboard/" + name, body || {});
+async function waitJob(id, onTick) {
+  for (;;) {
+    const j = (await api("/api/onboard/job/" + id)).job;
+    if (onTick) onTick(j);
+    if (j.status !== "running") return j;
+    await new Promise(r => setTimeout(r, 1500));
+  }
+}
+function showFatal() { $("#app").classList.add("hidden"); $("#fatal").classList.remove("hidden"); }
+function msg(el, kind, text) { el.className = "msg show " + kind; el.textContent = text; }
+function busy(btn, on, label) {
+  if (on) { btn.dataset.l = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<i class="spin"></i> ' + esc(label || "Salvando…"); }
+  else { btn.disabled = false; if (btn.dataset.l) btn.innerHTML = btn.dataset.l; }
+}
+
+// ── passos ─────────────────────────────────────────────────────────────────
+const STEPS = [
+  ["inicio", "Boas-vindas"], ["voce", "Você"], ["sobre", "Sobre você"], ["rotina", "Sua rotina"],
+  ["conectores", "Conectores"], ["permissoes", "Permissões"], ["memoria", "Memória"],
+  ["chaves", "Integrações"], ["planejamento", "Goals e projetos"], ["pronto", "Pronto"],
+];
+let S = null, cur = "inicio";
+try { cur = localStorage.getItem("brain-onboarding-step") || "inicio"; } catch (e) {}
+if (!STEPS.some(s => s[0] === cur)) cur = "inicio";
+
+async function refresh() { S = (await api("/api/onboard/state")).state; }
+function doneSet() { return new Set((S && S.progress && S.progress.done) || []); }
+function go(step) {
+  cur = step;
+  try { localStorage.setItem("brain-onboarding-step", step); } catch (e) {}
+  render();
+  window.scrollTo({top: 0, behavior: "smooth"});
+}
+function next() { const i = STEPS.findIndex(s => s[0] === cur); go(STEPS[Math.min(i + 1, STEPS.length - 1)][0]); }
+function back() { const i = STEPS.findIndex(s => s[0] === cur); go(STEPS[Math.max(i - 1, 0)][0]); }
+async function skip(step) { try { await act("skip", {step}); await refresh(); } catch (e) {} next(); }
+
+function renderSteps() {
+  const done = doneSet();
+  $("#steps").innerHTML = STEPS.map(([k, t], i) =>
+    `<li data-k="${k}" class="${k === cur ? "cur" : ""} ${done.has(k) ? "done" : ""}"><span class="dot">${done.has(k) ? "✓" : i}</span><span class="t">${esc(t)}</span></li>`).join("");
+  $$("#steps li").forEach(li => li.onclick = () => go(li.dataset.k));
+  const i = STEPS.findIndex(s => s[0] === cur);
+  $("#bar").style.width = Math.round(i / (STEPS.length - 1) * 100) + "%";
+}
+function nav(opts) {
+  opts = opts || {};
+  return `<div class="actions" id="nav">
+    ${cur !== "inicio" ? '<button class="btn ghost" data-a="back">← Voltar</button>' : ""}
+    <span class="spacer"></span>
+    ${opts.skip ? `<button class="btn ghost" data-a="skip">${esc(opts.skip)}</button>` : ""}
+    <button class="btn pri" data-a="main">${esc(opts.main || "Continuar")} →</button>
+  </div>`;
+}
+function bindNav(main) {
+  const b = $('[data-a="back"]'); if (b) b.onclick = back;
+  const k = $('[data-a="skip"]'); if (k) k.onclick = () => skip(cur);
+  const m = $('[data-a="main"]'); if (m) m.onclick = () => main(m);
+}
+function head(kicker, title, lead) {
+  return `<div class="kicker">${esc(kicker)}</div><h1>${esc(title)}</h1>${lead ? `<p class="lead">${lead}</p>` : ""}`;
+}
+
+const V = {};
+
+V.inicio = () => {
+  $("#view").innerHTML = `
+    <div class="welcome"><div>
+      ${head("Bem-vindo", "Vamos montar o seu Brain", "O Brain organiza sua vida profissional: reuniões, decisões, tarefas, objetivos e as pessoas com quem você trabalha — num lugar só, no seu computador.")}
+      <div class="feat">
+        <div><b>Leva uns 10 minutos</b>Você pode pular qualquer passo e voltar depois.</div>
+        <div><b>Seus dados são seus</b>Tudo fica nesta máquina. Nada é enviado sem você aprovar.</div>
+        <div><b>Ele observa, você decide</b>O Brain sugere; enviar, publicar e mudar objetivos é sempre com o seu "ok".</div>
+      </div>
+    </div><img src="/brain.svg" alt=""></div>
+    ${nav({main: "Começar"})}`;
+  bindNav(() => next());
+};
+
+V.voce = () => {
+  const o = S.owner;
+  $("#view").innerHTML = `${head("Passo 1", "Quem é você?", "Assim o Brain reconhece você nas reuniões, nos e-mails e no Slack.")}
+    <div class="card">
+      <label class="f"><span>Nome completo <span class="req">*</span></span><input type="text" id="name" value="${esc(o.name || o.suggested_name)}" autocomplete="name"></label>
+      <div class="grid2">
+        <label class="f"><span>Apelido</span><input type="text" id="nick" value="${esc(o.nickname)}" placeholder="como as pessoas te chamam"><small>O nome curto que aparece nas reuniões e no Slack. Ajuda a te achar nas transcrições.</small></label>
+        <label class="f"><span>Cargo</span><input type="text" id="role" value="${esc(o.role)}" placeholder="ex.: Gerente de Produto"></label>
+      </div>
+      <label class="f" style="margin-bottom:0"><span>E-mail de trabalho</span><input type="email" id="email" value="${esc(o.email)}" placeholder="voce@empresa.com" autocomplete="email"><small>Opcional. Usado para reconhecer convites e e-mails seus.</small></label>
+      <div class="msg" id="m"></div>
+    </div>${nav()}`;
+  $("#name").focus();
+  bindNav(async btn => {
+    const body = {name: $("#name").value, nickname: $("#nick").value, role: $("#role").value, email: $("#email").value};
+    if (!body.name.trim()) return msg($("#m"), "err", "Preencha o seu nome completo.");
+    busy(btn, true);
+    try { await act("about", body); await refresh(); next(); }
+    catch (e) { msg($("#m"), "err", e.message); } finally { busy(btn, false); }
+  });
+};
+
+let profileDraft = null;
+V.sobre = () => {
+  const tpl = S.profile.template;
+  $("#view").innerHTML = `${head("Passo 2", "Conte um pouco sobre você", "Isto vira o seu perfil — o contexto que o Brain usa para entender o que é importante para você. Escreva como se estivesse explicando para um colega novo.")}
+    ${!tpl ? '<div class="msg info show" style="margin:0 0 16px">Você já tem um perfil salvo. Se escrever aqui, o novo texto substitui o atual (você vê a prévia antes).</div>' : ""}
+    <div class="card" id="form">
+      <label class="f"><span>Sobre você</span><textarea id="about" placeholder="Seu papel, seu time, pelo que você responde, há quanto tempo está na empresa…"></textarea></label>
+      <label class="f"><span>Como você trabalha</span><textarea id="how" placeholder="Rituais da semana, reuniões fixas, como prefere receber informação, horários de foco…"></textarea></label>
+      <label class="f" style="margin-bottom:0"><span>O que importa agora</span><textarea id="focus" placeholder="As 2–3 coisas que mais pesam neste trimestre."></textarea></label>
+      <div class="msg" id="m"></div>
+    </div>
+    <div class="card hidden" id="prev"><h2>Prévia do seu perfil</h2><p style="color:var(--tx3);margin:0 0 12px;font-size:13.5px">É isto que será salvo. Confira e confirme.</p><div class="preview" id="pv"></div>
+      <div class="actions" style="margin-top:16px"><button class="btn" id="edit">Editar texto</button><span class="spacer"></span><button class="btn pri" id="save">Salvar perfil →</button></div><div class="msg" id="m2"></div></div>
+    ${nav({main: "Ver prévia", skip: "Pular por agora"})}`;
+  if (profileDraft) { $("#about").value = profileDraft.about; $("#how").value = profileDraft.how; $("#focus").value = profileDraft.focus; }
+  bindNav(async btn => {
+    profileDraft = {about: $("#about").value, how: $("#how").value, focus: $("#focus").value};
+    if (!(profileDraft.about + profileDraft.how + profileDraft.focus).trim()) return msg($("#m"), "err", "Escreva pelo menos um dos campos — ou pule este passo.");
+    busy(btn, true, "Montando…");
+    try {
+      const r = await act("profile_preview", profileDraft);
+      $("#pv").innerHTML = md(r.markdown); $("#pv").dataset.md = r.markdown;
+      $("#form").classList.add("hidden"); $("#prev").classList.remove("hidden"); $("#nav").classList.add("hidden");
+    } catch (e) { msg($("#m"), "err", e.message); } finally { busy(btn, false); }
+  });
+  $("#edit").onclick = () => { $("#prev").classList.add("hidden"); $("#form").classList.remove("hidden"); $("#nav").classList.remove("hidden"); };
+  $("#save").onclick = async () => {
+    const b = $("#save"); busy(b, true);
+    try { await act("profile_save", {markdown: $("#pv").dataset.md, overwrite: !tpl}); await refresh(); next(); }
+    catch (e) { msg($("#m2"), "err", e.message); } finally { busy(b, false); }
+  };
+};
+function md(text) {
+  return text.split("\n").filter(l => l !== "# PROFILE" && !/^_.*|.*_$/.test(l)).map(l => {
+    if (l.startsWith("# ")) return `<h1>${esc(l.slice(2))}</h1>`;
+    if (l.startsWith("## ")) return `<h2>${esc(l.slice(3))}</h2>`;
+    if (!l.trim()) return "";
+    const t = esc(l), it = /^_/.test(l) || /_$/.test(l);
+    return it ? `<p><em>${t.replace(/^_|_$/g, "")}</em></p>` : `<p>${t}</p>`;
+  }).join("");
+}
+
+V.rotina = () => {
+  const r = S.routine, guess = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const zones = Array.from(new Set([r.timezone, guess, "America/Sao_Paulo", "America/Argentina/Buenos_Aires", "America/Mexico_City", "America/Bogota", "America/Santiago", "America/Lima", "America/New_York", "Europe/Lisbon", "Europe/Madrid", "UTC"].filter(Boolean)));
+  const [ls, le] = (r.lunch || "12:00-13:00").split("-");
+  $("#view").innerHTML = `${head("Passo 3", "Sua rotina", "O Brain usa isto para calcular prazos, montar o seu dia e sugerir blocos de foco sem cair em cima do almoço.")}
+    <div class="card">
+      <label class="f"><span>Fuso horário</span><select id="tz">${zones.map(z => `<option ${z === (r.timezone || guess) ? "selected" : ""}>${esc(z)}</option>`).join("")}</select></label>
+      <div class="grid2">
+        <label class="f"><span>Começo do expediente</span><input type="time" id="st" value="${esc(r.start)}"></label>
+        <label class="f"><span>Fim do expediente</span><input type="time" id="en" value="${esc(r.end)}"></label>
+      </div>
+      <label class="check"><input type="checkbox" id="lon" ${r.lunch !== "" ? "checked" : ""}> Reservar horário de almoço</label>
+      <div class="grid2" id="lunch">
+        <label class="f"><span>Almoço — início</span><input type="time" id="ls" value="${esc(ls)}"></label>
+        <label class="f"><span>Almoço — fim</span><input type="time" id="le" value="${esc(le || "13:00")}"></label>
+      </div>
+      <div class="msg" id="m"></div>
+    </div>${nav()}`;
+  const sync = () => $("#lunch").classList.toggle("hidden", !$("#lon").checked); $("#lon").onchange = sync; sync();
+  bindNav(async btn => {
+    busy(btn, true);
+    try {
+      await act("routine", {timezone: $("#tz").value, start: $("#st").value, end: $("#en").value,
+        lunch: $("#lon").checked ? $("#ls").value + "-" + $("#le").value : ""});
+      await refresh(); next();
+    } catch (e) { msg($("#m"), "err", e.message); } finally { busy(btn, false); }
+  });
+};
+
+const ST_LABEL = {connected: ["ok", "Conectado"], auth: ["warn", "Precisa autorizar"], missing: ["muted", "Não adicionado"], error: ["bad", "Com erro"], unknown: ["muted", "Verificando…"]};
+V.conectores = () => {
+  const noClaude = !S.claude_installed;
+  $("#view").innerHTML = `${head("Passo 4", "Conecte suas ferramentas", "O Brain lê suas ferramentas através do Claude, só para <b>leitura</b>: ele nunca envia mensagem, e-mail ou convite sem você aprovar o texto exato.")}
+    ${noClaude ? `<div class="card"><h2>Primeiro, instale o Claude Code</h2><p style="color:var(--tx2);margin:6px 0 0">É o assistente que lê suas ferramentas e organiza tudo para o Brain. Instale, entre com a sua conta e volte aqui. <a href="https://claude.com/product/claude-code" target="_blank" rel="noopener">Como instalar →</a></p></div>` : ""}
+    <div class="card soft"><h2>Como conectar (uma vez só)</h2>
+      <ol class="howto">
+        <li>Abra <a href="https://claude.ai/settings/connectors" target="_blank" rel="noopener">claude.ai → Configurações → Conectores</a>.</li>
+        <li>Adicione os que você usa: <b>Slack</b>, <b>Gmail</b>, <b>Google Calendar</b>, <b>Google Drive</b>, <b>Granola</b>, <b>Atlassian</b>.</li>
+        <li>Clique em <b>Conectar</b> em cada um e autorize com a sua conta de trabalho.</li>
+        <li>Volte aqui e clique em <b>Verificar de novo</b>.</li>
+      </ol></div>
+    <div class="card"><div style="display:flex;align-items:center;gap:12px;margin-bottom:4px"><h2 style="margin:0">Seus conectores</h2><span class="spacer"></span><button class="btn sm" id="scan" ${noClaude ? "disabled" : ""}>↻ Verificar de novo</button></div>
+      <div id="conns"></div>
+      <div id="extra" class="hidden" style="margin-top:14px">
+        <div class="grid2">
+          <label class="f" id="fslack"><span>Canais do Slack para acompanhar</span><input type="text" id="slack" placeholder="#meu-time, #projeto-x"><small>Separados por vírgula. Dá para mudar depois.</small></label>
+          <label class="f" id="fdrive"><span>Pasta do Drive (link)</span><input type="text" id="drive" placeholder="https://drive.google.com/drive/folders/…"><small>Opcional: o Brain acompanha os documentos dela.</small></label>
+        </div>
+      </div>
+      <div class="msg" id="m"></div></div>
+    ${nav({main: "Salvar e continuar", skip: "Fazer depois"})}`;
+  const draw = () => {
+    $("#conns").innerHTML = S.connectors.map(c => {
+      const [k, l] = ST_LABEL[S.connectors_scanned ? c.status : "unknown"] || ST_LABEL.unknown;
+      const can = c.status === "connected" || c.enabled;
+      return `<div class="conn"><div><b>${esc(c.label)}</b></div><p>${esc(c.what)}</p>
+        <div class="right"><span class="pill ${k}">${l}</span>
+        <label class="toggle" title="O Brain pode ler"><input type="checkbox" data-c="${c.key}" ${c.enabled || c.status === "connected" ? "checked" : ""} ${can ? "" : "disabled"}><span></span></label></div></div>`;
+    }).join("");
+    const sel = () => $$("#conns input:checked").map(i => i.dataset.c);
+    const ex = () => { const s = sel(); $("#extra").classList.toggle("hidden", !s.includes("slack") && !s.includes("drive")); $("#fslack").classList.toggle("hidden", !s.includes("slack")); $("#fdrive").classList.toggle("hidden", !s.includes("drive")); };
+    $$("#conns input").forEach(i => i.onchange = ex); ex();
+  };
+  draw();
+  const scan = async force => {
+    const b = $("#scan"); busy(b, true, "Verificando…");
+    try {
+      const r = await act("connectors_scan", {force});
+      if (r.job) { const j = await waitJob(r.job); if (j.status === "error") msg($("#m"), "err", (j.result && j.result.error) || "não consegui verificar"); }
+      await refresh(); draw();
+    } catch (e) { msg($("#m"), "err", e.message); } finally { busy(b, false); }
+  };
+  $("#scan").onclick = () => scan(true);
+  if (!noClaude && !S.connectors_scanned) scan(false);
+  bindNav(async btn => {
+    const keys = $$("#conns input:checked").map(i => i.dataset.c);
+    if (!keys.length) return skip(cur);
+    busy(btn, true);
+    try { await act("connectors_enable", {connectors: keys, slack_channels: $("#slack").value, drive_folder: $("#drive").value}); await refresh(); next(); }
+    catch (e) { msg($("#m"), "err", e.message); } finally { busy(btn, false); }
+  });
+};
+
+V.permissoes = () => {
+  const ok = S.permissions.ok;
+  $("#view").innerHTML = `${head("Passo 5", "Permissões no computador", "Para o Brain trabalhar sem perguntar \"posso rodar isto?\" a cada passo, ele pré-autoriza o Claude a ler esta pasta e usar os conectores que você ligou — só para leitura.")}
+    <div class="card">
+      <div style="display:flex;align-items:center;gap:12px"><h2 style="margin:0">Pré-autorização do Claude</h2><span class="spacer"></span><span class="pill ${ok ? "ok" : "warn"}" id="pst">${ok ? "Liberado" : "Pendente"}</span></div>
+      <ul style="color:var(--tx2);margin:14px 0 0;padding-left:20px">
+        <li>Ler e organizar os arquivos do Brain nesta pasta.</li>
+        <li>Usar as ferramentas de <b>leitura</b> dos conectores (Slack, Gmail, Drive…).</li>
+        <li>Continua <b>bloqueado</b>: mexer nos segredos, editar o histórico (livro-razão) e enviar qualquer coisa sem você aprovar.</li>
+      </ul>
+      <div class="msg" id="m"></div>
+    </div>
+    <div class="card soft"><h2>macOS pode pedir licença</h2><p style="color:var(--tx2);margin:6px 0 0">Na primeira vez, o macOS pode perguntar se o Brain pode controlar o navegador ou acessar pastas. Clique em <b>Permitir</b> — é só para abrir o painel e ler os arquivos que você colocar nele.</p></div>
+    ${nav({main: ok ? "Continuar" : "Liberar e continuar", skip: "Fazer depois"})}`;
+  bindNav(async btn => {
+    if (ok) return next();
+    busy(btn, true, "Liberando…");
+    try { await act("permissions"); await refresh(); $("#pst").className = "pill ok"; $("#pst").textContent = "Liberado"; next(); }
+    catch (e) { msg($("#m"), "err", e.message); } finally { busy(btn, false); }
+  });
+};
+
+V.memoria = () => {
+  const m = S.memory;
+  let sel = m.mode === "none" ? "lite" : m.mode;
+  const pre = (on, t, link) => `<li style="list-style:none;margin-left:-18px">${on ? '<span class="pill ok">pronto</span>' : '<span class="pill warn">falta</span>'} ${t}${!on && link ? ` — <a href="${link}" target="_blank" rel="noopener">baixar</a>` : ""}</li>`;
+  $("#view").innerHTML = `${head("Passo 6", "Memória do Brain", "A memória deixa o Brain responder perguntas pelo <b>significado</b> — \"o que decidimos sobre o orçamento?\" acha a reunião certa mesmo que a palavra exata não apareça. Sem ela, o Brain continua funcionando com busca por palavras.")}
+    <div class="grid3">
+      <div class="opt" data-m="none"><span class="tag">Grátis · já funciona</span><h3>Sem memória</h3><ul><li>Busca por palavras</li><li>Nada a instalar</li><li>Dá para ligar depois</li></ul></div>
+      <div class="opt" data-m="lite"><span class="tag">Grátis · 100% local</span><h3>Lite</h3><ul><li>Busca por significado</li><li>Nada sai do seu computador</li><li>Precisa de 2 apps gratuitos</li></ul></div>
+      <div class="opt" data-m="full"><span class="tag">Com sua API key · pago por uso</span><h3>Full</h3><ul><li>Tudo do Lite, e mais:</li><li>Extrai fatos e liga assuntos entre reuniões</li><li>O texto vai para a IA com a sua chave</li></ul></div>
+    </div>
+    <div class="card" id="det" style="margin-top:16px"></div>
+    <div class="log" id="log"></div><div class="msg" id="m"></div>
+    ${nav({main: "Ativar", skip: "Fazer depois"})}`;
+  const det = () => {
+    $$(".opt").forEach(o => o.classList.toggle("sel", o.dataset.m === sel));
+    const prereq = `<p style="color:var(--tx2);margin:0 0 8px">Precisa destes dois apps gratuitos abertos no Mac:</p><ul style="margin:0;padding-left:18px">
+        ${pre(m.docker, "<b>OrbStack</b> (roda o banco de memória)", "https://orbstack.dev")}
+        ${pre(m.lmstudio, "<b>LM Studio</b> com o modelo <code>text-embedding-bge-m3</code>", "https://lmstudio.ai")}</ul>`;
+    if (sel === "none") $("#det").innerHTML = `<h2>Sem memória por enquanto</h2><p style="color:var(--tx2);margin:6px 0 0">O Brain usa o índice de palavras. Quando quiser, volte aqui (ou rode <code>brain setup --only memoria</code>).</p>`;
+    if (sel === "lite") $("#det").innerHTML = `<h2>Lite — no seu computador</h2>${prereq}`;
+    if (sel === "full") $("#det").innerHTML = `<h2>Full — com IA na nuvem</h2>${prereq}
+      <div class="grid2" style="margin-top:16px">
+        <label class="f"><span>Provedor</span><select id="prov"><option value="anthropic">Anthropic (Claude)</option><option value="openai">OpenAI</option></select></label>
+        <label class="f"><span>API key ${m.llm_key ? '<span class="pill ok" style="margin-left:6px">já salva</span>' : ""}</span><input type="password" id="key" placeholder="${m.llm_key ? "deixe vazio para manter a atual" : "cole a chave aqui"}" autocomplete="off"><small>Fica só no seu computador (config/.env). Não tem uma? Escolha <b>Fazer depois</b>.</small></label>
+      </div>
+      <label class="check"><input type="checkbox" id="consent"> Entendo que trechos das minhas reuniões, mensagens e documentos serão enviados à API do provedor, com a minha chave, e que isso tem custo por uso.</label>`;
+  };
+  $$(".opt").forEach(o => o.onclick = () => { sel = o.dataset.m; det(); });
+  det();
+  bindNav(async btn => {
+    const body = {mode: sel};
+    if (sel === "full") {
+      body.provider = $("#prov").value; body.key = $("#key").value; body.consent = $("#consent").checked;
+      if (!body.consent) return msg($("#m"), "err", "Para o modo Full, marque o aceite de envio à API.");
+      if (!body.key && !m.llm_key) return msg($("#m"), "err", "Cole a API key — ou escolha \"Fazer depois\".");
+    }
+    busy(btn, true, "Ativando…");
+    const log = $("#log");
+    try {
+      const r = await act("memory", body);
+      if (sel === "full") $("#key").value = "";
+      if (r.job) {
+        log.classList.add("show");
+        const j = await waitJob(r.job, jj => { log.textContent = jj.log.join("\n"); log.scrollTop = 1e9; });
+        if (j.status === "error") { msg($("#m"), "err", (j.result && j.result.error) || "não consegui ligar a memória"); return; }
+      }
+      await refresh(); msg($("#m"), "ok", "✓ Memória configurada."); setTimeout(next, 700);
+    } catch (e) { msg($("#m"), "err", e.message); } finally { busy(btn, false); }
+  });
+  $('[data-a="skip"]').onclick = async () => { try { await act("memory", {mode: sel, later: true}); await refresh(); } catch (e) {} next(); };
+};
+
+V.chaves = () => {
+  const k = S.keys;
+  $("#view").innerHTML = `${head("Passo 7", "Integrações opcionais", "Nada aqui é obrigatório. As chaves ficam só no seu computador e nunca aparecem de novo na tela.")}
+    <div class="card"><h2>Sugestões e bugs do Brain ${k.GITHUB_TOKEN.set ? '<span class="pill ok" style="margin-left:6px">configurado</span>' : ""}</h2>
+      <p style="color:var(--tx2);margin:6px 0 14px">Com um token do GitHub, as sugestões que você mandar pelo Brain viram pedidos públicos para quem mantém o projeto. <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">Criar token →</a></p>
+      <label class="f" style="margin:0"><span>Token do GitHub</span><input type="password" id="gh" placeholder="${k.GITHUB_TOKEN.set ? "deixe vazio para manter o atual" : "github_pat_…"}" autocomplete="off"></label></div>
+    <div class="card soft"><h2>Blocos de foco no Google Calendar</h2><p style="color:var(--tx2);margin:6px 0 0">O Brain pode reservar horários de foco direto na sua agenda. Isso pede uma autorização separada do Google — por enquanto, ele gera um arquivo de calendário (.ics) que você importa com um clique. Para ligar a escrita direta, peça ao Brain no chat: <i>"configurar foco no Google"</i>.</p></div>
+    <div class="msg" id="m"></div>
+    ${nav({skip: "Pular"})}`;
+  bindNav(async btn => {
+    const v = $("#gh").value.trim();
+    if (!v) { await skip(cur); return; }
+    busy(btn, true);
+    try { await act("keys", {GITHUB_TOKEN: v}); $("#gh").value = ""; await refresh(); next(); }
+    catch (e) { msg($("#m"), "err", e.message); } finally { busy(btn, false); }
+  });
+};
+
+let plan = {goals: []}, planTab = "escrever", uploads = [];
+V.planejamento = () => {
+  if (S.planning.proposal && !plan.goals.length) { plan = JSON.parse(JSON.stringify(S.planning.proposal)); planTab = "revisar"; }
+  const hasGoals = S.planning.goals > 0;
+  $("#view").innerHTML = `${head("Passo 8", "Seus objetivos e projetos", "É o mapa do que você quer alcançar. O Brain liga cada tarefa e decisão a um projeto, e mostra o progresso.")}
+    <div class="hier"><span class="g">Goal — objetivo grande</span>→<span class="p">Projeto — como chegar lá</span>→<span>Entregável — o que sai pronto</span></div>
+    ${hasGoals ? `<div class="msg info show">Você já tem ${S.planning.goals} goal(s). O que criar aqui é somado a eles.</div>` : ""}
+    <div style="margin-top:18px" class="tabs"><button data-t="escrever">Escrever ou enviar documento</button><button data-t="revisar">Revisar e montar</button></div>
+    <div id="tab"></div><div class="msg" id="m"></div>
+    ${nav({main: "Aprovar e criar", skip: "Fazer depois"})}`;
+  $$(".tabs button").forEach(b => { b.classList.toggle("on", b.dataset.t === planTab); b.onclick = () => { planTab = b.dataset.t; V.planejamento(); }; });
+  const main = $('[data-a="main"]');
+  if (planTab === "escrever") {
+    main.classList.add("hidden");
+    $("#tab").innerHTML = `<div class="card">
+      <label class="f"><span>Explique com as suas palavras</span><textarea id="ptext" style="min-height:160px" placeholder="Ex.: Neste semestre quero lançar o novo app de pagamentos até junho. Para isso, preciso fechar a pesquisa com clientes em março e o MVP em maio. Também quero estruturar o time de dados…"></textarea></label>
+      <div class="drop" id="drop"><b>Arraste documentos aqui</b> ou clique para escolher<br><small style="color:var(--tx3)">Planejamento, OKRs, apresentação… (PDF, Word, PowerPoint, texto — até 25 MB)</small><input type="file" id="file" multiple class="hidden"></div>
+      <ul class="files" id="files">${uploads.map(u => `<li><span>${esc(u.name)}</span><span>✓ recebido</span></li>`).join("")}</ul>
+      <div class="actions" style="margin-top:18px"><span class="spacer"></span><button class="btn" id="manual">Montar à mão</button><button class="btn pri" id="gen" ${S.agent ? "" : "disabled"}>✦ Gerar proposta com IA</button></div>
+      ${S.agent ? "" : '<p style="color:var(--tx3);font-size:13px;margin:10px 0 0">A proposta automática precisa do Claude Code instalado. Você pode montar à mão.</p>'}
+      <div class="log" id="log"></div></div>`;
+    const drop = $("#drop"), file = $("#file");
+    drop.onclick = () => file.click();
+    drop.ondragover = e => { e.preventDefault(); drop.classList.add("over"); };
+    drop.ondragleave = () => drop.classList.remove("over");
+    drop.ondrop = e => { e.preventDefault(); drop.classList.remove("over"); send(e.dataTransfer.files); };
+    file.onchange = () => send(file.files);
+    async function send(list) {
+      for (const f of Array.from(list)) {
+        const li = document.createElement("li"); li.innerHTML = `<span>${esc(f.name)}</span><span><i class="spin"></i></span>`; $("#files").appendChild(li);
+        try {
+          const r = await fetch("/api/onboard/upload", {method: "POST", headers: {"X-Brain-Token": TOK, "X-File-Name": encodeURIComponent(f.name)}, body: f});
+          const j = await r.json(); if (!r.ok || !j.ok) throw new Error(j.error || "falhou");
+          uploads.push({name: j.name}); li.lastChild.textContent = "✓ recebido";
+        } catch (e) { li.lastChild.textContent = "✗ " + e.message; }
+      }
+    }
+    $("#manual").onclick = () => { if (!plan.goals.length) plan.goals.push(emptyGoal()); planTab = "revisar"; V.planejamento(); };
+    $("#gen").onclick = async () => {
+      const b = $("#gen"), log = $("#log");
+      const t = $("#ptext").value.trim();
+      if (!t && !uploads.length) return msg($("#m"), "err", "Escreva algo ou envie um documento primeiro.");
+      busy(b, true, "Lendo…");
+      try {
+        if (t) await act("planning_note", {text: t});
+        const r = await act("planning_draft");
+        log.classList.add("show"); log.textContent = "O Brain está lendo o que você mandou. Isso leva de 1 a 3 minutos…";
+        const j = await waitJob(r.job, jj => { if (jj.log.length) log.textContent = jj.log.join("\n"); });
+        if (j.status === "error") throw new Error((j.result && j.result.error) || "não consegui gerar a proposta");
+        plan = j.result.proposal; planTab = "revisar"; await refresh(); V.planejamento();
+      } catch (e) { msg($("#m"), "err", e.message); } finally { busy(b, false); }
+    };
+  } else {
+    drawTree();
+  }
+  bindNav(async btn => {
+    collectTree();
+    const goals = plan.goals.filter(g => g.title.trim());
+    if (!goals.length) return msg($("#m"), "err", "Adicione pelo menos um goal — ou escolha \"Fazer depois\".");
+    if (!$("#approve").checked) return msg($("#m"), "err", "Marque a confirmação para criar os goals.");
+    busy(btn, true, "Criando…");
+    try { await act("planning_apply", {proposal: {goals}, approved: true}); plan = {goals: []}; await refresh(); next(); }
+    catch (e) { msg($("#m"), "err", e.message); } finally { busy(btn, false); }
+  });
+};
+const emptyGoal = () => ({title: "", horizon: "", why: "", projects: [{title: "", deliverables: [{title: "", due: ""}]}]});
+function drawTree() {
+  if (!plan.goals.length) plan.goals.push(emptyGoal());
+  $("#tab").innerHTML = `${plan.summary ? `<div class="msg info show" style="margin:0 0 14px">✦ ${esc(plan.summary)}</div>` : ""}
+    <div class="tree" id="tree">${plan.goals.map((g, gi) => `<div class="goal" data-g="${gi}">
+      <div class="row"><span class="lvl g">Goal</span><input type="text" data-f="title" value="${esc(g.title)}" placeholder="Ex.: Lançar o app de pagamentos"><button class="x" data-rm="g" title="Remover">×</button></div>
+      <div class="row"><span class="lvl d">Por quê</span><input type="text" data-f="why" value="${esc(g.why)}" placeholder="o que isto destrava (opcional)"><input type="date" data-f="horizon" value="${esc(g.horizon)}" style="max-width:170px" title="Prazo do goal"></div>
+      ${g.projects.map((p, pi) => `<div class="proj" data-p="${pi}">
+        <div class="row"><span class="lvl p">Projeto</span><input type="text" data-f="title" value="${esc(p.title)}" placeholder="Ex.: Pesquisa com clientes"><button class="x" data-rm="p">×</button></div>
+        ${p.deliverables.map((d, di) => `<div class="row del" data-d="${di}"><span class="lvl d">Entregável</span><input type="text" data-f="title" value="${esc(d.title)}" placeholder="Ex.: Relatório de entrevistas"><input type="date" data-f="due" value="${esc(d.due)}" style="max-width:170px" title="Prazo"><button class="x" data-rm="d">×</button></div>`).join("")}
+        <button class="add del" data-add="d">+ entregável</button></div>`).join("")}
+      <button class="add" data-add="p" style="margin-left:22px">+ projeto</button></div>`).join("")}</div>
+    <button class="btn sm" data-add="g">+ goal</button>
+    <label class="check" style="margin-top:20px"><input type="checkbox" id="approve"> Aprovo: pode criar estes goals, projetos e entregáveis no meu Brain.</label>`;
+  $$("#tab [data-add]").forEach(b => b.onclick = () => {
+    collectTree();
+    const gEl = b.closest("[data-g]"), pEl = b.closest("[data-p]");
+    if (b.dataset.add === "g") plan.goals.push(emptyGoal());
+    if (b.dataset.add === "p") plan.goals[+gEl.dataset.g].projects.push({title: "", deliverables: [{title: "", due: ""}]});
+    if (b.dataset.add === "d") plan.goals[+gEl.dataset.g].projects[+pEl.dataset.p].deliverables.push({title: "", due: ""});
+    drawTree();
+  });
+  $$("#tab [data-rm]").forEach(b => b.onclick = () => {
+    collectTree();
+    const gi = +b.closest("[data-g]").dataset.g, pEl = b.closest("[data-p]"), dEl = b.closest("[data-d]");
+    if (b.dataset.rm === "g") plan.goals.splice(gi, 1);
+    if (b.dataset.rm === "p") plan.goals[gi].projects.splice(+pEl.dataset.p, 1);
+    if (b.dataset.rm === "d") plan.goals[gi].projects[+pEl.dataset.p].deliverables.splice(+dEl.dataset.d, 1);
+    drawTree();
+  });
+}
+function collectTree() {
+  if (!$("#tree")) return;
+  plan.goals = $$("#tree .goal").map(gEl => {
+    const val = (el, f) => { const i = $(`:scope > .row [data-f="${f}"]`, el); return i ? i.value.trim() : ""; };
+    return {
+      title: val(gEl, "title"), why: val(gEl, "why"), horizon: val(gEl, "horizon"),
+      projects: $$(":scope > .proj", gEl).map(pEl => ({
+        title: val(pEl, "title"),
+        deliverables: $$(":scope > .del[data-d]", pEl).map(dEl => ({title: ($('[data-f="title"]', dEl) || {}).value.trim(), due: ($('[data-f="due"]', dEl) || {}).value || ""})).filter(d => d.title),
+      })).filter(p => p.title),
+    };
+  });
+}
+
+V.pronto = () => {
+  const d = doneSet();
+  const row = (k, t, extra) => `<li>${d.has(k) ? '<span class="pill ok">feito</span>' : '<span class="pill muted">depois</span>'} ${esc(t)}${extra ? ` <span style="color:var(--tx3)">— ${esc(extra)}</span>` : ""}</li>`;
+  $("#view").innerHTML = `${head("Tudo certo", "Seu Brain está pronto", "Daqui para frente, abra o Brain pelo ícone e comece o dia por ele.")}
+    <div class="card"><ul class="summary" style="list-style:none;margin:0;padding:0">
+      ${row("voce", "Você", S.owner.name)}${row("sobre", "Perfil")}${row("rotina", "Rotina", S.routine.start + "–" + S.routine.end)}
+      ${row("conectores", "Conectores", S.connectors.filter(c => c.enabled).map(c => c.label).join(", "))}
+      ${row("permissoes", "Permissões")}${row("memoria", "Memória", {none: "sem memória", lite: "lite", full: "full"}[S.memory.mode])}
+      ${row("chaves", "Integrações", S.keys.GITHUB_TOKEN.set ? "GitHub" : "")}
+      ${row("planejamento", "Goals e projetos", S.planning.goals ? S.planning.goals + " goal(s)" : "")}</ul></div>
+    <div class="card soft"><h2>Primeiros passos</h2><ol class="howto">
+      <li>No chat do Claude, nesta pasta, digite <b>/brief</b> para ver o seu dia.</li>
+      <li>Jogue arquivos (atas, PDFs, prints) na caixa de entrada do Brain e digite <b>/dump</b> — ele organiza tudo.</li>
+      <li>Para puxar as novidades do Slack, Gmail e agenda: <b>/update</b>.</li></ol>
+      ${S.inbox ? `<p style="color:var(--tx2);margin:10px 0 0">Você tem ${S.inbox} item(ns) na caixa de entrada esperando um <b>/dump</b>.</p>` : ""}</div>
+    <div class="msg" id="m"></div>
+    ${nav({main: "Abrir meu Brain"})}`;
+  bindNav(async btn => {
+    busy(btn, true, "Preparando o painel…");
+    try { await act("finish"); try { localStorage.removeItem("brain-onboarding-step"); } catch (e) {} location.href = "/#t=" + encodeURIComponent(TOK); }
+    catch (e) { msg($("#m"), "err", e.message); busy(btn, false); }
+  });
+};
+
+function render() { renderSteps(); (V[cur] || V.inicio)(); }
+
+(async function boot() {
+  if (!TOK) return showFatal();
+  try { await refresh(); } catch (e) { if ($("#fatal").classList.contains("hidden")) { document.body.innerHTML = `<div class="fatal"><h1>Não consegui falar com o Brain</h1><p class="lead">${esc(e.message)}</p></div>`; } return; }
+  history.replaceState(null, "", location.pathname);   // o token sai da barra de endereço (fica no localStorage)
+  $("#app").classList.remove("hidden");
+  render();
+})();
+</script>
+</body>
+</html>

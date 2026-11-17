@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 import shutil
-import webbrowser
+import webbrowser  # noqa: F401 — os testes interceptam render.webbrowser.open
 import subprocess
 from pathlib import Path
 
@@ -12,6 +12,7 @@ from . import harvest as harvest_mod
 
 ASSET = Path(__file__).resolve().parent / "assets" / "dashboard.html"
 PORTFOLIO_ASSET = ASSET.with_name("portfolio.html")
+ONBOARDING_ASSET = ASSET.with_name("onboarding.html")
 PANELS = {"execucao": "index.html", "portfolio": "portfolio.html"}   # brain render --open [execucao|portfolio]
 MANAGED_DIRS = ("projects", "people", "records/actions", "records/decisions",
                 "records/processes", "records/opportunities")
@@ -141,7 +142,9 @@ def ensure_bridge(brain, port: int = 8787, wait_s: float = 3.0) -> str | None:
     """Ponte no ar? devolve a URL viva. Não está? SOBE uma (daemon destacado) e espera.
     É o `./brain serve` de sempre, só não fazendo o dono lembrar dele."""
     try:
-        from .serve import live_panel_url
+        from .serve import live_panel_url, stop_stale
+        if stop_stale(brain.inst):                         # ponte de uma versão anterior: troca pela atual
+            print("↻ a ponte do painel era de uma versão anterior — reiniciando")
         live = live_panel_url(brain.inst)
     except Exception:                                      # noqa: BLE001 — abrir o painel nunca falha por isso
         live = None
@@ -175,10 +178,23 @@ def ensure_bridge(brain, port: int = 8787, wait_s: float = 3.0) -> str | None:
     return None
 
 
+def open_onboarding(brain) -> bool:
+    """Abre o onboarding no navegador (precisa da ponte: é ela que grava). False se a ponte não subiu."""
+    live = ensure_bridge(brain, wait_s=15.0)                # primeira subida pode ser lenta (máquina recém-instalada)
+    if not live:
+        return False
+    base, _, frag = live.partition("#")
+    print("✓ abrindo a configuração guiada do Brain")
+    util.open_url(base.rstrip("/") + "/onboarding" + (f"#{frag}" if frag else ""))
+    return True
+
+
 def open_dashboard(brain, panel: str = "execucao", spawn: bool = True) -> None:
     # painel VIVO sempre que possível: executa comandos e o reload é sempre fresco
     try:
-        from .serve import live_panel_url
+        from .serve import live_panel_url, stop_stale
+        if spawn and stop_stale(brain.inst):              # ponte de uma versão anterior (sem as rotas novas): troca
+            print("↻ a ponte do painel era de uma versão anterior — reiniciando")
         live = live_panel_url(brain.inst)
         if not live and spawn:
             live = ensure_bridge(brain)
@@ -186,11 +202,11 @@ def open_dashboard(brain, panel: str = "execucao", spawn: bool = True) -> None:
         live = None
     if live:
         print(f"✓ ponte CLI no ar — abrindo o painel vivo ({live.split('#')[0]})")
-        webbrowser.open(live)
+        util.open_url(live)
         return
     path = brain.inst.fresh / "dashboard" / PANELS[panel]
-    # via webbrowser (e não subprocess `open`): um só ponto de abertura, que os testes conseguem interceptar
-    if webbrowser.open(path.as_uri()):
+    # via util.open_url (→ webbrowser.open): um só ponto de abertura, que os testes conseguem interceptar
+    if util.open_url(path.as_uri()):
         print("retrato file:// — ./brain serve liga os comandos (e o --open passa a abrir o vivo)")
     else:
         print(f"abra no navegador: file://{path}\n(retrato — ./brain serve liga os comandos)")

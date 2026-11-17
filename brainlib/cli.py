@@ -70,7 +70,9 @@ def cmd_init(args, b: Brain) -> None:
     from . import upstream
     inst = b.inst
     # o ledger grava a pessoa com id em slug: o brain.toml precisa do MESMO id, senão o dono não casa com a ficha
-    owner_id = util.slugify(args.owner_id, 32) if args.owner_id else ""
+    owner_name = (args.owner_name or "").strip()
+    # id é opcional: sem --owner-id ele sai do nome (instância de uma pessoa só — não faz sentido pedir id ao dono)
+    owner_id = util.slugify(args.owner_id, 32) if args.owner_id else (util.owner_slug(owner_name) if owner_name else "")
     created = upstream.seed_template(inst)
     upstream.hook(inst, "install")
     inst.config_dir.mkdir(parents=True, exist_ok=True)
@@ -79,12 +81,12 @@ def cmd_init(args, b: Brain) -> None:
         src = inst.config_dir / f"{name}.example"
         if not dst.exists() and src.exists():
             text = src.read_text(encoding="utf-8")
-            if name == "brain.toml" and args.owner_id:
+            if name == "brain.toml" and owner_id:
                 # json.dumps = string TOML válida (aspas e barras escapadas): aspas no nome quebravam o brain.toml
                 text = text.replace('id = "eu"', f'id = {json.dumps(owner_id, ensure_ascii=False)}', 1)
-                if args.owner_name:
+                if owner_name:
                     text = text.replace('name = "Dono do cérebro"',
-                                        f'name = {json.dumps(args.owner_name, ensure_ascii=False)}', 1)
+                                        f'name = {json.dumps(owner_name, ensure_ascii=False)}', 1)
             dst.write_text(text, encoding="utf-8")
             if name == ".env":
                 dst.chmod(0o600)
@@ -94,7 +96,7 @@ def cmd_init(args, b: Brain) -> None:
         b.reload()
         if owner_id not in b.state.people:
             b.record_one({"type": "person.added", "id": owner_id, "by": "owner",
-                          "data": {"name": args.owner_name or args.owner_id,
+                          "data": {"name": owner_name or args.owner_id,
                                    "aliases": util.split_csv(args.alias), "email": args.email or "",
                                    "relation": "dono do cérebro"}})
             created.append(f"pessoa: {owner_id}")
@@ -760,6 +762,20 @@ def cmd_render(args, b: Brain) -> None:
         render.open_dashboard(b, args.open)
 
 
+def cmd_open(args, b: Brain) -> None:
+    """O clique no app Brain: a configuração guiada enquanto a instância não está pronta; depois, o painel."""
+    from . import onboard, render
+    if args.setup or onboard.needed(b):
+        if render.open_onboarding(b):
+            return
+        # o painel não substitui a configuração: sem ponte não há como gravar — falha visível (o app mostra o aviso)
+        raise util.BrainError("a ponte local não subiu, então a configuração guiada não abriu — detalhe em "
+                              "vault/logs/serve.log (ou rode `./brain serve` e tente de novo)", code=5)
+    report = render.render_all(b)
+    print(render.summary(report))
+    render.open_dashboard(b, args.panel)
+
+
 def cmd_sync(args, b: Brain) -> None:
     from . import harvest
     evs = harvest.run(b)
@@ -933,8 +949,8 @@ def build_parser() -> argparse.ArgumentParser:
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     p = sub.add_parser("init", help="semeia o vault a partir de template/ (nunca sobrescreve)")
-    p.add_argument("--owner-id")
-    p.add_argument("--owner-name")
+    p.add_argument("--owner-name", help="seu nome (o id sai dele); sem isso, o `brain setup` pergunta")
+    p.add_argument("--owner-id", help="só para forçar um id; por padrão é gerado do nome")
     p.add_argument("--alias", action="append")
     p.add_argument("--email")
     p.set_defaults(fn=cmd_init)
@@ -1241,6 +1257,11 @@ def build_parser() -> argparse.ArgumentParser:
     isub.add_parser("update")
     isub.add_parser("status")
     p.set_defaults(fn=cmd_index)
+
+    p = sub.add_parser("open", help="abre o Brain: a configuração guiada na primeira vez, depois o painel")
+    p.add_argument("panel", nargs="?", default="execucao", choices=["execucao", "portfolio"])
+    p.add_argument("--setup", action="store_true", help="abre a configuração guiada mesmo com a instância pronta")
+    p.set_defaults(fn=cmd_open)
 
     p = sub.add_parser("render", help="colhe edições do dono e regenera TODAS as views (sem LLM)")
     p.add_argument("--no-harvest", action="store_true")
@@ -1597,7 +1618,7 @@ def build_parser() -> argparse.ArgumentParser:
                    ("uninstall", "remove o ícone (só se foi criado por este comando)")):
         x = asub.add_parser(nm, help=hp)
         x.add_argument("--dest", help="pasta de destino (ex.: ~/Desktop); padrão: aplicativos do usuário")
-        x.add_argument("--name", default="Segundo Cérebro", help="nome do app (padrão: Segundo Cérebro)")
+        x.add_argument("--name", default="Brain", help="nome do app (padrão: Brain)")
     p.set_defaults(fn=cmd_app, no_brain=True)
     p = sub.add_parser("serve", help="ponte CLI do painel: 127.0.0.1 + token — o HTML executa as mesmas linhas do TUI")
     p.add_argument("--port", type=int, default=8787, help="porta local (padrão 8787)")

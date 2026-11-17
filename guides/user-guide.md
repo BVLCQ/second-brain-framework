@@ -152,13 +152,16 @@ agente: *"execute o setup.md"* resolve.
 
 ### Passo 1 — criar a instância
 
-No terminal, na pasta do repo:
+O caminho normal é o instalador (`sh install.sh`): ele cria o app **Brain** e abre a configuração guiada no
+navegador — nome, apelido, cargo, perfil, rotina, conectores, permissões, memória e goals, cada passo com
+explicação e "fazer depois". Para reabrir: `./brain open --setup`. No terminal, as alternativas:
 
 ```bash
-./brain init --owner-id voce --owner-name "Seu Nome"
+./brain setup                          # wizard de terminal (também o caminho das IAs)
+./brain init --owner-name "Seu Nome"   # ou só a semente, sem wizard
 ```
 
-Isso semeia o `vault/` vazio a partir do template. Nada de conteúdo falso,
+Você não escolhe id: ele é gerado do nome. Isso semeia o `vault/` vazio a partir do template. Nada de conteúdo falso,
 nada importado: cérebros nascem vazios de propósito. Confira com
 `./brain doctor` — deve reclamar de "cérebro novo, PROFILE vazio", o que é
 o esperado.
@@ -648,7 +651,7 @@ Já coberto na seção 3. Gatilho: PROFILE e PLANNING vazios.
 | Comando | Para quê |
 |---|---|
 | `./brain render --open` | regenerar tudo e abrir o painel |
-| `./brain app install` | criar o **ícone clicável** do painel (clique duplo faz o `render --open`) |
+| `./brain app install` | criar o app **Brain** (clique duplo faz o `brain open`: configuração guiada na primeira vez, depois o painel) |
 | `./brain status` | contagens rápidas |
 | `./brain search "termo"` | busca sem LLM no ledger + artefatos |
 | `./brain doctor [--online]` | saúde da instância (inclui memória) |
@@ -663,10 +666,11 @@ Já coberto na seção 3. Gatilho: PROFILE e PLANNING vazios.
 
 ## 8. O painel — um passeio
 
-**Abrir com dois cliques:** `./brain app install` cria o app **Segundo Cérebro** em `~/Applications`
-(macOS — aparece no Launchpad e no Spotlight; arraste para o Dock) ou uma entrada no menu de aplicativos
-(Linux). `--dest ~/Desktop` coloca em outra pasta e `--name` troca o nome. Cada clique faz o mesmo que o
-terminal: regenera as views, sobe a ponte se preciso e abre o painel vivo. Se algo falhar, aparece um aviso
+**Abrir com dois cliques:** `./brain app install` cria o app **Brain** em `/Applications`
+(macOS — a pasta Aplicativos, ou `~/Applications` se a conta não escreve lá; aparece no Launchpad e no Spotlight; arraste para o Dock) ou uma entrada no menu de aplicativos
+(Linux). `--dest ~/Desktop` coloca em outra pasta e `--name` troca o nome. Na primeira vez, o clique abre a
+configuração guiada no navegador; depois, faz o mesmo que o terminal: regenera as views, sobe a ponte se preciso
+e abre o painel vivo (`./brain open --setup` volta à configuração). Se algo falhar, aparece um aviso
 e o detalhe fica em `vault/logs/app.log`. Mudou a pasta do Brain de lugar? Rode `app install` de novo.
 `./brain app uninstall` remove — e só remove o que ele mesmo criou.
 

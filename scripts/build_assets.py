@@ -20,7 +20,7 @@ def assemble(pf_only: bool, title: str) -> str:
     css = (SRC / "dashboard.css").read_text(encoding="utf-8")
     core = (SRC / "core.js").read_text(encoding="utf-8")
     extra = (SRC / "extra.js").read_text(encoding="utf-8")
-    html = shell.replace("<title>Segundo Cérebro</title>", f"<title>{title}</title>", 1)
+    html = shell.replace("<title>Brain</title>", f"<title>{title}</title>", 1)
     html = html.replace("__CSS__", css, 1)
     # um ÚNICO bloco <script> (os testes extraem o JS com split("<script>")/rsplit("</script>"))
     # na ordem do mockup: extras primeiro, core depois; a flag da variante vem antes de tudo
@@ -38,8 +38,8 @@ def assemble(pf_only: bool, title: str) -> str:
 
 
 def main() -> int:
-    (OUT / "dashboard.html").write_text(assemble(False, "Segundo Cérebro"), encoding="utf-8")
-    (OUT / "portfolio.html").write_text(assemble(True, "Segundo Cérebro — Portfólio"), encoding="utf-8")
+    (OUT / "dashboard.html").write_text(assemble(False, "Brain"), encoding="utf-8")
+    (OUT / "portfolio.html").write_text(assemble(True, "Brain — Portfólio"), encoding="utf-8")
     for f in sorted(OUT.glob("*.html")):
         print(f"{f.name}: {f.stat().st_size:,} bytes")
     return 0

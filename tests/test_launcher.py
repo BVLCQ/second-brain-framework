@@ -8,7 +8,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
-import zlib
+from unittest import mock
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -37,32 +37,18 @@ def _fake_framework(tmp: Path) -> Path:
 
 
 class IconTests(unittest.TestCase):
-    def test_png_is_valid_rgba(self):
-        png = launcher.render_png(64)
+    def test_icon_assets_exist_and_are_clean(self):
+        png = launcher.icon_png()
         self.assertEqual(png[:8], b"\x89PNG\r\n\x1a\n")
-        pos, seen, idat = 8, [], b""
-        while pos < len(png):
-            n, tag = struct.unpack(">I4s", png[pos:pos + 8])
-            data = png[pos + 8:pos + 8 + n]
-            crc = struct.unpack(">I", png[pos + 8 + n:pos + 12 + n])[0]
-            self.assertEqual(crc, zlib.crc32(tag + data) & 0xFFFFFFFF, tag)
-            seen.append(tag)
-            if tag == b"IHDR":
-                self.assertEqual(struct.unpack(">II", data[:8]), (64, 64))
-                self.assertEqual(data[8:10], b"\x08\x06")            # 8 bits, RGBA
-            if tag == b"IDAT":
-                idat += data
-            pos += 12 + n
-        self.assertEqual(seen, [b"IHDR", b"IDAT", b"IEND"])
-        raw = zlib.decompress(idat)
-        self.assertEqual(len(raw), 64 * (1 + 64 * 4))
-        self.assertEqual(raw[1:5], b"\x00\x00\x00\x00")               # canto = transparente (placa arredondada)
-        mid = 32 * (1 + 64 * 4) + 1 + 4 * 32
-        self.assertEqual(raw[mid + 3], 255)                           # centro = opaco
+        self.assertEqual(struct.unpack(">II", png[16:24]), (512, 512))         # IHDR: 512×512
+        svg = launcher.ICON_SVG.read_text(encoding="utf-8")
+        self.assertTrue(svg.lstrip().startswith("<svg"))
+        for bad in ("<script", "onload=", "<image", "href=\"http"):               # SVG versionado: sem script nem rede
+            self.assertNotIn(bad, svg)
 
     def test_icns_container(self):
-        pngs = {size: launcher.render_png(16) for _t, size in launcher.ICNS_TYPES}   # tamanho do PNG não importa p/ o contêiner
-        icns = launcher.build_icns(pngs)
+        png = launcher.icon_png()
+        icns = launcher.build_icns({128: png, 256: png, 512: png})               # tamanho do PNG não importa p/ o contêiner
         self.assertEqual(icns[:4], b"icns")
         self.assertEqual(struct.unpack(">I", icns[4:8])[0], len(icns))
         pos, tags = 8, []
@@ -73,6 +59,13 @@ class IconTests(unittest.TestCase):
             pos += n
         self.assertEqual(pos, len(icns))
         self.assertEqual(tags, [t for t, _s in launcher.ICNS_TYPES])
+        self.assertEqual(launcher.build_icns({512: png})[8:12], b"ic09")       # reserva sem sips: só o 512
+
+    def test_icon_icns_falls_back_without_system_tools(self):
+        with mock.patch.object(launcher.shutil, "which", return_value=None):
+            icns = launcher.icon_icns()
+        self.assertEqual(icns[:4], b"icns")
+        self.assertEqual(icns[8:12], b"ic09")
 
 
 class InstallTests(unittest.TestCase):
@@ -91,7 +84,7 @@ class InstallTests(unittest.TestCase):
 
     def test_macos_bundle_layout(self):
         app = self._install()
-        self.assertEqual(app.name, "Segundo Cérebro.app")
+        self.assertEqual(app.name, "Brain.app")
         info = plistlib.loads((app / "Contents" / "Info.plist").read_bytes())
         self.assertEqual(info["CFBundleExecutable"], "launcher")
         self.assertEqual(info["CFBundleIdentifier"], launcher.BUNDLE_ID)
@@ -102,7 +95,7 @@ class InstallTests(unittest.TestCase):
         self.assertEqual(subprocess.run(["sh", "-n", str(exe)]).returncode, 0)    # sintaxe do script
         self.assertEqual(list(self.dest.glob(".*.tmp")), [])                       # sem sobra do build
 
-    def test_launcher_runs_render_open_in_the_instance(self):
+    def test_launcher_runs_brain_open_in_the_instance(self):
         exe = self._install() / "Contents" / "MacOS" / "launcher"
         out = self.tmp / "ran.txt"
         env = {**os.environ, "STUB_OUT": str(out), "HOME": str(self.tmp)}
@@ -110,7 +103,7 @@ class InstallTests(unittest.TestCase):
         r = subprocess.run([str(exe)], env=env, capture_output=True, text=True)
         self.assertEqual(r.returncode, 0, r.stderr)
         args, home, cwd = eval(out.read_text(encoding="utf-8"))
-        self.assertEqual(args, ["render", "--open"])
+        self.assertEqual(args, ["open"])                                   # onboarding na 1ª vez, depois o painel
         self.assertEqual(home, str(self.inst.root))
         self.assertEqual(Path(cwd).resolve(), self.inst.root.resolve())
 
@@ -136,7 +129,7 @@ class InstallTests(unittest.TestCase):
         self.assertEqual(launcher.owner_of(app), str(other.root))
 
     def test_refuses_to_overwrite_foreign_app(self):
-        foreign = self.dest / "Segundo Cérebro.app"
+        foreign = self.dest / "Brain.app"
         (foreign / "Contents").mkdir(parents=True)
         (foreign / "Contents" / "Info.plist").write_bytes(plistlib.dumps({"CFBundleIdentifier": "com.outro.app"}))
         with self.assertRaises(util.BrainError):
@@ -160,7 +153,7 @@ class InstallTests(unittest.TestCase):
     def test_linux_desktop_entry(self):
         dest = self.tmp / "share" / "applications"
         entry = launcher.install(self.inst, dest, framework=self.fw, platform="linux")
-        self.assertEqual(entry.name, "segundo-cérebro.desktop")
+        self.assertEqual(entry.name, "brain.desktop")
         text = entry.read_text(encoding="utf-8")
         self.assertIn("[Desktop Entry]", text)
         self.assertIn("Terminal=false", text)

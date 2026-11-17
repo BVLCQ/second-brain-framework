@@ -127,15 +127,15 @@ Semeia o vault e a config a partir de `template/`. **Nunca sobrescreve** nada qu
 
 | Opção | Uso |
 |---|---|
-| `--owner-id ID` | seu id curto (ex.: `voce`) |
-| `--owner-name NOME` | nome completo |
+| `--owner-name NOME` | seu nome completo; o id (ex.: `seu-nome`) é gerado dele |
+| `--owner-id ID` | opcional — só para forçar um id; por padrão é gerado do nome |
 | `--alias ALIAS` | como você aparece nos textos |
 | `--email EMAIL` | seu e-mail |
 
 ```bash
-brain init --owner-id voce --owner-name "Seu Nome" --alias Você \
-  --email voce@example.com
+brain init --owner-name "Seu Nome" --alias Você --email voce@example.com
 ```
+Sem `--owner-name`, a instância nasce sem dono e o `brain setup` (passo identidade) pergunta o nome.
 Depois, no chat do agente: `/init` (entrevista que preenche PROFILE e PLANNING).
 
 ### `brain demo`
@@ -358,16 +358,21 @@ Códigos de saída: `3` vínculo inexistente, nota vazia ou nota fora da inbox; 
 ---
 
 ### `brain app install|uninstall`
-Ícone clicável do painel: clique duplo = `brain render --open`. No macOS cria
-`~/Applications/Segundo Cérebro.app` (Launchpad/Spotlight; arraste para o Dock); no Linux, uma entrada
+O app **Brain**: clique duplo = `brain open` (a configuração guiada enquanto ela não terminou; depois, o
+painel). No macOS cria `/Applications/Brain.app`, com o ícone Sinapse, — ou `~/Applications` se a conta não escreve lá — (Launchpad/Spotlight/pasta Aplicativos; arraste para o Dock); no Linux, uma entrada
 `.desktop` no menu de aplicativos. Só escreve na pasta de destino (nada no vault/ledger) e só remove o que
 ele mesmo criou. O app guarda o caminho da instância e do framework — se mudar a pasta, reinstale.
 ```bash
-brain app install                       # padrão: ~/Applications
+brain app install                       # padrão: /Applications (ou ~/Applications)
 brain app install --dest ~/Desktop      # em outra pasta
 brain app install --name "Meu Cérebro"  # outro nome (várias instâncias)
 brain app uninstall
 ```
+
+### `brain open [execucao|portfolio] [--setup]`
+O que o clique no app faz: abre a **configuração guiada** no navegador (`/onboarding`, na ponte local) enquanto
+ela não foi concluída; depois, regenera as views e abre o painel. `--setup` reabre a configuração a qualquer hora.
+
 Se a abertura falhar, o app mostra um aviso; o detalhe da última tentativa fica em `vault/logs/app.log`.
 
 ## 4. Pessoas — `person`

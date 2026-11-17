@@ -164,6 +164,15 @@ def load(root: Path | None = None) -> Instance:
         root = _find_home()
         vault = Path(os.environ.get("BRAIN_VAULT") or root / "vault")
         config_dir = Path(os.environ.get("BRAIN_CONFIG") or root / "config")
+    return Instance(root=root, vault=vault, config_dir=config_dir, cfg=_read_cfg(config_dir))
+
+
+def reload(inst: Instance) -> Instance:
+    """Relê o brain.toml da MESMA instância (mesmo vault e pasta de config, inclusive os de BRAIN_VAULT/BRAIN_CONFIG)."""
+    return Instance(root=inst.root, vault=inst.vault, config_dir=inst.config_dir, cfg=_read_cfg(inst.config_dir))
+
+
+def _read_cfg(config_dir: Path) -> dict:
     cfg_file = config_dir / "brain.toml"
     user: dict = {}
     if cfg_file.exists():
@@ -176,7 +185,7 @@ def load(root: Path | None = None) -> Instance:
         util.set_timezone(cfg["timezone"])
     except (KeyError, ValueError, TypeError) as e:     # ZoneInfoNotFoundError é KeyError: BrainError em vez de traceback
         raise util.BrainError(f"config/brain.toml: timezone inválido {cfg['timezone']!r}", code=5) from e
-    return Instance(root=root, vault=vault, config_dir=config_dir, cfg=cfg)
+    return cfg
 
 
 def load_env(inst: Instance) -> dict[str, str]:

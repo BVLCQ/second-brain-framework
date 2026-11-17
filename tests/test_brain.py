@@ -942,9 +942,9 @@ class DashboardAssetTests(unittest.TestCase):
     def test_committed_assets_match_build(self):
         mod = self._build()
         self.assertEqual((ROOT / "brainlib/assets/dashboard.html").read_text(encoding="utf-8"),
-                         mod.assemble(False, "Segundo Cérebro"))
+                         mod.assemble(False, "Brain"))
         self.assertEqual((ROOT / "brainlib/assets/portfolio.html").read_text(encoding="utf-8"),
-                         mod.assemble(True, "Segundo Cérebro — Portfólio"))
+                         mod.assemble(True, "Brain — Portfólio"))
 
     def test_panel_reads_are_guarded_for_any_payload(self):
         """Compatibilidade retroativa: toda chave que o painel lê (M.x / D0.x) ou existe no view
@@ -1005,7 +1005,7 @@ class DashboardAssetTests(unittest.TestCase):
         "feedback pushed", "feedback failed",   # recuperação manual (o push morreu depois de criar) — agente/terminal
     }
     NOT_IN_PANEL = {      # ciclo de vida do framework e config: terminal/TUI (o painel é de uso diário)
-        "demo", "tui", "serve", "app install", "app uninstall", "migrate ids", "update", "upstream hook", "upstream scan", "backup", "mcp",
+        "demo", "tui", "serve", "open", "app install", "app uninstall", "migrate ids", "update", "upstream hook", "upstream scan", "backup", "mcp",
         "nightly", "schedule", "validate", "sync", "memory setup", "memory rebuild", "memory sync",
         "memory status", "memory cost", "agent allow", "watch add", "watch edit", "watch remove", "doc link", "doc unlink",
         # (memory harness saiu daqui: a face Configurações do painel emite install/verify)

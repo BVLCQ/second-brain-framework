@@ -2,9 +2,11 @@
 
 Sistema local de pastas, Markdown e um livro-razão que organiza a vida
 profissional de **uma pessoa**. Observa e organiza. Não trabalha pelo dono
-no mundo exterior — salvo quatro portas estreitas, cada uma com aprovação
-explícita: blocos de foco no calendário, mensagem no Slack, publicação no
-espaço do time, backup no Drive.
+no mundo exterior — salvo as portas estreitas, cada uma com escopo mínimo e
+aprovação explícita: blocos de foco no calendário, mensagem no Slack,
+publicação no espaço do time, backup no Drive, pastas de oportunidade no
+Drive, sugestões/bugs como issue no GitHub e as melhorias do próprio
+framework (upstream). A lista completa está em `AGENTS.md`.
 
 A constituição é `AGENTS.md`. O guia de uso A a Z — cada comando, cada conexão, a rotina normal — é
 `guides/user-guide.md`. A instalação completa do stack local de IA
@@ -49,48 +51,45 @@ A constituição é `AGENTS.md`. O guia de uso A a Z — cada comando, cada cone
 
 ## Instalação
 
-O caminho rápido (máquina nova):
+O app se chama **Brain** (Segundo Cérebro é o nome do framework). Numa máquina nova:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/BVLCQ/second-brain-framework/main/install.sh | sh -
 ```
 
-ou, dentro do clone:
+ou, dentro do clone, `sh install.sh`. O instalador clona o repo, confere o Python, cria o app **Brain**
+na pasta Aplicativos e abre a **configuração guiada no navegador**:
 
-```bash
-sh install.sh          # clona se preciso, confere o Python, abre o wizard
-```
+1. **Você** — nome completo, apelido, cargo e e-mail (o id interno sai do nome; ninguém escolhe id).
+2. **Sobre você** — o texto vira o seu perfil; você vê a prévia antes de salvar.
+3. **Rotina** — fuso, expediente e almoço.
+4. **Conectores** — Slack, Gmail, Calendar, Drive, Granola e Jira, conectados uma vez no claude.ai; o Brain
+   detecta o que já está ligado e libera só as ferramentas de **leitura**.
+5. **Permissões** — pré-autoriza o Claude Code nesta pasta, para ele não pedir licença a cada comando.
+6. **Memória** — nenhuma, **lite** (busca por significado, 100% local, grátis) ou **full** (extrai fatos e liga
+   assuntos; usa a sua API key, com custo por uso). Sem chave, fica para depois.
+7. **Integrações** — token do GitHub (sugestões e bugs), opcional.
+8. **Goals e projetos** — escreva com as suas palavras ou envie um documento; a IA propõe a árvore, você
+   revisa e aprova ali mesmo (é o gate do PLANNING).
 
-O wizard `./brain setup` pergunta tudo (identidade, rotina, memória `none`/`embed`/
-`full`, TUI, noturno, portas), valida na hora e é **re-executável** — o estado de cada
-passo deriva do `doctor`. Instalação assistida por IA: `./brain setup --yes` +
-`./brain doctor` em loop (receita executável em `setup.md`). Guias:
-`guides/setup.md` (wizard) · `guides/memory.md` (memória em dois setups).
+Depois, é só abrir o **Brain** pelo ícone (Aplicativos, Launchpad, Spotlight ou Dock). Enquanto a configuração
+não termina, o ícone volta a ela; depois, abre o painel. Para refazer: `./brain open --setup`.
 
-Modo script/headless (sem perguntas):
+Requisitos que o instalador ainda não resolve sozinho: **git**, **Python 3.11+** (o macOS traz só o 3.9 —
+`brew install mise && mise install` resolve) e o **Claude Code** instalado e logado.
+
+Terminal e IAs: o wizard `./brain setup` continua (`--yes` + `./brain doctor` em loop; receita em `setup.md`).
+Guias: `guides/setup.md` (wizard) · `guides/memory.md` (memória). Modo script, sem perguntas:
 
 ```bash
 git clone <este-repo> ~/brain && cd ~/brain
-mise install                 # Python 3.12 (ou qualquer 3.11+ já presente)
-./brain init --owner-id seu-id --owner-name "Seu Nome"
+mise install                                # Python 3.12 (ou qualquer 3.11+ já presente)
+./brain init --owner-name "Seu Nome"        # o id é gerado do nome (ex.: seu-nome)
 ./brain demo --dir /tmp/brain-demo --open   # vê o painel sem tocar no vault
 ```
 
-Abra o chat do agente **nesta pasta** e digite `/init`. Ele entrevista,
-propõe PROFILE + PLANNING e espera o seu "ok".
-
-Para o stack completo local (LM Studio + Hindsight + noturno),
-siga o **`setup.md`** — em uma máquina nova, basta pedir ao agente:
-*execute o setup.md*.
-
-Painel, depois de qualquer mudança:
-
-```bash
-./brain render --open
-```
-
-Sem terminal: `./brain app install` cria o ícone **Segundo Cérebro** (macOS: `~/Applications`,
-arraste para o Dock · Linux: menu de aplicativos). Clique duplo = o mesmo `render --open`.
+Painel, depois de qualquer mudança: `./brain open` (ou `./brain render --open`). `./brain app install` recria o
+app (`/Applications`, ou `~/Applications` sem permissão; Linux: menu de aplicativos) — rode de novo se mover a pasta.
 
 Noturno (render → agente `/update` → memória → backup semanal):
 
@@ -125,7 +124,8 @@ existir `config/brain.toml`); `BRAIN_HOME` vence se estiver setada.
 ## Testes
 
 ```bash
-python -m unittest tests.test_brain -v
+python3 -m unittest discover -s tests          # tudo (o que o CI roda)
+python3 -m unittest tests.test_brain -v        # um arquivo
 ```
 
 Só biblioteca padrão. Relógio congelado em `BRAIN_NOW`. Sem rede.

@@ -7,7 +7,7 @@ description: "Primeira entrevista do cérebro: descobre quem é o dono, seus goa
 
 **Gatilho:** `vault/PROFILE/profile.md` e `vault/PLANNING/goals.md` sem conteúdo real (só template).
 
-Antes de perguntar: `./brain init --owner-id <slug> --owner-name "<nome>"` se o ledger ainda não tiver o dono. Confira com `./brain doctor`.
+Antes de perguntar: `./brain init --owner-name "<nome>"` se o ledger ainda não tiver o dono (o id é gerado do nome; nunca peça id ao dono). Confira com `./brain doctor`.
 
 ## Princípios
 

@@ -15,10 +15,9 @@ import os
 import secrets
 import shlex
 import threading
-import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import util
+from . import __version__, util
 
 # (comando, subcomando | None) que o painel emite — nada além disso passa pela ponte.
 # Tudo que muda o mundo exterior continua nos gates do próprio CLI (--quote, aprovações).
@@ -142,7 +141,7 @@ class _Handler(BaseHTTPRequestHandler):
                 self.send_header("Content-Length", "0")
                 self.end_headers()
                 return
-            if path in ("/", "/index.html", "/portfolio.html"):
+            if path in ("/", "/index.html", "/portfolio.html", "/onboarding", "/brain.svg"):
                 if not self._guard(token_required=False):      # o HTML boota sem token; a /api/* exige
                     return
             elif not self._guard():
@@ -157,6 +156,27 @@ class _Handler(BaseHTTPRequestHandler):
                 with self.state.lock:
                     m = model.build(self._brain())
                 self._html(render.render_html(render_portfolio.html_payload(m), render.PORTFOLIO_ASSET))
+            elif path == "/onboarding":
+                from . import render
+                self._html(render.ONBOARDING_ASSET.read_text(encoding="utf-8"))
+            elif path == "/brain.svg":
+                from . import launcher
+                body = launcher.ICON_SVG.read_bytes()
+                self.send_response(200)
+                self.send_header("Content-Type", "image/svg+xml")
+                self.send_header("Content-Length", str(len(body)))
+                self._sec()
+                self.end_headers()
+                self.wfile.write(body)
+            elif path == "/api/onboard/state":
+                from . import onboard
+                with self.state.lock:
+                    st = onboard.state(self._brain())
+                self._json(200, {"ok": True, "state": st})
+            elif path.startswith("/api/onboard/job/"):
+                from . import onboard
+                j = onboard.job(path.rsplit("/", 1)[1])
+                self._json(200 if j else 404, {"ok": bool(j), "job": j})
             elif path == "/api/data":
                 from . import render
                 with self.state.lock:
@@ -171,6 +191,9 @@ class _Handler(BaseHTTPRequestHandler):
     def do_POST(self):                                  # noqa: N802
         try:
             if not self._guard():
+                return
+            if self.path.split("?", 1)[0].startswith("/api/onboard/"):
+                self._onboard_post(self.path.split("?", 1)[0].removeprefix("/api/onboard/"))
                 return
             if self.path.split("?", 1)[0] != "/api/cmd":
                 self._deny(404, "rota desconhecida")
@@ -216,8 +239,53 @@ class _Handler(BaseHTTPRequestHandler):
             self._deny(500, f"erro interno: {e}")
             raise
 
+    def _onboard_post(self, action: str):
+        """Passos do onboarding (brainlib/onboard.py). O corpo NUNCA vai para o log: carrega API keys."""
+        from urllib.parse import unquote
+        from . import onboard
+        if self.headers.get("Transfer-Encoding"):
+            self._deny(411, "use Content-Length — a ponte não lê chunked")
+            return
+        try:
+            n = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            self._deny(400, "Content-Length inválido")
+            return
+        cap = onboard.UPLOAD_MAX if action == "upload" else 256 * 1024
+        if not 0 <= n <= cap:
+            self._deny(413 if n > cap else 400, "pedido fora do tamanho aceito")
+            return
+        body = self.rfile.read(n)
+        try:
+            with self.state.lock:
+                b = self._brain()
+                if action == "upload":
+                    res = onboard.save_upload(b, unquote(self.headers.get("X-File-Name") or ""), body)
+                else:
+                    try:
+                        data = json.loads(body.decode("utf-8") or "{}")
+                    except (json.JSONDecodeError, UnicodeDecodeError):
+                        self._deny(400, "JSON inválido")
+                        return
+                    if not isinstance(data, dict):
+                        self._deny(400, "JSON inválido")
+                        return
+                    res = onboard.run_action(b, action, data)
+            print(f"[serve] onboarding: {action} → ok", flush=True)
+            self._json(200, {"ok": True, **res})
+        except util.BrainError as e:
+            print(f"[serve] onboarding: {action} → recusado", flush=True)
+            self._json(400, {"ok": False, "error": str(e)})
+
     def _brain(self):
+        """Brain com a config relida do disco: o onboarding (e o painel) mudam o brain.toml com a ponte no ar —
+        a instância guardada na partida ficaria com o dono e as fontes de antes."""
+        from . import config
         from .core import Brain
+        try:
+            self.state.inst = config.reload(self.state.inst)
+        except util.BrainError as e:
+            print(f"[serve] config não recarregou: {e}", flush=True)
         return Brain(self.state.inst)
 
 
@@ -225,6 +293,38 @@ def live_url_file(inst) -> Path:
     """Onde a ponte no ar anota a URL com token (modo 0600, apagado ao encerrar).
     Quem abre o painel (render --open) usa isso para cair no MODO VIVO quando existe."""
     return inst.logs / "serve.json"
+
+
+def stop_stale(inst) -> bool:
+    """A ponte no ar é de outra versão do código (ficou rodando de antes de um `brain update`)? Encerra — quem chama
+    sobe a nova. Só mata o pid anotado se o processo for mesmo um `brain serve`. True se encerrou uma."""
+    import signal
+    import subprocess
+    import time
+    f = live_url_file(inst)
+    try:
+        row = json.loads(f.read_text(encoding="utf-8"))
+        pid = int(row["pid"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return False
+    if row.get("version") == __version__ or not live_panel_url(inst):
+        return False
+    try:
+        cmd = subprocess.run(["ps", "-p", str(pid), "-o", "command="], capture_output=True, text=True,
+                             timeout=5).stdout
+    except (OSError, subprocess.SubprocessError):
+        return False
+    if "brain" not in cmd or " serve" not in cmd:
+        return False
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except OSError:
+        return False
+    for _ in range(40):                                   # até 4 s para liberar a porta
+        if not live_panel_url(inst):
+            return True
+        time.sleep(0.1)
+    return True
 
 
 def live_panel_url(inst) -> str | None:
@@ -253,10 +353,10 @@ def serve(inst, port: int = 8787, open_browser: bool = False) -> int:
     # 0600 já na criação: o arquivo carrega o token da ponte — write_text+chmod deixaria uma janela legível
     fd = os.open(live_url_file(inst), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as fh:
-        fh.write(json.dumps({"url": url, "port": port, "pid": os.getpid()}))
+        fh.write(json.dumps({"url": url, "port": port, "pid": os.getpid(), "version": __version__}))
     print(f"✓ ponte CLI no ar (Ctrl+C encerra)\n  {url}\n  file:// continua retrato: comandos só copiam")
     if open_browser:
-        webbrowser.open(url)
+        util.open_url(url)
     def _sair(*_a):
         raise KeyboardInterrupt                  # SIGTERM/SIGINT caem no mesmo caminho de limpeza
 

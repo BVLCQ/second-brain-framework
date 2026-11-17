@@ -14,7 +14,7 @@ def checks(brain, online: bool = False) -> list[dict]:
     inst, out = brain.inst, []
     cfg = inst.cfg
     if not (inst.config_dir / "brain.toml").exists():
-        out.append(_c("warn", "config", "config/brain.toml ausente — rode `./brain init --owner-id …`"))
+        out.append(_c("warn", "config", "config/brain.toml ausente — rode `./brain setup`"))
     for zone in ("PROFILE", "PLANNING", "RAW/inbox", "PROCESSED", "FRESH"):
         if not (inst.vault / zone).exists():
             out.append(_c("error", "vault", f"zona ausente: vault/{zone} — rode `./brain init`"))

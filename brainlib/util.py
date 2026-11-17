@@ -8,7 +8,9 @@ import os
 import re
 import tempfile
 import threading
+import sys
 import unicodedata
+import webbrowser
 from collections.abc import Iterator
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -88,6 +90,14 @@ def fold(text: str) -> str:
 def slugify(text: str, max_len: int = 48) -> str:
     s = re.sub(r"[^a-z0-9]+", "-", fold(text)).strip("-")
     return s[:max_len].strip("-") or "item"
+
+
+def owner_slug(name: str, max_len: int = 32) -> str:
+    """Id do dono gerado a partir do nome ("Marina Demo" → "marina-demo"). Instância é de uma pessoa só:
+    ninguém precisa inventar id. Nome sem nenhuma letra/dígito latino (ex.: só ideogramas) cai em "dono"."""
+    if not re.search(r"[a-z0-9]", fold(name)):
+        return "dono"
+    return slugify(name, max_len)
 
 
 def sha(text: str | bytes, n: int = 16) -> str:
@@ -227,3 +237,13 @@ def relpath(path: Path, root: Path) -> str:
         return str(path.resolve().relative_to(root.resolve()))
     except ValueError:
         return str(path)
+
+
+def open_url(url: str) -> bool:
+    """Abre `url` no navegador padrão. No macOS usa `/usr/bin/open`, que traz o navegador para a frente
+    (o caminho padrão do `webbrowser`, via osascript, abre a aba mas não ativa o app — vindo do ícone
+    do painel, parecia que nada acontecia). Segue sendo `webbrowser.open`: um só ponto de abertura,
+    que os testes conseguem interceptar."""
+    if sys.platform == "darwin" and os.access("/usr/bin/open", os.X_OK):
+        webbrowser.register("macos-open", None, webbrowser.BackgroundBrowser("/usr/bin/open"), preferred=True)
+    return webbrowser.open(url)

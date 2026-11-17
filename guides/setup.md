@@ -18,8 +18,8 @@ Os três terminam no mesmo lugar: `./brain doctor` verde (no máximo ⚠ normais
 
 | # | id | O que faz | Validação |
 |---|---|---|---|
-| 0 | instancia | semeia vault + config (demo detectado → arquiva e nasce de novo, com confirmação) | zonas + doctor |
-| 1 | identidade | dono no ledger (`person.added`) | `brain.person` no state |
+| 0 | instancia | **pergunta seu nome** (o id é gerado dele; padrão = nome da conta do Mac), semeia vault + config (demo detectado → arquiva e nasce de novo, com confirmação) | zonas + doctor |
+| 1 | identidade | dono no ledger (`person.added`); só pergunta se o `init` rodou sem nome | `brain.person` no state |
 | 2 | rotina | fuso + expediente + almoço (`[work]`) | parse |
 | 3 | comando | **`brain` no PATH** (symlink `~/.local/bin/brain` → repo) | `which brain` resolve |
 | 3b | painel | **ícone do painel** (`brain app install`; interativo pergunta, `--yes` cria — como o passo `comando`) | app/entrada existe |

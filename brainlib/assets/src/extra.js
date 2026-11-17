@@ -79,6 +79,8 @@ if (SERVE) {
   else { try { TOK = localStorage.getItem("brain-serve-token"); } catch (e) {} }
 }
 let LIVE = SERVE && !!TOK;
+// a configuração guiada (conectores, memória, chaves que ficaram para depois) só existe no painel vivo
+(function () { const ob = document.getElementById("onboard"); if (ob && LIVE) ob.hidden = false; })();
 function copyCmd(cmd){
   const t = document.createElement("textarea");
   t.value = cmd; t.style.position = "fixed"; t.style.opacity = "0";

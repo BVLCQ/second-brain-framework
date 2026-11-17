@@ -1,13 +1,13 @@
 #!/bin/sh
-# Segundo Cérebro — bootstrap do clone ao wizard.
+# Brain — instalação: do clone ao app aberto no navegador.
 #
 #   caminho 1 (curl, máquina nova):
 #     curl -fsSL https://raw.githubusercontent.com/BVLCQ/second-brain-framework/main/install.sh | sh -
 #   caminho 2 (dentro do clone):
 #     sh install.sh
 #
-# O que faz: clona (se fora do repo), confere o Python, e entrega ao wizard
-# `./brain setup` — que pergunta tudo, valida na hora e é re-executável.
+# O que faz: clona (se fora do repo), confere o Python, cria o app Brain (Aplicativos) e abre a
+# configuração guiada no navegador. Depois, é só abrir o Brain pelo ícone.
 # Instalação assistida por IA: o mesmo wizard com --yes/--only + `./brain doctor`
 # como régua (setup.md na raiz é a receita executável completa para agentes).
 set -e
@@ -37,5 +37,11 @@ else
     exit 1
 fi
 
-echo "→ abrindo o wizard (re-executável; Ctrl-C não estraga nada):"
-exec ./brain setup
+# Do clone ao app: semeia a instância (nunca sobrescreve), cria o app Brain e abre a configuração guiada
+# no navegador. O wizard de terminal continua existindo para quem prefere (ou para IAs): ./brain setup
+./brain init >/dev/null
+case "$(uname -s)" in
+    Darwin|Linux) ./brain app install || echo "⚠ não consegui criar o app — abra com: ./brain open" ;;
+esac
+echo "→ abrindo a configuração do Brain no navegador…"
+exec ./brain open --setup
