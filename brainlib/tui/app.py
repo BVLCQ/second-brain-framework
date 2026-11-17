@@ -1158,7 +1158,8 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
         """O view model com o que os formulários leem — as mesmas chaves que o painel recebe como M."""
         from .. import forms, schema, watch
         st = self.store
-        return {**st.m, "today": util.today().isoformat(), "sources": st.sources,   # hoje de agora (TUI aberta na virada) "source_kinds": [list(k) for k in watch.KINDS],
+        # "today" de agora: a TUI aberta na virada do dia não resolve "amanhã" um dia cedo
+        return {**st.m, "today": util.today().isoformat(), "sources": st.sources, "source_kinds": [list(k) for k in watch.KINDS],
                 "doc_kinds": sorted(schema.DOC_KINDS), "form_static": forms.static(st.brain)}
 
     def _py_rules(self, ctx: dict) -> tuple[dict, dict]:

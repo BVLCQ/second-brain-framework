@@ -88,8 +88,6 @@ if (SERVE) window.addEventListener("hashchange", e => {
   history.replaceState(null, "", location.pathname + location.search + (back ? "#" + back : ""));
   if (tok !== TOK) location.reload();
 });
-// a configuração guiada (conectores, memória, chaves que ficaram para depois) só existe no painel vivo
-(function () { const ob = document.getElementById("onboard"); if (ob && LIVE) ob.hidden = false; })();
 function copyCmd(cmd){
   const t = document.createElement("textarea");
   t.value = cmd; t.style.position = "fixed"; t.style.opacity = "0";
@@ -187,7 +185,9 @@ function navEntries(){
     : [["face/execucao", "→ face Execução"], ["face/portfolio", "→ face Portfólio"], ["face/configuracoes", "→ face Configurações"],
     ["home", "Início"], ["sources", "Fontes"], ["todo", "TODO"], ["projects", "Projetos"], ["decisions", "Decisões"], ["wins", "Conquistas"],
     ["people", "Pessoas"], ["timeline", "Linha do tempo"], ["focus", "Foco"], ["outbox", "Mensagens"], ["feedback", "Sugestões"],
-    ["cfg/memoria", "Configurações · Memória"], ["cfg/saude", "Configurações · Saúde"],
+    ["cfg/inicio", "Configurações · Visão geral"], ["cfg/perfil", "Configurações · Perfil"], ["cfg/rotina", "Configurações · Rotina"],
+    ["cfg/conectores", "Configurações · Conectores"], ["cfg/memoria", "Configurações · Memória"], ["cfg/integracoes", "Configurações · Integrações"],
+    ["cfg/saude", "Configurações · Saúde"],
     ["pf/visao", "Portfólio · Visão"], ["pf/opps", "Portfólio · Oportunidades"], ["pf/matrix", "Portfólio · Matriz"],
     ["pf/procs", "Portfólio · Processos"], ["pf/areas", "Portfólio · Áreas"], ["pf/docs", "Portfólio · Documentos"]];
   return tabs.map(t => ({group: t[0].startsWith("face/") ? "faces" : "ir para", label: t[1], view: t[0]}));
@@ -480,6 +480,209 @@ function dropPlan(a, target){                    // → {cmd, mut, dialog?, deny
 }
 let dragId = null, lastMoved = null;
 
+// ── face Configurações: os passos da configuração guiada, revisitáveis ───────────────────────────
+// Mesmos endpoints do /onboarding (/api/onboard/*): uma regra, duas portas de entrada. "feito" vem do
+// estado real (state.setup), não da lista de passos vistos — pular não conta como feito.
+const SETUP_STEPS = [["perfil", "Perfil"], ["rotina", "Rotina"], ["conectores", "Conectores"], ["memoria", "Memória"], ["integracoes", "Integrações"]];
+const MEM_LABEL = {none: "nenhuma", lite: "embed", embed: "embed", full: "full"};   // a API ainda diz "lite"; a tela diz o nome da CLI
+let SS = null, profileDraftCfg = null;
+async function obApi(path, body){
+  const o = {headers: {"X-Brain-Token": TOK}};
+  if (body !== undefined) { o.method = "POST"; o.headers["Content-Type"] = "application/json"; o.body = JSON.stringify(body); }
+  const r = await fetch(path, o);
+  let j = {};
+  try { j = await r.json(); } catch (e) {}
+  if (!r.ok || j.ok === false) throw new Error(j.error || ("erro " + r.status));
+  return j;
+}
+const obAct = (name, body) => obApi("/api/onboard/" + name, body || {});
+async function obJob(id, onTick){
+  for (;;) {
+    const j = (await obApi("/api/onboard/job/" + id)).job;
+    if (onTick) onTick(j);
+    if (j.status !== "running") return j;
+    await new Promise(r => setTimeout(r, 1500));
+  }
+}
+function stMsg(el, kind, text){ if (el) { el.className = "stmsg " + kind; el.textContent = text; } }
+async function stBusy(btn, label, fn){
+  const was = btn.innerHTML; btn.disabled = true; btn.textContent = label || "salvando…";
+  try { return await fn(); } finally { btn.disabled = false; btn.innerHTML = was; }
+}
+const stStatus = ok => ok ? '<span class="chip h-em-dia">feito</span>' : '<span class="stlater">depois</span>';
+const fld = (label, input, hint) => '<label class="fld"><span>' + label + "</span>" + input + (hint ? "<small>" + hint + "</small>" : "") + "</label>";
+const sec = (title, body, right) => '<section class="panel stsec"><div class="sthead"><h2>' + title + "</h2>" + (right || "") + "</div>" + body + "</section>";
+
+async function wireSetup(step){
+  const box = document.getElementById("setup");
+  if (!box) return;
+  if (!LIVE) {
+    box.innerHTML = step === "memoria" ? "" : '<section class="panel"><p>Este painel foi aberto como arquivo (retrato). Para ver e mudar a configuração, abra o <b>Brain</b> pelo app — Aplicativos, Launchpad ou Spotlight.</p></section>';
+    return;
+  }
+  try { await obState(); }
+  catch (e) { box.innerHTML = '<section class="panel"><p class="late">Não consegui ler a configuração: ' + esc(e.message) + "</p></section>"; return; }
+  if (!document.getElementById("setup") || document.getElementById("setup").dataset.step !== step) return;   // trocou de aba enquanto lia
+  (SETUP[step] || (() => {}))(document.getElementById("setup"));
+}
+async function obState(){ SS = (await obApi("/api/onboard/state")).state; return SS; }
+const redo = step => { const b = document.getElementById("setup"); if (b && b.dataset.step === step) SETUP[step](b); };
+
+const SETUP = {};
+SETUP.inicio = box => {
+  const st = SS.setup || {}, n = SETUP_STEPS.filter(([k]) => st[k]).length;
+  const conns = SS.connectors.filter(c => c.enabled).map(c => c.label);
+  const detail = {
+    perfil: [SS.owner.name, SS.owner.nickname].filter(Boolean).join(" · ") || "nome, apelido, sobre você",
+    rotina: SS.routine.start && SS.routine.end ? SS.routine.start + "–" + SS.routine.end + " · " + SS.routine.timezone : "fuso e expediente",
+    conectores: conns.length ? conns.join(", ") : "Slack, Gmail, Agenda…",
+    memoria: st.memoria ? MEM_LABEL[SS.memory.mode] || SS.memory.mode : "nenhuma · embed · full",
+    integracoes: SS.keys.GITHUB_TOKEN && SS.keys.GITHUB_TOKEN.set ? "GitHub configurado" : "token do GitHub",
+  };
+  box.innerHTML = '<div class="stbar"><span style="width:' + Math.round(n / SETUP_STEPS.length * 100) + '%"></span></div>' +
+    '<section class="panel stlist">' + SETUP_STEPS.map(([k, t]) =>
+      '<a class="strow" href="#cfg/' + k + '">' + stStatus(st[k]) + "<b>" + t + '</b><span class="muted">' + esc(detail[k]) + '</span><span class="stgo">›</span></a>').join("") + "</section>" +
+    '<div class="stactions"><button class="btn" data-welcome>Rever boas-vindas</button><a class="btn" href="#projects">Goals e projetos em Execução</a></div>';
+  box.querySelector("[data-welcome]").onclick = () => {
+    try { localStorage.setItem("brain-onboarding-step", "inicio"); } catch (e) {}
+    location.href = "/onboarding";
+  };
+};
+SETUP.perfil = box => {
+  const o = SS.owner, tpl = SS.profile.template;
+  box.innerHTML = sec("Você", '<div class="stgrid">' +
+      fld('Nome completo <span class="late">*</span>', '<input type="text" id="s-name" value="' + esc(o.name || o.suggested_name) + '" autocomplete="name">') +
+      fld("Apelido", '<input type="text" id="s-nick" value="' + esc(o.nickname) + '" placeholder="como as pessoas te chamam">', "Ajuda a te achar nas transcrições.") +
+      fld("Cargo", '<input type="text" id="s-role" value="' + esc(o.role) + '">') +
+      fld("E-mail de trabalho", '<input type="email" id="s-email" value="' + esc(o.email) + '" autocomplete="email">', "Opcional: reconhece convites e e-mails seus.") +
+      '</div><div class="stactions"><span class="stmsg" id="s-m1"></span><button class="btn primary" id="s-about">Salvar</button></div>') +
+    sec("Sobre você", (tpl ? '<p class="muted">Ainda não há perfil. Escreva como se explicasse para um colega novo.</p>'
+        : '<details class="stprof"><summary>Perfil atual</summary><pre>' + esc(SS.profile.text) + "</pre></details>" +
+          '<p class="muted small">Escrever aqui gera um perfil novo, que substitui o atual. Você vê a prévia antes de salvar.</p>') +
+      '<div id="s-form">' + fld("Sobre você", '<textarea id="s-ab" placeholder="Seu papel, seu time, pelo que você responde…"></textarea>') +
+      fld("Como você trabalha", '<textarea id="s-how" placeholder="Rituais, reuniões fixas, como prefere receber informação…"></textarea>') +
+      fld("O que importa agora", '<textarea id="s-foc" placeholder="As 2–3 coisas que mais pesam neste trimestre."></textarea>') +
+      '<div class="stactions"><span class="stmsg" id="s-m2"></span><button class="btn" id="s-prev">Ver prévia</button></div></div>' +
+      '<div id="s-pv" hidden><pre id="s-pvt"></pre><div class="stactions"><button class="btn" id="s-edit">Editar texto</button><span class="stmsg" id="s-m3"></span><button class="btn primary" id="s-save">Salvar perfil</button></div></div>');
+  if (profileDraftCfg) { box.querySelector("#s-ab").value = profileDraftCfg.about; box.querySelector("#s-how").value = profileDraftCfg.how; box.querySelector("#s-foc").value = profileDraftCfg.focus; }
+  const q = s => box.querySelector(s);
+  q("#s-about").onclick = e => stBusy(e.currentTarget, "salvando…", async () => {
+    const body = {name: q("#s-name").value, nickname: q("#s-nick").value, role: q("#s-role").value, email: q("#s-email").value};
+    if (!body.name.trim()) return stMsg(q("#s-m1"), "late", "preencha o nome completo");
+    try { await obAct("about", body); await obState(); stMsg(q("#s-m1"), "ok", "✓ salvo"); } catch (err) { stMsg(q("#s-m1"), "late", err.message); }
+  });
+  q("#s-prev").onclick = e => stBusy(e.currentTarget, "montando…", async () => {
+    profileDraftCfg = {about: q("#s-ab").value, how: q("#s-how").value, focus: q("#s-foc").value};
+    if (!(profileDraftCfg.about + profileDraftCfg.how + profileDraftCfg.focus).trim()) return stMsg(q("#s-m2"), "late", "escreva pelo menos um dos campos");
+    try { const r = await obAct("profile_preview", profileDraftCfg); q("#s-pvt").textContent = r.markdown; q("#s-pv").dataset.md = r.markdown; q("#s-form").hidden = true; q("#s-pv").hidden = false; }
+    catch (err) { stMsg(q("#s-m2"), "late", err.message); }
+  });
+  q("#s-edit").onclick = () => { q("#s-pv").hidden = true; q("#s-form").hidden = false; };
+  q("#s-save").onclick = e => stBusy(e.currentTarget, "salvando…", async () => {
+    try { await obAct("profile_save", {markdown: q("#s-pv").dataset.md, overwrite: !tpl}); profileDraftCfg = null; await obState(); redo("perfil"); toast("perfil salvo"); }
+    catch (err) { stMsg(q("#s-m3"), "late", err.message); }
+  });
+};
+SETUP.rotina = box => {
+  const r = SS.routine, guess = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const zones = Array.from(new Set([r.timezone, guess, "America/Sao_Paulo", "America/Argentina/Buenos_Aires", "America/Mexico_City", "America/Bogota",
+    "America/Santiago", "America/Lima", "America/New_York", "Europe/Lisbon", "Europe/Madrid", "UTC"].filter(Boolean)));
+  const lunch = (r.lunch || "12:00-13:00").split("-");
+  box.innerHTML = sec("Expediente", fld("Fuso horário", '<select id="s-tz">' + zones.map(z => "<option" + (z === (r.timezone || guess) ? " selected" : "") + ">" + esc(z) + "</option>").join("") + "</select>") +
+    '<div class="stgrid">' + fld("Começo", '<input type="time" id="s-st" value="' + esc(r.start) + '">') + fld("Fim", '<input type="time" id="s-en" value="' + esc(r.end) + '">') + "</div>" +
+    '<label class="chk"><input type="checkbox" id="s-lon"' + (r.lunch !== "" ? " checked" : "") + "> Reservar horário de almoço</label>" +
+    '<div class="stgrid" id="s-lunch">' + fld("Almoço — início", '<input type="time" id="s-ls" value="' + esc(lunch[0]) + '">') + fld("Almoço — fim", '<input type="time" id="s-le" value="' + esc(lunch[1] || "13:00") + '">') + "</div>" +
+    '<div class="stactions"><span class="stmsg" id="s-m"></span><button class="btn primary" id="s-save">Salvar</button></div>');
+  const q = s => box.querySelector(s), sync = () => { q("#s-lunch").hidden = !q("#s-lon").checked; };
+  q("#s-lon").onchange = sync; sync();
+  q("#s-save").onclick = e => stBusy(e.currentTarget, "salvando…", async () => {
+    try { await obAct("routine", {timezone: q("#s-tz").value, start: q("#s-st").value, end: q("#s-en").value, lunch: q("#s-lon").checked ? q("#s-ls").value + "-" + q("#s-le").value : ""});
+          await obState(); stMsg(q("#s-m"), "ok", "✓ salvo"); } catch (err) { stMsg(q("#s-m"), "late", err.message); }
+  });
+};
+const CONN_ST = {connected: ["h-em-dia", "conectado"], auth: ["h-atencao", "precisa autorizar"], missing: ["", "não adicionado"], error: ["h-em-risco", "com erro"], unknown: ["", "não verificado"]};
+SETUP.conectores = box => {
+  const noClaude = !SS.claude_installed, perm = SS.permissions.ok;
+  const rows = SS.connectors.map(c => {
+    const [cls, label] = CONN_ST[SS.connectors_scanned ? c.status : "unknown"] || CONN_ST.unknown;
+    const can = c.status === "connected" || c.enabled;
+    return '<div class="stconn"><div><b>' + esc(c.label) + '</b><span class="muted small">' + esc(c.what) + '</span></div><span class="chip ' + cls + '">' + label + "</span>" +
+      '<label class="chk" title="o Brain pode ler"><input type="checkbox" data-c="' + esc(c.key) + '"' + (c.enabled || c.status === "connected" ? " checked" : "") + (can ? "" : " disabled") + "> ler</label></div>";
+  }).join("");
+  box.innerHTML = sec("Seus conectores", (noClaude ? '<p class="late">O Claude Code não está instalado: é ele que lê as ferramentas para o Brain.</p>' : "") + rows +
+      '<div class="stgrid" id="s-extra">' + fld("Canais do Slack para acompanhar", '<input type="text" id="s-slack" placeholder="#meu-time, #projeto-x">', "Separados por vírgula: entram como fontes novas.") +
+      fld("Pasta do Drive (link)", '<input type="text" id="s-drive" placeholder="https://drive.google.com/drive/folders/…">', "Opcional.") + "</div>" +
+      '<p class="muted small">Desligar um conector aqui faz o Brain parar de lê-lo. Conecte novos em <a href="https://claude.ai/settings/connectors" target="_blank" rel="noopener">claude.ai → Configurações → Conectores</a> e clique em verificar.</p>' +
+      '<div class="stactions"><span class="stmsg" id="s-m"></span><button class="btn" id="s-scan"' + (noClaude ? " disabled" : "") + '>↻ verificar conexões</button><button class="btn primary" id="s-save">Salvar</button></div>') +
+    sec("Permissões no computador", '<p>Pré-autoriza o Claude a ler esta pasta e usar as ferramentas de <b>leitura</b> dos conectores ligados. Segredos, livro-razão e envios continuam bloqueados.</p>' +
+      '<div class="stactions"><span class="stmsg" id="s-mp"></span>' + (perm ? "" : '<button class="btn primary" id="s-perm">Liberar</button>') + "</div>",
+      perm ? '<span class="chip h-em-dia">liberado</span>' : '<span class="chip h-atencao">pendente</span>');
+  const q = s => box.querySelector(s);
+  const extra = () => { const on = k => !!box.querySelector('[data-c="' + k + '"]:checked'); q("#s-slack").closest(".fld").hidden = !on("slack"); q("#s-drive").closest(".fld").hidden = !on("drive"); };
+  box.querySelectorAll("[data-c]").forEach(i => i.onchange = extra); extra();
+  q("#s-scan").onclick = e => stBusy(e.currentTarget, "verificando…", async () => {
+    try { const r = await obAct("connectors_scan", {force: true});
+          if (r.job) { const j = await obJob(r.job); if (j.status === "error") stMsg(q("#s-m"), "late", (j.result && j.result.error) || "não consegui verificar"); }
+          await obState(); redo("conectores"); } catch (err) { stMsg(q("#s-m"), "late", err.message); }
+  });
+  q("#s-save").onclick = e => stBusy(e.currentTarget, "salvando…", async () => {
+    const keys = Array.from(box.querySelectorAll("[data-c]:checked")).map(i => i.dataset.c);
+    try { await obAct("connectors_enable", {connectors: keys, slack_channels: q("#s-slack").value, drive_folder: q("#s-drive").value});
+          await obState(); redo("conectores"); toast("conectores salvos — o próximo /update já lê a lista nova"); } catch (err) { stMsg(q("#s-m"), "late", err.message); }
+  });
+  if (q("#s-perm")) q("#s-perm").onclick = e => stBusy(e.currentTarget, "liberando…", async () => {
+    try { await obAct("permissions"); await obState(); redo("conectores"); } catch (err) { stMsg(q("#s-mp"), "late", err.message); }
+  });
+};
+SETUP.memoria = box => {
+  const m = SS.memory, cur = m.mode === "lite" ? "embed" : m.mode;
+  let sel = cur;
+  const opts = [["none", "Nenhuma", "Busca por palavras. Nada a instalar."], ["embed", "Embed", "Busca por significado, 100% local: nada sai do computador."],
+    ["full", "Full", "Também extrai fatos e liga assuntos. O texto vai à API do provedor, com a sua chave e custo por uso."]];
+  const draw = () => {
+    box.innerHTML = sec("Modo", '<div class="stopts">' + opts.map(([k, t, d]) => '<button class="stopt' + (k === sel ? " sel" : "") + '" data-m="' + k + '"><b>' + t + (k === cur ? ' <span class="chip h-info">atual</span>' : "") + "</b><span>" + d + "</span></button>").join("") + "</div>" +
+      (sel !== "none" ? '<p class="small">' + (m.docker ? '<span class="ok">✓</span>' : '<span class="late">✗</span>') + " OrbStack (o banco da memória) · " +
+        (m.lmstudio ? '<span class="ok">✓</span>' : '<span class="late">✗</span>') + " LM Studio com <code>text-embedding-bge-m3</code></p>" : "") +
+      (sel === "full" ? '<div class="stgrid">' + fld("Provedor", '<select id="s-prov"><option value="anthropic">Anthropic (Claude)</option><option value="openai">OpenAI</option></select>') +
+        fld("API key" + (m.llm_key ? ' <span class="chip h-em-dia">já salva</span>' : ""), '<input type="password" id="s-key" autocomplete="off" placeholder="' + (m.llm_key ? "vazio mantém a atual" : "cole a chave") + '">') + "</div>" +
+        '<label class="chk"><input type="checkbox" id="s-consent"> Entendo que trechos do vault vão à API do provedor, com a minha chave, e que isso tem custo por uso.</label>' : "") +
+      '<pre class="stlog" id="s-log" hidden></pre><div class="stactions"><span class="stmsg" id="s-m"></span><button class="btn primary" id="s-apply"' + (sel === cur && sel !== "full" ? " disabled" : "") + ">Aplicar</button></div>");
+    box.querySelectorAll("[data-m]").forEach(b => b.onclick = () => { sel = b.dataset.m; draw(); });
+    const q = s => box.querySelector(s);
+    q("#s-apply").onclick = e => stBusy(e.currentTarget, "aplicando…", async () => {
+      const body = {mode: sel};
+      if (sel === "full") {
+        body.provider = q("#s-prov").value; body.key = q("#s-key").value; body.consent = q("#s-consent").checked;
+        if (!body.consent) return stMsg(q("#s-m"), "late", "marque o aceite de envio à API");
+        if (!body.key && !m.llm_key) return stMsg(q("#s-m"), "late", "cole a API key");
+      }
+      try {
+        const r = await obAct("memory", body);
+        if (q("#s-key")) q("#s-key").value = "";
+        if (r.job) { const log = q("#s-log"); log.hidden = false;
+          const j = await obJob(r.job, jj => { log.textContent = (jj.log || []).join("\n"); log.scrollTop = 1e9; });
+          if (j.status === "error") return stMsg(q("#s-m"), "late", (j.result && j.result.error) || "não consegui mudar a memória"); }
+        await obState(); toast("memória: modo " + (MEM_LABEL[SS.memory.mode] || SS.memory.mode)); SETUP.memoria(box);
+      } catch (err) { stMsg(q("#s-m"), "late", err.message); }
+    });
+  };
+  draw();
+};
+SETUP.integracoes = box => {
+  const gh = SS.keys.GITHUB_TOKEN || {};
+  box.innerHTML = sec("Sugestões e bugs do Brain", '<p>Com um token do GitHub, as sugestões que você manda pelo Brain viram issues públicas no repo do framework. <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">Criar token →</a></p>' +
+      fld("Token do GitHub", '<input type="password" id="s-gh" autocomplete="off" placeholder="' + (gh.set ? "vazio mantém o atual" : "github_pat_…") + '">') +
+      '<div class="stactions"><span class="stmsg" id="s-m"></span><button class="btn primary" id="s-save">Salvar</button></div>', stStatus(gh.set).replace("feito", "configurado")) +
+    sec("Blocos de foco no Google Calendar", '<p>Por padrão o Brain gera um arquivo de calendário (.ics) que você importa com um clique. A escrita direta na agenda pede uma autorização separada do Google: peça ao Brain no chat, "configurar foco no Google".</p>');
+  const q = s => box.querySelector(s);
+  q("#s-save").onclick = e => stBusy(e.currentTarget, "salvando…", async () => {
+    const v = q("#s-gh").value.trim();
+    if (!v) return stMsg(q("#s-m"), "late", "cole o token");
+    try { await obAct("keys", {GITHUB_TOKEN: v}); q("#s-gh").value = ""; await obState(); redo("integracoes"); toast("token salvo no config/.env"); }
+    catch (err) { stMsg(q("#s-m"), "late", err.message); }
+  });
+};
+
 // ── face Configurações: troca de provedor da memória (mesma linha do CLI; sem campos condicionais:
 //    um select por slot, "manter" nos que não mudam — o preview monta só a linha do slot escolhido) ──
 function wireCfgMemoria(){
@@ -505,6 +708,7 @@ window.afterRoute = function(view){
   if (location.hash.startsWith("#pf/opps")) wireOppKanban();
   if (location.hash.startsWith("#ask")) wireAskPage();
   if (location.hash.startsWith("#cfg/memoria")) wireCfgMemoria();
+  if (document.getElementById("setup")) wireSetup(document.getElementById("setup").dataset.step);
   if (location.hash.startsWith("#cfg/saude")) {
     const head = document.querySelector("#view .pagehead");
     if (head && !head.querySelector(".planbtns")) { const row = document.createElement("div"); row.className = "planbtns";

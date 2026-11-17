@@ -1,4 +1,4 @@
-## 2.17.0 — formulários iguais na TUI e no painel
+## 2.18.0 — formulários iguais na TUI e no painel; o ícone reaproveita a aba
 
 - **Uma especificação, duas pontas.** Os formulários da TUI e do painel HTML eram escritos duas vezes, à mão, e
   divergiam: campos, nomes, ordem, obrigatórios, o que aparece por tipo e a linha `brain …` montada. Agora todos
@@ -27,6 +27,55 @@
   nas duas pontas (ou diga por que não) e roda ~1.000 combinações de valores pelo Python e pelo node comparando
   comando, validação, dicas, listas e valor inicial. As coberturas da CLI (TUI e painel) passam a ler os comandos
   da especificação. `dates.py` sai de `tui/` (o painel usa a mesma regra); a ponte aceita `decision supersede`.
+
+## 2.17.1 — o clone sempre sabe o que o upstream tem
+
+- **Passo `framework` no `brain setup`.** Confere a regra de fetch do `origin` (`remote.origin.fetch`) e o hook
+  pre-push, e conserta o que faltar (`brain setup --only framework`). Sem a regra, o `git fetch` comum só atualiza o
+  `FETCH_HEAD`: o `origin/main` local fica velho e o `ahead/behind` do `update`, do `doctor` e da conferência antes
+  do push mentem — o que parecia "o upstream não andou" era um espelho parado. Um `git clone` normal já traz a
+  regra; ela falta em clones montados à mão.
+- `brain init` (que o `install.sh` já roda) aplica o mesmo reparo, e o `brain doctor` avisa quando a regra falta.
+  Uma regra que já existe, inclusive a de um clone de um ramo só, nunca é alterada.
+
+## 2.17.0 — a configuração guiada mora na face Configurações
+
+- **Um passo por aba.** A face Configurações passa a ter Visão geral, Perfil, Rotina, Conectores, Memória,
+  Integrações e Saúde. Cada aba usa os mesmos endpoints da configuração guiada (`/api/onboard/*`): Perfil mantém a
+  prévia antes de gravar o `profile.md`, Conectores verifica as conexões só quando você clica, e Permissões virou
+  uma seção de Conectores.
+- **Visão geral** é a primeira aba da face: a lista dos passos com `feito` ou `depois`, o progresso, "Rever
+  boas-vindas" (abre o `/onboarding` do começo) e o atalho para Goals e projetos em Execução. `feito` vem do estado
+  real (`onboard.state()["setup"]`), não da lista de passos vistos: passo pulado segue `depois` e não gera contador.
+  O único contador da face continua sendo o da Saúde.
+- **Memória:** o modo (nenhuma · embed · full) entra no topo da aba, acima dos provedores e harnesses. O onboarding
+  também passa a chamar o modo leve de **Embed**, o mesmo nome da CLI e do `brain.toml` (a API aceita `lite` e
+  `embed`).
+- **O atalho "Configuração guiada" saiu da barra lateral.** O caminho de volta agora é a Visão geral.
+- **Painel aberto como arquivo:** as abas novas avisam que a configuração se edita pelo app Brain (a ponte é quem
+  grava).
+- A primeira vez continua igual: `brain open` abre a configuração guiada enquanto ela não foi concluída.
+
+## 2.16.1 — ícone que se vê no Dock e no painel
+
+- **Ícone legível em tamanho pequeno.** O "Sinapse" detalhado (199 linhas de 4 px numa tela de 1024) virava uma
+  mancha escura no Dock e na barra lateral. O ícone do app (`assets/icon/brain.svg`, e o `brain-512.png` gerado
+  dele) agora tem traço grosso, fundo índigo→violeta e cinco nós por hemisfério. Até 32 px entra a marca
+  simplificada `brain-mark.svg`: barra lateral do painel, favicon e os tamanhos 16/32 do `.icns`. A arte detalhada
+  fica como ilustração da boas-vindas do onboarding (`brain-hero.svg`, rota `/brain-hero.svg`). Para ver o ícone
+  novo no Dock, reinstale o app com `brain app install`.
+- **Barra lateral do painel:** a marca é SVG embutido pelo `scripts/build_assets.py`, recortado no ladrilho, e o
+  painel continua abrindo offline. O desenho visível passa de cerca de 20 para 30 px, e o "demo" ao lado do nome
+  saiu.
+- **"Configuração guiada" só na face Configurações.** Nas faces Execução e Portfólio o atalho parecia uma
+  pendência. É o passo intermediário até a integração proposta abaixo.
+- **Uma segunda ponte não deixa a primeira órfã.** `brain serve` numa outra porta sobrescrevia o registro
+  da ponte do app e o apagava ao encerrar: a ponte principal continuava viva, ocupando a porta, e o app caía
+  no retrato (sem comandos e sem o atalho da configuração guiada). Agora cada ponte só registra se não houver
+  outra no ar e só apaga o próprio registro.
+- **Proposta** `guides/plans/onboarding-in-settings.md`: a configuração guiada passa a morar na face
+  Configurações, com um passo por aba, a Visão geral no lugar do atalho global e uma só identidade visual. Ainda
+  não foi implementada.
 
 ## 2.16.0 — o app Brain: instalação e configuração guiada no navegador
 

@@ -75,6 +75,8 @@ def cmd_init(args, b: Brain) -> None:
     owner_id = util.slugify(args.owner_id, 32) if args.owner_id else (util.owner_slug(owner_name) if owner_name else "")
     created = upstream.seed_template(inst)
     upstream.hook(inst, "install")
+    if upstream.ensure_fetch_refspec(inst) == "corrigido":
+        created.append("git: regra de fetch do origin (remote.origin.fetch)")
     inst.config_dir.mkdir(parents=True, exist_ok=True)
     for name in ("brain.toml", "watch.toml", ".env"):
         dst = inst.config_dir / name

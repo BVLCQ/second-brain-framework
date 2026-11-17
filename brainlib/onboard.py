@@ -12,7 +12,7 @@ comandos da ponte, e nenhum segredo vai para o log:
   libera as ferramentas de LEITURA dele em `[runner].allow` e cria as fontes simples no `watch.toml`. Escrita no mundo
   exterior continua só pelas portas.
 * **Permissões** — `.claude/settings.local.json` (`perms.sync`), para o agente não pedir licença a cada comando.
-* **Memória** — nenhuma · lite (local, nada sai da máquina) · full (com a sua API key). A chave vai direto para o
+* **Memória** — nenhuma · embed (na API, `lite`: local, nada sai da máquina) · full (com a sua API key). A chave vai direto para o
   `config/.env` (0600) e nunca volta para o navegador; o modo full exige o aceite explícito do envio de texto.
 * **Chaves** — só os nomes de `KEY_NAMES`; a resposta diz apenas se cada uma está definida.
 * **Goals e projetos** — texto e documentos entram na `RAW/inbox/` (porta única); o agente *propõe* a árvore; o dono
@@ -269,7 +269,7 @@ def state(brain) -> dict:
         perm = {"static": "missing", "local": "missing"}
     pre = _prereqs()
     plan_goals = len(brain.plan.goals) if getattr(brain, "plan", None) else 0
-    return {
+    st = {
         "owner": {"id": brain.owner, "registered": person is not None,
                   "name": person.name if person else ("" if cfg["owner"]["name"] == "Dono do cérebro"
                                                       else cfg["owner"]["name"]),
@@ -297,6 +297,20 @@ def state(brain) -> dict:
         "progress": progress(inst),
         "steps": list(STEPS),
         "needed": needed(brain),
+    }
+    st["setup"] = setup_status(st)
+    return st
+
+
+def setup_status(st: dict) -> dict:
+    """Cada aba da face Configurações: `feito` vem do estado real, não da lista de passos vistos — pular um
+    passo marca o passo como visto (`skip`), e isso não pode aparecer como feito na Visão geral."""
+    return {
+        "perfil": st["owner"]["registered"] and not st["profile"]["template"],
+        "rotina": bool(st["routine"]["timezone"] and st["routine"]["start"] and st["routine"]["end"]),
+        "conectores": any(c.get("enabled") for c in st["connectors"]),
+        "memoria": st["memory"]["mode"] != "none",
+        "integracoes": any(k["set"] for k in st["keys"].values()),
     }
 
 

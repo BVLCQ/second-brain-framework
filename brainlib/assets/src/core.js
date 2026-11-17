@@ -435,6 +435,15 @@ V.feedback = (q) => {
 V.health = () => '<div class="pagehead"><div><h1>Saúde</h1><p class="sub">Checagens do brain doctor.</p></div></div>' +
   panel("", '<ul class="feed health">' + (M.health || []).map((c, i) => '<li class="' + c.level + '" data-sel="health:' + i + '"><span class="hicon">' + ({ok: "✓", warn: "⚠", error: "✗"}[c.level]) + "</span> <b>" + esc(c.title) + "</b> — " + esc(c.detail) + (c.fix ? ' <span class="muted small">· f ' + esc(c.fix.label) + "</span>" : "") + "</li>").join("") + "</ul>");
 V["cfg/saude"] = V.health;                      // face Configurações: a mesma régua do doctor
+// os passos da configuração guiada moram aqui: a view só monta o esqueleto, o extra.js preenche pela ponte
+// (/api/onboard/*, os mesmos endpoints do /onboarding). Painel aberto como arquivo: só o aviso de abrir pelo app.
+const setupView = (step, title, lead) => () => '<div class="pagehead"><div>' + (step === "inicio" ? '<p class="kicker">Configuração guiada</p>' : "") +
+  "<h1>" + title + '</h1><p class="sub">' + lead + '</p></div></div><div id="setup" data-step="' + step + '"><p class="muted">carregando…</p></div>';
+V["cfg/inicio"] = setupView("inicio", "Seu Brain", "Volte a qualquer passo quando quiser. Passo pulado fica como \"depois\" e não vira pendência.");
+V["cfg/perfil"] = setupView("perfil", "Perfil", "Quem você é e o contexto que o Brain usa para entender o que importa para você.");
+V["cfg/rotina"] = setupView("rotina", "Rotina", "Fuso e expediente: o Brain calcula prazos e blocos de foco a partir daqui.");
+V["cfg/conectores"] = setupView("conectores", "Conectores", "O que o Brain pode ler, sempre só leitura. Nada é enviado sem você aprovar o texto exato.");
+V["cfg/integracoes"] = setupView("integracoes", "Integrações", "Opcionais. As chaves ficam só no seu computador e nunca aparecem de novo na tela.");
 V["cfg/memoria"] = () => {
   const rows = [["llm", "LLM"], ["embeddings", "Embeddings"], ["reranker", "Reranker"]].map(([k, icon]) => {
     const p = M.providers[k] || {};
@@ -445,7 +454,8 @@ V["cfg/memoria"] = () => {
   const hw = (M.harnesses || []).map(h => "<tr><td>" + esc(h.label) + "</td><td>" +
     (h.wired ? '<span class="ok">✓ conectado</span>' : (h.detected ? '<span class="dim">instalado, não conectado</span>' : '<span class="dim">não encontrado</span>')) +
     '</td><td><button class="btn" data-hw="' + esc(h.name) + '">' + (h.wired ? "reinstalar" : "conectar") + "</button></td></tr>").join("");
-  return '<div class="pagehead"><div><h1>Memória</h1><p class="sub">Provedores (LLM · embeddings · reranker) e harnesses — configuração viva: mude quando quiser; o passo inteiro do setup re-roda no terminal pelo comando do wizard.</p></div></div>' +
+  return '<div class="pagehead"><div><h1>Memória</h1><p class="sub">O modo, os provedores (LLM · embeddings · reranker) e os harnesses — configuração viva: mude quando quiser.</p></div></div>' +
+    '<div id="setup" data-step="memoria"></div>' +
     panel("Provedores", '<div class="twrap"><table><tr><th>Slot</th><th>Provedor</th><th>Modelo</th><th></th></tr>' + rows + "</table></div>" +
       '<p class="note-s" style="margin:10px 2px">A chave mora no config/.env e nunca aparece aqui. Trocou embeddings? O comando rebuild da memória re-deriva os vetores do vault. Depois de trocar, recrie o container (compose com o env-file da config).</p>' +
       '<button class="btn primary" data-provform>Trocar provedor</button>') +
@@ -729,7 +739,9 @@ const TABS_EXEC = [["home", "Início"], ["sources", "Fontes", () => (M.sources |
 const TABS_PF = [["pf/visao", "Visão geral"], ["pf/opps", "Oportunidades", () => PF.opportunities.filter(o => o.status !== "descartada").length],
   ["pf/matrix", "Matriz"], ["pf/procs", "Processos", () => PF.processes.filter(p => p.status === "ativo").length], ["pf/areas", "Áreas", () => PF.areas.length],
   ["pf/docs", "Documentos", () => PF.processes.concat(PF.opportunities).reduce((n, x) => n + x.docs.length, 0)]];
-const TABS_CFG = [["cfg/memoria", "Memória"], ["cfg/saude", "Saúde", () => (M.health || []).filter(c => c.level !== "ok").length]];
+const TABS_CFG = [["cfg/inicio", "Visão geral"], ["cfg/perfil", "Perfil"], ["cfg/rotina", "Rotina"], ["cfg/conectores", "Conectores"],
+  ["cfg/memoria", "Memória"], ["cfg/integracoes", "Integrações"],
+  ["cfg/saude", "Saúde", () => (M.health || []).filter(c => c.level !== "ok").length]];   // o único contador da face: passo pulado não vira pendência
 const FACES = [["execucao", "Execução", TABS_EXEC], ["portfolio", "Portfólio", TABS_PF], ["configuracoes", "Configurações", TABS_CFG]];
 if (window.PF_ONLY) { FACES.length = 0; FACES.push(["portfolio", "Portfólio", TABS_PF]); }
 const faceOf = v => v.indexOf("pf/") === 0 ? "portfolio" : (v.indexOf("cfg/") === 0 ? "configuracoes" : "execucao");
@@ -748,7 +760,7 @@ function route(){
   if (seg[0] === "portfolio") seg = ["pf", "visao"];          // link antigo
   if (seg[0] === "health") seg = ["cfg", "saude"];            // Saúde mora só na Configurações (link antigo)
   const pf = seg[0] === "pf";
-  let view = pf ? "pf/" + (seg[1] || "visao") : (seg[0] === "cfg" ? "cfg/" + (seg[1] || "memoria") : seg[0]);
+  let view = pf ? "pf/" + (seg[1] || "visao") : (seg[0] === "cfg" ? "cfg/" + (seg[1] || "inicio") : seg[0]);
   const arg = pf ? seg.slice(2).join("/") : (seg[0] === "cfg" ? seg.slice(2).join("/") : seg.slice(1).join("/"));
   const q = new URLSearchParams(qs);
   if (!V[view]) view = "home";

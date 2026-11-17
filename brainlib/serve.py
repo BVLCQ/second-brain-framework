@@ -57,6 +57,9 @@ class _State:
         self.lock = threading.Lock()                    # comandos serializados: ledger é append-only, não concorrente
 
 
+ICON_ROUTES = {"/brain.svg": "ICON_SVG", "/brain-mark.svg": "ICON_MARK", "/brain-hero.svg": "ICON_HERO"}
+
+
 def _allowed_argv(args: list[str]) -> bool:
     if not args:
         return False
@@ -141,7 +144,7 @@ class _Handler(BaseHTTPRequestHandler):
                 self.send_header("Content-Length", "0")
                 self.end_headers()
                 return
-            if path in ("/", "/index.html", "/portfolio.html", "/onboarding", "/brain.svg"):
+            if path in ("/", "/index.html", "/portfolio.html", "/onboarding", *ICON_ROUTES):
                 if not self._guard(token_required=False):      # o HTML boota sem token; a /api/* exige
                     return
             elif not self._guard():
@@ -159,9 +162,9 @@ class _Handler(BaseHTTPRequestHandler):
             elif path == "/onboarding":
                 from . import render
                 self._html(render.ONBOARDING_ASSET.read_text(encoding="utf-8"))
-            elif path == "/brain.svg":
+            elif path in ICON_ROUTES:
                 from . import launcher
-                body = launcher.ICON_SVG.read_bytes()
+                body = getattr(launcher, ICON_ROUTES[path]).read_bytes()
                 self.send_response(200)
                 self.send_header("Content-Type", "image/svg+xml")
                 self.send_header("Content-Length", str(len(body)))
@@ -341,6 +344,41 @@ def live_panel_url(inst) -> str | None:
         return None
 
 
+def register(inst, url: str, port: int) -> bool:
+    """Anota esta ponte como A ponte da instância (é o que o app e o `render --open` procuram).
+    Se outra ponte desta instância já está anotada e no ar, não toma o lugar dela: uma segunda ponte
+    (outra porta, teste) sobrescrevendo o registro deixava a principal órfã — viva, ocupando a porta,
+    e invisível para o app, que caía no retrato. False = não registrou."""
+    f = live_url_file(inst)
+    try:
+        row = json.loads(f.read_text(encoding="utf-8"))
+        if int(row.get("pid", -1)) != os.getpid() and live_panel_url(inst):
+            return False
+    except (OSError, ValueError, TypeError):
+        pass
+    inst.logs.mkdir(parents=True, exist_ok=True)
+    # 0600 já na criação: o arquivo carrega o token da ponte — write_text+chmod deixaria uma janela legível
+    fd = os.open(f, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    os.fchmod(fd, 0o600)                 # arquivo que já existia mantém o modo antigo no O_CREAT: fecha antes do token
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write(json.dumps({"url": url, "port": port, "pid": os.getpid(), "version": __version__}))
+    return True
+
+
+def unregister(inst) -> None:
+    """Apaga o registro só se ele for desta ponte — nunca o de outra que continua no ar."""
+    f = live_url_file(inst)
+    try:
+        row = json.loads(f.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+    if isinstance(row, dict) and row.get("pid") == os.getpid():
+        try:
+            f.unlink()
+        except FileNotFoundError:
+            pass
+
+
 def serve(inst, port: int = 8787, open_browser: bool = False) -> int:
     if os.environ.get("BRAIN_NIGHTLY"):
         raise util.BrainError("o noturno nunca serve — a ponte CLI exige o dono presente", 3)
@@ -349,12 +387,10 @@ def serve(inst, port: int = 8787, open_browser: bool = False) -> int:
     url = f"http://127.0.0.1:{port}/#t={token}"
     httpd = ThreadingHTTPServer(("127.0.0.1", port), _Handler)
     httpd.daemon_threads = True
-    inst.logs.mkdir(parents=True, exist_ok=True)
-    # 0600 já na criação: o arquivo carrega o token da ponte — write_text+chmod deixaria uma janela legível
-    fd = os.open(live_url_file(inst), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8") as fh:
-        fh.write(json.dumps({"url": url, "port": port, "pid": os.getpid(), "version": __version__}))
+    registered = register(inst, url, port)
     print(f"✓ ponte CLI no ar (Ctrl+C encerra)\n  {url}\n  file:// continua retrato: comandos só copiam")
+    if not registered:
+        print("  ⚠ outra ponte desta instância já está no ar: esta não vira a ponte do app (só esta URL)")
     if open_browser:
         util.open_url(url)
     def _sair(*_a):
@@ -372,8 +408,5 @@ def serve(inst, port: int = 8787, open_browser: bool = False) -> int:
         print("\n✓ ponte encerrada")
     finally:
         httpd.server_close()
-        try:
-            live_url_file(inst).unlink()
-        except FileNotFoundError:
-            pass
+        unregister(inst)
     return 0
