@@ -239,11 +239,132 @@ def relpath(path: Path, root: Path) -> str:
         return str(path)
 
 
+# ── abrir o painel: reaproveita a aba do Brain que já está aberta (macOS) ──────────────────────────────────
+# bundle id (minúsculo) do navegador padrão → (nome do app, família do AppleScript). Só o navegador PADRÃO é consultado:
+# o macOS pede uma permissão de automação por app, e perguntar a todos os navegadores abertos seria invasivo.
+_SCRIPTABLE = {
+    "com.apple.safari": ("Safari", "safari"),
+    "com.google.chrome": ("Google Chrome", "chromium"),
+    "com.brave.browser": ("Brave Browser", "chromium"),
+    "com.microsoft.edgemac": ("Microsoft Edge", "chromium"),
+    "company.thebrowser.browser": ("Arc", "chromium"),
+    "org.chromium.chromium": ("Chromium", "chromium"),
+    "com.vivaldi.vivaldi": ("Vivaldi", "chromium"),
+    "com.operasoftware.opera": ("Opera", "chromium"),
+}
+_FIND_TAB = {   # argv: prefixo da aba · URL de destino. Só roda com o app já aberto (o chamador confere): nunca o abre.
+    "safari": '''on run argv
+  set prefix to item 1 of argv
+  set target to item 2 of argv
+  tell application "{app}"
+    repeat with w in windows
+      repeat with t in tabs of w
+        try
+          if (URL of t) starts with prefix then
+            if (URL of t) is not target then set URL of t to target
+            set current tab of w to t
+            try
+              set miniaturized of w to false
+            end try
+            set index of w to 1
+            activate
+            return "ok"
+          end if
+        end try
+      end repeat
+    end repeat
+  end tell
+  return ""
+end run''',
+    "chromium": '''on run argv
+  set prefix to item 1 of argv
+  set target to item 2 of argv
+  tell application "{app}"
+    repeat with w in windows
+      set i to 0
+      repeat with t in tabs of w
+        set i to i + 1
+        try
+          if (URL of t) starts with prefix then
+            if (URL of t) is not target then set URL of t to target
+            set active tab index of w to i
+            try
+              set minimized of w to false
+            end try
+            set index of w to 1
+            activate
+            return "ok"
+          end if
+        end try
+      end repeat
+    end repeat
+  end tell
+  return ""
+end run''',
+}
+
+
+def _default_browser() -> tuple[str, str] | None:
+    """(app, família) do navegador padrão do macOS, se for um que o AppleScript controla; senão None."""
+    import plistlib
+    path = Path.home() / "Library/Preferences/com.apple.LaunchServices/com.apple.launchservices.secure.plist"
+    try:
+        handlers = plistlib.loads(path.read_bytes()).get("LSHandlers", [])
+    except Exception:  # noqa: BLE001 — ausente/ilegível: sem padrão conhecido
+        return None
+    for h in handlers:
+        if h.get("LSHandlerURLScheme") in ("https", "http") and h.get("LSHandlerRoleAll"):
+            return _SCRIPTABLE.get(str(h["LSHandlerRoleAll"]).lower())
+    return None
+
+
+def _tab_prefix(url: str) -> str | None:
+    """O que identifica uma aba do Brain já aberta: a origem da ponte local (qualquer rota/token) ou o arquivo `file://`.
+    Qualquer outro endereço não é reaproveitado."""
+    m = re.match(r"(https?://127\.0\.0\.1:\d+/)", url)
+    if m:
+        return m.group(1)
+    return url.split("#", 1)[0] if url.startswith("file://") else None
+
+
+def focus_open_tab(url: str) -> bool:
+    """macOS: já existe uma aba do Brain no navegador padrão? Então a traz para a frente (e, se a ponte mudou de token,
+    aponta ela para a URL nova) em vez de abrir outra. False = não achou / sem permissão / sem navegador compatível —
+    quem chama abre normalmente. Nunca abre o navegador: só consulta se ele já está rodando."""
+    import subprocess
+    prefix = _tab_prefix(url)
+    br = _default_browser() if sys.platform == "darwin" else None
+    if not prefix or not br:
+        return False
+    app, family = br
+    try:
+        if subprocess.run(["/usr/bin/pgrep", "-x", app], capture_output=True, timeout=3).returncode != 0:
+            return False                                   # fechado: osascript o abriria à toa
+        r = subprocess.run(["/usr/bin/osascript", "-e", _FIND_TAB[family].format(app=app), prefix, url],
+                           capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return False                                       # permissão negada, osascript ausente, travou…
+    return r.returncode == 0 and r.stdout.strip() == "ok"
+
+
+class _MacOpen(webbrowser.BackgroundBrowser):
+    """`/usr/bin/open` (traz o navegador para a frente), depois de tentar reaproveitar a aba do Brain que já está aberta."""
+
+    def open(self, url, new=0, autoraise=True):  # noqa: A002
+        return focus_open_tab(url) or super().open(url, new, autoraise)
+
+
+_MAC_REGISTERED = False
+
+
 def open_url(url: str) -> bool:
     """Abre `url` no navegador padrão. No macOS usa `/usr/bin/open`, que traz o navegador para a frente
     (o caminho padrão do `webbrowser`, via osascript, abre a aba mas não ativa o app — vindo do ícone
-    do painel, parecia que nada acontecia). Segue sendo `webbrowser.open`: um só ponto de abertura,
-    que os testes conseguem interceptar."""
-    if sys.platform == "darwin" and os.access("/usr/bin/open", os.X_OK):
-        webbrowser.register("macos-open", None, webbrowser.BackgroundBrowser("/usr/bin/open"), preferred=True)
+    do painel, parecia que nada acontecia) e, se o Brain já estiver aberto lá, reaproveita a aba em vez de abrir outra
+    (`focus_open_tab`). Segue sendo `webbrowser.open`: um só ponto de abertura, que os testes conseguem interceptar
+    — e, interceptado, nunca mexe nas abas do dono."""
+    global _MAC_REGISTERED
+    if sys.platform == "darwin" and os.access("/usr/bin/open", os.X_OK) and not _MAC_REGISTERED:
+        webbrowser.register("macos-open", None, _MacOpen("/usr/bin/open"), preferred=True)
+        _MAC_REGISTERED = True
     return webbrowser.open(url)

@@ -249,4 +249,7 @@ def html_payload(m: dict) -> dict:
                       for d in decisions],
         "artifacts": [{k: a[k] for k in ("id", "kind", "title", "date", "raw", "people", "summary", "prov")}
                       for a in artifacts],
+        # formulários (a mesma especificação da TUI); sem reports/destinos — este arquivo circula
+        "forms": m.get("forms", {}), "doc_kinds": m.get("doc_kinds", []),
+        "form_static": {k: v for k, v in (m.get("form_static") or {}).items() if k not in ("reports", "destinations")},
     }

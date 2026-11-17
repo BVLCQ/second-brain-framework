@@ -11,6 +11,7 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
+from textual.suggester import SuggestFromList
 from textual.widgets import Input, Label, OptionList, Select, Static, TextArea
 from textual.widgets._select import SelectOverlay
 from textual.widgets.option_list import Option
@@ -39,6 +40,8 @@ class Field:
     multi: bool = False                              # caixa de texto grande (várias linhas); enter quebra a linha
     show: Callable[[dict], bool] | None = None       # (campos) → aparece? Escondido não conta: valor "", sem req nem check
     fill: tuple[str, Callable[[dict], str | None]] | None = None   # (id do campo, (campos) → valor): preenche sozinho quando aquele campo muda (None não mexe)
+    suggest: list[str] | None = None                 # texto livre com sugestões (o painel usa <datalist> com a mesma lista)
+    secret: bool = False                             # digita escondido (chave de API)
 
 
 def _pairs(f: Field, vals: dict) -> list[tuple[str, str]]:
@@ -116,7 +119,9 @@ class FormModal(ModalScreen):
                             yield Select(pairs, value=val, allow_blank=False, prompt=prompt,
                                          id=f"f_{f.id}", classes="fin")
                         else:
-                            yield Input(value=f.value, placeholder=f.ph, id=f"f_{f.id}", classes="fin")
+                            sug = SuggestFromList(f.suggest, case_sensitive=False) if f.suggest else None
+                            yield Input(value=f.value, placeholder=f.ph, id=f"f_{f.id}", classes="fin", suggester=sug,
+                                        password=f.secret)
                     yield Static("", id=f"r_{f.id}", classes="fres")
             yield Static("", id="cmdp")
             yield Static("", id="err")

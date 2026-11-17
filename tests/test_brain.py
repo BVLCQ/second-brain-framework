@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import io
 import contextlib
@@ -1007,7 +1008,7 @@ class DashboardAssetTests(unittest.TestCase):
     NOT_IN_PANEL = {      # ciclo de vida do framework e config: terminal/TUI (o painel é de uso diário)
         "demo", "tui", "serve", "open", "app install", "app uninstall", "migrate ids", "update", "upstream hook", "upstream scan", "backup", "mcp",
         "nightly", "schedule", "validate", "sync", "memory setup", "memory rebuild", "memory sync",
-        "memory status", "memory cost", "agent allow", "watch add", "watch edit", "watch remove", "doc link", "doc unlink",
+        "memory status", "memory cost", "agent allow",   # (watch add/edit/remove e doc link/unlink: formulários de forms.py)
         # (memory harness saiu daqui: a face Configurações do painel emite install/verify)
         "note edit", "setup",                          # wizard do dono: terminal primeiro (TUI/painel = Fases 2–3 do plano)
         "query actions", "query decisions", "query person", "query entity", "query sql",   # ferramenta do agente/MCP (brain_query)
@@ -1018,8 +1019,7 @@ class DashboardAssetTests(unittest.TestCase):
         "memory eval",                                         # Fase 0: harness do conjunto-ouro
         "agent permissions",                                   # gera .claude/settings.local.json: terminal/update/init cuidam; o painel não abre sessão do Claude
     }
-    DYNAMIC = {"memory recall", "memory reflect",       # formulário do TUI monta; o painel busca no índice
-               "decision supersede"}                     # o painel emite `decision add … --supersedes` (tecla S)
+    DYNAMIC = {"memory recall", "memory reflect"}       # formulário do TUI monta; o painel busca no índice
 
     def _cli_cmds(self):
         from brainlib import cli as _cli                      # (comando, sub-caminho até a FOLHA — "models list" & cia contam)
@@ -1039,12 +1039,22 @@ class DashboardAssetTests(unittest.TestCase):
                 out.append((path[0], " ".join(path[1:]) if len(path) > 1 else None))
         return out
 
-    def test_every_cli_command_has_a_place_in_the_panel(self):
-        """Todo subcomando da CLI: ou o painel emite (`brain …` no JS), ou tem justificativa.
-        Espelha tests/test_tui.py::CoverageTest — nenhuma interface fica para trás sem explicação."""
-        import re as _re
+    @staticmethod
+    def _panel_src() -> str:
+        """O que o painel emite: o JS à mão + os comandos dos formulários (brainlib/forms.py, where both/panel)."""
+        from brainlib import forms
         src = ((ROOT / "brainlib/assets/src/core.js").read_text(encoding="utf-8")
                + (ROOT / "brainlib/assets/src/extra.js").read_text(encoding="utf-8"))
+        src += "".join("\nbrain " + " ".join(t) for fm in forms.FORMS.values() if fm.where != "tui"
+                       for t in [fm.cmd] + [tpl for _, tpl in fm.more])
+        # argv direto no JS (runArgv([["publish", "cancel", id]])) conta como emitido
+        return src + "".join("\nbrain " + " ".join(m) for m in re.findall(r'runArgv\(\[\[\s*"([a-z][\w-]*)"\s*,\s*"([a-z][\w-]*)"', src))
+
+    def test_every_cli_command_has_a_place_in_the_panel(self):
+        """Todo subcomando da CLI: ou o painel emite (`brain …` no JS ou num formulário), ou tem justificativa.
+        Espelha tests/test_tui.py::CoverageTest — nenhuma interface fica para trás sem explicação."""
+        import re as _re
+        src = self._panel_src()
         missing = []
         for name, sc in self._cli_cmds():
             label = f"{name} {sc}" if sc else name
@@ -1060,8 +1070,7 @@ class DashboardAssetTests(unittest.TestCase):
         todos os subcomandos que o JS emite."""
         import re as _re
         from brainlib import serve as _serve
-        src = ((ROOT / "brainlib/assets/src/core.js").read_text(encoding="utf-8")
-               + (ROOT / "brainlib/assets/src/extra.js").read_text(encoding="utf-8"))
+        src = self._panel_src()
         emitted = {n for n, sc in self._cli_cmds()
                    if sc is None or True for n in []}                     # placeholder p/ legibilidade
         prose = {("serve", None), ("doctor", None)}     # instrução de terminal no texto, não gesto do painel
@@ -1087,9 +1096,13 @@ class DashboardAssetTests(unittest.TestCase):
         extra = (ROOT / "brainlib" / "assets" / "src" / "extra.js").read_text(encoding="utf-8")
         self.assertIn('M.actions.filter(a => a.list === "mine" && (!proj', core)       # o quadro é a lista, não o dono
         self.assertNotIn('a.list === "mine" && a.mine', core)
-        self.assertEqual(extra.count("fill: ownerFill(M)"), 2)                           # nova ação e editar
+        from brainlib import forms                                                         # nova ação e editar: a regra
+        for fid in ("action.new", "action.edit"):                                         # mora em forms.py (as duas pontas)
+            owner = next(f for f in forms.FORMS[fid].fields if f.id == "owner")
+            self.assertEqual(owner.fill, ("list", "owner_for_list"), fid)
+        self.assertEqual(forms.FILL["owner_for_list"]({"list": "mine", "owner": ""}), "eu")
         for name in ("dashboard.html", "portfolio.html"):
-            self.assertIn("const ownerFill = M =>", (ROOT / "brainlib" / "assets" / name).read_text(encoding="utf-8"))
+            self.assertIn("owner_for_list: v =>", (ROOT / "brainlib" / "assets" / name).read_text(encoding="utf-8"))
 
     def test_slash_is_a_cascading_list_filter_in_both_panels(self):
         """Paridade com a TUI: "/" filtra a lista da página e de novo refina; esc tira um nível por vez; a barra mostra a corrente.

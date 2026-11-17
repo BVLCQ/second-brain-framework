@@ -33,7 +33,7 @@ from .. import people as people_mod
 from .. import planning
 from .. import search as search_mod
 from .. import util
-from . import bridge, dates, rows
+from . import bridge, rows
 from .modals import (AgentModal, ChoiceModal, ConfirmModal, Field, FilterModal, FormModal, FormSpec, PickerModal,
                      PickItem, TextModal)
 from .ask_keys import AskKeys
@@ -1153,6 +1153,82 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
             self.exec(spec.build(vals), render=spec.render, after=spec.after, show=spec.show, on_fail=spec.on_fail)
         self.push_screen(FormModal(spec), done)
 
+    # ── formulários: a especificação mora em brainlib/forms.py (a MESMA do painel) ──────────────────────────
+    def form_model(self) -> dict:
+        """O view model com o que os formulários leem — as mesmas chaves que o painel recebe como M."""
+        from .. import forms, schema, watch
+        st = self.store
+        return {**st.m, "today": util.today().isoformat(), "sources": st.sources,   # hoje de agora (TUI aberta na virada) "source_kinds": [list(k) for k in watch.KINDS],
+                "doc_kinds": sorted(schema.DOC_KINDS), "form_static": forms.static(st.brain)}
+
+    def _py_rules(self, ctx: dict) -> tuple[dict, dict]:
+        """Validações e dicas que só o Python tem (forms.PY_ONLY): precisam do ledger inteiro ou da config."""
+        def dup_res(x, v, c, m) -> str:
+            if len(x.strip()) < 8:
+                return ""
+            hits = dupes.similar(self.store.brain.state, {**dupes.profile_from_data({"title": x}), "people": []})
+            return f"parecida com {hits[0]['id']} · {hits[0]['title']} ({hits[0]['score']:.2f})" if hits else ""
+
+        def promote_diff(x, v, c, m) -> str:
+            from ..cli_portfolio import promote_proposal
+            opp = self.store.brain.state.opportunities.get(c.get("id", ""))
+            level = v.get("level") or "project"
+            target = v.get("goal") if level == "project" else v.get("project") if level == "deliverable" else None
+            if opp is None or (level != "goal" and not target):
+                return ""
+            try:
+                _, lines = promote_proposal(self.store.brain, opp, v.get("title") or None, level, target)
+                return "cria:\n" + "\n".join("+ " + ln for ln in lines)
+            except Exception:  # noqa: BLE001 — a dica nunca derruba o formulário
+                return ""
+
+        def provider_model(x, v, c, m) -> str:
+            from .. import providers as prov
+            info = prov.PROVIDERS[v.get("slot") or "embeddings"].get(v.get("provider", ""), {})
+            if info.get("models"):
+                return "recomendados por operação (cenário B): " + " · ".join(f"{op}={md}" for op, md in info["models"].items())
+            return info.get("model", "— modelo default do provedor —")
+
+        checks = {"people": lambda x, v, c, m: self._people_check(x), "recipient": lambda x, v, c, m: self._check_recipient(x)}
+        return checks, {"dup_action": dup_res, "promote_diff": promote_diff, "provider_model": provider_model}
+
+    def open_form(self, form_id: str, ctx: dict | None = None, *, values: dict | None = None, after=None, on_cancel=None,
+                  on_fail=None, intercept=None, extra=None, render: bool = True, show: str | None = None, help=None,
+                  help_title: str = "Orientações", wrap=None) -> None:
+        """Abre o formulário `form_id` de brainlib/forms.py: campos, rótulos, validação e a linha `brain …` saem de lá.
+        `values` sobrepõe o valor inicial (rascunho que volta); `wrap(cmds, vals)` acrescenta passos só da TUI."""
+        from .. import forms
+        fm, ctx = forms.FORMS[form_id], ctx or {}
+        m = self.form_model()
+        init = {**forms.initial(fm, ctx, m), **{k: v for k, v in (values or {}).items() if v is not None}}
+        checks, hints = self._py_rules(ctx)
+
+        def build(v: dict) -> list[list[str]]:
+            cmds = forms.build(form_id, v, ctx, m)
+            return wrap(cmds, v) if wrap else cmds
+
+        if not fm.fields:                                # só confirmação (ex.: remover fonte, desligar documento)
+            cmds = build({})
+
+            def done(ok) -> None:
+                if ok:
+                    self.exec(cmds, render=render, after=after, show=show)
+            self.push_screen(ConfirmModal(forms.title(form_id, ctx), forms.sub(form_id, ctx), cmds[0]), done)
+            return
+        fields = [Field(f.id, forms.label(f, m, ctx), value=init[f.id], ph=forms._fmt(f.ph, ctx), req=forms.required(f, ctx),
+                        multi=f.multi,
+                        secret=f.secret, depends=f.depends,
+                        options=(lambda v, f=f: forms.options(f, m, v, ctx)) if f.choices is not None else None,
+                        suggest=[o[0] for o in forms.options(f, m, init, ctx)] if f.suggest else None,
+                        check=(lambda x, v, f=f: forms.check(f.check, x, v, ctx, m, checks)) if f.check else None,
+                        res=(lambda x, v, f=f: forms.hint(f.hint, x, v, ctx, m, hints)) if f.hint else None,
+                        show=(lambda v, f=f: forms._cond(f.show, v, ctx, m)) if f.show is not None else None,
+                        fill=(f.fill[0], forms.FILL[f.fill[1]]) if f.fill else None)
+                  for f in fm.fields]
+        self.form(FormSpec(forms.title(form_id, ctx), fields, build, sub=forms.sub(form_id, ctx), gate=fm.gate, extra=extra,
+                           on_cancel=on_cancel, on_fail=on_fail, after=after, render=render, show=show, intercept=intercept,
+                           help=help, help_title=help_title))
+
     def toggle_zoom(self) -> None:
         self.zoom = not self.zoom
         self.redraw()
@@ -1182,30 +1258,6 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
             self.redraw()
 
     # ── ações: formulários ─────────────────────────────────────────────────
-    @staticmethod
-    def _due_check(v: str) -> str:
-        try:
-            dates.parse_due(v)
-        except ValueError as e:
-            return str(e)
-        return ""
-
-    @staticmethod
-    def _effort_check(v: str) -> str:
-        try:
-            util.parse_duration(v)
-        except util.BrainError as e:
-            return str(e)
-        return ""
-
-    @staticmethod
-    def _due_arg(v: str) -> list[str]:
-        try:
-            d = dates.parse_due(v)
-        except ValueError:
-            return []
-        return ["--due", d.isoformat()] if d else []
-
     def f_new_child(self) -> None:
         """Painel 3, `n`: o que nasce depende do item. Goal → projeto, projeto → entregável, entregável → ação."""
         it = self.cur()
@@ -1218,202 +1270,35 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
         else:
             self.f_new_action({"project": it.extra["project"]["id"], "deliv": it.id})
 
-    @staticmethod
-    def _iso(v: str) -> str:
-        try:
-            d = dates.parse_due(v)
-        except ValueError:
-            return ""
-        return d.isoformat() if d else ""
-
-    def _gate_fields(self, why_ph: str) -> list[Field]:
-        return [Field("reason", "motivo", ph=why_ph), Field("quote", "sua aprovação", req=True, ph="digite a resposta literal, ex.: ok")]
-
     def f_new_goal(self) -> None:
         nid = planning.next_goal_id(self.store.brain.plan)
-
-        def build(v):
-            c = ["plan", "add-goal", v["title"] or "…"]
-            for opt, k in (("--why", "why"), ("--reason", "reason")):
-                if v[k]:
-                    c += [opt, v[k]]
-            if self._iso(v["horizon"]):
-                c += ["--horizon", self._iso(v["horizon"])]
-            return [c + ["--approval", v["quote"] or "…"]]
-
-        self.form(FormSpec(f"Novo goal {nid}", [
-            Field("title", "título", req=True, ph="Marketing com IA onde faz sentido"),
-            Field("horizon", "horizonte", ph=dates.HELP, check=self._due_check, res=dates.describe),
-            Field("why", "por quê", ph="o que isto destrava"),
-            *self._gate_fields("opcional: por que agora")], build,
-            sub="Criar goal é mudança estrutural: único gate do sistema. Nasce em PLANNING/goals.md, com linha em PLANNING/log.md e no ledger.",
-            gate=True, after=lambda: self.jump(nid)))
+        self.open_form("goal.new", {"nid": nid}, after=lambda: self.jump(nid))
 
     def f_new_project(self, goal: dict) -> None:
         nid = planning.next_project_id(self.store.brain.plan)
-
-        def build(v):
-            c = ["plan", "add-project", goal["id"], v["title"] or "…"]
-            if v["owner"]:
-                c += ["--owner", v["owner"]]
-            if v["reason"]:
-                c += ["--reason", v["reason"]]
-            return [c + ["--approval", v["quote"] or "…"]]
-
-        self.form(FormSpec(f"Novo projeto {nid} em {goal['id']}", [
-            Field("title", "título", req=True, ph="Padronização de métricas"),
-            Field("owner", "dono", ph="id ou alias da pessoa (opcional)"),
-            *self._gate_fields("opcional: por que agora")], build,
-            sub=f"{goal['id']} · {goal['title']}. Criar projeto é mudança estrutural: pede a sua aprovação digitada.",
-            gate=True, after=lambda: self.jump(nid)))
+        self.open_form("project.new", {"nid": nid, "goal": goal["id"], "goal_title": goal["title"]}, after=lambda: self.jump(nid))
 
     def f_new_deliverable(self, proj: dict) -> None:
         nid = planning.next_deliverable_id(self.store.brain.plan, proj["id"])
-        chk = lambda v: "" if v.isdigit() and int(v) >= 1 else "Use um inteiro a partir de 1."  # noqa: E731
-
-        def build(v):
-            c = ["plan", "add-deliverable", proj["id"], v["title"] or "…"]
-            if self._iso(v["due"]):
-                c += ["--due", self._iso(v["due"])]
-            if v["weight"] not in ("", "1"):
-                c += ["--weight", v["weight"]]
-            return [c]
-
-        self.form(FormSpec(f"Novo entregável {nid} em {proj['id']}", [
-            Field("title", "título", req=True, ph="Manual de rotinas v1"),
-            Field("due", "prazo", ph=dates.HELP, check=self._due_check, res=dates.describe),
-            Field("weight", "peso", value="1", ph="1 · 2 · 3…", check=chk)], build,
-            sub=f"{proj['id']} · {proj['title']}. Entregável não é goal nem projeto: entra no goals.md sem gate (o título não pode ter “·”).",
-            after=lambda: self.jump(nid)))
+        self.open_form("deliverable.new", {"nid": nid, "project": proj["id"], "project_title": proj["title"]},
+                       after=lambda: self.jump(nid))
 
     def f_edit_node(self) -> None:
         """Painel 3, `e`: edita o item selecionado. Goal e projeto são gate (aprovação digitada); entregável não."""
         it = self.cur()
         if it is None:
             return
-        d, nid = it.data, it.id
-        owner0 = d.get("owner") or ""
-        status_opts = lambda cur: planning.NODE_STATUS + ([cur] if cur not in planning.NODE_STATUS else [])  # noqa: E731
-
-        def build(v):
-            c = ["plan", "edit", nid]
-            if v["title"] != d["title"]:
-                c += ["--title", v["title"]]
-            if it.kind in ("g", "p") and v["status"] != d["status"]:
-                c += ["--status", v["status"]]
-            if it.kind == "g":
-                if v["horizon"] != (d["horizon"] or ""):
-                    c += ["--horizon", self._iso(v["horizon"])]
-                if v["why"] != (d["why"] or ""):
-                    c += ["--why", v["why"]]
-            elif it.kind == "p":
-                if v["owner"] != owner0:
-                    c += ["--owner", v["owner"]]
-            else:
-                if v["due"] != (d["due"] or ""):
-                    c += ["--due", self._iso(v["due"])]
-                if v["weight"] != str(d["weight"]):
-                    c += ["--weight", v["weight"]]
-            if it.kind in ("g", "p"):
-                if v["reason"]:
-                    c += ["--reason", v["reason"]]
-                c += ["--approval", v["quote"] or "…"]
-            return [c]
-
+        ctx = {"id": it.id, "item": it.data}
         if it.kind == "g":
-            fields = [Field("title", "título", value=d["title"], req=True),
-                      Field("status", "status", choice=status_opts(d["status"]), value=d["status"]),
-                      Field("horizon", "horizonte", value=d["horizon"] or "", ph="vazio remove · " + dates.HELP, check=self._due_check, res=dates.describe),
-                      Field("why", "por quê", value=d["why"] or "", ph="vazio remove")]
+            self.open_form("goal.edit", ctx)
         elif it.kind == "p":
-            fields = [Field("title", "título", value=d["title"], req=True),
-                      Field("status", "status", choice=status_opts(d["status"]), value=d["status"]),
-                      Field("owner", "dono", value=owner0, ph="id ou alias da pessoa · vazio remove")]
+            self.open_form("project.edit", ctx)
         else:
-            chk = lambda v: "" if v.isdigit() and int(v) >= 1 else "Use um inteiro a partir de 1."  # noqa: E731
-            fields = [Field("title", "título", value=d["title"], req=True, check=lambda v: "O título não pode ter “·”." if "·" in v else ""),
-                      Field("due", "prazo", value=d["due"] or "", ph="vazio remove · " + dates.HELP, check=self._due_check, res=dates.describe),
-                      Field("weight", "peso", value=str(d["weight"]), ph="1 · 2 · 3…", check=chk)]
-        gate = it.kind in ("g", "p")
-        if gate:
-            fields += self._gate_fields("opcional: por que mudar")
-        sub = (f"Editar {'goal' if it.kind == 'g' else 'projeto'} é mudança estrutural: pede a sua aprovação digitada."
-               if gate else "Entregável não é goal nem projeto: a edição entra no goals.md sem gate (o estado — feito, em andamento — segue em space/s).")
-        self.form(FormSpec(f"Editar {nid}", fields, build, sub=sub, gate=gate))
-
-    # entregável por número: dentro do projeto PROJ-1, "9" vale PROJ-1.9
-    @staticmethod
-    def _deliv_id(raw: str, project: str) -> str:
-        r = idmod.normalize((raw or "").strip().upper().lstrip("."))
-        if r.isdigit():
-            return f"{project}.{int(r)}" if project and project != "—" else ""
-        return r
-
-    def _deliv_check(self, raw: str, vals: dict) -> str:
-        proj = vals.get("project", "")
-        full = self._deliv_id(raw, proj)
-        if not full:
-            return "Só o número precisa do campo projeto: escolha o projeto ou escreva PROJ-#.# por inteiro."
-        if full in self.store.by_deliv:
-            return ""
-        p = full.split(".")[0]
-        nums = [d["id"].split(".")[1] for d in self.store.by_project[p]["deliverables"]] if p in self.store.by_project else []
-        return f"{full} não existe" + (f" (os de {p} são {', '.join(nums)})" if nums else "")
-
-    def _deliv_res(self, raw: str, vals: dict) -> str:
-        full = self._deliv_id(raw, vals.get("project", ""))
-        hit = self.store.by_deliv.get(full)
-        return f"→ {full} · {hit[1]['title']}" if hit else ""
-
-    def _goal_project_fields(self, project: str = "—") -> list[Field]:
-        """Goal antes de projeto: o goal filtra os projetos; só projetos ativos, com o nome ao lado do ID.
-        O campo `goal` só serve para filtrar — nenhuma CLI o recebe."""
-        st = self.store
-        proj = st.by_project.get(project)
-        goal0 = proj["goal"] if proj else "—"
-        short = lambda t: t if len(t) <= 46 else t[:45] + "…"  # noqa: E731
-
-        def projects(v: dict) -> list[tuple[str, str]]:
-            g = v.get("goal", "—")
-            return [("—", "—")] + [(p["id"], f"{p['id']} · {short(p['title'])}")
-                                   for p in st.active_projects("" if g == "—" else g, keep=project if g in ("—", goal0) else "")]
-
-        return [Field("goal", "goal", value=goal0, options=lambda v: [("—", "— (todos os goals)")] + [
-                    (g["id"], f"{g['id']} · {short(g['title'])}") for g in st.active_goals(keep=goal0)]),
-                Field("project", "projeto", value=project, options=projects, depends="goal")]
+            self.open_form("deliverable.edit", ctx)
 
     def f_new_action(self, pre: dict | None = None) -> None:
         pre = pre or {}
         lst = ["mine", "waiting", "watching"][self.tab[2]] if self.p == 2 else "mine"
-        owner = "eu" if lst == "mine" else ""          # mine é sempre sua: o dono já vem preenchido
-
-        def dup_res(v: str) -> str:
-            """Aviso ao digitar o título: a ação parecida aparece aqui, antes de gravar (gravar é o seu "é outra")."""
-            if len(v.strip()) < 8:
-                return ""
-            hits = dupes.similar(self.store.brain.state, {**dupes.profile_from_data({"title": v}), "people": []})
-            return f"parecida com {hits[0]['id']} · {hits[0]['title']} ({hits[0]['score']:.2f})" if hits else ""
-
-        def build(v):
-            # o aviso de parecida já apareceu no campo título: gravar é a decisão do dono de que é outra ação
-            a = ["action", "open", v["title"] or "…", "--by", "owner", "--force"]
-            if v["list"] != "mine":
-                a += ["--list", v["list"]]
-            if v["owner"]:
-                a += ["--owner", v["owner"]]
-            a += self._due_arg(v["due"])
-            if v["effort"]:
-                a += ["--effort", v["effort"]]
-            if v["project"] not in ("", "—"):
-                a += ["--project", v["project"]]
-            if v["prio"] != "normal":
-                a += ["--priority", v["prio"]]
-            if v["deliv"]:
-                a += ["--deliverable", self._deliv_id(v["deliv"], v["project"]) or v["deliv"]]
-            for opt, key in (("--people", "people"), ("--blocked-by", "blocked"), ("--link", "link")):
-                if v[key]:
-                    a += [opt, v[key]]
-            return [a]
 
         def after_suggest() -> None:
             """Sem prazo digitado: oferece o agente para sugerir um (aparece em roxo até você decidir)."""
@@ -1425,25 +1310,15 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
                     "Grava o prazo como sugestão (brain action update … --due-suggested): fica roxo até você definir a data",
                     "Sem base para sugerir, diz 'não consta' e deixa a ação sem prazo"], f"/todo prazo {hit[-1]}")
 
-        def build_and_remember(v):
-            self._suggest_for = v["title"] if not self._iso(v["due"]) and v["list"] != "watching" else None
-            return build(v)
+        def remember(cmds, v):
+            # o aviso de parecida já apareceu no campo título: gravar é a decisão do dono de que é outra ação (--force)
+            self._suggest_for = v["title"] if not v["due"] and v["list"] != "watching" else None
+            return cmds
 
-        self.form(FormSpec(f"Nova ação em {pre['deliv']}" if pre.get("deliv") else "Nova ação", [
-            Field("title", "título", req=True, ph="o que precisa acontecer", res=dup_res),
-            Field("due", "prazo", ph=dates.HELP, check=self._due_check, res=dates.describe),
-            Field("effort", "esforço", ph="90m · 2h · 1h30 · 1d", check=self._effort_check),
-            *self._goal_project_fields(pre.get("project", "—")),
-            Field("prio", "prioridade", choice=["normal", "alta", "baixa"]),
-            Field("list", "lista", choice=["mine", "waiting", "watching"], value=lst),
-            Field("owner", "dono", ph="eu (ou id/alias da pessoa)", value=owner, fill=("list", self._owner_for_list)),
-            Field("deliv", "entregável", ph="9 (do projeto escolhido) ou PROJ-#.# · opcional", value=pre.get("deliv", ""),
-                  check=self._deliv_check, res=self._deliv_res),
-            Field("people", "pessoas", ph="marina-demo, heitor-demo (opcional)"),
-            Field("blocked", "bloqueada por", ph="TASK-#### (opcional)"),
-            Field("link", "link", ph="URL (opcional)")],
-            build_and_remember, sub="Equivalente ao /todo. Sem prazo, o agente oferece uma sugestão (roxa).",
-            after=after_suggest))
+        deliv, proj = pre.get("deliv", ""), pre.get("project", "—")
+        self.open_form("action.new", {"list": lst, "owner": "eu" if lst == "mine" else "", "deliv": deliv, "project": proj,
+                                      "item": {"project": proj}, "in_deliv": f" em {deliv}" if deliv else ""},
+                       wrap=remember, after=after_suggest)
 
     def clear_log(self) -> None:
         self.query_one("#log", RichLog).clear()
@@ -1451,27 +1326,11 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
     def f_note(self, pre: dict | None = None) -> None:
         """Nota avulsa: vira um .md na inbox (a porta única); o /dump arquiva no RAW. Vínculo opcional.
         Se já existe nota de hoje para o mesmo vínculo (ainda na inbox), pergunta: editar a existente ou criar outra."""
+        from .. import forms
         it = self.cur()
         link0 = it.id if it and it.kind in ("action", "g", "p", "d") else ""
         pre = pre or {}
-        brain, today = self.store.brain, util.today().isoformat()
-
-        def err(v: str) -> str:
-            return notes_mod.check_link(brain, notes_mod.normalize_link(v))
-
-        def res(v: str) -> str:
-            link = notes_mod.normalize_link(v)
-            if err(v):
-                return err(v)
-            a = self.store.by_action.get(link)
-            title = a["title"] if a else brain.plan.title(link)
-            return f"{notes_mod.kind_of(link)} · {title} → {notes_mod.filename(self.inst, link, today)}"
-
-        def build(v):
-            c = ["note", "add"]
-            if v["link"]:
-                c += ["--link", notes_mod.normalize_link(v["link"])]
-            return [c + ["--text", v["text"] or "…"]]
+        today = util.today().isoformat()
 
         def intercept(v: dict) -> bool:
             link = notes_mod.normalize_link(v["link"])
@@ -1487,7 +1346,7 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
                 if c == "edit":
                     self.f_note_edit(ex, v["text"])
                 elif c == "new":
-                    self.exec(build(v), render=False)
+                    self.exec(forms.build("note.add", v, ctx, self.form_model()), render=False)
                 else:
                     self.f_note(pre=v)
             self.push_screen(ChoiceModal("Editar a nota de hoje ou criar outra?", body, [
@@ -1495,101 +1354,26 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
                 ("n", "new", f"Nova nota ({notes_mod.filename(self.inst, link, today)})")]), chose)
             return True
 
-        self.form(FormSpec("Nova nota", [
-            Field("text", "nota", value=pre.get("text", ""), req=True, multi=True, ph="escreva à vontade: ideias, contexto, o que ouviu…"),
-            Field("link", "vínculo", value=pre.get("link", link0), ph="TASK-#### · GOAL-# · PROJ-# · PROJ-#.# (opcional)", check=err, res=res)],
-            build, render=False, intercept=intercept,
-            sub="Cai na inbox como arquivo .md (nome: vínculo-data-note). O /dump arquiva no RAW; até lá e depois, "
-                "a nota aparece no detalhe do vínculo, abaixo do histórico. Markdown: ctrl+o abre no seu editor."))
+        ctx = {"text": pre.get("text", ""), "link": pre.get("link", link0)}
+        self.open_form("note.add", ctx, render=False, intercept=intercept)
 
     def f_note_edit(self, note: notes_mod.Note, extra: str = "") -> None:
-        merged = note.text + (f"\n\n{extra}" if extra else "")
-        self.form(FormSpec(f"Editar {Path(note.path).name}", [
-            Field("text", "nota", value=merged, req=True, multi=True)],
-            lambda v: [["note", "edit", note.path, "--text", v["text"] or "…"]], render=False,
-            sub=f"Reescreve o arquivo na inbox (criada {note.created}); vínculo e hora de criação ficam. "
-                "Depois do /dump a nota vira RAW e não se edita mais. ctrl+o abre no seu editor."))
+        self.open_form("note.edit", {"name": Path(note.path).name, "path": note.path, "created": note.created,
+                                     "text": note.text + (f"\n\n{extra}" if extra else "")}, render=False)
 
     def f_close_action(self) -> None:
         a = self.cur().data
-
-        def build(v):
-            return [["action", "close", a["id"], "--how", v["how"] or "…"] + (["--outcome", v["outcome"]] if v["outcome"] else []) + ["--by", "owner"]]
-
-        self.form(FormSpec(f"Fechar {a['id']}", [
-            Field("how", "como foi", req=True, ph="enviei o draft, Heitor-demo confirmou"),
-            Field("outcome", "resultado", ph="opcional: resultado observável (vira entrega WIN-####)")],
-            build, sub=a["title"]))
-
-    @staticmethod
-    def _owner_for_list(v: dict) -> str | None:
-        """Lista mine preenche o dono com "eu"; sair de mine limpa o "eu" (outra lista não nasce com o dono já escolhido)."""
-        if v["list"] == "mine":
-            return "eu"
-        return "" if v["owner"].lower() == "eu" else None
+        self.open_form("action.close", {"id": a["id"], "title": a["title"], "item": a})
 
     def f_edit_action(self) -> None:
         a = self.cur().data
-        eff0 = util.fmt_duration(a["effort_min"]) if a["effort_min"] else ""
-        deliv0, blocked0 = a["deliverable"] or "", ",".join(a["blocked_by_all"] or [])
-        proj0 = a["project"] or "—"
-        deliv_shown = deliv0.split(".", 1)[1] if proj0 != "—" and deliv0.startswith(proj0 + ".") else deliv0   # PROJ-1.9 aparece como 9
-        owner0 = "eu" if a["mine"] else a["owner"]       # o dono como o formulário o mostra: você aparece como "eu"
-        owner_shown = "eu" if a["mine"] or a["list"] == "mine" else a["owner"]     # mine é sempre sua: já vem preenchido (repara dono errado ao salvar)
-
-        def build(v):
-            c = ["action", "update", a["id"]]
-            if v["title"] != a["title"]:
-                c += ["--title", v["title"]]
-            if v["due"] != (a["due"] or ""):
-                c += self._due_arg(v["due"]) or ["--clear-due"]
-            if v["effort"] != eff0 and v["effort"]:
-                c += ["--effort", v["effort"]]
-            if v["prio"] != (a["priority"] or "normal"):
-                c += ["--priority", v["prio"]]
-            if v["project"] != proj0 and v["project"] != "—":
-                c += ["--project", v["project"]]
-            deliv = self._deliv_id(v["deliv"], v["project"]) or v["deliv"]
-            if deliv and deliv != deliv0:
-                c += ["--deliverable", deliv]
-            if v["blocked"] and v["blocked"].replace(" ", "") != blocked0:
-                c += ["--blocked-by", v["blocked"].replace(" ", "")]
-            new_people = [p.strip() for p in v["people"].split(",") if p.strip() and p.strip() not in a["people"]]
-            if new_people:
-                c += ["--people", ",".join(new_people)]
-            if v["list"] != a["list"]:
-                c += ["--list", v["list"]]
-            if v["owner"] and v["owner"].lower() != owner0:
-                c += ["--owner", v["owner"]]
-            if v["note"]:
-                c += ["--note", v["note"]]
-            return [c + ["--by", "owner"]]
-
-        self.form(FormSpec(f"Editar {a['id']}", [
-            Field("title", "título", value=a["title"], req=True),
-            Field("due", "prazo", value=a["due"] or "", check=self._due_check, res=dates.describe, ph="vazio remove o prazo"),
-            Field("effort", "esforço", value=eff0, check=self._effort_check),
-            Field("prio", "prioridade", choice=["normal", "alta", "baixa"], value=a["priority"] or "normal"),
-            *self._goal_project_fields(proj0),
-            Field("deliv", "entregável", value=deliv_shown, ph="só o número, no projeto escolhido (9 → PROJ-1.9), ou PROJ-#.#",
-                  check=self._deliv_check, res=self._deliv_res),
-            Field("blocked", "bloqueada por", value=blocked0, ph="TASK-#### (a CLI não remove bloqueio)"),
-            Field("people", "pessoas", ph="adiciona: marina-demo, heitor-demo"),
-            Field("list", "lista", choice=["mine", "waiting", "watching"], value=a["list"]),
-            Field("owner", "dono", value=owner_shown, ph="reatribui: eu, id ou alias", fill=("list", self._owner_for_list)),
-            Field("note", "nota", ph="vai para o histórico da ação")], build))
+        self.open_form("action.edit", {"id": a["id"], "title": a["title"], "item": a})
 
     def f_due(self) -> None:
         a = self.cur().data
-
-        def build(v):
-            return [["action", "update", a["id"]] + (self._due_arg(v["due"]) or ["--clear-due"]) + ["--by", "owner"]]
-
         sub = ("Prazo sugerido pelo agente (roxo): salve com a mesma data para confirmar, ou digite outra."
                if a.get("due_suggested") else "Deixe em branco para remover o prazo.")
-        self.form(FormSpec(f"Prazo de {a['id']}", [
-            Field("due", "prazo", value=a["due"] or "", ph=dates.HELP, check=self._due_check, res=dates.describe)],
-            build, sub=sub))
+        self.open_form("action.due", {"id": a["id"], "title": a["title"], "item": a, "due_sub": sub})
 
     def cycle_status(self) -> None:
         a = self.cur().data
@@ -1602,32 +1386,16 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
 
     def f_drop(self) -> None:
         a = self.cur().data
-        self.form(FormSpec(f"Descartar {a['id']}", [Field("reason", "motivo", req=True, ph="projeto cancelado")],
-                           lambda v: [["action", "drop", a["id"], "--reason", v["reason"] or "…", "--by", "owner"]],
-                           sub="Não foi feita e não será. O histórico fica no ledger."))
+        self.open_form("action.drop", {"id": a["id"], "title": a["title"], "item": a})
 
     def f_merge(self) -> None:
         """Mescla a ação selecionada (duplicada, que sai) em outra que fica — o mesmo `action merge` do painel."""
         a = self.cur().data
-
-        def into_check(v: str) -> str:
-            t = self.store.brain.state.actions.get(idmod.normalize(v)) if v else None
-            if not v:
-                return ""
-            if t is None or t.id == a["id"]:
-                return "informe outra ação existente (TASK-####)"
-            return "" if t.status in ("aberta", "fazendo", "aguardando") else f"{t.id} precisa estar aberta"
-
-        self.form(FormSpec(f"Mesclar {a['id']}", [Field("into", "mesclar em (TASK)", req=True, ph="TASK-####", check=into_check),
-                                                  Field("reason", "motivo", ph="opcional")],
-                           lambda v: [["action", "merge", a["id"], "--into", idmod.normalize(v["into"]) or "…", "--by", "owner",
-                                       *(["--reason", v["reason"]] if v["reason"] else [])]],
-                           sub=f"“{a['title']}” é duplicada: o que ela tem (pessoas, link, prazo, bloqueios) passa para a que fica."))
+        self.open_form("action.merge", {"id": a["id"], "title": a["title"], "item": a})
 
     def f_reopen(self) -> None:
         a = self.cur().data
-        self.form(FormSpec(f"Reabrir {a['id']}", [Field("reason", "motivo", req=True, ph="faltou a parte do México")],
-                           lambda v: [["action", "reopen", a["id"], "--reason", v["reason"] or "…", "--by", "owner"]]))
+        self.open_form("action.reopen", {"id": a["id"], "title": a["title"], "item": a})
 
     def f_chase(self) -> None:
         a = self.cur().data
@@ -1640,38 +1408,19 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
         if d["status"] == "feito":
             self.exec([["plan", "deliverable", d["id"], "--status", "nao-iniciado", "--by", "owner"]])
             return
-        self.form(FormSpec(f"Marcar {d['id']} como feito", [Field("ev", "evidência", ph="subiu em produção")],
-                           lambda v: [["plan", "deliverable", d["id"], "--status", "feito"] + (["--evidence", v["ev"]] if v["ev"] else []) + ["--by", "owner"]],
-                           sub=d["title"]))
+        self.open_form("deliverable.done", {"id": d["id"], "title": d["title"], "item": d})
 
     def f_deliv_state(self) -> None:
         d = self.cur().data
-        self.form(FormSpec(f"Estado de {d['id']}", [Field("st", "estado", choice=["nao-iniciado", "em-andamento", "feito", "cancelado"], value=d["status"]),
-                                                    Field("ev", "evidência", ph="opcional")],
-                           lambda v: [["plan", "deliverable", d["id"], "--status", v["st"]] + (["--evidence", v["ev"]] if v["ev"] else []) + ["--by", "owner"]]))
+        self.open_form("deliverable.state", {"id": d["id"], "title": d["title"], "item": d})
 
     def f_progress(self) -> None:
-        it = self.cur()
-        nid = it.id
-        chk = lambda v: "" if v.isdigit() and int(v) <= 100 else "Use um número de 0 a 100."  # noqa: E731
-        self.form(FormSpec(f"Declarar progresso de {nid}", [Field("pct", "percentual", req=True, ph="0 a 100", check=chk),
-                                                            Field("note", "nota", ph="cardápio andou; reforma não")],
-                           lambda v: [["progress", nid, v["pct"] or "…"] + (["--note", v["note"]] if v["note"] else [])],
-                           sub="Aparece ao lado do calculado; nunca o substitui.", render=True))
+        self.open_form("progress.declare", {"id": self.cur().id})
 
     def f_share(self) -> None:
         it = self.cur()
         kind = {"g": "goal", "p": "project"}.get(it.kind if it else "", "status")
-        target = it.id if it and it.kind in ("g", "p") else ""
-
-        def build(v):
-            return [["share", v["kind"]] + ([v["target"]] if v["target"] and v["kind"] != "status" else []) + ["--format", v["fmt"]]]
-
-        self.form(FormSpec("Exportar para um colega", [
-            Field("kind", "tipo", choice=["project", "goal", "status", "period"], value=kind),
-            Field("target", "alvo", value=target, ph="PROJ-1 · GOAL-1 · 2026-09-01:2026-09-30"),
-            Field("fmt", "formato", choice=["md", "html"])], build,
-            sub="Gera um documento autocontido, sem jargão interno, em vault/reports/share/.", render=False))
+        self.open_form("share.export", {"kind": kind, "target": it.id if it and it.kind in ("g", "p") else ""}, render=False)
 
     def external(self, argv: list[str]) -> None:
         """Roda um programa interativo (editor, pager) devolvendo o terminal a ele enquanto dura."""
@@ -1732,37 +1481,11 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
             util.atomic_write(path, before)
             self.log_line("mudança do PLANNING descartada: goals.md voltou ao que era", "yellow")
 
-        self.form(FormSpec(
-            "Mudança na árvore do plano",
-            [Field("diff", "resumo do diff", value=pre.get("diff", ""), req=True, ph="PROJ-5 nasce sob GOAL-2"),
-             Field("reason", "motivo", value=pre.get("reason", ""), req=True, ph="nova frente de retenção MX"),
-             Field("ev", "evidência", value=pre.get("ev", ""), ph="reunião de planejamento"),
-             Field("quote", "sua aprovação", req=True, ph="digite a resposta literal, ex.: ok")],
-            lambda v: [["plan", "log", "--diff", v["diff"] or "…", "--reason", v["reason"] or "…"] + (["--evidence", v["ev"]] if v["ev"] else []) + ["--approval", v["quote"] or "…"]],
-            sub="Único gate estrutural: criar, renomear ou fechar goal e projeto exige a sua aprovação. "
-                "Cancelar desfaz a edição do goals.md (e o registro que falhar também).", gate=True, extra=extra,
-            on_cancel=restore, on_fail=restore))
+        self.open_form("plan.log", {"diff": pre.get("diff", ""), "reason": pre.get("reason", ""), "ev": pre.get("ev", "")},
+                       extra=extra, on_cancel=restore, on_fail=restore)
 
     def f_accept(self) -> None:
         r = self.cur().data
-        fields = [Field("quote", "sua resposta", req=True, ph="ok, pode fechar")]
-        if r.kind == "fechar-acao":
-            fields.append(Field("how", "como foi", value=r.summary, req=True))
-        if r.kind == "reestimar":
-            fields.append(Field("effort", "novo esforço", req=True, ph="90m · 2h · 1h30", check=self._effort_check))
-
-        def build(v):
-            cmds = [["proposal", "accept", r.id, "--quote", v["quote"] or "…"]]
-            if r.kind == "fechar-acao" and r.target:
-                cmds.append(["action", "close", r.target, "--how", v.get("how") or "…", "--by", "owner"])
-            if r.kind == "reestimar" and r.target:
-                cmds.append(["action", "update", r.target, "--effort", v.get("effort") or "…", "--by", "owner"])
-            if r.kind == "unificar-acao" and r.target and r.into:
-                cmds.append(["action", "merge", r.target, "--into", r.into, "--by", "owner"])
-            if r.kind == "descartar-acao" and r.target and r.into:
-                cmds.append(["action", "drop", r.target, "--reason", f"duplicada de {r.into}",
-                             "--duplicate-of", r.into, "--by", "owner"])
-            return cmds
 
         def after() -> None:
             if r.kind == "mudar-plano":
@@ -1772,12 +1495,12 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
             elif r.kind in ("atualizar-acao", "outro"):
                 self.log_line("Proposta aceita. Aplique a mudança na ação com e (editar), se for o caso.", "yellow")
 
-        self.form(FormSpec(f"Aceitar {r.id}", fields, build, sub=r.summary, gate=True, after=after))
+        self.open_form("proposal.accept", {"id": r.id, "summary": r.summary, "kind": r.kind, "target": r.target or "",
+                                           "into": r.into or ""}, after=after)
 
     def f_reject(self) -> None:
         r = self.cur().data
-        self.form(FormSpec(f"Rejeitar {r.id}", [Field("quote", "sua resposta", req=True, ph="não, ainda falta o México")],
-                           lambda v: [["proposal", "reject", r.id, "--quote", v["quote"] or "…"]], sub=r.summary))
+        self.open_form("proposal.reject", {"id": r.id, "summary": r.summary})
 
     def _check_recipient(self, v: str) -> str:
         allow = self.store.allow()
@@ -1793,169 +1516,82 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
         return "" if to in allow else f"'{to}' não está em [outbound].allow do config/brain.toml"
 
     def f_draft(self, to: str = "", text: str = "", ref: str = "", why: str = "") -> None:
-        def build(v):
-            c = ["outbox", "draft", "--to", v["to"] or "…", "--text", v["text"] or "…"]
-            if v["ref"]:
-                c += ["--ref", v["ref"]]
-            if v["why"]:
-                c += ["--why", v["why"]]
-            if v.get("channel") and v["channel"] != "slack":
-                c += ["--channel", v["channel"]]
-            return [c]
-
         def after() -> None:
             self.p, self.tab[4] = 4, 2
             self.set_sel(4, 0)
             self.redraw()
 
-        self.form(FormSpec("Rascunhar mensagem no Slack", [
-            Field("to", "para", value=to, req=True, ph="id da pessoa ou #canal", check=self._check_recipient),
-            Field("text", "texto", value=text, req=True, ph="Oi …"),
-            Field("ref", "ref", value=ref, ph="TASK-####"), Field("why", "por quê", value=why),
-            Field("channel", "canal", choice=[("slack", "slack"), ("email", "email")], value="slack")], build,
-            sub="O agente envia depois da sua aprovação, como você. O texto aprovado fica travado por hash.", after=after))
+        self.open_form("outbox.draft", {"to": to, "text": text, "ref": ref, "why": why}, after=after)
 
     def f_approve_msg(self) -> None:
         m = self.cur().data
         n = m["id"].split("-")[1].lstrip("0") or "0"
-        self.form(FormSpec(f"Aprovar {m['id']} → {m['to_name']}", [Field("quote", "sua aprovação", req=True, ph=f"enviar {n}")],
-                           lambda v: [["outbox", "approve", m["id"], "--quote", v["quote"] or "…"]],
-                           sub="Você aprova este texto exato. Se mudar uma palavra, a aprovação cai.",
-                           gate=True, extra=Text.assemble(("▌ ", "cyan"), m["text"])))
+        self.open_form("outbox.approve", {"id": m["id"], "to_name": m["to_name"], "n": n, "text": m["text"]},
+                       extra=Text.assemble(("▌ ", "cyan"), m["text"]))
 
     def f_cancel_msg(self) -> None:
         m = self.cur().data
-        self.form(FormSpec(f"Cancelar {m['id']}", [Field("reason", "motivo", ph="opcional")],
-                           lambda v: [["outbox", "cancel", m["id"]] + (["--reason", v["reason"]] if v["reason"] else [])]))
+        self.open_form("outbox.cancel", {"id": m["id"], "text": m["text"]})
 
     def f_focus_plan(self) -> None:
-        chk = lambda v: "" if v.isdigit() and 1 <= int(v) <= 30 else "Use de 1 a 30 dias."  # noqa: E731
-        self.form(FormSpec("Planejar foco", [Field("days", "horizonte (dias)", value=str(self.inst.cfg["focus"]["horizon_days"]), check=chk)],
-                           lambda v: [["focus", "plan", "--days", v["days"] or "7"]],
-                           sub="Blocos EDF nas suas ações mine com prazo. Nada vai ao calendário ainda.",
-                           after=lambda: (self.tab.__setitem__(4, 3), self.redraw())))
+        self.open_form("focus.plan", {"days": str(self.inst.cfg["focus"]["horizon_days"])},
+                       after=lambda: (self.tab.__setitem__(4, 3), self.redraw()))
 
     def f_focus_approve(self) -> None:
-        f = self.store.m["focus"]
-        self.form(FormSpec(f"Aprovar plano {f['id']}", [Field("quote", "sua aprovação", req=True, ph="ok")],
-                           lambda v: [["focus", "approve", f["id"], "--quote", v["quote"] or "…"]],
-                           sub="Um ok libera o lote inteiro. Só depois dele o aplicar vira possível.", gate=True))
+        self.open_form("focus.approve", {"id": self.store.m["focus"]["id"]})
 
     def f_focus_apply(self) -> None:
-        f = self.store.m["focus"]
-        mode = self.inst.cfg["focus"]["mode"]
-        self.form(FormSpec(f"Aplicar {f['id']}", [Field("mode", "modo", choice=["ics", "google"], value=mode)],
-                           lambda v: [["focus", "apply", f["id"], "--mode", v["mode"]]],
-                           sub="google cria só eventos marcados brain_focus=1 no calendário primário. ics gera um arquivo e não toca na API.",
-                           gate=True))
+        self.open_form("focus.apply", {"id": self.store.m["focus"]["id"], "mode": self.inst.cfg["focus"]["mode"]})
 
     def focus_sync(self) -> None:
-        self.form(FormSpec("Sincronizar o foco", [Field("mode", "o que fazer", choice=["só mostrar (dry-run)", "remover agora"])],
-                           lambda v: [["focus", "sync"] + (["--dry-run"] if v["mode"].startswith("só") else [])],
-                           sub="Blocos futuros de ações já fechadas: no modo google saem do calendário; no ics, o arquivo avisa.",
-                           render=False))
+        self.open_form("focus.sync", render=False)
 
     def f_pub_request(self) -> None:
-        reports, dests = self.store.reports(), self.store.destinations()
-        if not dests:
+        if not self.store.destinations():
             self.log_line("Nenhum destino em [publish].destinations (config/brain.toml). A porta está fechada.", "red")
             return
-        rf = Field("report", "report", choice=reports) if reports else Field("report", "report", req=True, ph="reports/share/… (gere com S no painel 3)")
-        self.form(FormSpec("Pedir publicação", [rf, Field("to", "destino", choice=dests)],
-                           lambda v: [["publish", "request", v["report"] or "…", "--to", v["to"]]],
-                           sub="Uma aprovação por publicação. O conteúdo fica travado por hash.", render=False))
+        reports = self.store.reports()
+        self.open_form("publish.request", {"report": reports[0] if reports else ""}, render=False)
 
     def f_pub_approve(self) -> None:
         s = self.cur().data
-        self.form(FormSpec(f"Aprovar {s['id']}", [Field("quote", "sua aprovação", req=True, ph="ok, publica")],
-                           lambda v: [["publish", "approve", s["id"], "--quote", v["quote"] or "…"]],
-                           sub=f"Publicar {s['report']} em {s['destination']}", gate=True))
+        self.open_form("publish.approve", {"id": s["id"], "report": s["report"], "destination": s["destination"]})
 
     def pub_cancel(self) -> None:
         self.exec([["publish", "cancel", self.cur().data["id"]]])
 
     def f_decision(self) -> None:
-        def build(v):
-            c = ["decision", "add", v["title"] or "…", "--decided-by", v["by"] or "…"]
-            if v["project"] not in ("", "—"):
-                c += ["--project", v["project"]]
-            if v["why"]:
-                c += ["--rationale", v["why"]]
-            return [c + ["--by", "owner"]]
-
-        self.form(FormSpec("Registrar decisão", [Field("title", "título", req=True), Field("by", "quem decidiu", req=True, ph="marina-demo, sonia-demo"),
-                                                 *self._goal_project_fields(), Field("why", "porquê", ph="opcional")], build))
+        self.open_form("decision.new")
 
     def f_supersede(self) -> None:
         d = self.cur().data
-        self.form(FormSpec(f"Superar {d['id']}", [Field("reason", "motivo", req=True)],
-                           lambda v: [["decision", "supersede", d["id"], "--reason", v["reason"] or "…", "--by", "owner"]], sub=d["title"]))
+        self.open_form("decision.supersede", {"id": d["id"], "title": d["title"]})
 
     def f_delivery(self) -> None:
-        def build(v):
-            c = ["delivery", v["title"] or "…"]
-            for opt, key in (("--ref", "ref"), ("--result", "result"), ("--impact", "impact")):
-                if v[key]:
-                    c += [opt, v[key]]
-            return [c + ["--by", "owner"]]
-
-        self.form(FormSpec("Registrar entrega", [Field("title", "título", req=True), Field("ref", "ligada a", ph="PROJ-2 · TASK-#### · GOAL-1"),
-                                                 Field("result", "resultado"), Field("impact", "impacto")], build,
-                           sub="Conquista com resultado, sem precisar fechar uma ação."))
+        self.open_form("delivery.new")
 
     def f_person(self) -> None:
         made: dict[str, str] = {}
 
-        def build(v):
+        def remember(cmds, v):
             made["id"] = v["id"] or util.slugify(v["name"] or "")
-            c = ["person", "add", v["name"] or "…"]
-            if v["id"]:
-                c += ["--id", v["id"]]
-            for a in [x.strip() for x in v["alias"].split(",") if x.strip()]:
-                c += ["--alias", a]
-            if v["role"]:
-                c += ["--role", v["role"]]
-            return [c + ["--relation", v["rel"], "--by", "owner"]]
+            return cmds
 
-        self.form(FormSpec("Nova pessoa", [Field("name", "nome", req=True), Field("id", "id curto", ph="derivado do nome"), Field("alias", "aliases", ph="Lu, Lu M."),
-                                           Field("role", "papel"), Field("rel", "relação", choice=["par", "gestor", "stakeholder", "time"])], build,
-                           after=lambda: made.get("id") and self.jump(made["id"])))
+        self.open_form("person.new", wrap=remember, after=lambda: made.get("id") and self.jump(made["id"]))
 
     def f_person_update(self) -> None:
         p = self.cur().data
-
-        def build(v):
-            c = ["person", "update", p["id"]]
-            for opt, key, old in (("--name", "name", p["name"]), ("--role", "role", p["role"] or ""),
-                                  ("--relation", "rel", p["relation"] or ""), ("--email", "email", p["email"] or "")):
-                if v[key] and v[key] != old:
-                    c += [opt, v[key]]
-            return [c + ["--by", "owner"]]
-
-        self.form(FormSpec(f"Editar {p['id']}", [Field("name", "nome", value=p["name"], req=True), Field("role", "papel", value=p["role"] or ""),
-                                                 Field("rel", "relação", value=p["relation"] or ""), Field("email", "e-mail", value=p["email"] or "")], build,
-                           sub="Para aliases novos use a. A CLI não apaga campos, só os troca."))
+        self.open_form("person.edit", {"id": p["id"], "item": p})
 
     def f_resolve(self) -> None:
-        self.form(FormSpec("Quem é…?", [Field("text", "nome ou alias", req=True, ph="a Marina-demo")],
-                           lambda v: [["person", "resolve", v["text"] or "…"]],
-                           sub="Diz a quem o texto se refere, sem gravar nada. Ambíguo vira erro 2: a pergunta é sua.", render=False))
+        self.open_form("person.resolve", render=False)
 
     def f_memory(self) -> None:
-        self.form(FormSpec("Memória: perguntar", [Field("q", "pergunta", req=True, ph="o que foi decidido sobre o forno?"),
-                                                  Field("mode", "como", choice=["recall", "reflect"]),
-                                                  Field("bank", "banco", choice=["mem", "raw"]),
-                                                  Field("tags", "tags", ph="proj:PROJ-1,pessoa:marina-demo (opcional)")],
-                           lambda v: [["memory", v["mode"], v["q"] or "…", "--bank", v["bank"]] + (["--tags", v["tags"]] if v["tags"] else [])],
-                           sub="recall devolve trechos; reflect pede uma resposta sintetizada. Confirme no arquivo do vault antes de afirmar.",
-                           render=False, show="Memória"))
+        self.open_form("memory.ask", render=False, show="Memória")
 
     def f_alias(self) -> None:
         p = self.cur().data
-        def build(v):
-            return [["person", "alias", p["id"]] + [a.strip() for a in v["al"].split(",") if a.strip()] + ["--by", "owner"]]
-        self.form(FormSpec(f"Alias para {p['id']}", [Field("al", "aliases", req=True, ph="Mari-demo, M.-demo")], build,
-                           sub="Evita uma segunda ficha para a mesma pessoa."))
+        self.open_form("person.alias", {"id": p["id"]})
 
     def open_raw(self) -> None:
         a = self.cur().data
@@ -2070,9 +1706,8 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
             self.ask_agent(op["name"], bullets, cmd)
             return
         label, ph, req = op["arg"]
-        field = Field("arg", label, ph=ph, req=req)
-        self.form(FormSpec(op["name"], [field], lambda v: [], sub=op["desc"], render=False,
-                           intercept=lambda v: self.ask_agent(op["name"], bullets, f"{cmd} {v['arg']}".strip()) or True))
+        self.open_form("agent.arg", {"name": op["name"], "desc": op["desc"], "arg_label": label, "arg_ph": ph, "arg_req": req},
+                       render=False, intercept=lambda v: self.ask_agent(op["name"], bullets, f"{cmd} {v['arg']}".strip()) or True)
 
     def agent_init(self) -> None:
         self.ask_agent("Primeira entrevista", ["Pergunta quem você é, seus goals, projetos e pessoas", "Monta PROFILE e PLANNING como proposta (diff)",
@@ -2123,100 +1758,6 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
         self.push_screen(PickerModal("Puxar qual fonte?", "digite para filtrar…", source), done)
 
     # ── fontes: watch.toml pela CLI (`brain watch`) ────────────────────────
-    @staticmethod
-    def _extras_check(v: str) -> str:
-        from .. import watch
-        for part in [p for p in v.split(";") if p.strip()]:
-            k, sep, _ = part.partition("=")
-            if not sep or not watch.FIELD_RE.match(k.strip()):
-                return f"use campo=valor separados por ponto e vírgula (recebi {part.strip()!r})"
-        return ""
-
-    @staticmethod
-    def _extras(v: str) -> dict:
-        out = {}
-        for part in [p for p in v.split(";") if p.strip()]:
-            k, _, val = part.partition("=")
-            out[k.strip()] = val.strip()
-        return out
-
-    SOURCE_META = {"key", "kind", "in_watch", "last_ok", "last_error", "failures", "pulls", "last_changed"}
-    SOURCE_FIELDS = {"window", "note", "channel", "user", "query", "folder", "doc", "jql", "cloud", "mode", "path"}
-
-    def _source_fields(self, src: dict | None) -> list[Field]:
-        """Campos por tipo: só aparece o que aquele `kind` usa. Drive aceita a URL; Jira monta a JQL pelo escopo."""
-        from .. import watch
-        src = src or {}
-        other = "; ".join(f"{k}={v}" for k, v in src.items() if k not in self.SOURCE_META | self.SOURCE_FIELDS)
-        taken = {x["key"] for x in self.store.sources if x["in_watch"] and x["key"] != src.get("key")}
-        kinds = list(watch.KINDS)
-        if src.get("kind") and src["kind"] not in {k for k, _ in kinds}:
-            kinds.append((src["kind"], src["kind"]))
-        cloud0 = src.get("cloud") or next((x["cloud"] for x in self.store.sources if x.get("cloud")), "")
-
-        def key_check(v: str) -> str:
-            if not watch.KEY_RE.match(v):
-                return "key: minúsculas, números, '.', '_' e '-' (ex.: slack-time-dados)"
-            return "já existe uma fonte com essa key" if v in taken else ""
-
-        def drive_res(v: str) -> str:
-            got = watch.drive_doc_id(v)
-            return f"id {got}" if got else "não parece uma URL ou id do Drive"
-
-        def drive_check(v: str) -> str:
-            return "" if watch.drive_doc_id(v) else "cole a URL (ou o id) do Drive"
-
-        def jira_res(v: str, vals: dict) -> str:
-            try:
-                return "→ " + watch.jira_jql(vals["jscope"], v, vals["mode"])
-            except util.BrainError as e:
-                return str(e)
-
-        def jira_check(v: str, vals: dict) -> str:
-            try:
-                watch.jira_base(vals["jscope"], v)
-                return ""
-            except util.BrainError as e:
-                return str(e)
-
-        def of(*ks):
-            return lambda v: v.get("kind") in ks
-
-        return [Field("key", "key", value=src.get("key", ""), req=True, ph="slack-time-dados", check=key_check),
-                Field("note", "nota", value=src.get("note", ""), ph="para que serve esta fonte"),
-                Field("kind", "tipo", value=src.get("kind") or "gmail", choice=kinds),
-                Field("channel", "canal", value=src.get("channel", ""), req=True, ph="#time-dados ou @pessoa", show=of("slack")),
-                Field("user", "só de quem", value=src.get("user", ""), ph="@pessoa (opcional)", show=of("slack")),
-                Field("query", "filtro", value=src.get("query", ""), ph="from:alguem label:x (opcional; busca do Gmail)", show=of("gmail")),
-                Field("folder", "pasta (URL)", value=src.get("folder", ""), req=True, ph="https://drive.google.com/drive/folders/…",
-                      show=of("drive"), check=drive_check, res=drive_res),
-                Field("doc", "doc (URL)", value=src.get("doc", ""), req=True, ph="URL do Doc, Planilha ou Slides",
-                      show=of(watch.DRIVE_DOC), check=drive_check, res=drive_res),
-                Field("jscope", "o quê", value="jql" if src.get("jql") else "mine", choice=watch.JIRA_SCOPES, show=of("jira")),
-                Field("jref", "chave / URL", value=src.get("jql", ""), req=True, ph="OPS-123 · OPS · URL do épico, board ou filtro · JQL",
-                      show=lambda v: v.get("kind") == "jira" and v.get("jscope") != "mine", check=jira_check, res=jira_res),
-                Field("mode", "leitura", value=src.get("mode", ""), choice=[("", "só o que mudou (janela)"), ("state", "estado completo (o que está aberto)")],
-                      show=of("jira")),
-                Field("cloud", "site", value=cloud0, ph="<site>.atlassian.net (vem da URL, se colar uma)", show=of("jira")),
-                Field("path", "pasta local", value=src.get("path", ""), req=True, ph="~/Github/", show=of("github")),
-                Field("window", "janela", value=src.get("window", ""), ph="auto · 1d · 7d",
-                      show=lambda v: v.get("kind") not in watch.NO_WINDOW and not (v.get("kind") == "jira" and v.get("mode") == "state")),
-                Field("other", "outros", value=other, ph="campo=valor; campo=valor", check=self._extras_check)]
-
-    def _source_values(self, v: dict) -> dict:
-        """Valores do formulário → campos da fonte no watch.toml (só os do tipo escolhido; vazio = fora)."""
-        from .. import watch
-        out = {k: v[k] for k in ("window", "note", "channel", "user", "query", "folder", "doc", "path") if v.get(k)}
-        if v["kind"] == "jira":
-            try:
-                out["jql"] = watch.jira_jql(v["jscope"], v["jref"], v["mode"])
-            except util.BrainError:
-                out["jql"] = v["jref"] or "…"
-            cloud = v["cloud"] or watch.jira_cloud(v["jref"])
-            out |= {"cloud": cloud} if cloud else {}
-            out |= {"mode": "state"} if v["mode"] == "state" else {}
-        return out | self._extras(v["other"])
-
     def _source_after(self, getkey) -> None:
         self.p, self.tab[1] = 1, 1                     # Fontes (aba 1 desde a face Configurações)
         self.redraw()
@@ -2234,20 +1775,12 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
     def f_source_add(self, pre: dict | None = None) -> None:
         made: dict[str, str] = {}
 
-        def build(v):
+        def remember(cmds, v):
             made["key"] = v["key"]
-            c = ["watch", "add", v["key"] or "…", "--kind", v["kind"] or "…"]
-            vals = self._source_values(v)
-            for opt, k in (("--window", "window"), ("--note", "note")):
-                if vals.get(k):
-                    c += [opt, vals.pop(k)]
-            for k, val in vals.items():
-                c += ["--set", f"{k}={val}"]
-            return [c]
+            return cmds
 
-        self.form(FormSpec("Adicionar fonte ao watch.toml", self._source_fields(pre), build,
-                           sub="Fonte que não está no watch.toml não é puxada pelo /update nem pelo noturno. Os campos mudam com o tipo.",
-                           render=False, after=lambda: self._source_after(lambda: made.get("key"))))
+        self.open_form("watch.add", {"item": pre or {}}, wrap=remember, render=False,
+                       after=lambda: self._source_after(lambda: made.get("key")))
 
     def f_source_include(self) -> None:
         it = self.cur()
@@ -2258,34 +1791,16 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
         old = self.cur().data
         made: dict[str, str] = {}
 
-        def build(v):
+        def remember(cmds, v):
             made["key"] = v["key"]
-            c = ["watch", "edit", old["key"]]
-            if v["key"] != old["key"]:
-                c += ["--rename", v["key"]]
-            if v["kind"] != old.get("kind"):
-                c += ["--kind", v["kind"]]
-            new = self._source_values(v)
-            for k, val in new.items():
-                if str(old.get(k, "")) != val:
-                    c += {"window": ["--window", val], "note": ["--note", val]}.get(k, ["--set", f"{k}={val}"])
-            for k in old:
-                if k not in self.SOURCE_META and k not in new:
-                    c += ["--unset", k]
-            return [c]
+            return cmds
 
-        self.form(FormSpec(f"Editar a fonte {old['key']}", self._source_fields(old), build,
-                           sub="Mudar a key renomeia a fonte; o histórico de pulls fica na key antiga.",
-                           render=False, after=lambda: self._source_after(lambda: made.get("key"))))
+        self.open_form("watch.edit", {"key0": old["key"], "item": old}, wrap=remember, render=False,
+                       after=lambda: self._source_after(lambda: made.get("key")))
 
     def f_source_remove(self) -> None:
-        key = self.cur().data["key"]
-
-        def done(ok) -> None:
-            if ok:
-                self.exec([["watch", "remove", key]], render=False, after=lambda: self._source_after(lambda: None))
-        self.push_screen(ConfirmModal(f"Remover a fonte {key}", "O /update e o noturno deixam de puxá-la. Snapshots já gravados e o ledger ficam como estão.",
-                                      ["watch", "remove", key]), done)
+        self.open_form("watch.remove", {"key": self.cur().data["key"]}, render=False,
+                       after=lambda: self._source_after(lambda: None))
 
     def agent_send(self) -> None:
         m = self.cur().data

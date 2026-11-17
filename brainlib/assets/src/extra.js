@@ -79,6 +79,15 @@ if (SERVE) {
   else { try { TOK = localStorage.getItem("brain-serve-token"); } catch (e) {} }
 }
 let LIVE = SERVE && !!TOK;
+// o ícone do app reaproveita esta aba (util.focus_open_tab) apontando-a para `/#t=<token>`: se a ponte foi reiniciada
+// o token mudou — guarda o novo, devolve a URL ao que era (a rota fica) e recarrega; token igual, só devolve a URL
+if (SERVE) window.addEventListener("hashchange", e => {
+  const m = location.hash.match(/[#&]t=([^&]+)/); if (!m) return;
+  const tok = decodeURIComponent(m[1]), back = (e.oldURL || "").split("#").slice(1).join("#");
+  try { localStorage.setItem("brain-serve-token", tok); } catch (x) {}
+  history.replaceState(null, "", location.pathname + location.search + (back ? "#" + back : ""));
+  if (tok !== TOK) location.reload();
+});
 // a configuração guiada (conectores, memória, chaves que ficaram para depois) só existe no painel vivo
 (function () { const ob = document.getElementById("onboard"); if (ob && LIVE) ob.hidden = false; })();
 function copyCmd(cmd){
@@ -254,35 +263,13 @@ function focusReserve(){
     else focusApproveForm();
   };
 }
-function focusApproveForm(){                            // gate: resposta literal, como a TUI
-  const f = window.BRAIN.M.focus;
-  formDialog({title: "Aprovar plano " + f.id, gate: true,
-    sub: "Um ok libera o lote inteiro. Só depois dele o aplicar vira possível.",
-    fields: [{k: "quote", label: "Sua aprovação", value: "", ph: "ok"}],
-    preview: v => v.quote ? "brain focus approve " + f.id + " --quote " + q(v.quote) : null,
-    run: (v, m) => { m.focus.status = "aprovado"; m.focus.quote = v.quote; }});
-}
-function focusApplyForm(){                              // gate: modo ics/google, default do plano
-  const f = window.BRAIN.M.focus;
-  formDialog({title: "Aplicar " + f.id, gate: true,
-    sub: "Grava os blocos brain_focus=1 no calendário (google) ou gera o arquivo .ics.",
-    fields: [{k: "mode", label: "Modo", options: [["ics", "ics — arquivo local"], ["google", "google — Calendar"]], value: f.mode || "google"}],
-    preview: v => "brain focus apply " + f.id + " --mode " + v.mode,
-    run: (v, m) => { m.focus.status = "aplicado"; m.focus.applied = m.focus.blocks; m.focus.mode = v.mode; }});
-}
-function focusPlanForm(){                               // a TUI roda o mesmo comando com --days
+function focusApproveForm(){ openForm("focus.approve", {id: window.BRAIN.M.focus.id}); }   // gate: resposta literal, como a TUI
+function focusApplyForm(){ const f = window.BRAIN.M.focus; openForm("focus.apply", {id: f.id, mode: f.mode || "google"}); }
+function focusPlanForm(){
   const M = window.BRAIN.M;
-  formDialog({title: "Planejar foco", sub: "Blocos EDF nas suas ações mine com prazo. Nada vai ao calendário ainda.",
-    fields: [{k: "days", label: "Horizonte (dias)", type: "number", value: (M.focus && M.focus.horizon && M.focus.horizon.days) || "7"}],
-    preview: v => (+v.days >= 1 && +v.days <= 30) ? "brain focus plan --days " + v.days : null,
-    run: (v, m) => { m.focus = m.focus || {}; }});
+  openForm("focus.plan", {days: String((M.focus && M.focus.horizon && M.focus.horizon.days) || 7)});
 }
-function focusSyncForm(){                               // dry-run ou aplicar, escolha do dono
-  formDialog({title: "Sincronizar o foco", sub: "Blocos futuros de ações já fechadas: no google saem do calendário; no ics, o arquivo avisa.",
-    fields: [{k: "mode", label: "O que fazer", options: [["dry", "só mostrar (dry-run)"], ["apply", "remover agora"]], value: "dry"}],
-    preview: v => "brain focus sync" + (v.mode === "dry" ? " --dry-run" : ""),
-    run: (v, m) => {}});
-}
+function focusSyncForm(){ openForm("focus.sync"); }
 function wireFocus(){
   const f = window.BRAIN.M.focus; if (!f) return;
   const head = document.querySelector("#view .pagehead");
@@ -304,16 +291,14 @@ function wireFocus(){
 
 
 // ── perguntas e propostas (porta do dono: responder, descartar, aceitar, rejeitar) ──
-function askAnswer(id, text){
-  runCommand('brain ask answer ' + id + ' "' + text.replace(/"/g, "'") + '"',
-    m => { const q = m.questions.find(x => x.id === id); if (q) { q.status = "respondida"; q.answer = text; } });
+function askAnswer(id, text){                          // botão de opção: a mesma linha do formulário ask.answer
+  const M = window.BRAIN.M, q = (M.questions || []).find(x => x.id === id) || {};
+  runArgv(window.BRAIN_FORMS.formArgv(M.forms["ask.answer"], {answer: text}, {id: id, text: q.text}, M));
 }
 function propQuote(id, accept){
-  formDialog({title: (accept ? "Aceitar " : "Rejeitar ") + id, gate: accept,
-    sub: "o gate quer a sua resposta literal",
-    fields: [{k: "quote", label: "Resposta literal", value: accept ? "ok" : "não"}],
-    preview: v => v.quote ? "brain proposal " + (accept ? "accept" : "reject") + " " + id + ' --quote "' + v.quote.replace(/"/g, "'") + '"' : null,
-    run: (v, m) => { m.proposals = m.proposals.filter(x => x.id !== id); }});
+  const p = (window.BRAIN.M.proposals || []).find(x => x.id === id) || {id: id};
+  if (accept) openForm("proposal.accept", {id: id, summary: p.summary || "", kind: p.kind || "", target: p.target || "", into: p.into || ""});
+  else openForm("proposal.reject", {id: id, summary: p.summary || ""});
 }
 function wireAskPage(){
   document.querySelectorAll("#view [data-ask]").forEach(card => {
@@ -323,9 +308,7 @@ function wireAskPage(){
     if (send) send.onclick = () => { const inp = card.querySelector("[data-free]");
       if (inp && inp.value.trim()) askAnswer(id, inp.value.trim()); else inp && inp.focus(); };
     const drop = card.querySelector("[data-drop]");
-    if (drop) drop.onclick = () => formDialog({title: "Descartar " + id, fields: [{k: "reason", label: "Motivo", value: ""}],
-      preview: v => v.reason ? "brain ask drop " + id + ' --reason "' + v.reason.replace(/"/g, "'") + '"' : null,
-      run: (v, m) => { const q = m.questions.find(x => x.id === id); if (q) q.status = "descartada"; }});
+    if (drop) drop.onclick = () => { const q = (window.BRAIN.M.questions || []).find(x => x.id === id) || {}; openForm("ask.drop", {id: id, text: q.text || ""}); };
   });
   document.querySelectorAll("#view [data-acc], #view [data-rej]").forEach(b => {
     const card = b.closest(".card"); const idEl = card && card.querySelector(".idchip");
@@ -335,210 +318,58 @@ function wireAskPage(){
   });
 }
 
-function peopleOpts(extra){ return (extra || [["", "—"]]).concat(window.BRAIN.M.people.map(x => [x.id, x.name])); }
-function projectOpts(){ return [["", "—"]].concat(window.BRAIN.M.projects.map(x => [x.id, x.id + " " + x.title])); }
-function goalOpts(){ return [["", "—"]].concat(window.BRAIN.M.goals.map(g => [g.id, g.id + " " + g.title])); }
-function areaOpts(){ return window.BRAIN.M.portfolio.areas.map(a => [a.id, a.name]); }
-function procOpts(){ return [["", "—"]].concat(window.BRAIN.M.portfolio.processes.map(x => [x.id, x.id + " " + x.title])); }
-function q(t){ return '"' + String(t || "").replace(/"/g, "'") + '"'; }
 
 // ── P0: entregável, progresso, rascunho, publicar, criar entidades ───────
 function findDelivIn(m, id0){ for (const pr of m.projects) { const d = pr.deliverables.find(x => x.id === id0); if (d) return d; } return null; }
-function mutDeliv(id0, st){ return m => { const d = findDelivIn(m, id0); if (d) { d.status = st; d.done_date = st === "feito" ? m.today : null; } }; }
-function delivToggle(id0){
+function delivToggle(id0){                             // feito → pede evidência (como a TUI); desfazer é direto
   const d = findDelivIn(window.BRAIN.M, id0); if (!d) return;
-  const st = d.status === "feito" ? "nao-iniciado" : "feito";
-  runCommand("brain plan deliverable " + id0 + " --status " + st, mutDeliv(id0, st));
+  if (d.status === "feito") { runArgv([["plan", "deliverable", id0, "--status", "nao-iniciado", "--by", "owner"]]); return; }
+  openForm("deliverable.done", {id: id0, title: d.title, item: d});
 }
-function delivState(id0){
-  formDialog({title: "Estado · " + id0, fields: [{k: "status", label: "Estado",
-      options: [["nao-iniciado", "não iniciado"], ["em-andamento", "em andamento"], ["feito", "feito"], ["cancelado", "cancelado"]],
-      value: findDelivIn(window.BRAIN.M, id0).status}],
-    preview: v => "brain plan deliverable " + id0 + " --status " + v.status,
-    run: (v, m) => mutDeliv(id0, v.status)(m)});
-}
-function progressForm(gid){
-  formDialog({title: "Declarar progresso · " + gid, sub: "percentual seu, ao lado do cálculo por peso",
-    fields: [{k: "pct", label: "%", type: "number", value: ""}, {k: "note", label: "Nota", value: ""}],
-    preview: v => (v.pct !== "" && v.pct >= 0 && v.pct <= 100) ? "brain progress " + gid + " " + v.pct + (v.note ? ' --note "' + v.note.replace(/"/g, "'") + '"' : "") : null,
-    run: (v, m) => { const g = m.goals.find(x => x.id === gid); if (g) g.declared = {pct: +v.pct, date: m.today, note: v.note}; }});
-}
+function delivState(id0){ const d = findDelivIn(window.BRAIN.M, id0); openForm("deliverable.state", {id: id0, title: d.title, item: d}); }
+function progressForm(gid){ openForm("progress.declare", {id: gid}); }
 
-function draftForm(prefill){
-  const pref = prefill || {};
-  const people = window.BRAIN.M.people.filter(x => !x.is_owner);
-  formDialog({title: "Rascunhar mensagem", sub: "nada sai sem aprovação do texto exato — porta 2",
-    fields: [
-      {k: "to", label: "Para", options: people.map(x => [x.id, x.name]), value: pref.to || (people[0] && people[0].id)},
-      {k: "text", label: "Texto", value: pref.text || ""},
-      {k: "ref", label: "Ref", value: pref.ref || "", ph: "TASK-####"},
-      {k: "why", label: "Por quê", value: pref.why || ""},
-      {k: "channel", label: "Canal", options: [["slack", "slack"], ["email", "email"]], value: "slack"}],
-    preview: v => v.text ? "brain outbox draft --to " + v.to + " --text " + q(v.text) +
-      (v.ref ? " --ref " + v.ref : "") + (v.why ? " --why " + q(v.why) : "") +
-      (v.channel !== "slack" ? " --channel " + v.channel : "") : null,
-    run: (v, m) => { const n = Math.max(0, ...m.outbox.map(x => +x.id.slice(4))) + 1;
-      m.outbox.unshift({id: "MSG-" + String(n).padStart(4, "0"), to: v.to, to_name: (m.people.find(x => x.id === v.to) || {name: v.to}).name,
-        text: v.text, status: "rascunho", ref: v.ref || null, why: v.why || null, drafted: m.today, sent: null, link: null}); }});
+function draftForm(prefill){ const p = prefill || {}; openForm("outbox.draft", {to: p.to || "", text: p.text || "", ref: p.ref || "", why: p.why || ""}); }
+function chaseDraft(a){                                // o mesmo texto de partida da TUI (m cobrar)
+  draftForm({to: a.owner, ref: a.id, why: a.overdue_days ? "prazo venceu" : "acompanhamento",
+    text: "Oi " + String(a.owner_name || a.owner || "").split(" ")[0] + ', como está "' + a.title + '"?'});
 }
-function chaseDraft(a){
-  draftForm({to: a.owner, ref: a.id, why: "cobrança pelo painel",
-    text: 'Oi! Atualização sobre "' + a.title + '"? ' + (a.due ? "Era pra " + a.due.slice(8, 10) + "/" + a.due.slice(5, 7) + ". " : "") + "Consegue me dar um status?"});
-}
-function closeForm(a){                                 // como a TUI: como foi + resultado (vira WIN)
-  formDialog({title: "Fechar " + a.id, sub: a.title,
-    fields: [{k: "how", label: "Como foi", value: "", ph: "enviei o draft, confirmação chegou"},
-             {k: "outcome", label: "Resultado (vira entrega WIN)", value: "", ph: "opcional"}],
-    preview: v => v.how ? "brain action close " + a.id + " --how " + q(v.how) +
-      (v.outcome ? " --outcome " + q(v.outcome) : "") : null,
-    run: (v, m) => { const x = m.actions.find(y => y.id === a.id); x.open = false; x.status = "fechada"; x.closed = m.today; }});
-}
-function reopenForm(a){
-  formDialog({title: "Reabrir " + a.id, sub: a.title, fields: [{k: "reason", label: "Motivo", value: "", ph: "voltou ao radar"}],
-    preview: v => v.reason ? "brain action reopen " + a.id + " --reason " + q(v.reason) : null,
-    run: (v, m) => { const x = m.actions.find(y => y.id === a.id); x.open = true; x.status = "aberta"; x.closed = null; }});
-}
-function approveMsgForm(m0){                            // porta 2: texto exato + resposta literal, como a TUI
+function closeForm(a){ openForm("action.close", {id: a.id, title: a.title, item: a}); }
+function reopenForm(a){ openForm("action.reopen", {id: a.id, title: a.title, item: a}); }
+function approveMsgForm(m0){                           // porta 2: texto exato + resposta literal, como a TUI
   const n = (m0.id.split("-")[1] || "0").replace(/^0+/, "") || "0";
-  formDialog({title: "Aprovar " + m0.id + " → " + (m0.to_name || m0.to || "?"), gate: true,
-    sub: q(m0.text) + " — você aprova este texto exato; se mudar uma palavra, a aprovação cai.",
-    fields: [{k: "quote", label: "Sua aprovação", value: "", ph: "enviar " + n}],
-    preview: v => v.quote ? "brain outbox approve " + m0.id + " --quote " + q(v.quote) : null,
-    run: (v, m) => { m.outbox.find(x => x.id === m0.id).status = "aprovada"; }});
+  openForm("outbox.approve", {id: m0.id, to_name: m0.to_name || m0.to || "?", n: n, text: m0.text},
+    {extra: '<p class="note-s" style="margin:0 0 10px;white-space:pre-wrap">▌ ' + esc(m0.text) + "</p>"});
 }
-function cancelMsgForm(m0){
-  formDialog({title: "Cancelar " + m0.id, sub: m0.text, fields: [{k: "reason", label: "Motivo", value: "", ph: "opcional"}],
-    preview: v => "brain outbox cancel " + m0.id + (v.reason ? " --reason " + q(v.reason) : ""),
-    run: (v, m) => { m.outbox.find(x => x.id === m0.id).status = "cancelada"; }});
-}
-function feedbackForm(){
-  formDialog({title: "Sugestão ou bug", sub: "porta 7 — vira issue pública no repo do framework · sem dados pessoais",
-    fields: [
-      {k: "kind", label: "Tipo", options: [["sugestao", "💡 sugestão"], ["bug", "🐞 bug"]], value: "sugestao"},
-      {k: "title", label: "Título", value: "", ph: "curto e claro"},
-      {k: "body", label: "Descrição", value: "", ta: true, rows: 5, ph: "o que, onde, como reproduzir"},
-      {k: "pub", label: "Publicar", options: [["agora", "agora — cria a issue já"], ["depois", "depois — só registra (p publica)"]], value: "agora"},
-      {k: "force", label: "Título repetido — criar mesmo assim", options: [["nao", "não"], ["sim", "sim (--force)"]], value: "nao"}],
-    note: v => { const f = (window.BRAIN.M.feedback || []).find(x => x.kind === v.kind &&
-        x.title.trim().toLowerCase() === v.title.trim().toLowerCase());
-      return (f && v.force !== "sim") ? "⚠ mesmo título e tipo de " + f.id + " — acrescente detalhe ao existente ou marque “criar mesmo assim”" : ""; },
-    preview: v => v.title ? "brain feedback add " + q(v.title) + " --kind " + v.kind +
-      (v.body ? " --body " + q(v.body) : "") +
-      (v.pub === "depois" ? " --no-push" : "") + (v.force === "sim" ? " --force" : "") + " --by owner" : null,
-    run: (v, m) => { const n = Math.max(0, ...(m.feedback || []).map(x => +x.id.slice(3))) + 1;
-      (m.feedback = m.feedback || []).unshift({id: "FB-" + String(n).padStart(4, "0"), kind: v.kind,
-        title: v.title, body: v.body || null,
-        status: "pendente", number: null, url: null, error: null, added: m.today}); }});
-}
+function cancelMsgForm(m0){ openForm("outbox.cancel", {id: m0.id, text: m0.text}); }
+function feedbackForm(){ openForm("feedback.new"); }
 function pubAction(act, id0){
-  if (act === "cancel") { formDialog({title: "Cancelar " + id0, fields: [{k: "reason", label: "Motivo", value: ""}],
-    preview: () => "brain publish cancel " + id0,
-    run: (v, m) => { const x = m.publishes.find(y => y.id === id0); if (x) x.status = "cancelada"; }}); return; }
-  if (act === "approve") { formDialog({title: "Aprovar " + id0, gate: true, sub: "porta 3 — resposta literal",
-    fields: [{k: "quote", label: "Resposta literal", value: "ok"}],
-    preview: v => "brain publish approve " + id0 + ' --quote "' + (v.quote || "").replace(/"/g, "'") + '"',
-    run: (v, m) => { const x = m.publishes.find(y => y.id === id0); if (x) x.status = "aprovada"; }}); return; }
+  const s = (window.BRAIN.M.shares || []).find(y => y.id === id0) || {};
+  if (act === "cancel") { runArgv([["publish", "cancel", id0]]); return; }          // como a TUI: cancelar é direto
+  if (act === "approve") { openForm("publish.approve", {id: id0, report: s.report || "", destination: s.destination || ""}); return; }
   if (act === "done") { toast("(agente) publicar é porta do agente — publish done " + id0 + " registra o link ao postar"); return; }
 }
 function pubRequestForm(){
-  const M = window.BRAIN.M;
-  formDialog({title: "Pedir publicação", sub: "o export sai de brain share; a publicação é a porta 3",
-    fields: [
-      {k: "report", label: "Relatório (caminho do share)", value: "reports/share/", ph: "reports/share/…html"},
-      {k: "to", label: "Destino", value: "", ph: "slack:#seu-canal"}],
-    note: v => (v.report.length > 14 && v.to) ? "" : "1º exporta (comando `share`) · depois pedia o caminho + destino aqui",
-    preview: v => (v.report.length > 14 && v.to) ? "brain publish request " + v.report + " --to " + v.to : null,
-    run: (v, m) => { const n = Math.max(0, ...(m.publishes || []).map(x => +x.id.slice(4))) + 1;
-      (m.publishes = m.publishes || []).unshift({id: "PUB-" + String(n).padStart(4, "0"),
-        title: v.title || v.report, to: v.to, status: "solicitada", date: m.today, link: null}); }});
+  const st = window.BRAIN.M.form_static || {};
+  if (!(st.destinations || []).length) { toast("Nenhum destino em [publish].destinations (config/brain.toml). A porta está fechada."); return; }
+  openForm("publish.request", {report: (st.reports || [])[0] || ""});
 }
 function nbForm(kind){
-  const M = window.BRAIN.M;
   if (kind === "note") return noteForm();
   if (kind === "newaction") return newAction();
-  if (kind === "planform") return planForm();
+  if (kind === "planform") return planNew();
   if (kind === "outbox") return draftForm();
   if (kind === "feedback") return feedbackForm();
   if (kind === "pub") return pubRequestForm();
-  if (kind === "decision") return formDialog({title: "Nova decisão", fields: [
-      {k: "title", label: "Decisão", ph: "o que passa a valer"},
-      {k: "by", label: "Quem decidiu", value: M.owner.id, ph: "ids por vírgula"},
-      {k: "project", label: "Projeto", options: projectOpts()},
-      {k: "context", label: "Contexto", ph: "com base em quê"},
-      {k: "rationale", label: "Por quê", value: ""}],
-    preview: v => v.title ? 'brain decision add "' + v.title.replace(/"/g, "'") + '" --decided-by ' + v.by.split(",").map(x => x.trim()).join(" --decided-by ") +
-      (v.project ? " --project " + v.project : "") + (v.context ? " --context " + q(v.context) : "") +
-      (v.rationale ? " --rationale " + q(v.rationale) : "") : null,
-    run: (v, m) => { const n = Math.max(...m.decisions.map(x => +x.id.slice(4))) + 1;
-      m.decisions.unshift({id: "DEC-" + String(n).padStart(4, "0"), title: v.title, date: m.today,
-        decided_by: String(v.by || m.owner.id).split(",").map(x => x.trim()),
-        decided_by_names: String(v.by || m.owner.id).split(",").map(x => (m.people.find(y => y.id === x.trim()) || {name: x}).name),
-        project: v.project || null, context: null, rationale: v.rationale || null, status: "ativa",
-        supersedes: null, superseded_by: null, source_label: "declarado no painel", prov: "declarado"}); }});
-  if (kind === "delivery") return formDialog({title: "Nova entrega", fields: [
-      {k: "title", label: "Título", ph: "o que saiu"},
-      {k: "ref", label: "Ref", value: "", ph: "TASK/PROJ/GOAL"},
-      {k: "result", label: "Resultado", value: ""},
-      {k: "impact", label: "Impacto", value: ""},
-      {k: "evidence", label: "Evidência", value: "", ph: "caminho do artefato/RAW (opcional)"}],
-    preview: v => v.title ? 'brain delivery "' + v.title.replace(/"/g, "'") + '"' + (v.ref ? " --ref " + v.ref : "") +
-      (v.result ? ' --result "' + v.result.replace(/"/g, "'") + '"' : "") + (v.impact ? ' --impact "' + v.impact.replace(/"/g, "'") + '"' : "") +
-      (v.evidence ? ' --evidence "' + v.evidence.replace(/"/g, "'") + '"' : "") : null,
-    run: (v, m) => { m.deliveries.unshift({id: "W" + Date.now(), title: v.title, date: m.today, ref: v.ref || null,
-      project: v.ref && v.ref.startsWith("PROJ") ? v.ref : null, result: v.result || "resultado não declarado",
-      impact: v.impact || null, prov: "declarado", source_label: "declarado no painel"}); }});
-  if (kind === "person") return formDialog({title: "Nova pessoa", fields: [
-      {k: "name", label: "Nome", ph: "Nome Sobrenome"},
-      {k: "pid", label: "ID (só p/ ficha do dono no dia zero)", value: "", ph: "deixe vazio"},
-      {k: "role", label: "Papel", value: ""},
-      {k: "relation", label: "Relação", value: ""},
-      {k: "email", label: "E-mail", value: ""},
-      {k: "alias", label: "Alias", value: "", ph: "apelido"}],
-    preview: v => v.name ? "brain person add " + q(v.name) + (v.pid ? " --id " + v.pid : "") + " --role " + q(v.role || "—") + " --relation " + q(v.relation || "—") +
-      (v.email ? " --email " + q(v.email) : "") + (v.alias ? " --alias " + v.alias : "") : null,
-    run: (v, m) => { const id0 = norm(v.name).replace(/[^a-z]+/g, "-").replace(/^-|-$/g, "");
-      m.people.push({id: id0, name: v.name, aliases: v.alias ? [v.alias] : [], role: v.role || null, relation: v.relation || null,
-        email: null, is_owner: false, last_interaction: null, owes_me: [], i_owe: [], decisions: [], artifacts: [], projects: [], mentions: 0}); }});
-  if (kind === "process") return formDialog({title: "Novo processo", fields: [
-      {k: "title", label: "Título", ph: "o processo"},
-      {k: "area", label: "Área", options: areaOpts()},
-      {k: "owner", label: "Responsável", options: peopleOpts()},
-      {k: "executors", label: "Executores", ph: "ids por vírgula"},
-      {k: "recurrence", label: "Recorrência", options: [["diaria", "diária"], ["semanal", "semanal"], ["mensal", "mensal"], ["trimestral", "trimestral"]]},
-      {k: "perMonth", label: "Execuções/mês", type: "number"},
-      {k: "duration", label: "Duração", ph: "90m · 2h"},
-      {k: "maturity", label: "Maturidade (1-5)", options: [["", "—"], ["1", "1"], ["2", "2"], ["3", "3"], ["4", "4"], ["5", "5"]]},
-      {k: "tools", label: "Ferramentas", ph: "por vírgula"},
-      {k: "io", label: "Entrada → saída"},
-      {k: "pains", label: "Dores", ph: "por vírgula"},
-      {k: "note", label: "Nota"}],
-    preview: v => {
-      if (!v.title) return null;
-      let c = "brain process add " + q(v.title) + " --area " + v.area + " --owner " + v.owner;
-      if (v.recurrence) c += " --recurrence " + v.recurrence;
-      if (v.executors) c += " --executor " + v.executors.replace(/\s/g, "");
-      if (v.perMonth) c += " --per-month " + v.perMonth;
-      if (v.duration) c += " --duration " + v.duration;
-      if (v.maturity) c += " --maturity " + v.maturity;
-      if (v.tools) c += " --tools " + q(v.tools);
-      if (v.io) c += " --io " + q(v.io);
-      if (v.pains) c += " --pain " + q(v.pains);
-      if (v.note) c += " --note " + q(v.note);
-      return c;
-    },
-    run: (v, m) => { const n = Math.max(0, ...m.portfolio.processes.map(x => +x.id.slice(5))) + 1;
-      m.portfolio.processes.push({id: "PROC-" + String(n).padStart(4, "0"), title: v.title, area: v.area,
-        owner: v.owner, owner_name: (m.people.find(x => x.id === v.owner) || {name: v.owner}).name, executors: [],
-        recurrence: v.recurrence, hours_month: null, tools: [], io: null, pains: [], maturity: null,
-        status: "ativo", opportunities: [], gaps: [], docs: []}); }});
-  if (kind === "area") return formDialog({title: "Nova área", fields: [
-      {k: "slug", label: "Slug", ph: "producao"},
-      {k: "name", label: "Nome", ph: "Produção"},
-      {k: "alias", label: "Também chamada", ph: "Cozinha"},
-      {k: "note", label: "Nota"}],
-    preview: v => (v.slug && v.name) ? "brain area add " + v.slug + " --name " + q(v.name) +
-      (v.alias ? " --alias " + q(v.alias) : "") + (v.note ? " --note " + q(v.note) : "") : null,
-    run: (v, m) => { m.portfolio.areas.push({id: v.slug, name: v.name, aliases: [], note: null}); }});
+  if (kind === "decision") return openForm("decision.new");
+  if (kind === "delivery") return openForm("delivery.new");
+  if (kind === "person") return openForm("person.new");
+  if (kind === "process") return needArea() && openForm("process.new");
+  if (kind === "area") return openForm("area.new");
+}
+function needArea(){                                   // processo e oportunidade pedem área (como a TUI): sem nenhuma, cadastra
+  if ((window.BRAIN.M.portfolio || {}).areas && window.BRAIN.M.portfolio.areas.length) return true;
+  toast("Cadastre uma área primeiro (Portfólio › Áreas, tecla n)."); openForm("area.new"); return false;
 }
 function wireP0(){
   document.querySelectorAll("#view [data-deliv] .dmark").forEach(b => b.onclick = () => delivToggle(b.closest("li").dataset.deliv));
@@ -574,97 +405,35 @@ function wireP0(){
 }
 
 // ── nota, estrutura do plano, mesclar ação ───────────────────────────────
-function noteForm(){
-  const M = window.BRAIN.M;
-  const links = [["", "— sem vínculo —"],
-    ...M.actions.filter(a => a.open).slice(0, 30).map(a => [a.id, a.id + " " + a.title]),
-    ...M.goals.map(g => [g.id, g.id + " " + g.title]),
-    ...M.projects.map(x => [x.id, x.id + " " + x.title])];
-  formDialog({title: "Nota rápida", sub: "vai para a inbox — o /dump arquiva e vincula",
-    fields: [{k: "text", label: "Texto", value: "", ta: true, rows: 5},
-      {k: "link", label: "Vínculo", options: links}],
-    preview: v => v.text ? "brain note add --text \"" + v.text.replace(/"/g, "'") + "\"" +
-      (v.link ? " --link " + v.link : "") : null,
-    run: (v, m) => { toast(LIVE ? "nota na inbox — o /dump arquiva" : "retrato — comando copiado"); }});
+function noteForm(){                                   // vínculo: o item aberto ou selecionado (ação, goal, projeto, entregável)
+  const h = decodeURIComponent(location.hash.slice(1).split("?")[0]), sel = selId() || "";
+  const page = (h.match(/^(?:action|project|goal)\/(.+)$/) || [])[1] || "";
+  const link = [page, sel].find(x => /^(TASK-\d{4,}|GOAL-\d+|PROJ-\d+(\.\d+)?)$/.test(x)) || "";
+  openForm("note.add", {text: "", link: link});
 }
-function shareForm(){                                 // mesmo formulário da TUI (S exportar na árvore)
-  const M = window.BRAIN.M;
-  formDialog({title: "Exportar (share)", sub: "export datado em reports/share — sai da máquina só pelas portas",
-    fields: [
-      {k: "kind", label: "O quê", options: [["status", "status"], ["goal", "goal"], ["project", "projeto"]], value: "status"},
-      {k: "target", label: "Goal/Projeto", options: [["", "—"], ...M.goals.map(g => [g.id, g.id + " " + g.title]),
-        ...M.projects.map(x => [x.id, x.id + " " + x.title])]},
-      {k: "fmt", label: "Formato", options: [["html", "html"], ["md", "md"]], value: "html"}],
-    preview: v => "brain share " + v.kind + (v.target && v.kind !== "status" ? " " + v.target : "") + " --format " + v.fmt,
-    run: (v, m) => {}});
+function shareForm(){                                  // mesmo formulário da TUI (S exportar na árvore)
+  const id = selId() || "", kind = id.startsWith("GOAL-") ? "goal" : /^PROJ-\d+$/.test(id) ? "project" : "status";
+  openForm("share.export", {kind: kind, target: kind === "status" ? "" : id});
 }
-function planForm(){
-  const M = window.BRAIN.M;
-  formDialog({title: "Estrutura do plano", sub: "goal e projeto são gate estrutural (aprovação literal); entregável não",
-    fields: [
-      {k: "kind", label: "Criar", options: [["goal", "goal"], ["projeto", "projeto"], ["deliverable", "entregável"]]},
-      {k: "title", label: "Título", value: ""},
-      {k: "goal", label: "Goal (projeto/entregável)", options: M.goals.map(g => [g.id, g.id + " — " + g.title])},
-      {k: "project", label: "Projeto (entregável)", options: M.projects.map(x => [x.id, x.id + " — " + x.title])},
-      {k: "owner", label: "Dono (projeto)", options: M.people.map(x => [x.id, x.name])},
-      {k: "horizon", label: "Horizonte (goal)", value: "", ph: "AAAA-MM-DD"},
-      {k: "why", label: "Por quê (goal)", value: ""},
-      {k: "due", label: "Prazo (entregável)", value: "", ph: "AAAA-MM-DD"},
-      {k: "weight", label: "Peso (entregável)", type: "number", value: "1"},
-      {k: "approval", label: "Aprovação literal", value: "ok"}],
-    preview: v => {
-      if (!v.title) return null;
-      const q = t => '"' + t.replace(/"/g, "'") + '"';
-      if (v.kind === "goal") return 'brain plan add-goal ' + q(v.title) +
-        (v.horizon ? " --horizon " + v.horizon : "") + (v.why ? " --why " + q(v.why) : "") +
-        ' --approval "' + (v.approval || "").replace(/"/g, "'") + '"';
-      if (v.kind === "projeto") return 'brain plan add-project ' + v.goal + " " + q(v.title) +
-        (v.owner ? " --owner " + v.owner : "") + ' --approval "' + (v.approval || "").replace(/"/g, "'") + '"';
-      return 'brain plan add-deliverable ' + v.project + " " + q(v.title) +
-        (v.due ? " --due " + v.due : "") + (v.weight ? " --weight " + v.weight : "");
-    },
-    run: (v, m) => {}});
+function planNew(){                                    // n na árvore: o que nasce depende do item (como a TUI)
+  const M = window.BRAIN.M, id = selId() || "";
+  const nextN = (ids, re) => Math.max(0, ...ids.map(x => (x.match(re) || [])[1]).filter(Boolean).map(Number)) + 1;
+  const goal = M.goals.find(g => g.id === id), proj = M.projects.find(p => p.id === id);
+  if (goal) return openForm("project.new", {nid: "PROJ-" + nextN(M.projects.map(p => p.id), /^PROJ-(\d+)$/), goal: goal.id, goal_title: goal.title});
+  if (proj) return openForm("deliverable.new", {nid: proj.id + "." + nextN((proj.deliverables || []).map(d => d.id), /\.(\d+)$/),
+    project: proj.id, project_title: proj.title});
+  const dv = selEl() && selEl().dataset.deliv;
+  if (dv) { const pr = M.projects.find(p => (p.deliverables || []).some(d => d.id === dv));
+    return newAction({project: pr ? pr.id : "—", deliv: dv}); }
+  return planGoal();
 }
-function mergeForm(a){
-  formDialog({title: "Mesclar " + a.id, sub: '"' + a.title + '" é duplicada — o que ela tem passa para a que fica',
-    fields: [{k: "into", label: "Mesclar em (TASK)", value: "", ph: "TASK-####"},
-      {k: "reason", label: "Motivo", value: ""}],
-    preview: v => v.into ? "brain action merge " + a.id + " --into " + v.into +
-      (v.reason ? ' --reason "' + v.reason.replace(/"/g, "'") + '"' : "") : null,
-    run: (v, m) => {}});
-}
+function planGoal(){ const M = window.BRAIN.M;
+  const n = Math.max(0, ...M.goals.map(g => +(g.id.match(/^GOAL-(\d+)$/) || [0, 0])[1])) + 1;
+  openForm("goal.new", {nid: "GOAL-" + n}); }
+function mergeForm(a){ openForm("action.merge", {id: a.id, title: a.title, item: a}); }
 
 // ── kanban de oportunidades: arrastar = brain opportunity status (laterais pedem motivo) ──
 const OPP_LAT = ["em-espera", "descartada"];
-function oppMut(id, stage, reason){
-  return m => {
-    const x = m.portfolio.opportunities.find(y => y.id === id);
-    x.status_history.unshift({date: m.today, from: x.status, to: stage, reason: reason || null});
-    x.status = stage;
-  };
-}
-function oppReasonDialog(id, stage){
-  const ov = document.createElement("div"); ov.className = "pal-back open";
-  ov.innerHTML = '<div class="palette"><div class="pin"><b>' + esc(id) + " → " + esc(stage) + '</b><span class="hint">lateral</span></div>' +
-    '<div class="pal-confirm open" style="display:block;border-top:0;padding:14px 16px">' +
-    '<p class="note-s" style="margin:0 0 8px">Estágio lateral exige motivo (fica no histórico do ledger):</p>' +
-    '<input class="rin" id="rin" value="" placeholder="por quê? (fica no histórico do ledger)" spellcheck="false">' +
-    '<div class="cline" id="rin-cmd"></div>' +
-    '<div class="row"><span class="note-s"></span><button class="btn ghost" data-x>cancelar</button><button class="btn primary" data-ok>mover</button></div></div></div>';
-  document.body.appendChild(ov);
-  const cmdOf = r => "$ brain opportunity status " + id + " " + stage + ' --reason "' + r.replace(/"/g, "'") + '"';
-  ov.querySelector("#rin-cmd").textContent = cmdOf(ov.querySelector("#rin").value);
-  ov.querySelector("#rin").addEventListener("input", e => { ov.querySelector("#rin-cmd").textContent = cmdOf(e.target.value); });
-  ov.querySelector("[data-x]").onclick = () => ov.remove();
-  ov.onclick = e => { if (e.target === ov) ov.remove(); };
-  ov.querySelector("[data-ok]").onclick = () => {
-    const reason = ov.querySelector("#rin").value.trim();
-    if (!reason) { toast("estágio lateral exige motivo — o CLI recusa sem --reason"); return; }
-    const cmd = "brain opportunity status " + id + " " + stage + ' --reason "' + reason.replace(/"/g, "'") + '"';
-    ov.remove();
-    runCommand(cmd, oppMut(id, stage, reason));
-  };
-}
 function wireOppKanban(){
   let dragOpp = null;
   document.querySelectorAll("#view .pf-card").forEach(el => {
@@ -688,8 +457,9 @@ function wireOppKanban(){
       const stage = col.dataset.stage;
       const o = window.BRAIN.M.portfolio.opportunities.find(x => x.id === id);
       if (!o || o.status === stage) return;
-      if (OPP_LAT.includes(stage)) { oppReasonDialog(id, stage); return; }
-      runCommand("brain opportunity status " + id + " " + stage, oppMut(id, stage));
+      if (stage === "em-andamento" && !(o.promoted || o.project)) { toast(id + ": 'em-andamento' só existe depois de promover (tecla p, em qualquer nível)."); return; }
+      if (OPP_LAT.includes(stage)) { statusPicker(o, stage); return; }      // laterais pedem motivo: o formulário da TUI
+      runArgv([["opportunity", "status", id, stage, "--by", "owner"]]);
     });
   });
 }
@@ -714,7 +484,7 @@ let dragId = null, lastMoved = null;
 //    um select por slot, "manter" nos que não mudam — o preview monta só a linha do slot escolhido) ──
 function wireCfgMemoria(){
   const b = document.querySelector("[data-provform]");
-  if (b) b.onclick = () => formDialog(provFormSpec());
+  if (b) b.onclick = () => provForm();
   document.querySelectorAll("#view [data-hw]").forEach(btn => {
     btn.onclick = () => runCommand("brain memory harness install " + btn.dataset.hw, m => {
       const x = (m.harnesses || []).find(y => y.name === btn.dataset.hw);
@@ -725,43 +495,9 @@ function wireCfgMemoria(){
   if (v) v.onclick = () => runCommand("brain memory harness verify", () => {});
 }
 
-function provFormSpec(){
-  return {
-    title: "Trocar provedor da memória",
-    sub: "A escolha vai ao config/.env (chave nunca volta em output) e ao [memory]. Recrie o container depois para aplicar.",
-    fields: [
-      {k: "llm", label: "LLM (só modo full)", options: [["", "manter"], ["anthropic", "Anthropic (Haiku/Sonnet cenário B)"],
-        ["openai", "OpenAI"], ["fireworks", "Fireworks"], ["zai", "Z.ai (GLM)"], ["lmstudio", "LM Studio (local)"], ["custom", "custom"]], value: ""},
-      {k: "embeddings", label: "Embeddings", options: [["", "manter"], ["local", "Local — LM Studio bge-m3 (zero egress)"],
-        ["fireworks", "Fireworks — Qwen3-Embedding-8B"], ["openai", "OpenAI"], ["cohere", "Cohere"], ["custom", "custom"]], value: ""},
-      {k: "reranker", label: "Reranker", options: [["", "manter"], ["off", "off — fusão RRF (recomendado)"],
-        ["fireworks", "Fireworks — Qwen3-Reranker-8B"], ["cohere", "Cohere"], ["zeroentropy", "ZeroEntropy"],
-        ["openrouter", "OpenRouter"], ["custom", "custom"]], value: ""},
-      {k: "model", label: "modelo", ph: "vazio = recomendado do provedor"},
-      {k: "base_url", label: "base URL", ph: "custom / openai-wire"},
-      {k: "key", label: "API key", type: "password", ph: "vazio = mantém a do config/.env"},
-      {k: "models", label: "modelos por operação (LLM)", ph: "retain=…,consolidation=… (vazio = recomendados)"},
-      {k: "candidates", label: "top-N candidatos (reranker)", ph: "vazio = default do provedor"}
-    ],
-    preview(v){
-      const slot = ["llm", "embeddings", "reranker"].find(s => v[s]);
-      if (!slot) return null;
-      let c = "brain memory providers set " + slot + " --provider " + v[slot];
-      if (v.model) c += " --model " + v.model;
-      if (v.base_url) c += " --base-url " + v.base_url;
-      if (v.key) c += " --key " + v.key;
-      if (slot === "llm" && v.models) c += " --models " + v.models;
-      if (slot === "reranker" && v.candidates) c += " --candidates " + v.candidates;
-      return c;
-    },
-    note(v){
-      const slot = ["llm", "embeddings", "reranker"].find(s => v[s]);
-      if (slot && v[slot] !== "local" && v[slot] !== "off") return "☁ nuvem: texto do vault vai à API do provedor (mesmo gate de egress do plano).";
-      if (slot === "embeddings") return "trocar embeddings pede o rebuild da memória: vetores antigos ficam incompatíveis.";
-      return "";
-    },
-    run: () => {}
-  };
+function provForm(){
+  const cur = ((window.BRAIN.M.providers || {}).embeddings || {}).provider || "local";
+  openForm("memory.provider", {provider: cur});
 }
 
 window.afterRoute = function(view){
@@ -947,52 +683,83 @@ function navStep(dir){
 
 // ── genérico: dialog de formulário → linha brain … (preview vivo) ───────
 let dlgOpen = false;
-function formDialog(o){          // {title, sub, fields[{k,label,type,value,options,note(v),fill:{on,set(v)→valor|undefined}}], gate, note(v), help()→html, preview(v)→cmd, run(cmd,v)}
+// openForm: o formulário <id> de brainlib/forms.py (M.forms) — campos, rótulos, obrigatórios, quando cada um aparece,
+// validação, dicas e a linha `brain …` saem da MESMA especificação da TUI (forms.js). Aqui só se desenha.
+// opts: {values: valor inicial por cima do da especificação, extra: html fixo acima dos campos, help()→html,
+//        wrap(cmds, v)→cmds (passos só do painel), run(v, m): mutação otimista do modo retrato}
+function openForm(id, ctx, opts){
+  opts = opts || {}; ctx = ctx || {};
+  const M = window.BRAIN.M, F = window.BRAIN_FORMS, fm = (M.forms || {})[id];
+  if (!fm) { toast("formulário " + id + " indisponível nesta página"); return; }
+  const init = Object.assign(F.initial(fm, ctx, M), opts.values || {});
+  const opt = (f, v) => F.options(f, M, v, ctx);
+  const optHTML = (f, v, cur) => { const ops = opt(f, v), val = ops.some(o => o[0] === cur) ? cur : (ops[0] ? ops[0][0] : "");
+    return ops.map(o => '<option value="' + esc(o[0]) + '"' + (o[0] === val ? " selected" : "") + ">" + esc(o[1]) + "</option>").join(""); };
+  const rows = fm.fields.map(f => {
+    const lab = esc(F.label(f, M)) + (f.req ? ' <span class="req">*</span>' : ""), ph = F.fmt(f.ph || "", ctx), val = init[f.id] || "";
+    const ctl = f.choices !== undefined ? '<select data-k="' + f.id + '">' + optHTML(f, init, val) + "</select>"
+      : f.multi ? '<textarea data-k="' + f.id + '" rows="5"' + (ph ? ' placeholder="' + esc(ph) + '"' : "") + ">" + esc(val) + "</textarea>"
+      : '<input data-k="' + f.id + '" type="' + (f.secret ? "password" : "text") + '" value="' + esc(val) + '"' +
+        (ph ? ' placeholder="' + esc(ph) + '"' : "") + (f.suggest ? ' list="dl_' + f.id + '"' : "") + ">" +
+        (f.suggest ? '<datalist id="dl_' + f.id + '">' + opt(f, init).map(o => '<option value="' + esc(o[0]) + '">' + esc(o[1]) + "</option>").join("") + "</datalist>" : "");
+    return '<div data-row="' + f.id + '"><div class="frow"><label>' + lab + "</label>" + ctl + "</div>" +
+      '<div class="note-s fhint" data-hint="' + f.id + '" style="margin:-4px 0 8px 130px"></div></div>'; }).join("");
+  const title = F.fmt(fm.title, ctx), sub = F.fmt(fm.sub || "", ctx);
   const ov = document.createElement("div"); ov.className = "pal-back open";
-  const f = o.fields.map(x => '<div class="frow"><label>' + esc(x.label) + "</label>" +
-    (x.options ? '<select data-k="' + x.k + '">' + x.options.map(op => '<option value="' + esc(op[0]) + '"' + (op[0] === x.value ? " selected" : "") + ">" + esc(op[1] || op[0]) + "</option>").join("") + "</select>"
-      : x.ta ? '<textarea data-k="' + x.k + '" rows="' + (x.rows || 4) + '"' + (x.ph ? ' placeholder="' + esc(x.ph) + '"' : "") + ">" + esc(x.value ?? "") + "</textarea>"
-      : '<input data-k="' + x.k + '" type="' + (x.type || "text") + '" value="' + esc(x.value ?? "") + '"' + (x.ph ? ' placeholder="' + esc(x.ph) + '"' : "") + ">") + "</div>" +
-      (x.note ? '<div class="note-s fhint" data-hint="' + esc(x.k) + '" style="margin:-4px 0 8px 130px"></div>' : "")).join("");
-  ov.innerHTML = '<div class="palette"><div class="pin"><b>' + esc(o.title) + "</b>" + (o.gate ? ' <span class="gatebadge">gate — precisa do seu ok literal</span>' : "") + '</div>' +
+  ov.innerHTML = '<div class="palette"><div class="pin"><b>' + esc(title) + "</b>" + (fm.gate ? ' <span class="gatebadge">gate — precisa do seu ok literal</span>' : "") + "</div>" +
     '<div class="pal-confirm open" style="display:block;border-top:0;padding:14px 16px;max-height:70vh;overflow:auto">' +
-    (o.sub ? '<p class="note-s" style="margin:0 0 10px">' + esc(o.sub) + "</p>" : "") + f +
-    '<div class="note-s" data-note style="margin:0 0 6px;white-space:pre-line"></div>' +
-    '<div class="cline" data-preview style="min-height:34px"></div>' +
-    '<div class="row"><span class="note-s">mesma linha que a TUI roda</span>' +
-    (o.help ? '<button class="btn ghost" data-help> ? orientações</button>' : "") +
-    '<button class="btn ghost" data-x>cancelar</button><button class="btn primary" data-ok>' + (o.gate ? "aprovar (ok)" : "executar") + "</button></div></div></div>";
+    (sub ? '<p class="note-s" style="margin:0 0 10px">' + esc(sub) + "</p>" : "") + (opts.extra || "") + rows +
+    '<div class="cline" data-preview style="min-height:34px;white-space:pre"></div>' +
+    '<div class="note-s" data-err style="margin:0 0 6px;color:var(--risk)"></div>' +
+    '<div class="row"><span class="note-s">mesma linha que a TUI roda · ' + (fm.fields.some(f => f.multi) ? "ctrl+enter" : "enter") + " confirma · esc cancela</span>" +
+    (opts.help ? '<button class="btn ghost" data-help>? orientações</button>' : "") +
+    '<button class="btn ghost" data-x>cancelar</button><button class="btn primary" data-ok>' + (fm.gate ? "aprovar" : fm.fields.length ? "executar" : "confirmar") + "</button></div></div></div>";
   document.body.appendChild(ov); dlgOpen = true;
-  const close = () => { ov.remove(); dlgOpen = false; if (h2) document.removeEventListener("keydown", h2, true); };
-  const vals = () => { const v = {}; ov.querySelectorAll("[data-k]").forEach(el => v[el.dataset.k] = el.value); return v; };
-  const paint = () => { const p = ov.querySelector("[data-preview]"); const c = o.preview(vals()); p.textContent = c ? "$ " + c : "$ (preencha os campos)";
-    const n = ov.querySelector("[data-note]"); if (n) n.textContent = o.note ? (o.note(vals()) || "") : "";
-    ov.querySelectorAll("[data-hint]").forEach(el => { const x = o.fields.find(y => y.k === el.dataset.hint);
-      el.textContent = x && x.note ? (x.note(vals()[x.k]) || "") : ""; }); };
-  // campo que se preenche sozinho quando outro muda (ex.: lista mine → dono = você); `undefined` não mexe no que a pessoa escolheu
-  const follow = ch => o.fields.filter(x => x.fill && x.fill.on === ch).forEach(x => {
-    const nv = x.fill.set(vals()), el = ov.querySelector('[data-k="' + x.k + '"]');
-    if (nv !== undefined && el && (el.tagName !== "SELECT" || [...el.options].some(op => op.value === nv))) el.value = nv; });
-  ov.querySelectorAll("[data-k]").forEach(el => el.addEventListener("input", () => { follow(el.dataset.k); paint(); }));
-  ov.querySelectorAll("select[data-k]").forEach(el => el.addEventListener("change", () => { follow(el.dataset.k); paint(); }));
-  paint();
-  // ? abre as orientações (o.help) mesmo com o foco num select — antes do handler global, que ignora teclas com dialog aberto
   let h2 = null;
-  if (o.help) {
-    h2 = ev => { if (ev.key !== "?" || document.querySelector(".help-stack")) return;
-      ev.preventDefault(); ev.stopPropagation(); stackHelp("Metodologia · ICE", o.help()); };
+  const close = () => { ov.remove(); dlgOpen = false; if (h2) document.removeEventListener("keydown", h2, true); };
+  const el = k => ov.querySelector('[data-k="' + k + '"]');
+  const vals = () => { const v = {}; fm.fields.forEach(f => { const e = el(f.id); v[f.id] = e ? e.value : ""; }); return v; };
+  const paint = () => {
+    const v = vals(), hid = F.hidden(fm, v, ctx, M), w = F.values(fm, v, ctx, M);
+    fm.fields.forEach(f => { const row = ov.querySelector('[data-row="' + f.id + '"]'); row.hidden = hid.has(f.id);
+      const h = ov.querySelector('[data-hint="' + f.id + '"]'); h.textContent = f.hint && w[f.id] ? F.hint(f.hint, w[f.id], w, ctx, M) : ""; });
+    ov.querySelector("[data-preview]").textContent = "$ " + F.display(F.formArgv(fm, v, ctx, M)).replace(/\n/g, "\n$ ");
+    ov.querySelector("[data-err]").textContent = "";
+  };
+  const changed = id0 => {
+    fm.fields.filter(f => f.depends === id0 && f.choices !== undefined).forEach(f => { const e = el(f.id); e.innerHTML = optHTML(f, vals(), e.value); });
+    fm.fields.filter(f => f.fill && f.fill[0] === id0).forEach(f => { const nv = F.FILL[f.fill[1]](vals()), e = el(f.id);
+      if (nv !== undefined && e) e.value = nv; });
+    paint();
+  };
+  const submit = () => {
+    const v = vals(), msg = F.missing(fm, v, ctx, M);
+    if (msg) { ov.querySelector("[data-err]").textContent = msg; const p = ov.querySelector("[data-preview]");
+      p.classList.add("miss"); setTimeout(() => p.classList.remove("miss"), 600); return; }
+    let cmds = F.formArgv(fm, v, ctx, M); if (opts.wrap) cmds = opts.wrap(cmds, F.values(fm, v, ctx, M));
+    close();
+    runArgv(cmds, m => opts.run && opts.run(F.values(fm, v, ctx, M), m));
+  };
+  ov.querySelectorAll("[data-k]").forEach(e => { e.addEventListener("input", () => changed(e.dataset.k));
+    if (e.tagName === "SELECT") e.addEventListener("change", () => changed(e.dataset.k));
+    e.addEventListener("keydown", ev => { if (ev.key === "Enter" && (e.tagName !== "TEXTAREA" || ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); submit(); } }); });
+  paint();
+  if (opts.help) {                       // ? abre as orientações mesmo com o foco num select
+    h2 = ev => { if (ev.key !== "?" || document.querySelector(".help-stack") || /input|textarea/i.test(ev.target.tagName || "")) return;
+      ev.preventDefault(); ev.stopPropagation(); stackHelp("Metodologia · ICE", opts.help()); };
     document.addEventListener("keydown", h2, true);
-    ov.querySelector("[data-help]").onclick = () => stackHelp("Metodologia · ICE", o.help());
+    ov.querySelector("[data-help]").onclick = () => stackHelp("Metodologia · ICE", opts.help());
   }
   ov.querySelector("[data-x]").onclick = close;
   ov.onclick = e => { if (e.target === ov) close(); };
-  ov.querySelector("[data-ok]").onclick = () => {
-    const v = vals(), cmd = o.preview(v);
-    if (!cmd) { ov.querySelector("[data-preview]").classList.add("miss"); setTimeout(() => ov.querySelector("[data-preview]").classList.remove("miss"), 600); return; }
-    close();
-    runCommand(cmd, m => o.run && o.run(v, m));   // runCommand aplica ownerCmd (--by owner) nos dois modos
-  };
-  const first = ov.querySelector("input,select,textarea"); if (first) first.focus();
+  ov.querySelector("[data-ok]").onclick = submit;
+  const first = ov.querySelector("input,select,textarea"); if (first) first.focus(); else ov.querySelector("[data-ok]").focus();
+}
+// comandos da especificação: em sequência no modo vivo (para no primeiro que falhar); no retrato, a linha vai copiada
+async function runArgv(cmds, mut){
+  const lines = cmds.map(c => "brain " + window.BRAIN_FORMS.shjoin(c));
+  if (!LIVE) { offlineCmd(lines.join(" && ")); return; }
+  for (const ln of lines) { if (!(await serveRun(ln))) return; }
 }
 // overlay de orientações empilhável por cima do formulário aberto: Esc/? fecham SÓ a ajuda (capture, antes do global)
 function stackHelp(title, html){
@@ -1008,196 +775,34 @@ function stackHelp(title, html){
 function needSel(){ toast("selecione um item primeiro (j/k ou passe o mouse) e tente de novo"); }
 
 // lista mine é sempre do dono do Brain: escolher mine preenche o dono com você; sair de mine limpa só o que era você
-const ownerFill = M => ({on: "list", set: v => v.list === "mine" ? M.owner.id : (v.owner === M.owner.id ? "" : undefined)});
 
 // ── editar entidades (tecla e nas fichas, como a TUI) ───────────────────
 const A_OF = id => window.BRAIN.M.actions.find(x => x.id === id);
-function editAction(a){
-  const M = window.BRAIN.M;
-  const eff0 = a.effort_min >= 60 ? (a.effort_min % 60 ? Math.floor(a.effort_min / 60) + "h" + (a.effort_min % 60) + "m" : Math.floor(a.effort_min / 60) + "h") : (a.effort_min ? a.effort_min + "m" : "");
-  formDialog({title: "Editar " + a.id, sub: a.title, fields: [
-      {k: "title", label: "Título", value: a.title},
-      {k: "due", label: "Prazo (vazio remove)", type: "date", value: a.due || ""},
-      {k: "effort", label: "Esforço", value: eff0},
-      {k: "priority", label: "Prioridade", options: [["normal", "normal"], ["alta", "alta"], ["baixa", "baixa"]], value: a.priority || "normal"},
-      {k: "project", label: "Projeto", options: projectOpts(), value: a.project || ""},
-      {k: "deliverable", label: "Entregável", ph: "PROJ-#.#", value: a.deliverable || ""},
-      {k: "blocked", label: "Bloqueada por", ph: "TASK-#### (a CLI não remove bloqueio)", value: (a.blocked_by || []).join(",")},
-      {k: "people", label: "Pessoas (+)", ph: "adiciona: ids por vírgula"},
-      {k: "list", label: "Lista", options: [["mine", "minhas"], ["waiting", "aguardando outro"], ["watching", "observando"]], value: a.list},
-      {k: "owner", label: "Dono", options: peopleOpts(), value: a.list === "mine" ? M.owner.id : a.owner, fill: ownerFill(M)},
-      {k: "note", label: "Nota (histórico)", ph: "vai para o histórico da ação"}],
-    preview: v => {
-      let c = "brain action update " + a.id;
-      if (v.title && v.title !== a.title) c += " --title " + q(v.title);
-      if (v.due !== (a.due || "")) c += v.due ? " --due " + v.due : " --clear-due";
-      if (v.effort && v.effort !== eff0) c += " --effort " + v.effort;
-      if (v.priority !== (a.priority || "normal")) c += " --priority " + v.priority;
-      if (v.project !== (a.project || "")) c += " --project " + v.project;
-      if (v.deliverable && v.deliverable !== (a.deliverable || "")) c += " --deliverable " + v.deliverable;
-      if (v.blocked && v.blocked.replace(/\s/g, "") !== (a.blocked_by || []).join(",")) c += " --blocked-by " + v.blocked.replace(/\s/g, "");
-      const novos = v.people.split(",").map(x => x.trim()).filter(x => x && !(a.people || []).includes(x));
-      if (novos.length) c += " --people " + novos.join(",");
-      if (v.list !== a.list) c += " --list " + v.list;
-      if (v.owner && v.owner !== a.owner) c += " --owner " + v.owner;
-      if (v.note) c += " --note " + q(v.note);
-      return c === "brain action update " + a.id ? null : c;
-    },
-    run: (v, m) => { const x = m.actions.find(y => y.id === a.id);
-      if (v.title) x.title = v.title; if (v.due) x.due = v.due; if (v.priority) x.priority = v.priority; }});
+function editAction(a){ openForm("action.edit", {id: a.id, title: a.title, item: a}); }
+function newAction(pre){
+  pre = pre || {};
+  const M = window.BRAIN.M, ficha = M.people.find(x => x.id === M.owner.id);
+  const lst = (new URLSearchParams(location.hash.split("?")[1] || "").get("l")) || "mine";
+  const deliv = pre.deliv || "", proj = pre.project || "—";
+  openForm("action.new", {list: lst, owner: lst === "mine" ? "eu" : "", deliv: deliv, project: proj, item: {project: proj},
+    in_deliv: deliv ? " em " + deliv : ""},
+    {extra: ficha ? "" : '<p class="note-s late">⚠ a ficha do dono (' + esc(M.owner.id) + ") não existe — o CLI vai recusar até registrar</p>"});
 }
-function newAction(){
-  const M = window.BRAIN.M;
-  const ficha = M.people.find(x => x.id === M.owner.id);
-  formDialog({title: "Nova ação",
-    sub: ficha ? undefined : "⚠ a ficha do dono (" + M.owner.id + ") não existe — o CLI vai recusar até registrar",
-    fields: [
-      {k: "title", label: "Título", ph: "o que precisa ser feito"},
-      {k: "list", label: "Lista", options: [["mine", "minhas"], ["waiting", "aguardando outro"], ["watching", "observando"]], value: "mine"},
-      {k: "owner", label: "Dono", options: peopleOpts(), value: M.owner.id, fill: ownerFill(M)},
-      {k: "due", label: "Prazo", type: "date", value: ""},
-      {k: "effort", label: "Esforço", ph: "90m · 2h · 1h30"},
-      {k: "priority", label: "Prioridade", options: [["normal", "normal"], ["alta", "alta"], ["baixa", "baixa"]], value: "normal"},
-      {k: "project", label: "Projeto", options: projectOpts()},
-      {k: "deliverable", label: "Entregável", ph: "PROJ-#.# do projeto escolhido"},
-      {k: "people", label: "Pessoas", ph: "adiciona: marina-demo, heitor-demo"},
-      {k: "blocked", label: "Bloqueada por", ph: "TASK-####"},
-      {k: "unblocks", label: "Destrava", ph: "TASK-####"},
-      {k: "link", label: "Origem (link)", ph: "URL ou arquivo"}],
-    preview: v => {
-      if (!v.title) return null;
-      let c = "brain action open " + q(v.title) + " --force";
-      if (v.list !== "mine") c += " --list " + v.list;
-      if (v.owner && v.owner !== M.owner.id) c += " --owner " + v.owner;
-      if (v.due) c += " --due " + v.due;
-      if (v.effort) c += " --effort " + v.effort;
-      if (v.project) c += " --project " + v.project;
-      if (v.priority !== "normal") c += " --priority " + v.priority;
-      if (v.deliverable) c += " --deliverable " + v.deliverable;
-      if (v.people) c += " --people " + v.people.replace(/\s/g, "");
-      if (v.blocked) c += " --blocked-by " + v.blocked.replace(/\s/g, "");
-      if (v.unblocks) c += " --unblocks " + v.unblocks.replace(/\s/g, "");
-      if (v.link) c += " --link " + q(v.link);
-      return c;
-    },
-    run: (v, m) => {}});
-}
-function personAliasForm(pe){
-  formDialog({title: "Alias · " + pe.name, fields: [{k: "alias", label: "Novo alias", value: "", ph: "apelido"}],
-    preview: v => v.alias ? "brain person alias " + pe.id + " " + v.alias : null,
-    run: (v, m) => { m.people.find(x => x.id === pe.id).aliases.push(v.alias); }});
-}
-function editPerson(pe){
-  formDialog({title: "Editar " + pe.name, fields: [
-      {k: "name", label: "Nome", value: pe.name},
-      {k: "role", label: "Papel", value: pe.role || ""},
-      {k: "relation", label: "Relação", value: pe.relation || ""},
-      {k: "email", label: "E-mail", value: pe.email || ""}],
-    preview: v => {
-      const parts = [];
-      if (v.name && v.name !== pe.name) parts.push("--name " + q(v.name));
-      if (v.role !== (pe.role || "")) parts.push("--role " + q(v.role));
-      if (v.relation !== (pe.relation || "")) parts.push("--relation " + q(v.relation));
-      if (v.email !== (pe.email || "")) parts.push("--email " + q(v.email));
-      return parts.length ? "brain person update " + pe.id + " " + parts.join(" ") : null;
-    },
-    run: (v, m) => { const x = m.people.find(y => y.id === pe.id);
-      if (v.name) x.name = v.name; if (v.role) x.role = v.role; if (v.relation) x.relation = v.relation; }});
-}
-function editOpp(o){
-  formDialog({title: "Editar " + o.id, sub: o.title, fields: [
-      {k: "title", label: "Título", value: o.title},
-      {k: "kind", label: "Tipo", options: [["", "—"], ["melhoria-de-processo", "melhoria de processo"], ["novo-processo", "novo processo"], ["estruturante", "estruturante"]], value: o.kind || ""},
-      {k: "area", label: "Área", options: areaOpts(), value: o.area || ""},
-      {k: "process", label: "Processo", options: procOpts(), value: o.process || ""},
-      {k: "goal", label: "Goal", options: goalOpts(), value: o.goal || ""},
-      {k: "problem", label: "Problema", value: o.problem || ""},
-      {k: "suggestion", label: "Sugestão", value: o.suggestion || ""},
-      {k: "gain", label: "Ganho esperado", value: o.gain || ""},
-      {k: "hours", label: "Horas/mês economizadas", type: "number", value: o.hours_saved || ""},
-      {k: "person", label: "Pessoa ligada", options: peopleOpts(), value: ""},
-      {k: "note", label: "Nota"}],
-    preview: v => {
-      const parts = [];
-      if (v.title && v.title !== o.title) parts.push("--title " + q(v.title));
-      if (v.kind && v.kind !== o.kind) parts.push("--kind " + v.kind);
-      if (v.area && v.area !== o.area) parts.push("--area " + v.area);
-      if (v.process && v.process !== (o.process || "")) parts.push("--process " + v.process);
-      if (v.goal && v.goal !== (o.goal || "")) parts.push("--goal " + v.goal);
-      if (v.problem && v.problem !== (o.problem || "")) parts.push("--problem " + q(v.problem));
-      if (v.suggestion && v.suggestion !== (o.suggestion || "")) parts.push("--suggestion " + q(v.suggestion));
-      if (v.gain && v.gain !== (o.gain || "")) parts.push("--gain " + q(v.gain));
-      if (v.hours) parts.push("--hours-saved " + v.hours);
-      if (v.person) parts.push("--person " + v.person);
-      if (v.note) parts.push("--note " + q(v.note));
-      return parts.length ? "brain opportunity update " + o.id + " " + parts.join(" ") : null;
-    },
-    run: (v, m) => { const x = m.portfolio.opportunities.find(y => y.id === o.id);
-      if (v.title) x.title = v.title; if (v.problem) x.problem = v.problem; }});
-}
+function personAliasForm(pe){ openForm("person.alias", {id: pe.id}); }
+function editPerson(pe){ openForm("person.edit", {id: pe.id, item: pe}); }
+function editOpp(o){ openForm("opportunity.edit", {id: o.id, item: o}); }
 // ── ICE: dropdowns do rubric (fonte única: portfolio.ice_rubric do view model) ──
-function iceAxes(){ const pf = window.BRAIN.M.portfolio || {}; return (pf.ice_rubric && pf.ice_rubric.axes) || {}; }
-function iceOpts(ax){
-  const a = iceAxes()[ax], out = [["", "— escolha —"]];
-  if (a) a.levels.forEach(l => out.push([String(l.n), l.label]));
-  return out;
-}
-function iceQ(ax){ const a = iceAxes()[ax]; return a ? a.name + " — " + a.question : ax; }
-function iceNote(ax, v){
-  const a = iceAxes()[ax]; if (!a || !v) return "";
-  const lv = a.levels.find(l => String(l.n) === String(v));
-  return lv ? lv.criterion + " · " + lv.anchor : "";
-}
-function iceHint(h){ return h == null ? null : h > 40 ? 5 : h >= 20 ? 4 : h >= 10 ? 3 : h >= 5 ? 2 : 1; }
-function oppAddForm(pref){                            // pré-fill: {process} p/ "nova opp a partir do processo"
-  pref = pref || {};
-  formDialog({title: "Nova oportunidade", fields: [
-        {k: "title", label: "Título", ph: "o que vale melhorar"},
-        {k: "area", label: "Área", options: areaOpts(), value: M.portfolio.areas[0] && M.portfolio.areas[0].id},
-        {k: "kind", label: "Tipo", options: [["melhoria-de-processo", "melhoria-de-processo"], ["novo-processo", "novo-processo"], ["estruturante", "estruturante"]]},
-        {k: "process", label: "Processo", options: procOpts(), value: (pref.process || "")},
-        {k: "problem", label: "Problema", ph: "o que dói hoje"},
-        {k: "suggestion", label: "Sugestão", ph: "como resolver"},
-        {k: "gain", label: "Ganho esperado"},
-        {k: "hours", label: "Horas/mês economizadas", type: "number"},
-        {k: "person", label: "Pessoa ligada", options: peopleOpts()},
-        {k: "goal", label: "Goal", options: goalOpts()}],
-      preview: v => {
-        if (!v.title) return null;
-        let c = "brain opportunity add " + q(v.title) + " --area " + v.area + " --kind " + v.kind;
-        if (v.process) c += " --process " + v.process;
-        if (v.problem) c += " --problem " + q(v.problem);
-        if (v.suggestion) c += " --suggestion " + q(v.suggestion);
-        if (v.gain) c += " --gain " + q(v.gain);
-        if (v.hours) c += " --hours-saved " + v.hours;
-        if (v.person) c += " --person " + v.person;
-        if (v.goal) c += " --goal " + v.goal;
-        return c;
-      },
-      run: (v, m) => { const n = Math.max(0, ...m.portfolio.opportunities.map(x => +x.id.slice(4))) + 1;   // lista vazia: 0001, não -Infinity
-        m.portfolio.opportunities.push({id: "OPP-" + String(n).padStart(4, "0"), title: v.title, area: v.area, kind: v.kind,
-          status: "ideia", status_history: [], score: null, ice_suggested: false, docs: [], evidence: [], people: []}); }});
+function oppAddForm(pref){                            // pré-fill: {area, process} p/ "nova opp a partir do processo"
+  if (!needArea()) return;
+  openForm("opportunity.new", {item: Object.assign({}, pref || {})});
 }
 function confirmIce(o){                              // ICE sugerido vira firme com as notas sugeridas
   runCommand("brain opportunity score " + o.id + " --impact " + o.impact + " --confidence " + o.confidence + " --ease " + o.ease,
     m => { const x = m.portfolio.opportunities.find(y => y.id === o.id); x.ice_suggested = false; });
 }
 function iceForm(o){
-  formDialog({title: "ICE · " + o.id, sub: "impacto × confiança × facilidade (1–5) — o CLI calcula o score · ? traz a metodologia", fields: [
-      {k: "impact", label: iceQ("impact"), options: iceOpts("impact"), value: o.impact == null ? "" : String(o.impact),
-        note: v => { const base = iceNote("impact", v); if (!o.hours_saved || !v) return base;
-          const hint = iceHint(o.hours_saved);
-          let t = (base ? base + "\n" : "") + "horas declaradas: " + o.hours_saved + "h/mês → faixa sugerida " + hint;
-          if (+v > hint) t += " · ⚠ escopo e horas divergem: vale a menor nota";
-          return t; }},
-      {k: "confidence", label: iceQ("confidence"), options: iceOpts("confidence"), value: o.confidence == null ? "" : String(o.confidence), note: v => iceNote("confidence", v)},
-      {k: "ease", label: iceQ("ease"), options: iceOpts("ease"), value: o.ease == null ? "" : String(o.ease), note: v => iceNote("ease", v)}],
-    help: () => iceHelpHTML(),
-    preview: v => (v.impact && v.confidence && v.ease)
-      ? "brain opportunity score " + o.id + " --impact " + v.impact + " --confidence " + v.confidence + " --ease " + v.ease
-      : null,
-    run: (v, m) => { const x = m.portfolio.opportunities.find(y => y.id === o.id);
-      x.impact = +v.impact; x.confidence = +v.confidence; x.ease = +v.ease; x.score = x.impact * x.confidence * x.ease; x.ice_suggested = false; }});
+  openForm("opportunity.score", {id: o.id, item: o, ice_reason: o.ice_suggested && o.ice_reason ? " Sugestão do agente: " + o.ice_reason : ""},
+    {help: () => iceHelpHTML()});
 }
 // metodologia: as 3 tabelas + medidas de sucesso + regras, do portfolio.ice_rubric (nada de texto no JS)
 function iceHelpHTML(){
@@ -1218,189 +823,28 @@ function iceHelpHTML(){
 function iceHelpOverlay(){ stackHelp("Metodologia · ICE", iceHelpHTML()); }
 window.iceHelp = iceHelpOverlay;
 document.addEventListener("click", e => { if (e.target.closest("[data-icehelp]")) { e.preventDefault(); iceHelpOverlay(); } });
-function editProc(pc){
-  formDialog({title: "Editar " + pc.id, sub: pc.title, fields: [
-      {k: "title", label: "Título", value: pc.title},
-      {k: "area", label: "Área", options: areaOpts(), value: pc.area},
-      {k: "owner", label: "Responsável", options: peopleOpts(), value: pc.owner},
-      {k: "executors", label: "Executores (+)", ph: "ids por vírgula", value: (pc.executors || []).join(",")},
-      {k: "recurrence", label: "Recorrência", options: [["", "—"], ["diaria", "diária"], ["semanal", "semanal"], ["mensal", "mensal"], ["trimestral", "trimestral"]], value: pc.recurrence || ""},
-      {k: "perMonth", label: "Execuções/mês", type: "number", value: pc.per_month || ""},
-      {k: "duration", label: "Duração", ph: "90m · 2h", value: pc.duration_min ? (pc.duration_min >= 60 ? Math.floor(pc.duration_min / 60) + "h" + (pc.duration_min % 60 ? (pc.duration_min % 60) + "m" : "") : pc.duration_min + "m") : ""},
-      {k: "maturity", label: "Maturidade (1-5)", options: [["", "—"], ["1", "1"], ["2", "2"], ["3", "3"], ["4", "4"], ["5", "5"]], value: pc.maturity ? String(pc.maturity) : ""},
-      {k: "tools", label: "Ferramentas", ph: "por vírgula", value: (pc.tools || []).join(",")},
-      {k: "io", label: "Entrada → saída", value: pc.io || ""},
-      {k: "pains", label: "Dores (+)", ph: "por vírgula"},
-      {k: "note", label: "Nota"}],
-    preview: v => {
-      const parts = [];
-      if (v.title && v.title !== pc.title) parts.push("--title " + q(v.title));
-      if (v.area && v.area !== pc.area) parts.push("--area " + v.area);
-      if (v.owner && v.owner !== pc.owner) parts.push("--owner " + v.owner);
-      if (v.executors) parts.push("--executor " + v.executors.replace(/\s/g, ""));
-      if (v.recurrence) parts.push("--recurrence " + v.recurrence);
-      if (v.perMonth) parts.push("--per-month " + v.perMonth);
-      if (v.duration) parts.push("--duration " + v.duration);
-      if (v.maturity) parts.push("--maturity " + v.maturity);
-      if (v.tools) parts.push("--tools " + q(v.tools));
-      if (v.io) parts.push("--io " + q(v.io));
-      if (v.pains) parts.push("--pain " + q(v.pains));
-      if (v.note) parts.push("--note " + q(v.note));
-      return parts.length ? "brain process update " + pc.id + " " + parts.join(" ") : null;
-    },
-    run: (v, m) => { const x = m.portfolio.processes.find(y => y.id === pc.id);
-      if (v.title) x.title = v.title; if (v.area) x.area = v.area; }});
+function editProc(pc){ openForm("process.edit", {id: pc.id, item: pc}); }
+function editPlanNode(kind, id, node){                 // goal/projeto: gate estrutural · entregável: sem gate
+  const ctx = {id: id, item: node};
+  if (id.includes(".")) openForm("deliverable.edit", ctx);
+  else if (kind === "goal") openForm("goal.edit", ctx);
+  else openForm("project.edit", ctx);
 }
-function editPlanNode(kind, id, node){        // goal/projeto: gate estrutural · entregável: sem gate
-  const isGoal = kind === "goal", isDeliv = id.includes(".");
-  const M = window.BRAIN.M;
-  const fields = [{k: "title", label: "Título", value: node.title}];
-  if (isDeliv) {
-    fields.push({k: "due", label: "Prazo", type: "date", value: node.due || ""});
-    fields.push({k: "weight", label: "Peso", type: "number", value: String(node.weight || 1)});
-  } else {
-    fields.push({k: "status", label: "Status", value: node.status || "ativo",
-      options: [["ativo", "ativo"], ["congelado", "congelado"], ["depois", "depois"], ["finalizado", "finalizado"]]});
-    if (isGoal) {
-      fields.push({k: "horizon", label: "Horizonte", type: "date", value: node.horizon || ""});
-      fields.push({k: "why", label: "Por quê", value: node.why || ""});
-    } else {
-      fields.push({k: "owner", label: "Dono", options: peopleOpts(), value: node.owner || ""});
-    }
-    fields.push({k: "approval", label: "Aprovação literal", value: "ok"});
-  }
-  formDialog({title: "Editar " + id, sub: node.title + (isDeliv ? "" : " — mudança estrutural"), gate: !isDeliv, fields: fields,
-    preview: v => {
-      const parts = [];
-      if (v.title && v.title !== node.title) parts.push("--title " + q(v.title));
-      if (isDeliv) {
-        if (v.due !== (node.due || "")) parts.push(v.due ? "--due " + v.due : "--due ");
-        if (v.weight && +v.weight !== (node.weight || 1)) parts.push("--weight " + v.weight);
-        return parts.length ? "brain plan edit " + id + " " + parts.join(" ") : null;
-      }
-      if (v.status && v.status !== (node.status || "ativo")) parts.push("--status " + v.status);
-      if (isGoal) {
-        if (v.horizon !== (node.horizon || "")) parts.push("--horizon " + (v.horizon || "\"\""));
-        if (v.why !== (node.why || "")) parts.push("--why " + q(v.why));
-      } else if (v.owner && v.owner !== node.owner) parts.push("--owner " + v.owner);
-      parts.push('--approval "' + (v.approval || "").replace(/"/g, "'") + '"');
-      return "brain plan edit " + id + " " + parts.join(" ");
-    },
-    run: (v, m) => { if (v.title) node.title = v.title; if (v.status) node.status = v.status; }});
-}
-function promoteDialog(o){
-  const G = window.BRAIN.M.goals, P = window.BRAIN.M.projects;
-  formDialog({title: "Promover " + o.id, sub: o.title + " — vira nó do PLANNING no nível escolhido (gate estrutural)", gate: true, fields: [
-      {k: "level", label: "Nível", options: [["project", "projeto — num goal"], ["deliverable", "entregável — num projeto"], ["goal", "goal novo"]], value: "project"},
-      {k: "goal", label: "Goal (nível projeto)", options: G.map(g => [g.id, g.id + " — " + g.title]), value: G[0] && G[0].id},
-      {k: "project", label: "Projeto (nível entregável)", options: P.map(p => [p.id, p.id + " — " + p.title]), value: P[0] && P[0].id}],
-    note: v => v.level === "project" ? "cria um PROJ-# novo dentro do goal escolhido"
-      : v.level === "deliverable" ? "cria um PROJ-#.N novo (entregável) dentro do projeto escolhido"
-      : "cria um GOAL-# novo no topo da árvore",
-    preview: v => "brain opportunity promote " + o.id + " --level " + v.level +
-      (v.level === "project" ? " --goal " + v.goal : v.level === "deliverable" ? " --project " + v.project : "") +
-      ' --approval "ok"',
-    run: (v, m) => { const x = m.portfolio.opportunities.find(y => y.id === o.id); x.status = "em-andamento"; x.promoted = v.level;
-      if (v.level === "project") x.goal = v.goal;
-      if (v.level === "deliverable") { x.project = v.project; x.goal = ((m.goals.find(g => g.projects.includes(v.project)) || {}).id) || x.goal; }
-      if (!LIVE) toast("retrato — no live o CLI cria o nó no goals.md e o refresh traz"); }});
-}
-function statusPicker(o){
-  const stages = ["ideia", "triagem", "priorizada", "em-andamento", "piloto", "validando", "entregue", "em-espera", "descartada"];
-  const blocked = (o.project || o.promoted) ? "" : "em-andamento";   // em-andamento só nasce da promoção (gate)
-  formDialog({title: "Status · " + o.id, sub: o.title, fields: [
-      {k: "status", label: "Estágio", options: stages.map(s => [s, s + (s === o.status ? " (atual)" : "") +
-        (s === blocked ? " — exige promoção (gate)" : "")]), value: o.status},
-      {k: "reason", label: "Motivo (exigido p/ em-espera e descartada)", value: ""}],
-    preview: v => {
-      if (v.status === o.status || v.status === blocked) return null;
-      const lateral = ["em-espera", "descartada"].includes(v.status);
-      if (lateral && !v.reason.trim()) return null;               // estágio lateral sem motivo não vira comando
-      return "brain opportunity status " + o.id + " " + v.status +
-        (lateral ? ' --reason "' + v.reason.replace(/"/g, "'") + '"' : "");
-    },
-    run: (v, m) => { if (v.status === o.status || v.status === blocked) return; const x = m.portfolio.opportunities.find(y => y.id === o.id);
-      x.status_history.unshift({date: m.today, from: x.status, to: v.status, reason: v.reason || null}); x.status = v.status; }});
-}
-function supersedeForm(d){
-  formDialog({title: "Superar " + d.id, sub: "decisões são imutáveis — o caminho é uma nova que substitui", fields: [
-      {k: "title", label: "Nova decisão", ph: "o que passa a valer"},
-      {k: "by", label: "Quem decidiu", value: window.BRAIN.M.owner.id, ph: "ids por vírgula"},
-      {k: "rationale", label: "Por quê", value: ""}],
-    preview: v => v.title ? 'brain decision add "' + v.title.replace(/"/g, "'") + '" --decided-by ' + (v.by || window.BRAIN.M.owner.id) + ' --supersedes ' + d.id + (v.rationale ? ' --rationale "' + v.rationale.replace(/"/g, "'") + '"' : "") : null,
-    run: (v, m) => { const n = Math.max(...m.decisions.map(x => +x.id.slice(4))) + 1;
-      m.decisions.unshift({id: "DEC-" + String(n).padStart(4, "0"), title: v.title, date: m.today, decided_by: [String(v.by || m.owner.id).trim()], decided_by_names: [m.owner.name],
-        project: d.project, context: "supera " + d.id, rationale: v.rationale || null, status: "ativa",
-        supersedes: d.id, superseded_by: null, source_label: "declarado no painel", prov: "declarado"}); }});
-}
+function promoteDialog(o){ openForm("opportunity.promote", {id: o.id, item: o}); }
+function statusPicker(o, status){ openForm("opportunity.status", {id: o.id, title: o.title, item: o}, status ? {values: {status: status}} : {}); }
+function supersedeForm(d){ openForm("decision.supersede", {id: d.id, title: d.title}); }
 
 // ── lacunas de paridade com a TUI: documentos, evidência, quem é…?, fontes, correção de saúde ──
-function docLinkForm(target){
-  const M = window.BRAIN.M;
-  const targets = [["", "—"]].concat(M.portfolio.processes.map(p => [p.id, p.id + " " + p.title]), M.portfolio.opportunities.map(o => [o.id, o.id + " " + o.title]));
-  formDialog({title: "Ligar documento" + (target ? " a " + target : ""), sub: "Playbook vigiado do Drive: o /update só relê quando o modifiedTime muda.",
-    fields: (target ? [] : [{k: "target", label: "Ligar a", options: targets}]).concat([
-      {k: "kind", label: "Tipo", options: (M.doc_kinds || ["playbook"]).map(x => [x, x]), value: "playbook"},
-      {k: "ref", label: "Ref", ph: "URL, id do Drive ou caminho do vault"},
-      {k: "title", label: "Título", ph: "opcional"},
-      {k: "watch", label: "Vigiar", options: [["não", "não"], ["sim", "sim (só playbook do Drive)"]]}]),
-    preview: v => { const tg = target || v.target; if (!tg || !v.ref) return null;
-      return "brain doc link " + tg + " --kind " + v.kind + " --ref " + q(v.ref) + (v.title ? " --title " + q(v.title) : "") + (v.watch === "sim" ? " --watch" : ""); },
-    run: (v, m) => {}});
-}
+function docLinkForm(target){ openForm("doc.link", target ? {target: target, target_fixed: true} : {target: ""}); }
 function docUnlinkForm(target, n){
   const x = window.BRAIN.PROC[target] || window.BRAIN.OPP[target]; const d = x && x.docs[n]; if (!d) { needSel(); return; }
-  formDialog({title: "Desligar o documento de " + target, sub: d.title || d.ref, fields: [],
-    preview: () => "brain doc unlink " + target + " --ref " + q(d.ref), run: (v, m) => {}});
+  openForm("doc.unlink", {target: target, ref: d.ref, doc_title: d.title || d.ref});
 }
-function evidenceForm(o){
-  formDialog({title: "Evidência de " + o.id, sub: "Artefato ou RAW que reforça esta oportunidade.",
-    fields: [{k: "source", label: "Fonte", ph: "PROCESSED/2026/10/reuniao.md"}],
-    preview: v => v.source ? "brain opportunity evidence " + o.id + " --source " + q(v.source) : null, run: (v, m) => {}});
-}
-function resolveForm(){
-  formDialog({title: "Quem é…?", sub: "Diz a quem o texto se refere, sem gravar nada. Ambíguo vira erro: a pergunta é sua.",
-    fields: [{k: "text", label: "Nome ou alias", ph: "a Marina-demo"}],
-    preview: v => v.text ? "brain person resolve " + q(v.text) : null, run: (v, m) => {}});
-}
-const SRC_META = ["key", "kind", "in_watch", "last_ok", "last_error", "failures", "pulls", "last_changed", "window", "note"];
-const srcOther = s => Object.entries(s || {}).filter(([k]) => !SRC_META.includes(k)).map(([k, v]) => k + "=" + v).join("; ");
-function parseOther(t){ const out = {}; String(t || "").split(/;\s*/).forEach(p => { const i = p.indexOf("="); if (i > 0) out[p.slice(0, i).trim()] = p.slice(i + 1).trim(); }); return out; }
-function srcFields(old){
-  const M = window.BRAIN.M;
-  return [{k: "key", label: "Key", value: old ? old.key : "", ph: "slack-time-dados"},
-    {k: "kind", label: "Tipo", options: (M.source_kinds || []).map(x => [x[0], x[1]]), value: (old && old.kind) || "gmail"},
-    {k: "window", label: "Janela", value: (old && old.window) || "", ph: "7d"},
-    {k: "note", label: "Nota", value: (old && old.note) || ""},
-    {k: "other", label: "Outros campos", value: srcOther(old), ta: true, rows: 3, ph: "channel=#canal; query=…; doc=<url do Drive>"}];
-}
-function srcAddForm(pre){
-  formDialog({title: "Adicionar fonte ao watch.toml", sub: "Fonte que não está no watch.toml não é puxada pelo /update nem pelo noturno. Os campos do tipo vão em “Outros” (k=v; k=v).",
-    fields: srcFields(pre),
-    preview: v => { if (!v.key || !v.kind) return null;
-      let c = "brain watch add " + v.key + " --kind " + v.kind + (v.window ? " --window " + q(v.window) : "") + (v.note ? " --note " + q(v.note) : "");
-      Object.entries(parseOther(v.other)).forEach(([k, x]) => { c += " --set " + q(k + "=" + x); });
-      return c; },
-    run: (v, m) => {}});
-}
-function srcEditForm(old){
-  formDialog({title: "Editar a fonte " + old.key, sub: "Mudar a key renomeia a fonte; o histórico de pulls fica na key antiga.", fields: srcFields(old),
-    preview: v => { if (!v.key || !v.kind) return null;
-      const parts = [];
-      if (v.key !== old.key) parts.push("--rename " + v.key);
-      if (v.kind !== old.kind) parts.push("--kind " + v.kind);
-      const oldO = parseOther(srcOther(old)), newO = parseOther(v.other);
-      [["window", v.window, old.window], ["note", v.note, old.note]].forEach(([k, nv, ov]) => {
-        if ((nv || "") !== (ov || "")) parts.push(nv ? (k === "window" ? "--window " : "--note ") + q(nv) : "--unset " + k); });
-      Object.entries(newO).forEach(([k, x]) => { if (oldO[k] !== x) parts.push("--set " + q(k + "=" + x)); });
-      Object.keys(oldO).forEach(k => { if (!(k in newO)) parts.push("--unset " + k); });
-      return parts.length ? "brain watch edit " + old.key + " " + parts.join(" ") : null; },
-    run: (v, m) => {}});
-}
-function srcRemoveForm(s){
-  formDialog({title: "Remover a fonte " + s.key, sub: "O /update e o noturno deixam de puxá-la. Snapshots já gravados e o ledger ficam como estão.", fields: [],
-    preview: () => "brain watch remove " + s.key, run: (v, m) => {}});
-}
+function evidenceForm(o){ openForm("opportunity.evidence", {id: o.id}); }
+function resolveForm(){ openForm("person.resolve"); }
+function srcAddForm(pre){ openForm("watch.add", {item: pre || {}}); }
+function srcEditForm(old){ openForm("watch.edit", {key0: old.key, item: old}); }
+function srcRemoveForm(s){ openForm("watch.remove", {key: s.key}); }
 function agentToast(what, how){ toast("(agente) " + what + " — rode " + how + " no chat; o painel não roda o agente"); }
 function healthFix(fix){
   if (fix.agent === "dump") agentToast("processar a inbox", "/dump");
@@ -1441,7 +885,9 @@ function ctxKeys(k){
     if (k === "w") { if (!src.in_watch) srcAddForm({key: src.key}); else toast(src.key + " já está no watch.toml"); return true; }
     agentToast("puxar " + src.key, "/connect " + src.key); return true; }
   if (h.startsWith("#projects")) {
-    if (k === "n" || k === "G" || k === "E") { planForm(); return true; }   // E = mudar árvore: o gate estrutural mora no formulário   // G = novo goal: o gate estrutural mora no formulário
+    if (k === "n") { planNew(); return true; }
+    if (k === "G") { planGoal(); return true; }
+    if (k === "E") { toast("mudança livre no goals.md: E na TUI abre o editor e mostra o diff (gate) — aqui, n cria e e edita o item"); return true; }   // E = mudar árvore: o gate estrutural mora no formulário   // G = novo goal: o gate estrutural mora no formulário
     if (k === "P") { const id = selId() || "";
       if (id.startsWith("GOAL-")) progressForm(id);
       else if (id) toast("P declara progresso de goal — selecione um goal");
@@ -1472,12 +918,9 @@ function ctxKeys(k){
       if (t.blocked_by && t.blocked_by.length) { toast(t.id + " segue bloqueada por " + t.blocked_by.join(", ")); return true; }
       const next = {aberta: "fazendo", fazendo: "aguardando", aguardando: "aberta"}[t.status] || "aberta";
       runCommand("brain action update " + t.id + " --status " + next, m => { A_OF(t.id).status = next; }); return true; }
-    if (k === "t") { formDialog({title: "Prazo · " + t.id, sub: t.title, fields: [{k: "due", label: "Prazo", type: "date", value: t.due || ""}],
-      preview: v => v.due ? "brain action update " + t.id + " --due " + v.due : null,
-      run: (v, m) => { A_OF(t.id).due = v.due; }}); return true; }
-    if (k === "d") { formDialog({title: "Descartar " + t.id, fields: [{k: "reason", label: "Motivo", value: ""}],
-      preview: v => v.reason ? "brain action drop " + t.id + ' --reason "' + v.reason.replace(/"/g, "'") + '"' : null,
-      run: (v, m) => { const x = A_OF(t.id); x.open = false; x.status = "descartada"; }}); return true; }
+    if (k === "t") { openForm("action.due", {id: t.id, title: t.title, item: t, due_sub: t.due_suggested
+      ? "Prazo sugerido pelo agente (roxo): salve com a mesma data para confirmar, ou digite outra." : "Deixe em branco para remover o prazo."}); return true; }
+    if (k === "d") { openForm("action.drop", {id: t.id, title: t.title, item: t}); return true; }
     if (k === "z") { const park = !t.parked;
       runCommand("brain action update " + t.id + (park ? " --park" : " --unpark"), m => { A_OF(t.id).parked = park; }); return true; }
     if (k === "o" && !t.open) { reopenForm(t); return true; }
@@ -1513,10 +956,7 @@ function ctxKeys(k){
     if (k === "A" && pu) { if (pu.status === "solicitada") pubAction("approve", pu.id); else toast(pu.id + " está " + pu.status); return true; }
     if (k === "d" && pu) { if (pu.status === "solicitada" || pu.status === "aprovada") pubAction("cancel", pu.id); else toast(pu.id + " está " + pu.status); return true; }
     if (k === "a" && q) { if (q.status !== "aberta") { toast(q.id + " já está " + q.status); return true; }
-      formDialog({title: "Responder " + q.id, sub: q.text,
-      fields: [{k: "answer", label: "Resposta", value: (q.options && q.options[0]) || ""}],
-      preview: v => v.answer ? "brain ask answer " + q.id + ' "' + v.answer.replace(/"/g, "'") + '"' : null,
-      run: (v, m) => { const x = m.questions.find(y => y.id === q.id); x.status = "respondida"; x.answer = v.answer; }}); return true; }
+      openForm("ask.answer", {id: q.id, text: q.text, item: {options: q.options || []}}); return true; }
     if (k === "a" && pr) { if (pr.status !== "aberta") { toast(pr.id + " já está " + pr.status); return true; } propQuote(pr.id, true); return true; }
     if (k === "d" && pr) { if (pr.status !== "aberta") { toast(pr.id + " já está " + pr.status); return true; } propQuote(pr.id, false); return true; }
     if (k === "d" && q) { if (q.status !== "aberta") { toast(q.id + " já está " + q.status); return true; }
@@ -1573,7 +1013,7 @@ function ctxKeys(k){
     if (k === "c" && o.ice_suggested) { confirmIce(o); return true; }
     if (k === "e") { editOpp(o); return true; }
     if (k === "d") { if (["descartada", "entregue"].includes(o.status)) { toast(o.id + " está " + o.status); return true; }
-      oppReasonDialog(o.id, "descartada"); return true; }
+      statusPicker(o, "descartada"); return true; }
     if (k === "p" && !(o.project || o.promoted)) { promoteDialog(o); return true; }
     if (k === "L") { docLinkForm(o.id); return true; }
     if (k === "v") { evidenceForm(o); return true; }
@@ -1584,7 +1024,7 @@ function ctxKeys(k){
     if (k === "s" && o) { statusPicker(o); return true; }
     if (k === "i" && o) { iceForm(o); return true; }
     if (k === "c" && o && o.ice_suggested) { confirmIce(o); return true; }
-    if (k === "d" && o && !["descartada", "entregue"].includes(o.status)) { oppReasonDialog(o.id, "descartada"); return true; }
+    if (k === "d" && o && !["descartada", "entregue"].includes(o.status)) { statusPicker(o, "descartada"); return true; }
     if (k === "p" && o && !(o.project || o.promoted)) { promoteDialog(o); return true; }
     if (k === "L" && o) { docLinkForm(o.id); return true; }
     if (k === "v" && o) { evidenceForm(o); return true; }
@@ -1605,12 +1045,10 @@ function ctxKeys(k){
       else if (url) window.open(url, "_blank", "noopener"); else toast("playbook no vault: " + pb.ref);
       return true; }
     if ((k === "L" || k === "o") && !pc) { needSel(); return true; }
-    if (k === "d" && pc) { formDialog({title: "Aposentar " + pc.id, fields: [{k: "reason", label: "Motivo", value: ""}],
-      preview: v => v.reason ? "brain process retire " + pc.id + ' --reason "' + v.reason.replace(/"/g, "'") + '"' : null,
-      run: (v, m) => { m.portfolio.processes.find(x => x.id === pc.id).status = "aposentado"; }}); return true; }
+    if (k === "d" && pc) { openForm("process.retire", {id: pc.id, title: pc.title}); return true; }
     return false; }
   if (h.startsWith("#cfg/memoria")) {
-    if (k === "s") { const b = document.querySelector("[data-provform]"); if (b) b.click(); else formDialog(provFormSpec()); return true; }
+    if (k === "s") { const b = document.querySelector("[data-provform]"); if (b) b.click(); else provForm(); return true; }
     if (k === "v") { runCommand("brain memory harness verify", () => {}); return true; }
     if (k === "i") { const id = selId() || ""; const hw = (window.BRAIN.M.harnesses || []).find(x => (x.name || x.id) === id);
       if (hw) runCommand("brain memory harness install " + (hw.name || hw.id), m => {
@@ -1630,11 +1068,7 @@ function ctxKeys(k){
     if (h.startsWith("#pf/area/")) a = M.portfolio.areas.find(x => x.id === decodeURIComponent(h.slice(9)));
     else { const name = selEl() && selEl().querySelector("b") ? selEl().querySelector("b").textContent : null;
       a = name && M.portfolio.areas.find(x => x.name === name); }
-    if (k === "e" && a) { formDialog({title: "Editar área " + a.name, fields: [{k: "name", label: "Nome", value: a.name}, {k: "alias", label: "Novo alias", value: ""}, {k: "note", label: "Nota", value: a.note || ""}],
-      preview: v => { const parts = []; if (v.name && v.name !== a.name) parts.push("--name " + q(v.name)); if (v.alias) parts.push("--alias " + q(v.alias));
-        if (v.note && v.note !== (a.note || "")) parts.push("--note " + q(v.note));
-        return parts.length ? "brain area update " + a.id + " " + parts.join(" ") : null; },
-      run: (v, m) => { const x = m.portfolio.areas.find(y => y.id === a.id); if (v.name) x.name = v.name; if (v.alias) x.aliases.push(v.alias); if (v.note) x.note = v.note; }}); return true; }
+    if (k === "e" && a) { openForm("area.edit", {id: a.id, item: a}); return true; }
     return false; }
   return false;
 }

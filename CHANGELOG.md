@@ -1,3 +1,33 @@
+## 2.17.0 — formulários iguais na TUI e no painel
+
+- **Uma especificação, duas pontas.** Os formulários da TUI e do painel HTML eram escritos duas vezes, à mão, e
+  divergiam: campos, nomes, ordem, obrigatórios, o que aparece por tipo e a linha `brain …` montada. Agora todos
+  (61) moram em `brainlib/forms.py` — a TUI desenha os campos a partir dali (`open_form`) e o painel recebe a mesma
+  especificação no view model (`M.forms`) e monta o comando com o mesmo motor (`assets/src/forms.js`, que compila
+  as mesmas regexes do Python).
+- **O que mudou no painel** (passa a ser como a TUI): Fontes mostra só os campos do tipo (`drive-doc` pede o doc,
+  `slack` o canal, `jira` monta a JQL pelo escopo e tira o site da URL) em vez do "Outros campos"; datas aceitam
+  `sex`, `+3d`, `20/10` com a data resolvida ao lado; obrigatório tem `*` e bloqueia o confirmar com a mesma
+  mensagem; entregável aceita só o número (`9` → `PROJ-1.9`); a lista `mine` preenche o dono com `eu`; nota rápida
+  com vínculo validado; promover pede título, motivo e a sua aprovação; marcar entregável feito pede a evidência;
+  "Superar decisão" usa `decision supersede` (como a TUI); cobrar e responder pergunta montam a mesma linha.
+- **Correções de gate.** O painel pré-preenchia "ok" em aprovar proposta, publicação, editar goal/projeto e
+  estrutura do plano, e o promover mandava `--approval "ok"` sozinho. Aprovação literal agora nunca vem preenchida,
+  nas duas pontas (`tests/test_forms.py::test_gates_never_prefill_approval`).
+- **O que a TUI ganhou do painel:** contexto na decisão, evidência na entrega, e-mail na nova pessoa, "destrava" na
+  nova ação, "substituída por" ao superar decisão, sugestões (autocompletar) nos campos de pessoa, projeto e vínculo.
+- **O ícone do app reaproveita a aba do Brain.** No macOS, `util.open_url` (o app, `brain open` e `render --open`)
+  procura no navegador **padrão** — Safari, Chrome, Brave, Edge, Arc, Chromium, Vivaldi ou Opera — uma aba já aberta
+  na ponte local (`127.0.0.1:<porta>`) e a traz para a frente em vez de abrir outra janela; se a ponte foi reiniciada
+  (token novo), a aba recebe o token e recarrega na mesma rota. Só consulta navegador que já está rodando (nunca o
+  abre à toa) e só o padrão (o macOS pede uma permissão de automação por app, na primeira vez). Sem permissão, sem
+  aba ou em outro navegador (Firefox), abre como antes. Os testes interceptam `webbrowser.open`: nunca mexem nas abas
+  do dono.
+- **Trava:** `tests/test_forms.py` recusa campo escrito à mão fora do `forms.py`, exige que todo formulário abra
+  nas duas pontas (ou diga por que não) e roda ~1.000 combinações de valores pelo Python e pelo node comparando
+  comando, validação, dicas, listas e valor inicial. As coberturas da CLI (TUI e painel) passam a ler os comandos
+  da especificação. `dates.py` sai de `tui/` (o painel usa a mesma regra); a ponte aceita `decision supersede`.
+
 ## 2.16.0 — o app Brain: instalação e configuração guiada no navegador
 
 - **App Brain.** O app (e o painel) passam a se chamar **Brain** — Segundo Cérebro segue como nome do framework.

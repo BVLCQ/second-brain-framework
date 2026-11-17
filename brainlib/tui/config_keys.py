@@ -8,10 +8,7 @@ from __future__ import annotations
 
 import sys
 
-from rich.text import Text
-
 from .. import providers as prov
-from .modals import Field, FormSpec
 
 
 class ConfigKeys:
@@ -47,54 +44,8 @@ class ConfigKeys:
     def f_providers_set(self) -> None:
         """Muda um slot (llm · embeddings · reranker) — mesmo caminho do wizard, sem refazer setup."""
         cur = prov.stack(self.store.brain) if self.store else {}
-
-        def provider_opts(v):
-            slot = v.get("slot", "embeddings")
-            return [(p, info.get("label") or p) for p, info in prov.PROVIDERS[slot].items()]
-
-        def build(v):
-            slot = v["slot"]
-            c = ["memory", "providers", "set", slot, "--provider", v["provider"]]
-            if v.get("model"):
-                c += ["--model", v["model"]]
-            if v.get("base_url"):
-                c += ["--base-url", v["base_url"]]
-            if v.get("key"):
-                c += ["--key", v["key"]]
-            if slot == "llm" and v.get("models"):
-                c += ["--models", v["models"]]
-            if slot == "reranker" and v.get("candidates"):
-                c += ["--candidates", v["candidates"]]
-            return [c]
-
-        def res_model(v):
-            info = prov.PROVIDERS[v.get("slot", "embeddings")].get(v.get("provider", ""), {})
-            if info.get("models"):
-                return "recomendados por operação (cenário B): " + " · ".join(
-                    f"{op}={m}" for op, m in info["models"].items())
-            return info.get("model", "— modelo default do provedor —")
-
-        cur_slot = cur.get("embeddings", {}).get("provider", "local")
-        self.form(FormSpec(
-            "Provedor da memória",
-            [Field("slot", "slot", value="embeddings",
-                   choice=[("llm", "LLM — só vale no modo full"),
-                           ("embeddings", "embeddings"), ("reranker", "reranker")]),
-             Field("provider", "provedor", value=cur_slot, options=provider_opts, depends="slot"),
-             Field("model", "modelo", ph="vazio = recomendado do provedor", res=res_model),
-             Field("base_url", "base URL", ph="custom / openai-wire",
-                   show=lambda v: v.get("provider") == "custom"),
-             Field("key", "API key", ph="vazio = mantém a do config/.env",
-                   show=lambda v: v.get("provider") not in ("local", "off", "")),
-             Field("models", "modelos por operação", ph="retain=…,consolidation=… (vazio = recomendados)",
-                   show=lambda v: v.get("slot") == "llm"),
-             Field("candidates", "top-N candidatos", ph="vazio = default do provedor",
-                   show=lambda v: v.get("slot") == "reranker" and v.get("provider") != "off")],
-            build,
-            sub="A escolha vai ao config/.env (chave nunca volta em output) e ao [memory]. "
-                "Trocou embeddings? vetores antigos ficam incompatíveis — brain memory rebuild. "
-                "Depois recrie o container: docker compose -f services/compose.yaml --env-file config/.env up -d",
-            render=False, show="Provedores"))
+        self.open_form("memory.provider", {"provider": cur.get("embeddings", {}).get("provider", "local")},
+                       render=False, show="Provedores")
 
     def f_wizard_memoria(self) -> None:
         """Abre o passo Memória do wizard num terminal suspenso (interativo)."""

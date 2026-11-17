@@ -400,3 +400,4 @@ main.col{padding-bottom:120px}
 .icerub td:nth-child(3){white-space:nowrap;width:110px}
 .fhint{white-space:pre-line;line-height:1.4}
 .cline.miss{border-color:var(--risk);color:var(--risk)}
+.frow .req{color:var(--risk);font-weight:700}

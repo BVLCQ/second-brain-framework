@@ -7,7 +7,7 @@ import webbrowser  # noqa: F401 — os testes interceptam render.webbrowser.open
 import subprocess
 from pathlib import Path
 
-from . import doctor, model, render_md, render_portfolio, schema, util, watch
+from . import doctor, forms, model, render_md, render_portfolio, schema, util, watch
 from . import harvest as harvest_mod
 
 ASSET = Path(__file__).resolve().parent / "assets" / "dashboard.html"
@@ -78,6 +78,8 @@ def view_model(brain) -> dict:
     m["sources"] = _sources(brain)
     m["source_kinds"] = [list(k) for k in watch.KINDS]
     m["doc_kinds"] = sorted(schema.DOC_KINDS)
+    m["forms"] = forms.export()                                 # formulários: a MESMA especificação da TUI
+    m["form_static"] = forms.static(brain)
     m["notes"] = _notes(brain.inst.fresh)
     from . import upstream as _up                              # versão + aviso de atualização (cache, sem rede)
     from . import __version__ as _ver

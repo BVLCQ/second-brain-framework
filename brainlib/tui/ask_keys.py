@@ -15,7 +15,7 @@ from rich.text import Text
 
 from .. import config, util
 from . import bridge
-from .modals import ConfirmModal, Field, FormSpec, PickerModal, PickItem
+from .modals import ConfirmModal, PickerModal, PickItem
 
 OTHER = "outra resposta…"
 ALLOW_YES, ALLOW_NO, UNDERSTOOD = "liberar sempre", "não liberar", "entendi"
@@ -99,9 +99,8 @@ class AskKeys:
         self.push_screen(PickerModal(f"{q.id} · {q.text}", "escolha uma opção ou “outra resposta…”", source), done)
 
     def _answer_text(self, q) -> None:
-        self.form(FormSpec(f"Responder {q.id}", [Field("answer", "resposta", req=True, ph="texto livre", multi=False)],
-                           lambda v: self._answer_cmds(q, v["answer"] or "…"), sub=q.text,
-                           after=lambda: self._after_answer(q)))
+        self.open_form("ask.answer", {"id": q.id, "text": q.text, "item": {"options": list(q.options or [])}},
+                       wrap=lambda cmds, v: self._answer_cmds(q, v["answer"] or "…"), after=lambda: self._after_answer(q))
 
     def answer_question(self, q, text: str) -> None:
         self.exec(self._answer_cmds(q, text), after=lambda: self._after_answer(q))
@@ -127,8 +126,7 @@ class AskKeys:
 
     def f_ask_drop(self) -> None:
         q = self.cur().data
-        self.form(FormSpec(f"Descartar {q.id}", [Field("reason", "motivo", req=True, ph="já resolvi / não importa")],
-                           lambda v: [["ask", "drop", q.id, "--reason", v["reason"] or "…", "--by", "owner"]], sub=q.text))
+        self.open_form("ask.drop", {"id": q.id, "text": q.text})
 
     # ── retomar ────────────────────────────────────────────────────────────
     def _after_answer(self, q) -> None:
@@ -183,9 +181,6 @@ class AskKeys:
 
     def free_reply(self) -> None:
         """Resposta livre (tecla r quando o agente deixou algo, ou pela paleta): continua a conversa na mesma sessão."""
-        def build(v):
-            return [["note", "add", "--text", v["text"] or "…"]] if not self._resumable() else []
-
         def intercept(v) -> bool:
             text = v["text"]
             if self._resumable():
@@ -196,8 +191,8 @@ class AskKeys:
             return True
         sub = ("Continua a conversa do agente na mesma sessão." if self._resumable()
                else "Não há sessão do agente para retomar: o texto vira uma nota na inbox (o próximo /update lê).")
-        self.form(FormSpec("Resposta livre ao agente", [Field("text", "resposta", req=True, multi=True, ph="o que o agente deve saber ou fazer")],
-                           build, sub=sub, intercept=intercept, render=False))
+        self.open_form("ask.free", {"sub": sub}, intercept=intercept, render=False,
+                       wrap=lambda cmds, v: [] if self._resumable() else cmds)
 
     # ── depois de cada rodada ⚡ ───────────────────────────────────────────
     async def after_run(self, info) -> None:

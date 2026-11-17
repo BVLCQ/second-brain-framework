@@ -5,19 +5,15 @@ ledger por conta própria. Promover é o gate estrutural: mostra o diff do goals
 """
 from __future__ import annotations
 
-import re
-
 from rich.text import Text
 
 from .. import people as people_mod
 from .. import portfolio, util, watch
-from ..cli_portfolio import promote_proposal
-from ..schema import DOC_KINDS, OPP_KINDS, OPP_REASON_STATUS, RECURRENCE
-from .modals import ConfirmModal, Field, FormSpec, PickerModal, PickItem
+from ..schema import OPP_REASON_STATUS
+from .modals import ConfirmModal, PickerModal, PickItem
 from . import rows
 
 STATUS_ORDER = ["ideia", "triagem", "priorizada", "em-andamento", "piloto", "validando", "entregue", "em-espera", "descartada"]
-NONE = "—"                                          # opção "sem valor" dos campos de escolha
 
 
 class PortfolioKeys:
@@ -65,9 +61,6 @@ class PortfolioKeys:
                 add("d", "desligar", self.f_doc_unlink)
 
     # ── apoio ──────────────────────────────────────────────────────────────
-    def _area_ids(self) -> list[str]:
-        return list(self.store.by_area)
-
     def _need_area(self) -> bool:
         """Processo e oportunidade pedem uma área cadastrada; sem nenhuma, leva ao cadastro."""
         if self.store.by_area:
@@ -89,106 +82,19 @@ class PortfolioKeys:
                 return f"'{name}' é ambíguo: {', '.join(cands)}."
         return ""
 
-    @staticmethod
-    def _num_check(v: str) -> str:
-        try:
-            ok = float(v.replace(",", ".")) > 0
-        except ValueError:
-            ok = False
-        return "" if ok else "Use um número maior que zero."
-
-    @staticmethod
-    def _num(v: str) -> str:
-        return str(float(v.replace(",", ".")))
-
-    @staticmethod
-    def _dur_check(v: str) -> str:
-        try:
-            return "" if (util.parse_duration(v) or 0) > 0 else "Use uma duração maior que zero (45m, 1h30m)."
-        except util.BrainError as e:
-            return str(e)
-
-    @staticmethod
-    def _scale_check(v: str) -> str:
-        return "" if v.isdigit() and 1 <= int(v) <= 5 else "Use um inteiro de 1 a 5."
-
-    def _proc_check(self, v: str) -> str:
-        return "" if v in self.store.by_proc else f"{v} não existe (use PROC-####)."
-
-    def _goal_check(self, v: str) -> str:
-        return "" if v in self.store.by_goal else f"{v} não existe no PLANNING (use GOAL-#)."
-
-    def _choice(self, v: str) -> str:
-        return "" if v == NONE else v
-
     # ── processos ──────────────────────────────────────────────────────────
-    def _proc_fields(self, d: dict | None = None) -> list[Field]:
-        d = d or {}
-        rec = [NONE, *sorted(RECURRENCE)]
-        area = d.get("area") if d.get("area") in self.store.by_area else self._area_ids()[0]
-        return [
-            Field("title", "título", value=d.get("title", ""), req=True, ph="Fechamento mensal"),
-            Field("area", "área", choice=self._area_ids(), value=area),
-            Field("owner", "responsável", value=d.get("owner") or "", ph="id ou alias da pessoa (1)", check=self._people_check),
-            Field("executors", "executores", value=", ".join(d.get("executors") or []), ph="ids ou aliases, vírgula", check=self._people_check),
-            Field("recurrence", "recorrência", choice=rec, value=d.get("recurrence") or NONE),
-            Field("per_month", "execuções/mês", value=f"{d['per_month']:g}" if d.get("per_month") else "",
-                  ph="só sob-demanda / por-evento", check=self._num_check),
-            Field("duration", "duração", value=util.fmt_duration(d["duration_min"]).replace("min", "m") if d.get("duration_min") else "",
-                  ph="por execução: 45m · 1h30m", check=self._dur_check),
-            Field("tools", "ferramentas", value=", ".join(d.get("tools") or []), ph="Sheets, Jira"),
-            Field("io", "entradas → saídas", value=d.get("io") or "", ph="planilha de vendas → relatório fechado"),
-            Field("pain", "dor", ph="uma dor a adicionar (opcional)"),
-            Field("maturity", "maturidade", value=str(d["maturity"]) if d.get("maturity") else "", ph="1–5", check=self._scale_check),
-            Field("note", "nota", ph="opcional")]
-
-    def _proc_args(self, v: dict, old: dict | None) -> list[str]:
-        """Opções da CLI para os campos que mudaram (no cadastro novo, todos os preenchidos)."""
-        old = old or {}
-        c: list[str] = []
-        pairs = (("--area", v["area"], old.get("area") or ""), ("--owner", v["owner"], old.get("owner") or ""),
-                 ("--executor", v["executors"], ", ".join(old.get("executors") or [])),
-                 ("--recurrence", self._choice(v["recurrence"]), old.get("recurrence") or ""),
-                 ("--tools", v["tools"], ", ".join(old.get("tools") or [])), ("--io", v["io"], old.get("io") or ""),
-                 ("--maturity", v["maturity"], str(old.get("maturity") or "")))
-        for opt, new, was in pairs:
-            if new and new != was:
-                c += [opt, new]
-        if v["per_month"] and (not old.get("per_month") or float(v["per_month"].replace(",", ".")) != old["per_month"]):
-            c += ["--per-month", self._num(v["per_month"])]
-        was_dur = util.fmt_duration(old["duration_min"]).replace("min", "m") if old.get("duration_min") else ""
-        if v["duration"] and v["duration"] != was_dur:
-            c += ["--duration", v["duration"]]
-        for opt, key in (("--pain", "pain"), ("--note", "note")):
-            if v[key]:
-                c += [opt, v[key]]
-        return c
-
     def f_proc_new(self) -> None:
         if not self._need_area():
             return
-        self.form(FormSpec("Novo processo", self._proc_fields(),
-                           lambda v: [["process", "add", v["title"] or "…", "--by", "owner", *self._proc_args(v, None)]],
-                           sub="Horas/mês = execuções/mês × duração × nº de executores; quem calcula é o CLI.",
-                           after=lambda: self._after_new("PROC-")))
+        self.open_form("process.new", after=lambda: self._after_new("PROC-"))
 
     def f_proc_edit(self) -> None:
         p = self.cur().data
-
-        def build(v):
-            c = ["process", "update", p["id"], "--by", "owner"]
-            if v["title"] != p["title"]:
-                c += ["--title", v["title"]]
-            return [c + self._proc_args(v, p)]
-
-        self.form(FormSpec(f"Editar {p['id']}", self._proc_fields(p), build,
-                           sub="Só o que mudou vai para a CLI. Executores e ferramentas substituem a lista; dor e nota são acrescentadas."))
+        self.open_form("process.edit", {"id": p["id"], "item": p})
 
     def f_proc_retire(self) -> None:
         p = self.cur().data
-        self.form(FormSpec(f"Aposentar {p['id']}", [Field("reason", "motivo", req=True, ph="deixou de existir")],
-                           lambda v: [["process", "retire", p["id"], "--reason", v["reason"] or "…", "--by", "owner"]],
-                           sub=p["title"]))
+        self.open_form("process.retire", {"id": p["id"], "title": p["title"]})
 
     def open_playbook(self) -> None:
         p = self.cur().data
@@ -207,57 +113,27 @@ class PortfolioKeys:
         self.f_opp_new({"area": p["area"], "process": p["id"]})
 
     # ── oportunidades ──────────────────────────────────────────────────────
-    def _opp_fields(self, d: dict | None = None) -> list[Field]:
-        d = d or {}
-        area = d.get("area") if d.get("area") in self.store.by_area else self._area_ids()[0]
-        return [
-            Field("title", "título", value=d.get("title", ""), req=True, ph="Automatizar a conciliação"),
-            Field("area", "área", choice=self._area_ids(), value=area),
-            Field("process", "processo", value=d.get("process") or "", ph="PROC-#### (opcional)", check=self._proc_check),
-            Field("kind", "tipo", choice=sorted(OPP_KINDS), value=d.get("kind") or "melhoria-de-processo"),
-            Field("problem", "problema", value=d.get("problem") or ""),
-            Field("suggestion", "sugestão", value=d.get("suggestion") or ""),
-            Field("gain", "ganho esperado", value=d.get("gain") or "", ph="texto livre"),
-            Field("hours", "horas/mês poupadas", value=f"{d['hours_saved']:g}" if d.get("hours_saved") else "", ph="declarado por você (opcional)",
-                  check=self._num_check),
-            Field("goal", "goal", value=d.get("goal") or "", ph="GOAL-# (opcional)", check=self._goal_check),
-            Field("people", "pessoas", ph="ids ou aliases, vírgula (opcional)", check=self._people_check)]
-
-    def _opp_args(self, v: dict, old: dict | None) -> list[str]:
-        old = old or {}
-        c: list[str] = []
-        for opt, key in (("--area", "area"), ("--process", "process"), ("--kind", "kind"), ("--problem", "problem"),
-                         ("--suggestion", "suggestion"), ("--gain", "gain"), ("--goal", "goal")):
-            if v[key] and v[key] != (old.get(key) or ""):
-                c += [opt, v[key]]
-        if v["hours"] and (not old.get("hours_saved") or float(v["hours"].replace(",", ".")) != old["hours_saved"]):
-            c += ["--hours-saved", self._num(v["hours"])]
-        if v["people"]:
-            c += ["--person", v["people"]]
-        return c
-
     def f_opp_new(self, pre: dict | None = None) -> None:
         if not self._need_area():
             return
-        build = lambda v, force=False: [["opportunity", "add", v["title"] or "…", "--by", "owner",  # noqa: E731
-                                         *self._opp_args(v, None), *(["--force"] if force else [])]]
+        from .. import forms
 
         def intercept(v: dict) -> bool:
             dups = portfolio.duplicates(v["title"], v["problem"], self.store.brain.state.opportunities.values())
             if not dups:
                 return False
             body = "\n".join(f"{o.id} ({o.status}) · {o.title} · similaridade {s:.2f}" for o, s in dups)
+            forced = [c + ["--force"] for c in forms.build("opportunity.new", v, ctx, self.form_model())]
 
             def done(ok) -> None:
                 if ok:
-                    self.exec(build(v, True), after=lambda: self._after_new("OPP-"))
+                    self.exec(forced, after=lambda: self._after_new("OPP-"))
             self.push_screen(ConfirmModal("Possível duplicata", body + "\n\nGravar mesmo assim? (Se for a mesma ideia, cancele e use v: evidência.)",
-                                          build(v, True)[0]), done)
+                                          forced[0]), done)
             return True
 
-        self.form(FormSpec("Nova oportunidade", self._opp_fields(pre), build,
-                           sub="Nasce em 'ideia'. O detector de duplicatas olha título e problema antes de gravar.",
-                           intercept=intercept, after=lambda: self._after_new("OPP-")))
+        ctx = {"item": dict(pre or {})}
+        self.open_form("opportunity.new", ctx, intercept=intercept, after=lambda: self._after_new("OPP-"))
 
     def _after_new(self, prefix: str) -> None:
         """Depois de criar, vai para o item novo (o último id do prefixo)."""
@@ -268,15 +144,7 @@ class PortfolioKeys:
 
     def f_opp_edit(self) -> None:
         o = self.cur().data
-
-        def build(v):
-            c = ["opportunity", "update", o["id"], "--by", "owner"]
-            if v["title"] != o["title"]:
-                c += ["--title", v["title"]]
-            return [c + self._opp_args(v, o)]
-
-        self.form(FormSpec(f"Editar {o['id']}", self._opp_fields(o), build,
-                           sub="Só o que mudou vai para a CLI. Status, ICE e promoção têm teclas próprias (s, i, p)."))
+        self.open_form("opportunity.edit", {"id": o["id"], "item": o})
 
     def pick_status(self) -> None:
         o = self.cur().data
@@ -303,10 +171,8 @@ class PortfolioKeys:
         if status == "em-andamento" and not o.get("promoted"):
             self.log_line(f"{o['id']}: 'em-andamento' só existe depois de promover (tecla p, em qualquer nível).", "yellow")
             return
-        if status in OPP_REASON_STATUS:
-            self.form(FormSpec(f"{o['id']} → {status}", [Field("reason", "motivo", req=True, ph="por que fica assim")],
-                               lambda v: [["opportunity", "status", o["id"], status, "--reason", v["reason"] or "…", "--by", "owner"]],
-                               sub=o["title"]))
+        if status in OPP_REASON_STATUS:            # laterais pedem motivo: o mesmo formulário do painel
+            self.open_form("opportunity.status", {"id": o["id"], "title": o["title"], "item": o}, values={"status": status})
             return
         self.exec([["opportunity", "status", o["id"], status, "--by", "owner"]])
 
@@ -314,37 +180,10 @@ class PortfolioKeys:
         self.set_status(self.cur().data, "descartada")
 
     def f_ice(self) -> None:
-        from .. import ice_rubric
         o = self.cur().data
-        q = lambda ax: f"{ice_rubric.RUBRIC[ax]['name']} — {ice_rubric.RUBRIC[ax]['question']}"  # noqa: E731
-
-        def res(axis):
-            def _r(v: str) -> str:
-                return ice_rubric.describe(axis, int(v)) if v.isdigit() else ""
-            return _r
-
-        def impact_res(v: str) -> str:
-            out = res("impact")(v)
-            h = o.get("hours_saved")
-            if v.isdigit() and h:
-                hint = ice_rubric.hint_from_hours(h) or 1
-                out += f"\nhoras declaradas: {h:g} h/mês → faixa sugerida {hint}"
-                if int(v) > hint:
-                    out += " · ⚠ escopo e horas divergem: vale a menor nota"
-            return out
-
-        self.form(FormSpec(
-            f"ICE de {o['id']}",
-            [Field("impact", q("impact"), value=str(o["impact"] or ""), choice=ice_rubric.options("impact"), req=True, res=impact_res),
-             Field("confidence", q("confidence"), value=str(o["confidence"] or ""), choice=ice_rubric.options("confidence"), req=True, res=res("confidence")),
-             Field("ease", q("ease"), value=str(o["ease"] or ""), choice=ice_rubric.options("ease"), req=True, res=res("ease"))],
-            lambda v: [["opportunity", "score", o["id"], "--impact", v["impact"] or "…", "--confidence", v["confidence"] or "…",
-                        "--ease", v["ease"] or "…", "--by", "owner"]],
-            sub="Score = impacto × confiança × facilidade (1–125). O CLI calcula e mostra o resultado." + (
-                f" Sugestão do agente: {o['ice_reason']}" if o["ice_suggested"] and o["ice_reason"] else ""),
-            show="ICE gravado",
-            help=lambda: rows.ice_methodology(min(100, self.size.width - 6)),
-            help_title="Metodologia · ICE"))
+        reason = f" Sugestão do agente: {o['ice_reason']}" if o["ice_suggested"] and o["ice_reason"] else ""
+        self.open_form("opportunity.score", {"id": o["id"], "item": o, "ice_reason": reason}, show="ICE gravado",
+                       help=lambda: rows.ice_methodology(min(100, self.size.width - 6)), help_title="Metodologia · ICE")
 
     def confirm_ice(self) -> None:
         o = self.cur().data
@@ -353,9 +192,7 @@ class PortfolioKeys:
 
     def f_evidence(self) -> None:
         o = self.cur().data
-        self.form(FormSpec(f"Evidência de {o['id']}", [Field("source", "fonte", req=True, ph="PROCESSED/2026/10/reuniao.md")],
-                           lambda v: [["opportunity", "evidence", o["id"], "--source", v["source"] or "…", "--by", "owner"]],
-                           sub="Artefato ou RAW que reforça esta oportunidade."))
+        self.open_form("opportunity.evidence", {"id": o["id"]})
 
     def agent_onepager(self) -> None:
         o = self.cur().data
@@ -367,111 +204,23 @@ class PortfolioKeys:
 
     def f_promote(self) -> None:
         o = self.cur().data
-        goals = [g["id"] for g in self.store.m["goals"] if g["status"] in ("ativo", "ativa")]
-        projects = [p["id"] for p in self.store.m["projects"] if p["status"] in ("ativo", "ativa")]
-        opp = self.store.brain.state.opportunities[o["id"]]
-
-        def diff_res(_val, v):
-            """Diff vivo do nó que nasceria no nível/alvo atuais (muda a cada tecla)."""
-            level = v.get("level") or "project"
-            target = v.get("goal") if level == "project" else v.get("project") if level == "deliverable" else None
-            if level != "goal" and not target:
-                return ""
-            try:
-                _, lines = promote_proposal(self.store.brain, opp, v.get("title") or None, level, target)
-                return "cria:\n" + "\n".join("+ " + ln for ln in lines)
-            except Exception:  # noqa: BLE001 — o res nunca derruba o formulário
-                return ""
-
-        def build(v):
-            c = ["opportunity", "promote", o["id"], "--level", v["level"] or "project"]
-            if v["level"] == "project":
-                c += ["--goal", v["goal"]]
-            elif v["level"] == "deliverable":
-                c += ["--project", v["project"]]
-            if v["title"] and v["title"] != o["title"]:
-                c += ["--title", v["title"]]
-            if v["reason"]:
-                c += ["--reason", v["reason"]]
-            return [c + ["--approval", v["quote"] or "…"]]
-
-        self.form(FormSpec(
-            f"Promover {o['id']}",
-            [Field("level", "nível", choice=[("project", "projeto — num goal"), ("deliverable", "entregável — num projeto"),
-                                             ("goal", "goal novo")], value="project", res=diff_res),
-             Field("goal", "goal alvo", choice=goals, value=goals[0] if goals else "",
-                   show=lambda v: v.get("level") == "project"),
-             Field("project", "projeto alvo", choice=projects, value=projects[0] if projects else "",
-                   show=lambda v: v.get("level") == "deliverable"),
-             Field("title", "título do nó", value=o["title"], req=True),
-             Field("reason", "motivo", ph="opcional"),
-             Field("quote", "sua aprovação", req=True, ph="digite a resposta literal, ex.: ok")], build,
-            sub="Criar nó do PLANNING (goal, projeto ou entregável) é mudança estrutural: único gate do sistema. "
-                "Nasce em PLANNING/goals.md, com linha em PLANNING/log.md e no ledger; a oportunidade vira em-andamento.",
-            gate=True, after=lambda: self.jump(o["id"])))
+        self.open_form("opportunity.promote", {"id": o["id"], "item": o}, after=lambda: self.jump(o["id"]))
 
     # ── áreas ──────────────────────────────────────────────────────────────
     def f_area_new(self) -> None:
-        def build(v):
-            c = ["area", "add", v["slug"] or "…", "--by", "owner"]
-            for opt, key in (("--name", "name"), ("--alias", "alias"), ("--note", "note")):
-                if v[key]:
-                    c += [opt, v[key]]
-            return [c]
-
-        slug_ok = lambda v: "" if re.fullmatch(r"[a-z0-9]+(-[a-z0-9]+)*", v) else "Use minúsculas, números e hífens (ex.: growth)."  # noqa: E731
-        self.form(FormSpec("Nova área", [Field("slug", "id", req=True, ph="operacoes", check=slug_ok),
-                                         Field("name", "nome", ph="Operações"), Field("alias", "aliases", ph="Ops, Operacoes (vírgula)"),
-                                         Field("note", "nota")], build, sub="Áreas são do ledger: cadastre quantas quiser."))
+        self.open_form("area.new")
 
     def f_area_edit(self) -> None:
         a = self.cur().data
-
-        def build(v):
-            c = ["area", "update", a["id"], "--by", "owner"]
-            if v["name"] and v["name"] != a["name"]:
-                c += ["--name", v["name"]]
-            for opt, key in (("--alias", "alias"), ("--note", "note")):
-                if v[key]:
-                    c += [opt, v[key]]
-            return [c]
-
-        self.form(FormSpec(f"Editar a área {a['id']}", [Field("name", "nome", value=a["name"], req=True),
-                                                        Field("alias", "novo alias", ph="vírgula"), Field("note", "nota", value=a["note"])],
-                           build, sub="Aliases novos são acrescentados."))
+        self.open_form("area.edit", {"id": a["id"], "item": a})
 
     # ── documentos ─────────────────────────────────────────────────────────
     def f_doc_link(self, target: str) -> None:
-        def watch_check(v: str, vals: dict) -> str:
-            if v != "sim":
-                return ""
-            if vals.get("kind") != "playbook":
-                return "Só playbook é vigiado."
-            return "" if watch.drive_doc_id(vals.get("ref", "")) else "Vigiar pede um doc do Drive (URL ou id)."
-
-        def build(v):
-            c = ["doc", "link", target, "--kind", v["kind"], "--ref", v["ref"] or "…", "--by", "owner"]
-            if v["title"]:
-                c += ["--title", v["title"]]
-            if v["watch"] == "sim":
-                c.append("--watch")
-            return [c]
-
-        self.form(FormSpec(f"Ligar documento a {target}",
-                           [Field("kind", "tipo", choice=sorted(DOC_KINDS), value="playbook"),
-                            Field("ref", "ref", req=True, ph="URL, id do Drive ou caminho do vault"),
-                            Field("title", "título", ph="opcional"),
-                            Field("watch", "vigiar", choice=["não", "sim"], check=watch_check)],
-                           build, sub="Playbook vigiado do Drive: o /update só relê quando o modifiedTime muda."))
+        self.open_form("doc.link", {"target": target, "target_fixed": True})
 
     def f_doc_unlink(self) -> None:
         d = self.cur().data
-
-        def done(ok) -> None:
-            if ok:
-                self.exec([["doc", "unlink", d["target"], "--ref", d["ref"], "--by", "owner"]])
-        self.push_screen(ConfirmModal(f"Desligar o documento de {d['target']}", d["title"] or d["ref"],
-                                      ["doc", "unlink", d["target"], "--ref", d["ref"], "--by", "owner"]), done)
+        self.open_form("doc.unlink", {"target": d["target"], "ref": d["ref"], "doc_title": d["title"] or d["ref"]})
 
     def open_current_doc(self) -> None:
         it = self.cur()

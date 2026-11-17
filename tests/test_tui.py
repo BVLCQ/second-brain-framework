@@ -7,6 +7,7 @@ import argparse
 import contextlib
 import importlib.util
 import io
+import json
 import os
 import sys
 import tempfile
@@ -616,7 +617,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             await pilot.press("ctrl+s")
             await pilot.pause(0.3)
             self.assertEqual(got[-1], [["opportunity", "add", "Algo totalmente novo", "--by", "owner", "--area", "growth",
-                                        "--kind", "melhoria-de-processo", "--problem", "outro assunto", "--hours-saved", "12.0"]])
+                                        "--kind", "melhoria-de-processo", "--problem", "outro assunto", "--hours-saved", "12"]])
 
     async def test_portfolio_o_opens_opportunity_map(self):
         """Face Portfólio: `o` na Visão e na Matriz abre o mapa HTML (o mesmo gesto do painel da face Execução)."""
@@ -2583,8 +2584,12 @@ class CoverageTest(unittest.TestCase):
     def test_every_cli_subcommand_is_accounted_for(self):
         import re
         from brainlib import cli
+        from brainlib import forms
         src = "".join((ROOT / "brainlib" / "tui" / f).read_text(encoding="utf-8")
                       for f in ("app.py", "store.py", "portfolio_keys.py", "config_keys.py", "ask_keys.py", "feedback_keys.py"))
+        # formulários: o comando mora na especificação única (brainlib/forms.py); a TUI abre os de where both/tui
+        src += "".join(json.dumps(list(t)) for fm in forms.FORMS.values() if fm.where != "panel"
+                       for t in [fm.cmd] + [tpl for _, tpl in fm.more])
         sub = next(a for a in cli.build_parser()._actions if a.__class__.__name__ == "_SubParsersAction")
 
         def leaves(pr, path):                      # anda até a folha: memory models list & cia não escapam

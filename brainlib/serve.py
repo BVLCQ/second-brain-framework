@@ -27,7 +27,7 @@ ALLOWED: dict[str, set[str] | None] = {
     "focus": {"approve", "apply", "plan", "sync"},
     "memory": {"providers", "harness"},          # face Configurações: provedores + conectar/verificar harnesses
     "outbox": {"draft", "approve", "cancel"},
-    "decision": {"add"},
+    "decision": {"add", "supersede"},              # supersede: o mesmo formulário da TUI (forms.py)
     "delivery": None,                                   # posicional, sem subcomando
     "person": {"add", "alias", "update", "resolve"},   # resolve: só lê (quem é…?)
     "process": {"add", "update", "retire"},

@@ -284,6 +284,20 @@ completo por contexto está na ajuda da própria TUI (`?`). Fora do TUI ficam s�
 `tests/test_tui.py::CoverageTest` garante que nenhum subcomando novo da CLI fique sem lugar ou sem justificativa. `[runner].allow` do `brain.toml` lista as ferramentas MCP de leitura do agente headless (noturno e TUI). Em `[tui]`, `model` e `effort` escolhem o modelo e o esforço do claude nas ações ⚡ (ex.: `haiku` · `high`; vazio = padrão; não valem com `[runner].command`), e `agent_allow` lista ferramentas extras, só do TUI, que o
 agente pode usar nas ações ⚡ (por exemplo as de escrita do MCP do Slack, só para enviar uma mensagem aprovada).
 
+**Formulários: uma especificação, duas pontas.** Todo formulário da TUI e do painel HTML mora em
+`brainlib/forms.py` — título, texto de apoio, campos (rótulo, exemplo, obrigatório `*`, lista de escolha, quando
+aparece), a validação, a dica ao lado do campo, o valor com que abre ao editar e como os valores viram a linha
+`brain …`. A TUI desenha os campos com o Textual; o painel recebe a mesma especificação no view model (`M.forms`) e
+o `assets/src/forms.js` monta o comando com a mesma regra. Por isso os dois mostram os mesmos campos na mesma ordem,
+escondem e mostram os mesmos campos quando o tipo muda (ex.: Fontes: `drive-doc` pede só o doc; `jira` monta a JQL
+pelo escopo), aceitam as mesmas datas naturais (`sex`, `+3d`) e montam a mesma linha. Nenhum dos dois pré-preenche
+aprovação: silêncio não é "ok". `tests/test_forms.py` recusa campo escrito à mão numa ponta só e compara, pelo
+node, o comando, a validação, as dicas e as listas que o Python e o JS dão para os mesmos valores. Exceções de uma
+ponta só (`where="tui"`, com o porquê): `plan.log` (diff do `$EDITOR`), `note.edit`, `memory.ask`, `ask.free` e
+`agent.arg` (o painel não roda o agente nem a memória). Validações que precisam do ledger inteiro (alias de
+pessoa, ação parecida, destinatário em `[outbound].allow`) ficam só na TUI (`forms.PY_ONLY`); a CLI valida de
+novo ao gravar.
+
 ### `brain serve`
 Ponte CLI do painel HTML: o mesmo `FRESH/dashboard/index.html` que abre por `file://`, mas executando
 os comandos de verdade — exatamente as linhas que o TUI dispara (`tui/bridge.run_brain`), com os gates
