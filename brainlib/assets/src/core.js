@@ -206,11 +206,11 @@ V.todo = (q) => {
   else if (view === "depois") mine = mine.filter(a => a.open && !a.parked && !((a.due && a.due <= endS) || a.status === "fazendo"));
   else if (view === "nao-agora") mine = mine.filter(a => a.open && a.parked);
   const recent = new Date(M.today + "T12:00:00");
-  if (!showAll) recent.setDate(recent.getDate() - 14);
+  recent.setDate(recent.getDate() - 14);
   const cols = [["A fazer", a => a.open && a.status === "aberta", "aberta"],
     ["Fazendo", a => a.open && a.status === "fazendo", "fazendo"],
     ["Bloqueada / aguardando", a => a.open && ((a.blocked_by && a.blocked_by.length) || a.status === "bloqueada" || a.status === "aguardando"), "aguardando"],
-    ["Feita" + (showAll ? "" : " (14 dias)"), a => a.status === "fechada" && a.closed && new Date(a.closed + "T12:00:00") >= recent, "fechada"]];
+    ["Feita" + (showAll ? "" : " (14 dias)"), a => a.status === "fechada" && a.closed && (showAll || new Date(a.closed + "T12:00:00") >= recent), "fechada"]];
   const sortA = l => l.sort((x, y) => sortK === "id" ? x.id.localeCompare(y.id)
     : ((x.due || "9999").localeCompare(y.due || "9999") || (x.priority === "alta" ? -1 : 0)));
   const VIEWS = [["todas", "todas"], ["semana", "esta semana"], ["depois", "depois"], ["nao-agora", "não agora"]];
