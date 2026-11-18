@@ -600,20 +600,26 @@ SETUP.rotina = box => {
           await obState(); stMsg(q("#s-m"), "ok", "✓ salvo"); } catch (err) { stMsg(q("#s-m"), "late", err.message); }
   });
 };
+let connScanRes = null;
 const CONN_ST = {connected: ["h-em-dia", "conectado"], auth: ["h-atencao", "precisa autorizar"], missing: ["", "não adicionado"], error: ["h-em-risco", "com erro"], unknown: ["", "não verificado"]};
 SETUP.conectores = box => {
-  const noClaude = !SS.claude_installed, perm = SS.permissions.ok;
-  const rows = SS.connectors.map(c => {
-    const [cls, label] = CONN_ST[SS.connectors_scanned ? c.status : "unknown"] || CONN_ST.unknown;
-    const can = c.status === "connected" || c.enabled;
-    return '<div class="stconn"><div><b>' + esc(c.label) + '</b><span class="muted small">' + esc(c.what) + '</span></div><span class="chip ' + cls + '">' + label + "</span>" +
-      '<label class="chk" title="o Brain pode ler"><input type="checkbox" data-c="' + esc(c.key) + '"' + (c.enabled || c.status === "connected" ? " checked" : "") + (can ? "" : " disabled") + "> ler</label></div>";
-  }).join("");
-  box.innerHTML = sec("Seus conectores", (noClaude ? '<p class="late">O Claude Code não está instalado: é ele que lê as ferramentas para o Brain.</p>' : "") + rows +
-      '<div class="stgrid" id="s-extra">' + fld("Canais do Slack para acompanhar", '<input type="text" id="s-slack" placeholder="#meu-time, #projeto-x">', "Separados por vírgula: entram como fontes novas.") +
+  const perm = SS.permissions.ok;
+  const src = (connScanRes && connScanRes.source) || SS.connectors_source;
+  const hint = (connScanRes && connScanRes.hint) || SS.connectors_hint;
+  const noConn = src === "none";
+  const rows = noConn
+    ? '<p class="muted">' + esc(hint) + "</p>"
+    : SS.connectors.map(c => {
+        const [cls, label] = CONN_ST[SS.connectors_scanned ? c.status : "unknown"] || CONN_ST.unknown;
+        const can = c.status === "connected" || c.enabled;
+        return '<div class="stconn"><div><b>' + esc(c.label) + '</b><span class="muted small">' + esc(c.what) + '</span></div><span class="chip ' + cls + '">' + label + "</span>" +
+          '<label class="chk" title="o Brain pode ler"><input type="checkbox" data-c="' + esc(c.key) + '"' + (c.enabled || c.status === "connected" ? " checked" : "") + (can ? "" : " disabled") + "> ler</label></div>";
+      }).join("");
+  box.innerHTML = sec("Seus conectores", rows +
+      '<div class="stgrid" id="s-extra"' + (noConn ? " hidden" : "") + ">" + fld("Canais do Slack para acompanhar", '<input type="text" id="s-slack" placeholder="#meu-time, #projeto-x">', "Separados por vírgula: entram como fontes novas.") +
       fld("Pasta do Drive (link)", '<input type="text" id="s-drive" placeholder="https://drive.google.com/drive/folders/…">', "Opcional.") + "</div>" +
-      '<p class="muted small">Desligar um conector aqui faz o Brain parar de lê-lo. Conecte novos em <a href="https://claude.ai/settings/connectors" target="_blank" rel="noopener">claude.ai → Configurações → Conectores</a> e clique em verificar.</p>' +
-      '<div class="stactions"><span class="stmsg" id="s-m"></span><button class="btn" id="s-scan"' + (noClaude ? " disabled" : "") + '>↻ verificar conexões</button><button class="btn primary" id="s-save">Salvar</button></div>') +
+      (noConn ? "" : '<p class="muted small">Desligar um conector aqui faz o Brain parar de lê-lo. Conecte novos em <a href="https://claude.ai/settings/connectors" target="_blank" rel="noopener">claude.ai → Configurações → Conectores</a> e clique em verificar.</p>') +
+      '<div class="stactions"><span class="stmsg" id="s-m"></span><button class="btn" id="s-scan">↻ verificar conexões</button><button class="btn primary" id="s-save"' + (noConn ? " hidden" : "") + '>Salvar</button></div>') +
     sec("Permissões no computador", '<p>Pré-autoriza o Claude a ler esta pasta e usar as ferramentas de <b>leitura</b> dos conectores ligados. Segredos, livro-razão e envios continuam bloqueados.</p>' +
       '<div class="stactions"><span class="stmsg" id="s-mp"></span>' + (perm ? "" : '<button class="btn primary" id="s-perm">Liberar</button>') + "</div>",
       perm ? '<span class="chip h-em-dia">liberado</span>' : '<span class="chip h-atencao">pendente</span>');
@@ -622,7 +628,8 @@ SETUP.conectores = box => {
   box.querySelectorAll("[data-c]").forEach(i => i.onchange = extra); extra();
   q("#s-scan").onclick = e => stBusy(e.currentTarget, "verificando…", async () => {
     try { const r = await obAct("connectors_scan", {force: true});
-          if (r.job) { const j = await obJob(r.job); if (j.status === "error") stMsg(q("#s-m"), "late", (j.result && j.result.error) || "não consegui verificar"); }
+          if (r.job) { const j = await obJob(r.job); if (j.status === "error") stMsg(q("#s-m"), "late", (j.result && j.result.error) || "não consegui verificar"); connScanRes = j.result || null; }
+          else { connScanRes = r; }
           await obState(); redo("conectores"); } catch (err) { stMsg(q("#s-m"), "late", err.message); }
   });
   q("#s-save").onclick = e => stBusy(e.currentTarget, "salvando…", async () => {

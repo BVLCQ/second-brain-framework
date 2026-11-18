@@ -347,16 +347,16 @@ V.rotina = () => {
 const ST_LABEL = {connected: ["ok", "Conectado"], auth: ["warn", "Precisa autorizar"], missing: ["muted", "Não adicionado"], error: ["bad", "Com erro"], unknown: ["muted", "Verificando…"]};
 V.conectores = () => {
   const noClaude = !S.claude_installed;
-  $("#view").innerHTML = `${head("Passo 4", "Conecte suas ferramentas", "O Brain lê suas ferramentas através do Claude, só para <b>leitura</b>: ele nunca envia mensagem, e-mail ou convite sem você aprovar o texto exato.")}
-    ${noClaude ? `<div class="card"><h2>Primeiro, instale o Claude Code</h2><p style="color:var(--tx2);margin:6px 0 0">É o assistente que lê suas ferramentas e organiza tudo para o Brain. Instale, entre com a sua conta e volte aqui. <a href="https://claude.com/product/claude-code" target="_blank" rel="noopener">Como instalar →</a></p></div>` : ""}
-    <div class="card soft"><h2>Como conectar (uma vez só)</h2>
+  let scanRes = null;
+  $("#view").innerHTML = `${head("Passo 4", "Conecte suas ferramentas", "O Brain lê suas ferramentas através do seu agente, só para <b>leitura</b>: ele nunca envia mensagem, e-mail ou convite sem você aprovar o texto exato.")}
+    ${noClaude ? "" : `<div class="card soft"><h2>Como conectar (uma vez só)</h2>
       <ol class="howto">
         <li>Abra <a href="https://claude.ai/settings/connectors" target="_blank" rel="noopener">claude.ai → Configurações → Conectores</a>.</li>
         <li>Adicione os que você usa: <b>Slack</b>, <b>Gmail</b>, <b>Google Calendar</b>, <b>Google Drive</b>, <b>Granola</b>, <b>Atlassian</b>.</li>
         <li>Clique em <b>Conectar</b> em cada um e autorize com a sua conta de trabalho.</li>
         <li>Volte aqui e clique em <b>Verificar de novo</b>.</li>
-      </ol></div>
-    <div class="card"><div style="display:flex;align-items:center;gap:12px;margin-bottom:4px"><h2 style="margin:0">Seus conectores</h2><span class="spacer"></span><button class="btn sm" id="scan" ${noClaude ? "disabled" : ""}>↻ Verificar de novo</button></div>
+      </ol></div>`}
+    <div class="card"><div style="display:flex;align-items:center;gap:12px;margin-bottom:4px"><h2 style="margin:0">Seus conectores</h2><span class="spacer"></span><button class="btn sm" id="scan">↻ Verificar de novo</button></div>
       <div id="conns"></div>
       <div id="extra" class="hidden" style="margin-top:14px">
         <div class="grid2">
@@ -367,6 +367,13 @@ V.conectores = () => {
       <div class="msg" id="m"></div></div>
     ${nav({main: "Salvar e continuar", skip: "Fazer depois"})}`;
   const draw = () => {
+    const src = (scanRes && scanRes.source) || S.connectors_source;
+    const hint = (scanRes && scanRes.hint) || S.connectors_hint;
+    if (src === "none") {
+      $("#conns").innerHTML = `<p style="color:var(--tx2);margin:10px 0 0">${esc(hint)}</p>`;
+      $("#extra").classList.add("hidden");
+      return;
+    }
     $("#conns").innerHTML = S.connectors.map(c => {
       const [k, l] = ST_LABEL[S.connectors_scanned ? c.status : "unknown"] || ST_LABEL.unknown;
       const can = c.status === "connected" || c.enabled;
@@ -383,12 +390,18 @@ V.conectores = () => {
     const b = $("#scan"); busy(b, true, "Verificando…");
     try {
       const r = await act("connectors_scan", {force});
-      if (r.job) { const j = await waitJob(r.job); if (j.status === "error") msg($("#m"), "err", (j.result && j.result.error) || "não consegui verificar"); }
+      if (r.job) {
+        const j = await waitJob(r.job);
+        if (j.status === "error") msg($("#m"), "err", (j.result && j.result.error) || "não consegui verificar");
+        scanRes = j.result || null;
+      } else {
+        scanRes = r;
+      }
       await refresh(); draw();
     } catch (e) { msg($("#m"), "err", e.message); } finally { busy(b, false); }
   };
   $("#scan").onclick = () => scan(true);
-  if (!noClaude && !S.connectors_scanned) scan(false);
+  if (!S.connectors_scanned) scan(false);
   bindNav(async btn => {
     const keys = $$("#conns input:checked").map(i => i.dataset.c);
     if (!keys.length) return skip(cur);
@@ -509,7 +522,7 @@ V.planejamento = () => {
       <div class="drop" id="drop"><b>Arraste documentos aqui</b> ou clique para escolher<br><small style="color:var(--tx3)">Planejamento, OKRs, apresentação… (PDF, Word, PowerPoint, texto — até 25 MB)</small><input type="file" id="file" multiple class="hidden"></div>
       <ul class="files" id="files">${uploads.map(u => `<li><span>${esc(u.name)}</span><span>✓ recebido</span></li>`).join("")}</ul>
       <div class="actions" style="margin-top:18px"><span class="spacer"></span><button class="btn" id="manual">Montar à mão</button><button class="btn pri" id="gen" ${S.agent ? "" : "disabled"}>✦ Gerar proposta com IA</button></div>
-      ${S.agent ? "" : '<p style="color:var(--tx3);font-size:13px;margin:10px 0 0">A proposta automática precisa do Claude Code instalado. Você pode montar à mão.</p>'}
+      ${S.agent ? "" : '<p style="color:var(--tx3);font-size:13px;margin:10px 0 0">A proposta automática precisa de um agente headless instalado ou configurado em [runner]. Você pode montar à mão.</p>'}
       <div class="log" id="log"></div></div>`;
     const drop = $("#drop"), file = $("#file");
     drop.onclick = () => file.click();

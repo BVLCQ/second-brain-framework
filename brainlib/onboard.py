@@ -8,9 +8,10 @@ comandos da ponte, e nenhum segredo vai para o log:
   nome enquanto o dono ainda não tem ficha (instância de uma pessoa só: ninguém escolhe id).
 * **Sobre você** — o texto vira o `PROFILE/profile.md`, mostrado como prévia antes de gravar (o clique é a aprovação).
 * **Rotina** — fuso e expediente (`[owner]`, `[work]`).
-* **Conectores** — o estado vem do `claude mcp list` (rodado em segundo plano, só nome → status); ligar um conector
-  libera as ferramentas de LEITURA dele em `[runner].allow` e cria as fontes simples no `watch.toml`. Escrita no mundo
-  exterior continua só pelas portas.
+* **Conectores** — quando o Claude Code está presente, o estado vem do `claude mcp list` (rodado em segundo plano, só
+  nome → status) e ligar um conector libera as ferramentas de LEITURA dele em `[runner].allow` e cria as fontes simples
+  no `watch.toml`; caso contrário, o passo orienta a conectar pelo agente configurado e cadastrar a fonte em `watch.toml`.
+  Escrita no mundo exterior continua só pelas portas.
 * **Permissões** — `.claude/settings.local.json` (`perms.sync`), para o agente não pedir licença a cada comando.
 * **Memória** — nenhuma · embed (na API, `lite`: local, nada sai da máquina) · full (com a sua API key). A chave vai direto para o
   `config/.env` (0600) e nunca volta para o navegador; o modo full exige o aceite explícito do envio de texto.
@@ -33,7 +34,7 @@ import threading
 import time
 from pathlib import Path
 
-from . import config, util
+from . import config, runner, util
 
 STEPS = ("voce", "sobre", "rotina", "conectores", "permissoes", "memoria", "chaves", "planejamento", "pronto")
 PROFILE_TEMPLATE_MARK = "(a preencher no /init)"
@@ -155,7 +156,7 @@ class _Job:
 
 _JOBS: dict[str, _Job] = {}
 _JOBS_LOCK = threading.Lock()
-_MCP_CACHE: dict = {"at": 0.0, "servers": None, "job": None}
+_MCP_CACHE: dict = {"at": 0.0, "servers": None, "source": None, "hint": "", "job": None}
 
 
 def _start(kind: str, fn) -> _Job:
@@ -187,9 +188,19 @@ def job(job_id: str) -> dict | None:
 
 
 # ── leitura do estado ────────────────────────────────────────────────────────
-def _agent_name(cfg) -> str | None:
-    from .tui import bridge
-    return bridge._agent_name(cfg)
+def _agent_name(argv) -> str | None:
+    if isinstance(argv, dict):
+        argv = runner.agent_command(argv)
+    if not argv:
+        return None
+    return next((n for n, p in runner.PRESETS.items() if p[0] == argv[0]), Path(argv[0]).name)
+
+
+def _no_claude_hint() -> str:
+    return ("Você usa o Hermes: os conectores ligam nele — peça ao Hermes \"conecte o meu Gmail\" e depois "
+            "cadastre a fonte em Fontes (`brain watch add`)." if shutil.which("hermes") else
+            "Conectores do Claude Code não encontrados nesta máquina — conecte pelo seu agente e cadastre a "
+            "fonte em Fontes (`brain watch add`).")
 
 
 def parse_mcp_list(text: str) -> dict[str, str]:
@@ -204,25 +215,32 @@ def parse_mcp_list(text: str) -> dict[str, str]:
     return out
 
 
-def scan_connectors(force: bool = False) -> dict:
+def scan_connectors(force: bool = False, run=subprocess.run) -> dict:
     """Dispara (ou reaproveita) o `claude mcp list` em segundo plano — leva 30–60 s. Nunca segura a trava da ponte."""
-    if _MCP_CACHE["job"] and _JOBS.get(_MCP_CACHE["job"]) and _JOBS[_MCP_CACHE["job"]].status == "running":
+    if not force and _MCP_CACHE["job"] and _JOBS.get(_MCP_CACHE["job"]) and _JOBS[_MCP_CACHE["job"]].status == "running":
         return {"job": _MCP_CACHE["job"]}
     if not force and _MCP_CACHE["servers"] is not None and time.time() - _MCP_CACHE["at"] < 600:
-        return {"servers": _MCP_CACHE["servers"]}
+        return {"source": _MCP_CACHE.get("source") or "claude", "servers": _MCP_CACHE["servers"],
+                "hint": _MCP_CACHE.get("hint") or ""}
 
-    def run(j: _Job) -> dict:
+    def _run(j: _Job) -> dict:
         claude = shutil.which("claude")
         if not claude:
-            raise util.BrainError("o Claude Code (comando `claude`) não está instalado nesta máquina")
+            hint = ("Você usa o Hermes: os conectores ligam nele — peça ao Hermes \"conecte o meu Gmail\" e depois "
+                    "cadastre a fonte em Fontes (`brain watch add`)." if shutil.which("hermes") else
+                    "Conectores do Claude Code não encontrados nesta máquina — conecte pelo seu agente e cadastre a "
+                    "fonte em Fontes (`brain watch add`).")
+            _MCP_CACHE.update(at=time.time(), servers={}, source="none", hint=hint)
+            j.say(hint)
+            return {"source": "none", "servers": {}, "hint": hint}
         j.say("verificando os conectores do Claude…")
-        p = subprocess.run([claude, "mcp", "list"], capture_output=True, text=True, timeout=180,
-                           stdin=subprocess.DEVNULL)
+        p = run([claude, "mcp", "list"], capture_output=True, text=True, timeout=180,
+                stdin=subprocess.DEVNULL)
         servers = parse_mcp_list(p.stdout + "\n" + p.stderr)
-        _MCP_CACHE.update(at=time.time(), servers=servers)
+        _MCP_CACHE.update(at=time.time(), servers=servers, source="claude", hint="")
         j.say(f"✓ {len(servers)} conectores encontrados")
-        return {"servers": servers}
-    j = _start("connectors", run)
+        return {"source": "claude", "servers": servers, "hint": ""}
+    j = _start("connectors", _run)
     _MCP_CACHE["job"] = j.id
     return {"job": j.id}
 
@@ -281,10 +299,12 @@ def state(brain) -> dict:
                     if (inst.vault / "PROFILE" / "profile.md").exists() else ""},
         "routine": {"timezone": cfg["timezone"], "start": cfg["work"]["start"], "end": cfg["work"]["end"],
                     "lunch": cfg["work"].get("lunch", "")},
-        "agent": _agent_name(cfg),
+        "agent": _agent_name(runner.agent_command(cfg)),
         "claude_installed": bool(shutil.which("claude")),
         "connectors": connector_status(_MCP_CACHE["servers"], cfg),
         "connectors_scanned": _MCP_CACHE["servers"] is not None,
+        "connectors_source": "claude" if shutil.which("claude") else "none",
+        "connectors_hint": "" if shutil.which("claude") else _no_claude_hint(),
         "permissions": {"ok": perm.get("local") == "ok", "static": perm.get("static")},
         "memory": {"mode": {"embed": "lite"}.get(mem_mode, mem_mode),
                    "docker": pre["docker"], "lmstudio": pre["lmstudio"],
@@ -595,24 +615,28 @@ def draft_planning(brain) -> dict:
     files = [f for f in files if (brain.inst.root / f).exists() or (brain.inst.vault / f).exists()]
     if not files:
         raise util.BrainError("escreva sobre seus objetivos ou envie um documento primeiro", code=4)
-    if _agent_name(brain.inst.cfg) is None:
-        raise util.BrainError("nenhum agente de IA instalado (Claude Code) — monte os goals à mão", code=4)
+    argv = runner.agent_command(brain.inst.cfg)
+    if argv is None:
+        raise util.BrainError("nenhum agente headless encontrado (procurei: cursor-agent, claude, codex, agy, gemini) "
+                              "— instale um deles ou defina [runner] no config", code=4)
+    agent = _agent_name(argv)
     inst = brain.inst
     paths = [str((inst.vault / f) if (inst.vault / f).exists() else (inst.root / f)) for f in files]
-    argv = bridge.agent_argv(inst.cfg, PROPOSAL_PROMPT.format(root=inst.root, files=", ".join(paths)))
+    prompt = PROPOSAL_PROMPT.format(root=inst.root, files=", ".join(paths))
+    run_argv = bridge.agent_argv(inst.cfg, prompt) or argv
 
     def run(j: _Job) -> dict:
-        j.say("o agente está lendo o que você escreveu…")
+        j.say(f"o agente ({agent}) está lendo o que você escreveu…")
         info = bridge.RunInfo()
         lines: list[str] = []
-        rc = asyncio.run(bridge.run_agent(inst, argv, lines.append, info))
+        rc = asyncio.run(bridge.run_agent(inst, run_argv, lines.append, info))
         if rc != 0 and not info.result:
-            raise util.BrainError(f"o agente parou com erro (código {rc})")
+            raise util.BrainError(f"o agente ({agent}) parou com erro (código {rc})")
         proposal = _parse_proposal(info.result or "\n".join(lines))
         _save_progress(inst, proposal=proposal)
         j.say(f"✓ proposta com {len(proposal['goals'])} goal(s)")
-        return {"proposal": proposal}
-    return {"job": _start("planning", run).id}
+        return {"proposal": proposal, "agent": agent}
+    return {"job": _start("planning", run).id, "agent": agent}
 
 
 def apply_planning(brain, data: dict) -> dict:
