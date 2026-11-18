@@ -285,7 +285,9 @@ libere as ferramentas de leitura em `[runner].allow` (`list_meetings`, `get_meet
 em `RAW/…/meetings/` e o `/dump` processa como reunião.
 
 **O `watch.toml` — a lista do que roda sozinho.** Abra
-`config/watch.toml.example` e repare na estrutura; cada bloco é uma fonte:
+`config/watch.toml.example` e repare na estrutura; cada bloco é uma fonte
+(uma fonte desligada continua listada mas é pulada: `enabled = false`, ligada de novo
+com `true` — pelo editor da aba Fontes ou `brain watch edit <key> --set enabled=true`):
 
 ```toml
 [[source]]
@@ -695,7 +697,11 @@ arquivo** que funciona em qualquer navegador, com dois modos:
   (impresso no terminal). O painel passa a **executar** os comandos de
   verdade, pelo mesmo caminho do TUI, com os mesmos gates (confirmar no formulário
   aprova com `--approval`/`--quote painel`, `--by owner`). A allowlist é fechada; `update`,
-  `migrate`, `backup` e cia. seguem no terminal.
+  `migrate`, `backup` e cia. seguem no terminal. Com a ponte no ar, **arrastar um arquivo
+  ou pasta** para qualquer tela do painel entrega os itens em `vault/RAW/inbox/` — duas
+  zonas sobrepostas decidem entre **Mover** (remove o original, quando o navegador
+  permite) e **Copiar**; pasta entra arquivo por arquivo, nome repetido ganha sufixo
+  `-2` e o resultado aparece no console do painel.
 
 O painel tem três **faces** (como o TUI): **Execução**, **Portfólio** e **Configurações** —
 `Tab`/`Shift+Tab` troca, e cada face lembra onde você estava. A barra
