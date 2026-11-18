@@ -1045,9 +1045,9 @@ function openForm(id, ctx, opts){
     const ctl = f.choices !== undefined ? '<select data-k="' + f.id + '">' + optHTML(f, init, val) + "</select>"
       : f.multi ? '<textarea data-k="' + f.id + '" rows="5"' + (ph ? ' placeholder="' + esc(ph) + '"' : "") + ">" + esc(val) + "</textarea>"
       : '<input data-k="' + f.id + '" type="' + (f.secret ? "password" : "text") + '" value="' + esc(val) + '"' +
-        (ph ? ' placeholder="' + esc(ph) + '"' : "") + (f.suggest ? ' list="dl_' + f.id + '"' : "") + ">" +
-        (f.suggest ? '<datalist id="dl_' + f.id + '">' + opt(f, init).map(o => '<option value="' + esc(o[0]) + '">' + esc(o[1]) + "</option>").join("") + "</datalist>" : "");
-    return '<div data-row="' + f.id + '"><div class="frow"><label>' + lab + "</label>" + ctl + "</div>" +
+        (ph ? ' placeholder="' + esc(ph) + '"' : "") + (f.suggest ? ' autocomplete="off" data-suggest="' + esc(f.suggest) + '"' : "") + ">";
+    const sug = f.suggest ? '<div class="fsug" data-sug="' + f.id + '" hidden></div>' : "";
+    return '<div data-row="' + f.id + '"><div class="frow"><label>' + lab + "</label>" + ctl + "</div>" + sug +
       '<div class="note-s fhint" data-hint="' + f.id + '" style="margin:-4px 0 8px 130px"></div></div>'; }).join("");
   const title = F.fmt(fm.title, ctx), sub = F.fmt(fm.sub || "", ctx);
   const ov = document.createElement("div"); ov.className = "pal-back open";
@@ -1071,10 +1071,51 @@ function openForm(id, ctx, opts){
     ov.querySelector("[data-preview]").textContent = "$ " + F.display(F.formArgv(fm, v, ctx, M)).replace(/\n/g, "\n$ ");
     ov.querySelector("[data-err]").textContent = "";
   };
+  const sugState = {};
+  const sugTok = val => val.includes(",") ? val.split(",").pop().trim() : val.trim();
+  const closeSug = id0 => {
+    (id0 ? [id0] : Object.keys(sugState)).forEach(k => {
+      const st = sugState[k]; if (!st) return;
+      st.open = false; st.nav = false;
+      if (st.box) { st.box.hidden = true; st.box.innerHTML = ""; }
+    });
+  };
+  const renderSug = f => {
+    const st = sugState[f.id]; if (!st || !st.box) return;
+    if (!st.open || !st.items.length) { st.box.hidden = true; st.box.innerHTML = ""; return; }
+    st.box.hidden = false;
+    st.box.innerHTML = st.items.map((it, i) =>
+      '<div class="fsug-item' + (i === st.sel ? " sel" : "") + '" data-i="' + i + '" data-id="' + esc(it.id) + '">' +
+      '<span class="ent">' + esc(it.id) + "</span>" +
+      (it.label && it.label !== it.id ? "<span>" + esc(it.label) + "</span>" : "") + "</div>"
+    ).join("");
+    st.box.querySelectorAll(".fsug-item").forEach(row => {
+      row.onmouseenter = () => { st.sel = +row.dataset.i; renderSug(f); };
+      row.onmousedown = ev => { ev.preventDefault(); applySug(f, st.items[+row.dataset.i]); };
+      row.onclick = ev => { ev.preventDefault(); applySug(f, st.items[+row.dataset.i]); };
+    });
+  };
+  const refreshSug = (f, forceOpen) => {
+    const inp = el(f.id), st = sugState[f.id]; if (!inp || !st) return;
+    const tok = sugTok(inp.value);
+    if (!tok && !forceOpen) { closeSug(f.id); return; }
+    Object.keys(sugState).forEach(k => { if (k !== f.id) closeSug(k); });
+    st.items = F.filterOptions(opt(f, vals()), tok);
+    st.sel = 0; st.open = st.items.length > 0;
+    renderSug(f);
+  };
+  const applySug = (f, chosen) => {
+    const inp = el(f.id); if (!inp || !chosen) return;
+    const cur = inp.value;
+    inp.value = cur.includes(",") ? cur.slice(0, cur.lastIndexOf(",")).trimEnd() + ", " + chosen.id : chosen.id;
+    closeSug(f.id);
+    changed(f.id);
+    inp.focus();
+  };
   const changed = id0 => {
     fm.fields.filter(f => f.depends === id0 && f.choices !== undefined).forEach(f => { const e = el(f.id); e.innerHTML = optHTML(f, vals(), e.value); });
     fm.fields.filter(f => f.fill && f.fill[0] === id0).forEach(f => { const nv = F.FILL[f.fill[1]](vals()), e = el(f.id);
-      if (nv !== undefined && e) e.value = nv; });
+      if (nv !== undefined && e) { e.value = nv; closeSug(f.id); } });
     paint();
   };
   const submit = () => {
@@ -1085,9 +1126,39 @@ function openForm(id, ctx, opts){
     close();
     runArgv(cmds, m => opts.run && opts.run(F.values(fm, v, ctx, M), m));
   };
-  ov.querySelectorAll("[data-k]").forEach(e => { e.addEventListener("input", () => changed(e.dataset.k));
+  fm.fields.filter(f => f.auto !== "surface" && f.suggest).forEach(f => {
+    sugState[f.id] = {items: [], sel: 0, open: false, nav: false, box: ov.querySelector('[data-sug="' + f.id + '"]')};
+  });
+  ov.querySelectorAll("[data-k]").forEach(e => {
+    const f = fm.fields.find(x => x.id === e.dataset.k), st = f && sugState[f.id];
+    e.addEventListener("input", () => { if (st) { st.nav = false; refreshSug(f, false); } changed(e.dataset.k); });
     if (e.tagName === "SELECT") e.addEventListener("change", () => changed(e.dataset.k));
-    e.addEventListener("keydown", ev => { if (ev.key === "Enter" && (e.tagName !== "TEXTAREA" || ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); submit(); } }); });
+    if (st) e.addEventListener("focus", () => Object.keys(sugState).forEach(k => { if (k !== f.id) closeSug(k); }));
+    e.addEventListener("keydown", ev => {
+      if (st) {
+        if (ev.key === "ArrowDown") {
+          ev.preventDefault();
+          if (!st.open) { st.nav = true; refreshSug(f, true); }
+          else if (st.items.length) { st.nav = true; st.sel = Math.min(st.items.length - 1, st.sel + 1); renderSug(f); }
+          return;
+        }
+        if (ev.key === "ArrowUp" && st.open) {
+          ev.preventDefault(); st.nav = true; st.sel = Math.max(0, st.sel - 1); renderSug(f); return;
+        }
+        if (ev.key === "Escape" && st.open) {
+          ev.preventDefault(); ev.stopPropagation(); closeSug(f.id); return;
+        }
+        if (ev.key === "Enter" && st.open && st.items[st.sel]) {
+          const chosen = st.items[st.sel], tok = sugTok(e.value);
+          if (tok !== chosen.id || st.nav) {
+            ev.preventDefault(); ev.stopPropagation(); applySug(f, chosen); return;
+          }
+          closeSug(f.id);
+        }
+      }
+      if (ev.key === "Enter" && (e.tagName !== "TEXTAREA" || ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); submit(); }
+    });
+  });
   paint();
   if (opts.help) {                       // ? abre as orientações mesmo com o foco num select
     h2 = ev => { if (ev.key !== "?" || document.querySelector(".help-stack") || /input|textarea/i.test(ev.target.tagName || "")) return;

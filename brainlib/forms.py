@@ -270,8 +270,8 @@ def _forms() -> list[Form]:
             F("deliv", "entregável", ph="9 (do projeto escolhido) ou PROJ-#.# · opcional", init="@deliv",
               check="deliv", hint="deliv", xf="deliv", arg="--deliverable"),
             F("people", "pessoas", ph="marina-demo, heitor-demo (opcional)", suggest="@people", arg="--people"),
-            F("blocked", "bloqueada por", ph="TASK-#### (opcional)", xf="nospace", arg="--blocked-by"),
-            F("unblocks", "destrava", ph="TASK-#### (opcional)", xf="nospace", arg="--unblocks"),
+            F("blocked", "bloqueada por", ph="TASK-#### (opcional)", suggest="@actions", xf="nospace", arg="--blocked-by"),
+            F("unblocks", "destrava", ph="TASK-#### (opcional)", suggest="@actions", xf="nospace", arg="--unblocks"),
             F("link", "link", ph="URL ou arquivo de origem (opcional)", arg="--link")),
             sub="Equivalente ao /todo. Sem prazo, o agente oferece uma sugestão (roxa).",
             tail=("--by", "owner", "--force"),
@@ -284,8 +284,8 @@ def _forms() -> list[Form]:
             *_goal_project(),
             F("deliv", "entregável", ph="só o número, no projeto escolhido (9 → PROJ-1.9), ou PROJ-#.#",
               init=":deliv_short", base="deliverable", check="deliv", hint="deliv", xf="deliv", arg="--deliverable"),
-            F("blocked", "bloqueada por", ph="TASK-#### (a CLI não remove bloqueio)", init="blocked_by_all:csvc",
-              xf="nospace", arg="--blocked-by"),
+            F("blocked", "bloqueada por", ph="TASK-#### (a CLI não remove bloqueio)", suggest="@actions",
+              init="blocked_by_all:csvc", xf="nospace", arg="--blocked-by"),
             F("people", "pessoas", ph="adiciona: marina-demo, heitor-demo", suggest="@people", xf="new_people",
               arg="--people", always=True),
             F("list", "lista", choices=LISTS, init="list", arg="--list"),
@@ -303,7 +303,7 @@ def _forms() -> list[Form]:
             F("reason", "motivo", req=True, ph="projeto cancelado"),),
             sub="Não foi feita e não será. O histórico fica no ledger.", tail=OWNER),
         Form("action.merge", "Mesclar {id}", ("action", "merge", "{id}", "--into", "{into}", "--by", "owner"), (
-            F("into", "mesclar em (TASK)", req=True, ph="TASK-####", check="merge_into"),
+            F("into", "mesclar em (TASK)", req=True, ph="TASK-####", suggest="@actions", check="merge_into"),
             _reason(req=False)),
             sub="“{title}” é duplicada: o que ela tem (pessoas, link, prazo, bloqueios) passa para a que fica."),
         Form("action.reopen", "Reabrir {id}", ("action", "reopen", "{id}", "--reason", "{reason}"), (
@@ -352,7 +352,7 @@ def _forms() -> list[Form]:
         Form("outbox.draft", "Rascunhar mensagem", ("outbox", "draft", "--to", "{to}", "--text", "{text}"), (
             F("to", "para", req=True, ph="id da pessoa ou #canal", suggest="@recipients", init="@to", check="recipient"),
             F("text", "texto", req=True, ph="Oi …", init="@text"),
-            F("ref", "ref", ph="TASK-####", init="@ref", arg="--ref"),
+            F("ref", "ref", ph="TASK-####", suggest="@actions", init="@ref", arg="--ref"),
             F("why", "por quê", init="@why", arg="--why"),
             F("channel", "canal", choices=(("slack", "slack"), ("email", "email")), value="slack", arg="--channel",
               skip=("slack",))),
@@ -644,6 +644,8 @@ def _src_memory_embs(m, v, ctx):
 SOURCES = {
     "people": lambda m, v, ctx: [(p["id"], p["name"]) for p in m.get("people", [])],
     "recipients": lambda m, v, ctx: [(p["id"], p["name"]) for p in m.get("people", []) if not p.get("is_owner")],
+    "actions": lambda m, v, ctx: [(a["id"], a["title"]) for a in m.get("actions", [])
+                                  if a.get("open") and a.get("id") != (ctx or {}).get("id")],
     "relations": lambda m, v, ctx: list(RELATIONS),
     "areas": lambda m, v, ctx: [(a["id"], a["name"]) for a in (m.get("portfolio") or {}).get("areas", [])],
     "processes": lambda m, v, ctx: [(p["id"], f"{p['id']} · {_short(p['title'])}")
@@ -689,6 +691,39 @@ def options(f: F, m: dict, v: dict | None = None, ctx: dict | None = None) -> li
     if isinstance(src, str):
         return [tuple(x) for x in SOURCES[src.lstrip("@")](m, v or {}, ctx or {})]
     return [tuple(x) for x in src]
+
+
+SUGGEST_LIMIT = 12
+
+
+def filter_options(items, query: str = "", limit: int = SUGGEST_LIMIT) -> list[dict[str, str]]:
+    """Filtra opções de autocompletar por prefixo do ID ou palavras dobradas (util.fold) do título/nome.
+    Devolve [{id, label}] ordenado (prefixo exato do ID primeiro, depois pelo rótulo) e limitado a `limit`."""
+    q = util.fold(query)
+    words = q.split()
+    matched: list[tuple[tuple[int, str, str], dict[str, str]]] = []
+    for raw in items or ():
+        if isinstance(raw, dict):
+            oid = str(raw.get("id") or "")
+            lab = str(raw.get("label") or raw.get("title") or raw.get("name") or oid)
+        elif isinstance(raw, (tuple, list)):
+            oid = str(raw[0])
+            lab = str(raw[1] if len(raw) > 1 else raw[0])
+        else:
+            oid = lab = str(raw)
+        prefix = f"{oid} · "
+        if lab.startswith(prefix):
+            lab = lab[len(prefix):]
+        fid, flab = util.fold(oid), util.fold(lab)
+        id_pref = bool(q) and fid.startswith(q)
+        num_pref = bool(q) and q.isdigit() and "-" in fid and (
+            fid.split("-", 1)[1].startswith(q) or fid.split("-", 1)[1].lstrip("0").startswith(q)
+        )
+        if not words or id_pref or num_pref or all(w in flab or w in fid for w in words):
+            key = (0 if id_pref else 1, flab, fid)
+            matched.append((key, {"id": oid, "label": lab}))
+    matched.sort(key=lambda x: x[0])
+    return [x[1] for x in matched[: max(0, limit)]]
 
 
 def label(f: F, m: dict, ctx: dict | None = None) -> str:
@@ -1354,6 +1389,6 @@ def export() -> dict:
     return out
 
 
-__all__ = ["F", "Form", "FORMS", "SOURCES", "INIT", "IFMT", "PRED", "CHECKS", "HINTS", "XF", "FILL", "PY_ONLY", "build",
-           "missing", "required", "initial", "baseline", "values", "hidden", "options", "label", "title", "sub", "display",
-           "export", "static"]
+__all__ = ["F", "Form", "FORMS", "SOURCES", "INIT", "IFMT", "PRED", "CHECKS", "HINTS", "XF", "FILL", "PY_ONLY",
+           "SUGGEST_LIMIT", "build", "missing", "required", "initial", "baseline", "values", "hidden", "options",
+           "filter_options", "label", "title", "sub", "display", "export", "static"]

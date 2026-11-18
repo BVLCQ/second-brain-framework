@@ -409,6 +409,12 @@ main.col{padding-bottom:120px}
 .icerub td:first-child{font:700 12.5px ui-monospace,monospace;color:var(--accent);white-space:nowrap;width:34px}
 .icerub td:nth-child(3){white-space:nowrap;width:110px}
 .fhint{white-space:pre-line;line-height:1.4}
+.fsug{margin:-4px 0 8px 130px;background:var(--panel);border:1px solid var(--line);border-radius:10px;
+  box-shadow:var(--shadow-lg);max-height:220px;overflow-y:auto;padding:4px}
+.fsug[hidden]{display:none}
+.fsug-item{display:flex;gap:10px;align-items:center;padding:6px 10px;border-radius:8px;cursor:pointer;font-size:13px}
+.fsug-item .ent{font:11.5px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--accent);font-weight:600;white-space:nowrap}
+.fsug-item.sel,.fsug-item:hover{background:color-mix(in srgb,var(--accent) 12%,transparent)}
 .cline.miss{border-color:var(--risk);color:var(--risk)}
 .frow .req{color:var(--risk);font-weight:700}
 

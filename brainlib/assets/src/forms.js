@@ -114,6 +114,7 @@ const BRAIN_FORMS = (function(){
   const SOURCES = {
     people: M => (M.people || []).map(p => [p.id, p.name]),
     recipients: M => (M.people || []).filter(p => !p.is_owner).map(p => [p.id, p.name]),
+    actions: (M, v, ctx) => (M.actions || []).filter(a => a.open && a.id !== (ctx && ctx.id)).map(a => [a.id, a.title]),
     relations: () => [["par", "par"], ["gestor", "gestor"], ["stakeholder", "stakeholder"], ["time", "time"]],
     areas: M => (pf(M).areas || []).map(a => [a.id, a.name]),
     processes: M => (pf(M).processes || []).map(p => [p.id, p.id + " · " + short(p.title)]),
@@ -152,6 +153,30 @@ const BRAIN_FORMS = (function(){
     if (src === undefined || src === null) return [];
     if (typeof src === "string") return SOURCES[src.replace(/^@/, "")](M, v || {}, ctx || {}).map(x => [str(x[0]), str(x[1])]);
     return src.map(x => [str(x[0]), str(x[1])]);
+  }
+  const SUGGEST_LIMIT = 12;
+  function filterOptions(items, query, limit){
+    limit = limit === undefined ? SUGGEST_LIMIT : limit;
+    const q = fold(query || ""), words = q ? q.split(" ").filter(Boolean) : [];
+    const matched = [];
+    (items || []).forEach(raw => {
+      let oid, lab;
+      if (Array.isArray(raw)) { oid = str(raw[0]); lab = str(raw.length > 1 ? raw[1] : raw[0]); }
+      else if (raw && typeof raw === "object") { oid = str(raw.id || ""); lab = str(raw.label || raw.title || raw.name || oid); }
+      else { oid = lab = str(raw); }
+      const prefix = oid + " · ";
+      if (lab.startsWith(prefix)) lab = lab.slice(prefix.length);
+      const fid = fold(oid), flab = fold(lab);
+      const idPref = !!q && fid.startsWith(q);
+      const dash = fid.indexOf("-");
+      const numPart = dash >= 0 ? fid.slice(dash + 1) : "";
+      const numPref = !!q && /^\d+$/.test(q) && dash >= 0 && (numPart.startsWith(q) || numPart.replace(/^0+/, "").startsWith(q));
+      if (!words.length || idPref || numPref || words.every(w => flab.includes(w) || fid.includes(w))) {
+        matched.push({tier: idPref ? 0 : 1, flab, fid, item: {id: oid, label: lab}});
+      }
+    });
+    matched.sort((a, b) => (a.tier - b.tier) || (a.flab < b.flab ? -1 : a.flab > b.flab ? 1 : (a.fid < b.fid ? -1 : a.fid > b.fid ? 1 : 0)));
+    return matched.slice(0, Math.max(0, limit)).map(x => x.item);
   }
   function label(f, M){
     if (f.label.startsWith("@ice:")) { const ax = ((pf(M).ice_rubric || {}).axes || {})[f.label.slice(5)] || {};
@@ -348,7 +373,8 @@ const BRAIN_FORMS = (function(){
   }
   const fmt = (s, ctx) => str(s).replace(/\{(\w+)\}/g, (_, k) => str((ctx || {})[k]));
   const display = cmds => cmds.map(c => "brain " + shjoin(c)).join("\n");
-  return {formArgv, missing, initial, baseline, values, hidden, options, label, check, hint, fmt, display, shjoin, cond,
+  return {formArgv, missing, initial, baseline, values, hidden, options, filterOptions, filter_options: filterOptions,
+    SUGGEST_LIMIT, label, check, hint, fmt, display, shjoin, cond,
     FILL, SOURCES, INIT, IFMT, PRED, CHECKS, HINTS, XF, parseDue, describeDate, parseDuration, normId};
 })();
 if (typeof window !== "undefined") window.BRAIN_FORMS = BRAIN_FORMS;

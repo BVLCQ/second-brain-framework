@@ -11,11 +11,11 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
-from textual.suggester import SuggestFromList
 from textual.widgets import Input, Label, OptionList, Select, Static, TextArea
 from textual.widgets._select import SelectOverlay
 from textual.widgets.option_list import Option
 
+from .. import forms
 from . import bridge
 
 
@@ -40,7 +40,7 @@ class Field:
     multi: bool = False                              # caixa de texto grande (várias linhas); enter quebra a linha
     show: Callable[[dict], bool] | None = None       # (campos) → aparece? Escondido não conta: valor "", sem req nem check
     fill: tuple[str, Callable[[dict], str | None]] | None = None   # (id do campo, (campos) → valor): preenche sozinho quando aquele campo muda (None não mexe)
-    suggest: list[str] | None = None                 # texto livre com sugestões (o painel usa <datalist> com a mesma lista)
+    suggest: list[tuple[str, str]] | list[dict[str, str]] | list[str] | None = None   # texto livre com sugestões (id + rótulo; mesma fonte do painel)
     secret: bool = False                             # digita escondido (chave de API)
 
 
@@ -104,6 +104,11 @@ class FormModal(ModalScreen):
     def __init__(self, spec: FormSpec):
         super().__init__()
         self.spec = spec
+        self._fields = {f.id: f for f in spec.fields}
+        self._last_vals = {f.id: f.value for f in spec.fields}
+        self._sug_items: dict[str, list[dict[str, str]]] = {}
+        self._sug_active: str | None = None
+        self._sug_navigated: bool = False
 
     def compose(self) -> ComposeResult:
         s = self.spec
@@ -127,9 +132,13 @@ class FormModal(ModalScreen):
                             yield Select(pairs, value=val, allow_blank=False, prompt=prompt,
                                          id=f"f_{f.id}", classes="fin")
                         else:
-                            sug = SuggestFromList(f.suggest, case_sensitive=False) if f.suggest else None
-                            yield Input(value=f.value, placeholder=f.ph, id=f"f_{f.id}", classes="fin", suggester=sug,
+                            yield Input(value=f.value, placeholder=f.ph, id=f"f_{f.id}", classes="fin",
                                         password=f.secret)
+                    if f.suggest is not None:
+                        ol = OptionList(id=f"s_{f.id}", classes="fsug")
+                        ol.can_focus = False
+                        ol.display = False
+                        yield ol
                     yield Static("", id=f"r_{f.id}", classes="fres")
             yield Static("", id="cmdp")
             yield Static("", id="err")
@@ -145,6 +154,75 @@ class FormModal(ModalScreen):
         first = self.query("Input, Select, TextArea")
         if first:
             first.first().focus()
+
+    @staticmethod
+    def _sug_token(val: str) -> str:
+        return val.rsplit(",", 1)[-1].strip() if "," in val else val.strip()
+
+    def _close_sug(self, fid: str | None = None) -> None:
+        targets = [fid] if fid else [f.id for f in self.spec.fields if f.suggest is not None]
+        for k in targets:
+            for ol in self.query(f"#s_{k}"):
+                ol.display = False
+        if fid is None or self._sug_active == fid:
+            self._sug_active = None
+            self._sug_navigated = False
+
+    def _refresh_sug(self, fid: str, raw_val: str, *, force_open: bool = False) -> None:
+        f = self._fields.get(fid)
+        if not f or f.suggest is None:
+            return
+        tok = self._sug_token(raw_val)
+        if not tok and not force_open:
+            self._close_sug(fid)
+            return
+        if self._sug_active and self._sug_active != fid:
+            self._close_sug(self._sug_active)
+        items = forms.filter_options(f.suggest, tok)
+        self._sug_items[fid] = items
+        ol = self.query_one(f"#s_{fid}", OptionList)
+        ol.clear_options()
+        if not items:
+            self._close_sug(fid)
+            return
+        ol.add_options([
+            Option(
+                Text.assemble(
+                    (it["id"], "bold cyan"),
+                    (f" · {it['label']}", "") if it["label"] and it["label"] != it["id"] else "",
+                ),
+                id=str(i),
+            )
+            for i, it in enumerate(items)
+        ])
+        ol.highlighted = 0
+        ol.display = True
+        self._sug_active = fid
+        if not force_open:
+            self._sug_navigated = False
+
+    def _highlighted_sug(self, fid: str) -> dict[str, str] | None:
+        if self._sug_active != fid:
+            return None
+        ol = self.query_one(f"#s_{fid}", OptionList)
+        items = self._sug_items.get(fid) or []
+        if not ol.display or ol.highlighted is None or not (0 <= ol.highlighted < len(items)):
+            return None
+        return items[ol.highlighted]
+
+    def _apply_sug(self, fid: str, chosen_id: str) -> None:
+        inp = self.query_one(f"#f_{fid}", Input)
+        cur = inp.value
+        if "," in cur:
+            prefix = cur.rsplit(",", 1)[0].rstrip()
+            new_val = f"{prefix}, {chosen_id}"
+        else:
+            new_val = chosen_id
+        self._last_vals[fid] = new_val
+        self._close_sug(fid)
+        inp.value = new_val
+        inp.cursor_position = len(new_val)
+        self._update()
 
     def _raw(self) -> dict:
         out = {}
@@ -175,7 +253,11 @@ class FormModal(ModalScreen):
             self.query_one("#cmdp", Static).update(Text(f"({e})", "dim"))
         self.query_one("#err", Static).update("")
 
-    def on_input_changed(self, _e) -> None:
+    def on_input_changed(self, e: Input.Changed) -> None:
+        fid = (e.input.id or "")[2:]
+        if fid in self._fields and e.value != self._last_vals.get(fid):
+            self._last_vals[fid] = e.value
+            self._refresh_sug(fid, e.value)
         self._update()
 
     def on_select_changed(self, e: Select.Changed) -> None:
@@ -186,6 +268,8 @@ class FormModal(ModalScreen):
             if f.fill and f.fill[0] == changed:
                 val = f.fill[1](self.vals())
                 if val is not None:
+                    self._last_vals[f.id] = val
+                    self._close_sug(f.id)
                     self.query_one(f"#f_{f.id}").value = val           # Input.Changed repinta o preview
         self._update()
 
@@ -200,8 +284,38 @@ class FormModal(ModalScreen):
     def on_text_area_changed(self, _e) -> None:
         self._update()
 
+    def on_option_list_option_selected(self, e: OptionList.OptionSelected) -> None:
+        fid = (e.option_list.id or "")[2:]
+        items = self._sug_items.get(fid) or []
+        if e.option.id is not None and 0 <= int(e.option.id) < len(items):
+            self._apply_sug(fid, items[int(e.option.id)]["id"])
+            self.query_one(f"#f_{fid}", Input).focus()
+
+    def on_descendant_focus(self, e) -> None:
+        fid = (e.widget.id or "")[2:] if (e.widget.id or "").startswith("f_") else None
+        if self._sug_active and self._sug_active != fid:
+            self._close_sug(self._sug_active)
+
+    def on_key(self, e) -> None:
+        if e.key in ("down", "up") and isinstance(self.focused, Input):
+            fid = (self.focused.id or "")[2:]
+            f = self._fields.get(fid)
+            if f and f.suggest is not None:
+                ol = self.query_one(f"#s_{fid}", OptionList)
+                if not ol.display:
+                    if e.key == "down":
+                        self._refresh_sug(fid, self.focused.value, force_open=True)
+                        self._sug_navigated = True
+                        e.stop()
+                        e.prevent_default()
+                else:
+                    ol.action_cursor_down() if e.key == "down" else ol.action_cursor_up()
+                    self._sug_navigated = True
+                    e.stop()
+                    e.prevent_default()
+
     def on_input_submitted(self, _e) -> None:
-        self.action_submit()
+        self.action_enter_submit()
 
     def check_action(self, action: str, parameters) -> bool | None:
         if action == "enter_submit":                       # lista aberta: enter escolhe a opção; caixa grande: enter quebra a linha
@@ -211,6 +325,15 @@ class FormModal(ModalScreen):
         return True
 
     def action_enter_submit(self) -> None:
+        if self._sug_active:
+            chosen = self._highlighted_sug(self._sug_active)
+            if chosen is not None:
+                inp = self.query_one(f"#f_{self._sug_active}", Input)
+                tok = self._sug_token(inp.value)
+                if tok != chosen["id"] or self._sug_navigated:
+                    self._apply_sug(self._sug_active, chosen["id"])
+                    return
+            self._close_sug()
         self.action_submit()
 
     def action_show_help(self) -> None:
@@ -246,6 +369,9 @@ class FormModal(ModalScreen):
         ta.focus()
 
     def action_cancel(self) -> None:
+        if self._sug_active and self._highlighted_sug(self._sug_active) is not None:
+            self._close_sug()
+            return
         self.dismiss(None)
 
 

@@ -1267,7 +1267,7 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
                         multi=f.multi,
                         secret=f.secret, depends=f.depends,
                         options=(lambda v, f=f: forms.options(f, m, v, ctx)) if f.choices is not None else None,
-                        suggest=[o[0] for o in forms.options(f, m, init, ctx)] if f.suggest else None,
+                        suggest=forms.options(f, m, init, ctx) if f.suggest else None,
                         check=(lambda x, v, f=f: forms.check(f.check, x, v, ctx, m, checks)) if f.check else None,
                         res=(lambda x, v, f=f: forms.hint(f.hint, x, v, ctx, m, hints)) if f.hint else None,
                         show=(lambda v, f=f: forms._cond(f.show, v, ctx, m)) if f.show is not None else None,
