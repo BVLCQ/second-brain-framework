@@ -25,9 +25,12 @@ if [ ! -f "./brain" ] || [ ! -d "./brainlib" ]; then
     cd "$DEST"
 fi
 
+# /tmp ↔ /private/tmp: caminho canônico evita trust registrado num alias e recusado no outro
+cd "$(pwd -P)"
+
 # mise recusa o mise.toml de um clone novo ("not trusted") antes de qualquer Python rodar — confia no do próprio repo.
 if command -v mise >/dev/null 2>&1 && [ -f "$PWD/mise.toml" ]; then
-    mise trust "$PWD/mise.toml" >/dev/null 2>&1 || \
+    mise trust >/dev/null 2>&1 || mise trust "$PWD" >/dev/null 2>&1 || \
         echo "⚠ não consegui confiar no mise.toml — rode:  mise trust \"$PWD\"  e depois  sh install.sh"
 fi
 
