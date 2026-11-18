@@ -133,6 +133,19 @@ th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line2);vert
 th{font-size:10.5px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.06em;background:var(--panel)}
 tbody tr:hover td{background:var(--line2)}
 tr.sup td{color:var(--muted);text-decoration:line-through}
+.src-group-hdr td{background:var(--chip);font-weight:600;padding:8px 10px;border-top:1px solid var(--line2)}
+tbody tr.src-group-hdr:hover td{background:var(--chip)}
+.src-group-title{display:inline-flex;align-items:center;gap:8px}
+.src-group-name{font-weight:700;color:var(--ink)}
+.src-group-count{color:var(--muted);font-size:12px;font-weight:500}
+.src-th-toggle{width:32px;text-align:center}
+.src-td-toggle{width:32px;text-align:center;vertical-align:middle}
+.src-toggle{accent-color:var(--accent);width:16px;height:16px;cursor:pointer;vertical-align:middle}
+.src-sort-hdr{cursor:pointer;user-select:none}
+.src-sort-hdr:hover{color:var(--ink)}
+tr.src-disabled{opacity:.55}
+tr.src-problem td{background:color-mix(in srgb,var(--riskbg) 35%,transparent)}
+tbody tr.src-problem:hover td{background:color-mix(in srgb,var(--riskbg) 55%,transparent)}
 
 /* ── kanban ── */
 .kanban{display:grid;grid-template-columns:repeat(4,minmax(220px,1fr));gap:12px;align-items:start}

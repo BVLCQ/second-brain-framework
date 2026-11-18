@@ -140,6 +140,19 @@ th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line2);vert
 th{font-size:10.5px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.06em;background:var(--panel)}
 tbody tr:hover td{background:var(--line2)}
 tr.sup td{color:var(--muted);text-decoration:line-through}
+.src-group-hdr td{background:var(--chip);font-weight:600;padding:8px 10px;border-top:1px solid var(--line2)}
+tbody tr.src-group-hdr:hover td{background:var(--chip)}
+.src-group-title{display:inline-flex;align-items:center;gap:8px}
+.src-group-name{font-weight:700;color:var(--ink)}
+.src-group-count{color:var(--muted);font-size:12px;font-weight:500}
+.src-th-toggle{width:32px;text-align:center}
+.src-td-toggle{width:32px;text-align:center;vertical-align:middle}
+.src-toggle{accent-color:var(--accent);width:16px;height:16px;cursor:pointer;vertical-align:middle}
+.src-sort-hdr{cursor:pointer;user-select:none}
+.src-sort-hdr:hover{color:var(--ink)}
+tr.src-disabled{opacity:.55}
+tr.src-problem td{background:color-mix(in srgb,var(--riskbg) 35%,transparent)}
+tbody tr.src-problem:hover td{background:color-mix(in srgb,var(--riskbg) 55%,transparent)}
 
 /* ── kanban ── */
 .kanban{display:grid;grid-template-columns:repeat(4,minmax(220px,1fr));gap:12px;align-items:start}
@@ -2901,6 +2914,23 @@ function dd(id0, opts, sel, ph){
     "</div></div>";
 }
 document.addEventListener("click", e => {
+  const sortBtn = e.target.closest("[data-src-sort]");
+  if (sortBtn) {
+    e.preventDefault();
+    S_SORT = S_SORT === "desc" ? "asc" : "desc";
+    route();
+    return;
+  }
+  const toggleBtn = e.target.closest("[data-src-toggle]");
+  if (toggleBtn && e.target === toggleBtn) {
+    e.stopPropagation();
+    const key = toggleBtn.dataset.srcToggle;
+    const s = (M.sources || []).find(x => x.key === key);
+    if (s) {
+      runCommand('brain watch edit ' + qArg(s.key) + ' --set enabled=' + (s.enabled === false ? 'true' : 'false'));
+    }
+    return;
+  }
   const btn = e.target.closest(".dd-btn");
   if (btn) { const box = btn.closest(".dd"); const was = box.classList.contains("open");
     document.querySelectorAll(".dd.open").forEach(x => x.classList.remove("open"));
@@ -3356,14 +3386,137 @@ function oppRow(o, i){
       : '<span class="muted">—</span>') + '</td><td class="num">' + hrs(o.hours_saved) + "</td></tr>";
 }
 // ── Fontes (watch.toml) — a aba Fontes do TUI ──
+var S_SORT = "desc";
+const qArg = s => {
+  s = String(s ?? "");
+  if (/^[\w@%+=:,./-]+$/.test(s)) return s;
+  return "'" + s.replace(/'/g, "'\"'\"'") + "'";
+};
+
 V.sources = () => {
   const S = M.sources || [], when = x => x ? esc(x.slice(0, 16).replace("T", " ")) : '<span class="muted">nunca</span>';
+  if (!S.length) {
+    return '<div class="pagehead"><div><h1>Fontes</h1><p class="sub">O universo observável: fonte que não está no watch.toml não é puxada pelo /update nem pelo noturno.</p></div></div>' +
+      panel("", empty("Nenhuma fonte no watch.toml — n adiciona."));
+  }
+
+  const kindMap = Object.fromEntries(M.source_kinds || []);
+  const groupsMap = new Map();
+  S.forEach(s => {
+    const k = s.kind || "avulsas";
+    if (!groupsMap.has(k)) {
+      const label = kindMap[k] || (k === "avulsas" ? "avulsas" : k);
+      groupsMap.set(k, {kind: k, label: label, rows: []});
+    }
+    groupsMap.get(k).rows.push(s);
+  });
+
+  const groups = Array.from(groupsMap.values());
+
+  // Ordenação de grupos: grupos com pelo menos uma fonte com problem primeiro; resto alfabético por label
+  groups.sort((a, b) => {
+    const pA = a.rows.some(x => !!x.problem) ? 0 : 1;
+    const pB = b.rows.some(x => !!x.problem) ? 0 : 1;
+    if (pA !== pB) return pA - pB;
+    return a.label.localeCompare(b.label, "pt-BR");
+  });
+
+  // Baldes por linha:
+  // 1. problem === true sempre primeiro (em asc e desc)
+  // 2. saudáveis habilitadas (enabled !== false && !problem)
+  // 3. desligadas (enabled === false) por último
+  const bucket = s => {
+    if (s.problem) return 0;
+    if (s.enabled === false) return 2;
+    return 1;
+  };
+
+  groups.forEach(g => {
+    g.rows.sort((a, b) => {
+      const bA = bucket(a);
+      const bB = bucket(b);
+      if (bA !== bB) return bA - bB;
+      const cmp = S_SORT === "asc"
+        ? (a.last_ok || "").localeCompare(b.last_ok || "")
+        : (b.last_ok || "").localeCompare(a.last_ok || "");
+      if (cmp !== 0) return cmp;
+      return (a.key || "").localeCompare(b.key || "");
+    });
+  });
+
+  const sortArrow = S_SORT === "desc" ? "↓" : "↑";
+  let tableHtml = '<div class="twrap"><table class="src-table"><thead><tr>' +
+    '<th class="src-th-toggle"></th>' +
+    '<th>Key</th><th>Tipo</th><th>Janela</th>' +
+    '<th data-src-sort class="src-sort-hdr" title="Alternar ordenação">Último pull ' + sortArrow + '</th>' +
+    '<th>Estado</th></tr></thead><tbody>';
+
+  groups.forEach(g => {
+    const probCount = g.rows.filter(x => !!x.problem).length;
+    const badge = probCount ? ' ' + chip("atencao", "⚠ " + probCount + " com problema") : "";
+    tableHtml += '<tr class="src-group-hdr"><td colspan="6"><div class="src-group-title">' +
+      '<span class="src-group-name">▾ ' + esc(g.label) + '</span>' +
+      ' <span class="src-group-count">(' + g.rows.length + ')</span>' +
+      badge + '</div></td></tr>';
+
+    g.rows.forEach(s => {
+      const isProblem = !!s.problem;
+      const isDisabled = s.enabled === false;
+      let trAttrs = 'data-sel="src:' + esc(s.key) + '"';
+      if (isProblem) trAttrs += ' class="src-problem"';
+      else if (isDisabled) trAttrs += ' class="src-disabled muted"';
+
+      const toggleCell = s.in_watch
+        ? '<td class="src-td-toggle"><input type="checkbox" class="src-toggle" data-src-toggle="' + esc(s.key) + '" aria-label="Ligar/desligar fonte"' + (s.enabled !== false ? ' checked' : '') + '></td>'
+        : '<td class="src-td-toggle"><span class="muted">—</span></td>';
+
+      let stateHtml = "";
+      if (isDisabled) {
+        stateHtml = '<span class="chip h-muted">desligada</span>';
+      } else if (isProblem) {
+        stateHtml = '<span class="chip h-em-risco late">⚠ ' + esc(s.problem_reason || "problema") + '</span>' +
+          (s.last_error ? ' <span class="late small">· ' + esc(s.last_error.slice(0, 80)) + '</span>' : '');
+      } else if (!s.in_watch) {
+        stateHtml = chip("atencao", "fora do watch") + ' <span class="muted small">w inclui</span>';
+      } else {
+        stateHtml = '<span class="ok">✓</span>';
+      }
+
+      tableHtml += '<tr ' + trAttrs + '>' +
+        toggleCell +
+        '<td><b>' + esc(s.key) + '</b></td>' +
+        '<td>' + esc(s.kind || "—") + '</td>' +
+        '<td>' + esc(s.window || "—") + '</td>' +
+        '<td>' + when(s.last_ok) + '</td>' +
+        '<td>' + stateHtml + '</td>' +
+        '</tr>';
+    });
+  });
+
+  tableHtml += '</tbody></table></div>';
+
+  setTimeout(() => {
+    document.querySelectorAll("#view [data-src-sort]").forEach(el => {
+      el.onclick = e => {
+        e.preventDefault();
+        S_SORT = S_SORT === "desc" ? "asc" : "desc";
+        route();
+      };
+    });
+    document.querySelectorAll("#view [data-src-toggle]").forEach(el => {
+      el.onclick = e => {
+        e.stopPropagation();
+        const key = el.dataset.srcToggle;
+        const s = (M.sources || []).find(x => x.key === key);
+        if (s) {
+          runCommand('brain watch edit ' + qArg(s.key) + ' --set enabled=' + (s.enabled === false ? 'true' : 'false'));
+        }
+      };
+    });
+  });
+
   return '<div class="pagehead"><div><h1>Fontes</h1><p class="sub">O universo observável: fonte que não está no watch.toml não é puxada pelo /update nem pelo noturno.</p></div></div>' +
-    panel("", S.length ? '<div class="twrap"><table><tr><th>Key</th><th>Tipo</th><th>Janela</th><th>Último pull</th><th>Estado</th></tr>' +
-      S.map(s => '<tr data-sel="src:' + esc(s.key) + '"><td><b>' + esc(s.key) + "</b></td><td>" + esc(s.kind || "—") + "</td><td>" + esc(s.window || "—") + "</td><td>" + when(s.last_ok) + "</td><td>" +
-        (!s.in_watch ? chip("atencao", "fora do watch") + ' <span class="muted small">w inclui</span>'
-          : s.failures ? '<span class="late">⚠ ' + s.failures + " falha(s) · " + esc((s.last_error || "").slice(0, 80)) + "</span>" : '<span class="ok">✓</span>') + "</td></tr>").join("") + "</table></div>"
-      : empty("Nenhuma fonte no watch.toml — n adiciona."));
+    panel("", tableHtml);
 };
 V["pf/docs"] = () => {
   const rows = [];
@@ -3611,6 +3764,7 @@ function route(){
   window.scrollTo(0, 0);
 }
 window.BRAIN = {M, A, D, P, G, PE, OPP, PROC, AREA, docUrl, go, route, chip, aL, dL, pL, peL, fmtD, fmtDW, donut, bar, esc,
+  qArg, V, get S_SORT(){ return S_SORT; }, set S_SORT(v){ S_SORT = v; },
   refresh: function(nm){                       // ponte CLI (./brain serve): novo view model → índices + views
     normalizeBrain(nm);
     for (const k of Object.keys(M)) delete M[k];
