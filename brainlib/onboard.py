@@ -41,6 +41,9 @@ WEB_STEPS = setup.WEB_STEPS                       # (id, título, grupo) — a b
 PROFILE_TEMPLATE_MARK = "(a preencher no /init)"
 KEY_NAMES = {
     "GITHUB_TOKEN": "Token do GitHub (sugestões e bugs do Brain viram issues)",
+    "GOOGLE_CLIENT_ID": "Google OAuth — Client ID (foco na agenda + backup no Drive)",
+    "GOOGLE_CLIENT_SECRET": "Google OAuth — Client Secret",
+    "GOOGLE_REFRESH_TOKEN": "Google OAuth — Refresh Token (gerado pelo fluxo de conexão)",
 }
 UPLOAD_MAX = 25 * 1024 * 1024
 UPLOAD_EXT = {".pdf", ".md", ".txt", ".docx", ".doc", ".pptx", ".xlsx", ".csv", ".json", ".html", ".rtf", ".odt",
@@ -699,6 +702,41 @@ def agent_later(brain, data: dict) -> dict:
     return {"id": ev["id"]}
 
 
+def apply_foco_google(brain, data: dict) -> dict:
+    """Conectar Google AGORA (ruling do dono: o wizard não manda pedir ao agente). Job visível:
+    grava id/secret → abre o navegador no consentimento (loopback) → captura o refresh token →
+    foco em modo google. Escopo mínimo: calendar.events.owned + drive.file."""
+    from . import setup
+    if os.environ.get("BRAIN_NIGHTLY") == "1":
+        raise util.BrainError("conectar o Google é decisão do dono presente — nunca no noturno", code=4)
+    env = config.load_env(brain.inst)
+    cid = _text(data.get("client_id"), 200) or env.get("GOOGLE_CLIENT_ID", "")
+    sec = str(data.get("client_secret") or "").strip() or env.get("GOOGLE_CLIENT_SECRET", "")
+    if not (cid and sec):
+        raise util.BrainError("preencha Client ID e Client Secret — ou crie em "
+                              "console.cloud.google.com → APIs e serviços → Credenciais → ID do cliente OAuth (app Desktop)",
+                              code=4)
+    if len(sec) > 400 or any(ch.isspace() for ch in sec):
+        raise util.BrainError("client secret inválido", code=4)
+    inst0 = brain.inst
+
+    def run(j: _Job) -> dict:
+        from .core import Brain
+        b = Brain(config.reload(inst0))
+        setup.set_env(b.inst, {"GOOGLE_CLIENT_ID": cid, "GOOGLE_CLIENT_SECRET": sec})
+        j.say("✓ credenciais OAuth gravadas no config/.env (0600)")
+        j.say("abrindo o navegador para você autorizar o Google — escopo mínimo: "
+              "só eventos que marcamos + os zips de backup")
+        refresh = setup.google_refresh_token(cid, sec, open_browser=True, say=j.say)
+        setup.set_env(b.inst, {"GOOGLE_REFRESH_TOKEN": refresh})
+        j.say("✓ refresh token gravado no config/.env (nunca impresso)")
+        config.set_keys(b.inst, "focus", {"mode": "google"})
+        j.say("✓ foco em modo google — os blocos aprovados entram direto na sua agenda")
+        _mark(b.inst, "chaves")
+        return {"mode": "google"}
+    return {"job": _start("foco_google", run).id}
+
+
 def maquina_state(brain) -> dict:
     """Estado dos passos de máquina (plano F2) — derivado, mesma régua do `brain setup`."""
     return {
@@ -716,15 +754,11 @@ def apply_maquina(brain, data: dict) -> dict:
     if os.environ.get("BRAIN_NIGHTLY") == "1":
         raise util.BrainError("a máquina não se configura no noturno — abra o app com o dono presente", code=4)
     hhmm = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
-    noturno = str(data.get("noturno") or "").strip()          # "" = não mexer; "05:00" = instalar no horário
+    noturno = str(data.get("noturno") or "").strip()          # "" = não agendar / não mexer; "05:00" = instalar no horário
     if noturno and not hhmm.match(noturno):
-        raise util.BrainError("horário do noturno inválido — use HH:MM", code=4)
-    foco = str(data.get("foco") or "ics").strip()
-    if foco not in ("ics", "google"):
-        raise util.BrainError("modo de foco inválido — ics ou google", code=4)
-    if foco == "google":
-        raise util.BrainError("o modo google pede OAuth interativo — configure depois com `brain setup --only foco` "
-                              "ou peça ao agente \"configurar foco no Google\"", code=4)
+        raise util.BrainError("horário da sincronização inválido — use HH:MM", code=4)
+    # foco/agenda: NÃO é daqui — quem decide é a conexão Google em "Chaves e portas" (ruling:
+    # Google Calendar é o caminho do wizard; .ics fica como default silencioso do framework).
     wants = {"comando": bool(data.get("comando", True)), "tui": bool(data.get("tui", True)),
              "framework": bool(data.get("framework", True))}
     inst0 = brain.inst
@@ -750,9 +784,6 @@ def apply_maquina(brain, data: dict) -> dict:
             done.append("tui")
         else:
             j.say("– TUI: fica para depois (`brain tui --setup` quando quiser)")
-        config.set_keys(b.inst, "focus", {"mode": "ics"})
-        b.inst = config.reload(b.inst)
-        j.say("✓ foco em modo ics (arquivo local, zero configuração — Google liga depois com OAuth)")
         if wants["framework"]:
             setup._run_framework(b, ui)
             done.append("framework")
@@ -948,7 +979,7 @@ ACTIONS = {
     "connectors_scan": lambda b, d: scan_connectors(bool(d.get("force"))),
     "connectors_enable": enable_connectors, "permissions": lambda b, d: apply_permissions(b),
     "source_add": source_add, "source_remove": source_remove,
-    "keys": save_keys, "memory": apply_memory, "maquina": apply_maquina,
+    "keys": save_keys, "memory": apply_memory, "maquina": apply_maquina, "foco_google": apply_foco_google,
     "agent_connect": connect_agent, "agent_later": agent_later,
     "planning_note": save_planning_note,
     "planning_draft": lambda b, d: draft_planning(b), "planning_apply": apply_planning,

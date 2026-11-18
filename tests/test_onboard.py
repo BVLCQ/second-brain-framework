@@ -138,7 +138,8 @@ class StepTests(unittest.TestCase):
 
     def test_keys_accept_only_known_names_and_never_echo_values(self):
         r = onboard.save_keys(self.b, {"GITHUB_TOKEN": "github_pat_FAKE", "PATH": "/tmp/x"})
-        self.assertEqual(r, {"keys": {"GITHUB_TOKEN": True}})
+        self.assertEqual(r["keys"]["GITHUB_TOKEN"], True)
+        self.assertEqual(r["keys"]["GOOGLE_CLIENT_ID"], False)   # nomes google aparecem como não-definidos
         env = config.load_env(self.b.inst)
         self.assertEqual(env.get("GITHUB_TOKEN"), "github_pat_FAKE")
         self.assertNotIn("PATH=/tmp/x", (self.tmp / "config/.env").read_text(encoding="utf-8"))
@@ -509,13 +510,13 @@ class MaquinaTests(unittest.TestCase):
                 os.environ[k] = v
         self._td.cleanup()
 
-    def test_maquina_sets_ics_focus_and_marks_the_step(self):
+    def test_maquina_marks_the_step_and_leaves_focus_alone(self):
         r = onboard.apply_maquina(self.b, {"comando": False, "tui": False, "framework": False,
-                                           "noturno": "", "foco": "ics"})
+                                           "noturno": "", "foco": "google"})   # foco: ignorado — agenda é do Google (Chaves)
         j = _wait_job(r["job"])
         self.assertEqual(j["status"], "done", j["log"])
-        cfg = tomllib.loads((self.tmp / "config" / "brain.toml").read_text(encoding="utf-8"))
-        self.assertEqual(cfg["focus"]["mode"], "ics")
+        cfg = config.load(self.b.inst.root).cfg
+        self.assertEqual(cfg["focus"]["mode"], "ics")                  # default intacto: quem muda é a conexão Google
         self.assertIn("maquina", onboard.progress(self.b.inst).get("done", []))
 
     def test_maquina_installs_the_command_under_isolated_home(self):
@@ -531,11 +532,7 @@ class MaquinaTests(unittest.TestCase):
         before = set(onboard._JOBS)
         with self.assertRaises(util.BrainError):
             onboard.apply_maquina(self.b, {"noturno": "25:99"})
-        with self.assertRaises(util.BrainError):
-            onboard.apply_maquina(self.b, {"foco": "google"})       # OAuth interativo: não é porta roteada
-        with self.assertRaises(util.BrainError):
-            onboard.apply_maquina(self.b, {"foco": "carro"})
-        self.assertEqual(set(onboard._JOBS), before)                # nada rodou
+        self.assertEqual(set(onboard._JOBS), before)                # nada rodou (foco nem é campo daqui)
 
 
 class AgentStepTests(unittest.TestCase):
@@ -737,6 +734,43 @@ class FinishAskTests(unittest.TestCase):
             # claude selecionado mas SEM binário: sem scan, e a dica segue a ESCOLHA (label do passo anterior)
             self.assertIn("Claude Code", st["connectors_hint"])
             self.assertNotIn("Hermes", st["connectors_hint"])
+
+
+class FocoGoogleTests(unittest.TestCase):
+    """Conectar Google AGORA (ruling do dono): OAuth de escopo mínimo como job visível."""
+
+    def setUp(self):
+        self._td = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._td.name)
+        self.b = Brain(_inst(self.tmp))
+
+    def tearDown(self):
+        self._td.cleanup()
+
+    def test_foco_google_runs_the_oauth_flow_and_sets_the_mode(self):
+        from unittest import mock
+        with mock.patch.object(onboard.setup, "google_refresh_token", return_value="rt-1") as grt:
+            r = onboard.apply_foco_google(self.b, {"client_id": "cid.apps.googleusercontent.com",
+                                                   "client_secret": "GOCSPX-1"})
+            j = _wait_job(r["job"])
+        self.assertEqual(j["status"], "done", j["log"])
+        grt.assert_called_once()
+        env = config.load_env(self.b.inst)
+        self.assertEqual(env.get("GOOGLE_REFRESH_TOKEN"), "rt-1")
+        self.assertEqual(env.get("GOOGLE_CLIENT_ID"), "cid.apps.googleusercontent.com")
+        cfg = tomllib.loads((self.tmp / "config/brain.toml").read_text(encoding="utf-8"))
+        self.assertEqual(cfg["focus"]["mode"], "google")
+        self.assertIn("chaves", onboard.progress(self.b.inst).get("done", []))
+
+    def test_foco_google_requires_credentials(self):
+        with self.assertRaises(util.BrainError):
+            onboard.apply_foco_google(self.b, {})
+
+    def test_keys_state_carries_the_google_names(self):
+        st = onboard.state(self.b)["keys"]
+        for name in ("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_REFRESH_TOKEN"):
+            self.assertIn(name, st)
+            self.assertIs(st[name]["set"], False)
 
 
 if __name__ == "__main__":

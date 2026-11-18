@@ -303,9 +303,9 @@ class _OAuthHandler(BaseHTTPRequestHandler):
 
 
 def google_refresh_token(client_id: str, client_secret: str, open_browser: bool = True,
-                         wait_s: int = 300) -> str:
+                         wait_s: int = 300, say=print) -> str:
     """Fluxo OAuth loopback (calendar.events.owned + drive.file). Devolve o refresh token —
-    o chamador grava no .env; o valor não é impresso."""
+    o chamador grava no .env; o valor não é impresso. `say` narra (CLI imprime; wizard vira log de job)."""
     redirect = f"http://localhost:{OAUTH_PORT}"
     _OAuthHandler.code = _OAuthHandler.denied = None
     _OAuthHandler.expected_state = secrets.token_urlsafe(24)
@@ -316,8 +316,8 @@ def google_refresh_token(client_id: str, client_secret: str, open_browser: bool 
         opener = shutil.which("xdg-open") or shutil.which("open")
         if opener:
             subprocess.run([opener, auth_url], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    print(f"Abrindo o navegador para autorizar (escopos: calendar.events.owned + drive.file)…")
-    print(f"Se não abrir: {auth_url}\n")
+    say(f"Abrindo o navegador para autorizar (escopos: calendar.events.owned + drive.file)…")
+    say(f"Se não abrir: {auth_url}")
     server = HTTPServer(("127.0.0.1", OAUTH_PORT), _OAuthHandler)
     threading.Thread(target=lambda: (setattr(server, "timeout", 1), _pump(server, wait_s)), daemon=True).start()
     deadline = time.time() + wait_s

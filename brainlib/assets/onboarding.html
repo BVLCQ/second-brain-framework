@@ -905,10 +905,11 @@ V.memoria = () => {
     }
     const visibleSlots = sel === "full" ? ["llm", "embeddings", "reranker"] : ["embeddings", "reranker"];
     const anyCloud = visibleSlots.some(sl => (getProv(sl, chosen[sl]) || {}).cloud);
+    const usesLocal = visibleSlots.some(sl => ["local", "lmstudio"].includes((getProv(sl, chosen[sl]) || {}).key));
     const prereqs = `<div class="rowline" style="margin-top:12px;padding-bottom:0;border-top:1px solid var(--line2)">
-      <div class="info"><b>Pré-requisitos locais</b>
-        ${pre(m.docker, "<b>OrbStack</b> (roda o servidor de memória)", "https://orbstack.dev")}
-        ${pre(m.lmstudio, "<b>LM Studio</b> (embeddings locais)", "https://lmstudio.ai")}
+      <div class="info"><b>Servidor e modelos locais</b>
+        ${pre(m.docker, "<b>OrbStack</b> — roda o servidor de memória (precisa em qualquer modo)", "https://orbstack.dev")}
+        ${usesLocal ? pre(m.lmstudio, "<b>LM Studio</b> — modelo local escolhido acima", "https://lmstudio.ai") : ""}
       </div>
     </div>`;
     $("#det").innerHTML = `<h2>Motores</h2>
@@ -994,9 +995,21 @@ V.chaves = () => {
       </ol>
       <label class="f" style="margin:0"><span>Token do GitHub (GITHUB_TOKEN)</span><input type="password" id="gh" placeholder="${k.GITHUB_TOKEN.set ? "deixe vazio para manter o atual" : "ghp_… (clássico, escopo public_repo)"}" autocomplete="off"></label>
     </div>
-    <div class="card soft">
-      <h2>Google — foco na agenda e backup no Drive</h2>
-      <p class="sub" style="margin:0">O OAuth interativo do Google fica para depois — por padrão o planejador de foco gera um arquivo <span class="kbd">.ics</span> para você importar. Quando quiser ligar a escrita direta na agenda e o backup no Drive, peça ao seu agente: <i>"configurar foco no Google"</i>.</p>
+    <div class="card">
+      <h2>Google — foco na agenda e backup no Drive ${(k.GOOGLE_REFRESH_TOKEN && k.GOOGLE_REFRESH_TOKEN.set) ? '<span class="pill ok" style="margin-left:6px">conectado</span>' : ""}</h2>
+      <p class="sub">Blocos de foco aprovados entram direto no Google Calendar, e o backup semanal sobe pro Drive. Escopo mínimo: só eventos que o Brain cria + os próprios zips de backup.</p>
+      <ol class="howto" style="margin:4px 0 12px;padding-left:20px;color:var(--muted)">
+        <li>No <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">Google Cloud Console</a>, crie um <b>ID do cliente OAuth</b> do tipo <b>App desktop</b> (ative a Calendar API e a Drive API se o console pedir).</li>
+        <li>Copie o <b>Client ID</b> e o <b>Client Secret</b> para os campos abaixo.</li>
+        <li>Clique em <b>Conectar Google</b> — o navegador abre na autorização; aceite e volte.</li>
+      </ol>
+      <div class="grid2">
+        <label class="f"><span>Client ID ${k.GOOGLE_CLIENT_ID && k.GOOGLE_CLIENT_ID.set ? '<span class="pill ok">já salvo</span>' : ""}</span><input type="text" id="gcid" placeholder="${k.GOOGLE_CLIENT_ID && k.GOOGLE_CLIENT_ID.set ? "deixe vazio para manter o atual" : "…apps.googleusercontent.com"}" autocomplete="off"></label>
+        <label class="f" style="margin-bottom:0"><span>Client Secret ${k.GOOGLE_CLIENT_SECRET && k.GOOGLE_CLIENT_SECRET.set ? '<span class="pill ok">já salvo</span>' : ""}</span><input type="password" id="gsec" placeholder="${k.GOOGLE_CLIENT_SECRET && k.GOOGLE_CLIENT_SECRET.set ? "deixe vazio para manter o atual" : "GOCSPX-…"}" autocomplete="off"></label>
+      </div>
+      <div class="actions" style="margin-top:14px"><button class="btn pri sm" type="button" id="gcon">Conectar Google</button>
+        <span style="font-size:12px;color:var(--muted)">O navegador vai abrir pra você autorizar — o token fica no seu computador.</span></div>
+      <div class="log" id="glog"></div>
     </div>
     <div class="msg" id="m"></div>
     ${nav({skip: "Pular"})}`;
@@ -1007,6 +1020,22 @@ V.chaves = () => {
     try { await act("keys", {GITHUB_TOKEN: v}); $("#gh").value = ""; await refresh(); next(); }
     catch (e) { msg($("#m"), "err", e.message); } finally { busy(btn, false); }
   });
+
+  $("#gcon").onclick = async () => {
+    const b = $("#gcon"), log = $("#glog");
+    busy(b, true, "Conectando…");
+    try {
+      const r = await act("foco_google", {client_id: $("#gcid").value, client_secret: $("#gsec").value});
+      if (r.job) {
+        log.classList.add("show");
+        const j = await waitJob(r.job, jj => { log.textContent = (jj.log || []).join("\n"); log.scrollTop = 1e9; });
+        if (j.status === "error") throw new Error((j.result && j.result.error) || "não consegui conectar o Google");
+      }
+      $("#gsec").value = "";
+      await refresh();
+      msg($("#m"), "ok", "✓ Google conectado — foco na agenda e backup no Drive ativos.");
+    } catch (e) { msg($("#m"), "err", e.message); } finally { busy(b, false); }
+  };
 };
 
 // ── 8. A máquina (NOVA) ────────────────────────────────────────────────────
@@ -1020,13 +1049,10 @@ V.maquina = () => {
   $("#view").innerHTML = `${head("O cérebro", "A máquina", "Cinco ajustes para o Brain rodar sozinho no seu computador, com defaults prontos. Confira e clique em Configurar.")}
     <div class="card">
       <div class="rowline">
-        <div class="info"><b>Noturno</b><p>Reler fontes, renderizar o painel e sincronizar memória automaticamente.</p></div>
+        <div class="info"><b>Sincronização automática</b><p>O "noturno": reler fontes, renderizar o painel, sincronizar memória e backup semanal — sem você fazer nada.</p></div>
         <div class="right">${pill(mq.noturno)}
-          <select id="mq-noturno" style="width:140px">
-            <option value="05:00" selected>05:00</option>
-            <option value="06:00">06:00</option>
-            <option value="">não agendar</option>
-          </select>
+          <label class="toggle" title="Agendar sincronização"><input type="checkbox" id="mq-agendar" checked><span></span></label>
+          <input type="time" id="mq-time" value="05:00" style="width:104px" title="Horário da sincronização (HH:MM)">
         </div>
       </div>
       <div class="rowline">
@@ -1042,8 +1068,10 @@ V.maquina = () => {
         </div>
       </div>
       <div class="rowline">
-        <div class="info"><b>Foco na agenda</b><p>Arquivo <span class="kbd">.ics</span> local (zero configuração). Google liga depois com OAuth.</p></div>
-        <div class="right">${pill(mq.foco)}<span class="pill info">.ics</span></div>
+        <div class="info"><b>Agenda — Google Calendar</b><p>Blocos de foco aprovados entram direto na sua agenda (e o backup semanal vai pro Drive).</p></div>
+        <div class="right">${(S.keys && S.keys.GOOGLE_REFRESH_TOKEN && S.keys.GOOGLE_REFRESH_TOKEN.set)
+          ? '<span class="pill ok">✓ Google conectado</span>'
+          : '<span class="pill warn">conectar em Chaves e portas</span> <button class="btn sm" type="button" id="mq-goto-keys">ir lá</button>'}</div>
       </div>
       <div class="rowline">
         <div class="info"><b>Atualização do framework</b><p>Regra de fetch + varredura do push (nada pessoal sobe para o repositório público).</p></div>
@@ -1056,12 +1084,14 @@ V.maquina = () => {
     </div>
     ${nav({main: "Configurar", skip: "Fazer depois"})}`;
 
+  const gk = $("#mq-goto-keys");
+  if (gk) gk.onclick = () => go("chaves");
+
   bindNav(async btn => {
     const payload = {
-      noturno: $("#mq-noturno").value,
+      noturno: $("#mq-agendar").checked ? $("#mq-time").value : "",
       comando: $("#mq-comando").checked,
       tui: $("#mq-tui").checked,
-      foco: "ics",
       framework: $("#mq-framework").checked,
     };
     const log = $("#log");
@@ -1228,7 +1258,7 @@ V.pronto = () => {
 
   const mq = S.maquina || {};
   const mqFmt = (name, st) => `${name}: ${{done: "pronto", pending: "pendente", warn: "atenção", off: "desligado"}[st] || st || "—"}`;
-  const mqExtra = [mqFmt("noturno", mq.noturno), mqFmt("comando", mq.comando), mqFmt("TUI", mq.tui)].join(" · ");
+  const mqExtra = [mqFmt("sincronização", mq.noturno), mqFmt("comando", mq.comando), mqFmt("TUI", mq.tui)].join(" · ");
   const mqDone = mq.noturno === "done" && mq.comando === "done";
 
   const nGoals = (S.planning || {}).goals || 0;
