@@ -701,7 +701,8 @@ def queue(brain, hs: Hindsight) -> dict:
         backlog = int(st.get("pending_consolidation") or 0) if "consolidation" in by_type else 0
         out[bank] = {"ops": by_type,
                      "pending_consolidation": backlog,
-                     "failed_consolidation": int(st.get("failed_consolidation") or 0)}
+                     "failed_consolidation": int(st.get("failed_consolidation") or 0),
+                     "failed_operations": int(st.get("failed_operations") or 0)}
     return out
 
 
@@ -713,6 +714,8 @@ def _queue_text(q: dict) -> str:
                for t, c in sorted(b["ops"].items())]
         if b["pending_consolidation"]:
             ops.append(f"{b['pending_consolidation']} memórias aguardando consolidação")
+        if b.get("failed_operations"):
+            ops.append(f"{b['failed_operations']} operações falhas")
         busy |= bool(ops)
         parts.append(f"{bank}: {', '.join(ops) if ops else 'ociosa'}")
     head = "fila: ocupada — LLM/embedding em uso" if busy else "fila: vazia — LLM livre"
@@ -817,6 +820,19 @@ def status(brain, online: bool = False, hs: Hindsight | None = None) -> dict:
         text = " · ".join(filter(None, [text, "memórias que desistiram da consolidação: " + ", ".join(
             f"{b} {n}" for b, n in failed_cons.items())
             + " — POST /v1/default/banks/<banco>/consolidation/recover recoloca na fila"]))
+    failed_ops = {b: v["failed_operations"] for b, v in (q or {}).items() if v.get("failed_operations")}
+    if failed_ops:
+        hint = "`docker logs hindsight` mostra a causa"
+        if online and hs is not None:
+            try:
+                bad = next(iter(hs.operations(mem["bank"], "failed")), None)
+                if "no models loaded" in str((bad or {}).get("error", "")).lower():
+                    hint = ("sem modelo de LLM no servidor ('No models loaded') — carregue o modelo "
+                            "(`lms load` no LM Studio) ou `brain memory providers set llm …`")
+            except util.BrainError:
+                pass
+        text = " · ".join(filter(None, [text, "operações falhas no servidor: "
+            + ", ".join(f"{b} {n}" for b, n in failed_ops.items()) + " — " + hint]))
     if text:
         detail += " · ⚠ " + text
     res = {"level": "warn" if warn or text else "ok", "detail": detail, "problems": problems, "mode": m}
