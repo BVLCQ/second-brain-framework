@@ -773,5 +773,66 @@ class FocoGoogleTests(unittest.TestCase):
             self.assertIs(st[name]["set"], False)
 
 
+class EntrevistaTests(unittest.TestCase):
+    """A conversa acontece no wizard (ruling): responder aplica; pular vira TASK no TODO."""
+
+    def setUp(self):
+        self._td = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._td.name)
+        self.b = Brain(_inst(self.tmp))
+
+    def tearDown(self):
+        self._td.cleanup()
+
+    def _finish(self):
+        return onboard.finish(self.b)
+
+    def test_people_answer_becomes_records_and_closes_the_ask(self):
+        onboard.apply_entrevista(self.b, {"people": "Marina-demo — Mari-demo, marina@exemplo.com\nHeitor-demo"})
+        r = self._finish()
+        self.assertEqual(r["people_added"], ["marina-demo", "heitor-demo"])
+        self.assertIn("marina-demo", self.b.state.people)
+        p = self.b.state.people["marina-demo"]
+        self.assertEqual(p.email, "marina@exemplo.com")
+        self.assertIn("Mari-demo", p.aliases)
+        q = self.b.state.questions[r["ask"]]
+        self.assertEqual(q.status, "aplicada")
+
+    def test_sources_answer_goes_to_the_ask_reserve_queue(self):
+        onboard.apply_entrevista(self.b, {"sources": "#time-dados, pasta do Drive"})
+        r = self._finish()
+        self.assertEqual(r["people_added"], [])
+        q = self.b.state.questions[r["ask"]]
+        self.assertEqual(q.status, "respondida")
+        self.assertIn("#time-dados", q.answer)
+
+    def test_skip_creates_a_task_and_keeps_the_ask_open(self):
+        self.b.record_one({"type": "person.added", "id": self.b.owner, "by": "owner", "prov": "declarado",
+                           "source": "onboarding", "data": {"name": "Você (teste)", "aliases": [],
+                                                            "email": "", "relation": "dono do cérebro"}})
+        onboard.apply_entrevista(self.b, {"people": "", "sources": ""})
+        r = self._finish()
+        q = self.b.state.questions[r["ask"]]
+        self.assertEqual(q.status, "aberta")
+        tasks = [a for a in self.b.state.actions.values()
+                 if a.status == "aberta" and "entrevista" in a.title.lower()]
+        self.assertEqual(len(tasks), 1)
+        self.assertEqual(tasks[0].list, "mine")
+
+    def test_existing_person_is_not_duplicated(self):
+        onboard.apply_entrevista(self.b, {"people": "Marina-demo"})
+        onboard.finish(self.b)
+        self.b.reload()
+        onboard._apply_people(self.b, "Marina-demo — Mari")
+        ids = [p for p in self.b.state.people]
+        self.assertEqual(ids.count("marina-demo"), 1)
+
+    def test_nightly_refuses(self):
+        from unittest import mock
+        with mock.patch.dict(os.environ, {"BRAIN_NIGHTLY": "1"}):
+            with self.assertRaises(util.BrainError):
+                onboard.apply_entrevista(self.b, {"people": "x"})
+
+
 if __name__ == "__main__":
     unittest.main()

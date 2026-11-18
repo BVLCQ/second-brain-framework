@@ -953,6 +953,44 @@ def apply_planning(brain, data: dict) -> dict:
     return {"created": created}
 
 
+def apply_entrevista(brain, data: dict) -> dict:
+    """A conversa acontece AQUI também (ruling do dono): responder já no wizard ou pular —
+    pular vira TASK no TODO, não só ASK esperando o agente. As respostas ficam no progresso
+    (logs/onboarding.json) e o finish() aplica: pessoas viram fichas na hora, fontes viram
+    resposta da ASK para o agente aplicar (/dump passo 0)."""
+    if os.environ.get("BRAIN_NIGHTLY") == "1":
+        raise util.BrainError("a entrevista é fala do dono — nunca no noturno", code=4)
+    people = _text(data.get("people"), 4000)
+    sources = _text(data.get("sources"), 4000)
+    answered = bool(people.strip() or sources.strip())
+    _save_progress(brain.inst, entrevista={"people": people, "sources": sources, "answered": answered})
+    _mark(brain.inst, "conversa")
+    return {"answered": answered}
+
+
+def _apply_people(brain, text: str) -> list[str]:
+    """Linhas `Nome — apelido, e-mail` viram fichas agora. Duplicado (mesma pessoa resolvida)
+    é pulado — nunca segunda ficha. Máx. 20 linhas."""
+    from . import people
+    done: list[str] = []
+    for raw in [l.strip() for l in text.splitlines() if l.strip()][:20]:
+        parts = re.split(r"\s+[—–]\s+|\s*;\s*", raw, maxsplit=1)
+        name = parts[0].strip()
+        rest = parts[1] if len(parts) > 1 else ""
+        if not name or len(name) > 80:
+            continue
+        email = next((tok.strip() for tok in re.split(r"[,;]", rest) if "@" in tok), "")
+        aliases = [util.slugify(name)] + [t.strip() for t in re.split(r"[,;]", rest) if t.strip() and "@" not in t]
+        pid = util.slugify(name)
+        if pid in brain.state.people or people.resolve(brain.state, name):
+            continue                      # já tem ficha — o agente une os apelidos depois, se sobrar
+        brain.record_one({"type": "person.added", "id": pid, "by": "owner", "prov": "declarado",
+                          "source": "onboarding", "data": {"name": name, "aliases": aliases,
+                                                           "email": email, "relation": "contato recorrente"}})
+        done.append(pid)
+    return done
+
+
 def finish(brain) -> dict:
     from . import ask, render
     if os.environ.get("BRAIN_NIGHTLY") == "1":
@@ -969,8 +1007,32 @@ def finish(brain) -> dict:
         "e quais fontes além das conectadas valem observar?",
         options=["conversar agora", "deixar para depois"], kind="outro",
         by="agent", prov="observado", source="onboarding")
+    stash = progress(brain.inst).get("entrevista") or {}
+    people_txt, sources_txt = str(stash.get("people") or ""), str(stash.get("sources") or "")
+    applied_inline: list[str] = []
+    if people_txt.strip():
+        applied_inline = _apply_people(brain, people_txt)
+    if sources_txt.strip():
+        brain.record_one({"type": "question.answered", "id": ask_id, "by": "owner", "prov": "declarado",
+                          "source": "onboarding",
+                          "data": {"answer": f"fontes que valem observar: {sources_txt.strip()}", "free": True}})
+    elif applied_inline:
+        brain.record_one({"type": "question.answered", "id": ask_id, "by": "owner", "prov": "declarado",
+                          "source": "onboarding", "data": {"answer": "conversar agora", "free": None}})
+        brain.record_one({"type": "question.applied", "id": ask_id, "by": "agent", "prov": "observado",
+                          "source": "onboarding",
+                          "data": {"how": f"pessoas viraram fichas no onboarding: {', '.join(applied_inline)}"}})
+    elif not stash.get("answered") and brain.owner in brain.state.people:
+        # pulou a conversa: não se perde — vira TASK no TODO do dono (a ASK segue aberta pro agente;
+        # sem a ficha do dono (passo Você pulado) a ASK sozinha cobre — nada de ficha fantasma)
+        brain.record_one({"type": "action.opened", "by": "agent", "prov": "observado", "source": "onboarding",
+                          "data": {"title": "Terminar a entrevista do Brain — pessoas recorrentes e fontes que valem observar",
+                                   "owner": brain.owner, "list": "mine", "due": None, "due_suggested": None,
+                                   "due_reason": "", "due_none_reason": "entrevista pós-onboarding — responda quando quiser (chat ou TUI ⚡)",
+                                   "effort_min": None, "project": None, "deliverable": None, "blocked_by": [],
+                                   "unblocks": [], "people": [], "priority": None, "link": "", "origin": "onboarding"}})
     render.render_all(brain)
-    return {"ok": True, "ask": ask_id}
+    return {"ok": True, "ask": ask_id, "people_added": applied_inline}
 
 
 ACTIONS = {
@@ -980,6 +1042,7 @@ ACTIONS = {
     "connectors_enable": enable_connectors, "permissions": lambda b, d: apply_permissions(b),
     "source_add": source_add, "source_remove": source_remove,
     "keys": save_keys, "memory": apply_memory, "maquina": apply_maquina, "foco_google": apply_foco_google,
+    "entrevista": apply_entrevista,
     "agent_connect": connect_agent, "agent_later": agent_later,
     "planning_note": save_planning_note,
     "planning_draft": lambda b, d: draft_planning(b), "planning_apply": apply_planning,

@@ -1225,21 +1225,30 @@ function collectTree() {
 
 // ── 10. A conversa (NOVA) ──────────────────────────────────────────────────
 V.conversa = () => {
-  $("#view").innerHTML = `${head("Começando", "A conversa", "O formulário acabou; a entrevista não.")}
+  $("#view").innerHTML = `${head("Começando", "A conversa", "O formulário acabou; a entrevista não. Responda aqui mesmo — ou pule e o Brain anota no seu TODO.")}
     <div class="card">
-      <h2>O Brain deixa uma pergunta aberta para o agente</h2>
-      <p class="sub">Ao concluir a configuração, o Brain registra <b>uma pergunta</b> no livro-razão para fechar o mapa com você no chat:</p>
-      <div class="msgline"><b>Pessoas recorrentes</b> — quem mais aparece no seu dia (nome, e-mail, como chamam você) para criar fichas sem duplicar ninguém.</div>
-      <div class="msgline"><b>Fontes que valem observar</b> — canais, pastas ou projetos que faltaram e entram como proposta para você aprovar.</div>
+      <h2>Uma pergunta aberta para o agente</h2>
+      <p class="sub">O que o Brain ainda quer saber para fechar o seu mapa:</p>
+      <div class="msgline"><b>Pessoas recorrentes</b> — quem mais aparece no seu dia, para criar fichas sem duplicar ninguém.</div>
+      <div class="msgline"><b>Fontes que valem observar</b> — canais, pastas ou projetos que faltaram nas conexões.</div>
+      <label class="f"><span>Pessoas recorrentes <i style="font-weight:400">(uma por linha: Nome — apelido, e-mail)</i></span>
+        <textarea id="cv-people" rows="4" placeholder="Marina Silva — Mari, marina@exemplo.com&#10;Heitor Costa"></textarea></label>
+      <label class="f"><span>Fontes que valem observar <i style="font-weight:400">(uma por linha: canal, pasta, projeto)</i></span>
+        <textarea id="cv-sources" rows="3" placeholder="#time-dados&#10;pasta do Drive &quot;Clientes&quot;"></textarea></label>
+      <p class="sub" style="margin:2px 0 0">As pessoas viram fichas agora; as fontes entram como proposta para você aprovar depois.</p>
     </div>
     <div class="card soft">
       <div class="rowline" style="padding:0">
-        <div class="info"><b>Aparece sozinha na próxima conversa</b><p>Quando você abrir seu agente no chat — ou acionar o <span class="kbd">⚡</span> na TUI — essa pergunta vem à tona automaticamente.</p></div>
-        <span class="pill ok">automático</span>
+        <div class="info"><b>Se preferir conversar depois</b><p>Pule — o Brain cria uma tarefa no seu TODO e retoma a pergunta quando você abrir o chat (ou o <span class="kbd">⚡</span> na TUI).</p></div>
+        <span class="pill ok">não se perde</span>
       </div>
     </div>
-    ${nav({main: "Continuar"})}`;
-  bindNav(() => next());
+    ${nav({main: "Enviar respostas", skip: "Pular"})}`;
+  bindNav(async btn => {
+    busy(btn, true);
+    try { await act("entrevista", {people: $("#cv-people").value, sources: $("#cv-sources").value}); next(); }
+    catch (e) { msg($("#m"), "err", e.message); } finally { busy(btn, false); }
+  });
 };
 
 // ── 11. Pronto ─────────────────────────────────────────────────────────────
