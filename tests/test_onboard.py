@@ -103,17 +103,30 @@ class StepTests(unittest.TestCase):
 
     def test_connectors_enable_only_read_tools_and_simple_sources(self):
         from brainlib import watch
-        onboard.enable_connectors(self.b, {"connectors": ["slack", "gmail", "inexistente"],
-                                           "slack_channels": "#time-demo, compras, #ruim;rm"})
-        allow = self.b.inst.cfg["runner"]["allow"]
-        self.assertIn("mcp__claude_ai_Slack__slack_read_channel", allow)
-        self.assertIn("mcp__claude_ai_Gmail__search_threads", allow)
-        self.assertFalse([r for r in allow if config.is_external_write(r)], "nenhuma ferramenta de escrita")
-        self.assertFalse([r for r in allow if "send" in r or "create" in r])
+        from unittest import mock
+        with mock.patch("shutil.which", side_effect=lambda k: "/usr/local/bin/claude" if k == "claude" else None):
+            onboard.enable_connectors(self.b, {"connectors": ["slack", "gmail", "inexistente"],
+                                               "slack_channels": "#time-demo, compras, #ruim;rm"})
+            allow = self.b.inst.cfg["runner"]["allow"]
+            self.assertIn("mcp__claude_ai_Slack__slack_read_channel", allow)
+            self.assertIn("mcp__claude_ai_Gmail__search_threads", allow)
+            self.assertFalse([r for r in allow if config.is_external_write(r)], "nenhuma ferramenta de escrita")
+            self.assertFalse([r for r in allow if "send" in r or "create" in r])
+            onboard.enable_connectors(self.b, {"connectors": ["slack", "gmail"], "slack_channels": "#time-demo"})
+            self.assertEqual(len(self.b.inst.cfg["runner"]["allow"]), len(allow))          # idempotente
         keys = {s["key"] for s in watch.list_sources(self.b.inst)}
         self.assertEqual(keys, {"gmail-hoje", "slack-time-demo", "slack-compras"})
-        onboard.enable_connectors(self.b, {"connectors": ["slack", "gmail"], "slack_channels": "#time-demo"})
-        self.assertEqual(len(self.b.inst.cfg["runner"]["allow"]), len(allow))          # idempotente
+
+    def test_connectors_enable_without_claude_still_creates_sources(self):
+        """Máquina sem Claude Code (Hermes/Cursor/Codex): sem allow-rules, com fontes — e 'ligado' vale."""
+        from unittest import mock
+        with mock.patch("shutil.which", return_value=None):
+            r = onboard.enable_connectors(self.b, {"connectors": ["gmail"]})
+            self.assertEqual(r["allow_rules"], "puladas — permissões de ferramenta são do seu agente (Hermes/Cursor/Codex)")
+        self.assertEqual(self.b.inst.cfg["runner"]["allow"], [])
+        self.assertIn("gmail-hoje", {s["key"] for s in onboard.state(self.b)["sources"]})
+        st = {c["key"]: c["enabled"] for c in onboard.state(self.b)["connectors"]}
+        self.assertTrue(st["gmail"])                                        # a FONTE vale como ligado
 
     def test_parse_mcp_list(self):
         out = onboard.parse_mcp_list("Checking…\n\nclaude.ai Slack: https://x/mcp - ✔ Connected\n"
@@ -227,12 +240,14 @@ class MoreStepTests(unittest.TestCase):
     setUp, tearDown = StepTests.setUp, StepTests.tearDown
 
     def test_unchecking_a_connector_revokes_its_rules_and_default_source(self):
+        from unittest import mock
         from brainlib import watch
-        onboard.enable_connectors(self.b, {"connectors": ["slack", "gmail"]})
-        r = onboard.enable_connectors(self.b, {"connectors": ["slack"]})
-        allow = self.b.inst.cfg["runner"]["allow"]
-        self.assertFalse([x for x in allow if "Gmail" in x])
-        self.assertTrue([x for x in allow if "Slack" in x])
+        with mock.patch("shutil.which", side_effect=lambda k: "/usr/local/bin/claude" if k == "claude" else None):
+            onboard.enable_connectors(self.b, {"connectors": ["slack", "gmail"]})
+            r = onboard.enable_connectors(self.b, {"connectors": ["slack"]})
+            allow = self.b.inst.cfg["runner"]["allow"]
+            self.assertFalse([x for x in allow if "Gmail" in x])
+            self.assertTrue([x for x in allow if "Slack" in x])
         self.assertEqual(r["removed"], ["gmail-hoje"])
         self.assertNotIn("gmail-hoje", {s["key"] for s in watch.list_sources(self.b.inst)})
 
@@ -591,6 +606,49 @@ class AgentStepTests(unittest.TestCase):
     def test_agent_later_without_registered_owner_refuses(self):
         with self.assertRaises(util.BrainError):
             onboard.agent_later(self.b, {"agent": "hermes"})
+
+
+class SourcesEditorTests(unittest.TestCase):
+    """Editor de fontes (plano F4): o watch.toml na tela, com validação na hora."""
+
+    def setUp(self):
+        self._td = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._td.name)
+        self.b = Brain(_inst(self.tmp))
+
+    def tearDown(self):
+        self._td.cleanup()
+
+    def test_source_add_and_remove_roundtrip(self):
+        r = onboard.source_add(self.b, {"key": "slack-design", "kind": "slack", "channel": "#design", "window": "1d"})
+        self.assertEqual(r["source"]["key"], "slack-design")
+        from brainlib import watch
+        self.assertIn("slack-design", {s["key"] for s in watch.list_sources(self.b.inst)})
+        r2 = onboard.source_remove(self.b, {"key": "slack-design"})
+        self.assertEqual(r2, {"removed": "slack-design"})
+        self.assertNotIn("slack-design", {s["key"] for s in watch.list_sources(self.b.inst)})
+
+    def test_source_add_validates(self):
+        with self.assertRaises(util.BrainError):
+            onboard.source_add(self.b, {"key": "x", "kind": "twitter"})          # tipo fora do registro
+        with self.assertRaises(util.BrainError):
+            onboard.source_add(self.b, {"kind": "slack"})                        # sem key
+        onboard.source_add(self.b, {"key": "dup", "kind": "slack"})
+        with self.assertRaises(util.BrainError):                                  # key duplicada
+            onboard.source_add(self.b, {"key": "dup", "kind": "slack"})
+        with self.assertRaises(util.BrainError):                                  # janela inválida (watch._clean)
+            onboard.source_add(self.b, {"key": "w", "kind": "slack", "window": "ontem"})
+
+    def test_source_remove_missing_key_refuses(self):
+        with self.assertRaises(util.BrainError):
+            onboard.source_remove(self.b, {"key": "nao-existe"})
+
+    def test_state_carries_sources_and_kinds(self):
+        onboard.source_add(self.b, {"key": "gmail-hoje", "kind": "gmail", "window": "1d"})
+        st = onboard.state(self.b)
+        self.assertIn("gmail-hoje", {s["key"] for s in st["sources"]})
+        self.assertTrue(all(len(k) == 2 for k in st["watch_kinds"]))
+        self.assertIn("gmail", {k[0] for k in st["watch_kinds"]})
 
 
 if __name__ == "__main__":

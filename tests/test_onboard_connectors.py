@@ -65,7 +65,7 @@ class OnboardConnectorsTests(unittest.TestCase):
         self.assertEqual(j["result"]["source"], "none")
         self.assertEqual(j["result"]["servers"], {})
         self.assertIn("Hermes", j["result"]["hint"])
-        self.assertIn("brain watch add", j["result"]["hint"])
+        self.assertIn("Adicionar fonte", j["result"]["hint"])
 
     def test_scan_connectors_without_claude_and_without_hermes_gives_generic_hint(self):
         with mock.patch("shutil.which", return_value=None), \
@@ -76,8 +76,8 @@ class OnboardConnectorsTests(unittest.TestCase):
         self.assertEqual(j["result"]["source"], "none")
         self.assertEqual(j["result"]["servers"], {})
         self.assertNotIn("Hermes", j["result"]["hint"])
-        self.assertIn("Conectores do Claude Code não encontrados nesta máquina", j["result"]["hint"])
-        self.assertIn("brain watch add", j["result"]["hint"])
+        self.assertIn("o seu agente", j["result"]["hint"])
+        self.assertIn("Adicionar fonte", j["result"]["hint"])
 
     def test_planning_draft_uses_configured_runner_and_mentions_no_claude_code_on_error(self):
         onboard.save_planning_note(self.b, {"text": "Abrir a 2ª loja da Padaria Pão Quente até março de 2027."})

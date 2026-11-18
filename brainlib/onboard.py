@@ -229,10 +229,9 @@ def _agent_name(argv) -> str | None:
 
 
 def _no_claude_hint() -> str:
-    return ("Você usa o Hermes: os conectores ligam nele — peça ao Hermes \"conecte o meu Gmail\" e depois "
-            "cadastre a fonte em Fontes (`brain watch add`)." if shutil.which("hermes") else
-            "Conectores do Claude Code não encontrados nesta máquina — conecte pelo seu agente e cadastre a "
-            "fonte em Fontes (`brain watch add`).")
+    ag = "Hermes" if shutil.which("hermes") else "o seu agente"
+    return (f"Os conectores ligam no {ag} — conecte Slack/Gmail/Calendar lá e use o botão "
+            "\"+ Adicionar fonte\" abaixo para dizer o que o Brain deve observar.")
 
 
 def parse_mcp_list(text: str) -> dict[str, str]:
@@ -258,10 +257,7 @@ def scan_connectors(force: bool = False, run=subprocess.run) -> dict:
     def _run(j: _Job) -> dict:
         claude = shutil.which("claude")
         if not claude:
-            hint = ("Você usa o Hermes: os conectores ligam nele — peça ao Hermes \"conecte o meu Gmail\" e depois "
-                    "cadastre a fonte em Fontes (`brain watch add`)." if shutil.which("hermes") else
-                    "Conectores do Claude Code não encontrados nesta máquina — conecte pelo seu agente e cadastre a "
-                    "fonte em Fontes (`brain watch add`).")
+            hint = _no_claude_hint()
             _MCP_CACHE.update(at=time.time(), servers={}, source="none", hint=hint)
             j.say(hint)
             return {"source": "none", "servers": {}, "hint": hint}
@@ -277,8 +273,9 @@ def scan_connectors(force: bool = False, run=subprocess.run) -> dict:
     return {"job": j.id}
 
 
-def connector_status(servers: dict[str, str] | None, cfg: dict) -> list[dict]:
+def connector_status(servers: dict[str, str] | None, cfg: dict, sources: set[str] | None = None) -> list[dict]:
     allow = set(cfg["runner"].get("allow", []))
+    srcs = sources or set()
     out = []
     for key, c in CONNECTORS.items():
         status = "unknown"
@@ -291,8 +288,12 @@ def connector_status(servers: dict[str, str] | None, cfg: dict) -> list[dict]:
                     if st == "connected":
                         break
         prefix = rule_prefix(c["server"])
+        enabled = any(r.startswith(prefix) for r in allow)
+        # sem Claude Code as ferramentas não têm allow-rule: vale a FONTE — o Brain observa do mesmo jeito
+        if not enabled and key in DEFAULT_SOURCES and DEFAULT_SOURCES[key][0] in srcs:
+            enabled = True
         out.append({"key": key, "label": c["label"], "what": c["what"], "status": status,
-                    "enabled": any(r.startswith(prefix) for r in allow)})
+                    "enabled": enabled})
     return out
 
 
@@ -319,6 +320,11 @@ def state(brain) -> dict:
         perm = {"static": "missing", "local": "missing"}
     pre = _prereqs()
     plan_goals = len(brain.plan.goals) if getattr(brain, "plan", None) else 0
+    from . import watch as _watch
+    try:
+        sources = _watch.list_sources(inst)
+    except util.BrainError:
+        sources = []
     st = {
         "owner": {"id": brain.owner, "registered": person is not None,
                   "name": person.name if person else ("" if cfg["owner"]["name"] == "Dono do cérebro"
@@ -334,10 +340,12 @@ def state(brain) -> dict:
         "agent": _agent_name(runner.agent_command(cfg)),
         "agents": agents_state(brain),
         "claude_installed": bool(shutil.which("claude")),
-        "connectors": connector_status(_MCP_CACHE["servers"], cfg),
+        "connectors": connector_status(_MCP_CACHE["servers"], cfg, {s["key"] for s in sources if s.get("key")}),
         "connectors_scanned": _MCP_CACHE["servers"] is not None,
         "connectors_source": "claude" if shutil.which("claude") else "none",
         "connectors_hint": "" if shutil.which("claude") else _no_claude_hint(),
+        "sources": sources,
+        "watch_kinds": [list(k) for k in _watch.KINDS],
         "permissions": {"ok": perm.get("local") == "ok", "static": perm.get("static")},
         "memory": {"mode": {"embed": "lite"}.get(mem_mode, mem_mode),
                    "docker": pre["docker"], "lmstudio": pre["lmstudio"],
@@ -467,13 +475,20 @@ def enable_connectors(brain, data: dict) -> dict:
     keys = [k for k in data.get("connectors") or [] if k in CONNECTORS]
     off = [k for k in CONNECTORS if k not in keys]               # desligado na tela = o Brain deixa de ler
     off_prefixes = tuple(rule_prefix(CONNECTORS[k]["server"]) for k in off)
-    allow = [r for r in brain.inst.cfg["runner"].get("allow", []) if not r.startswith(off_prefixes)]
-    for key in keys:
-        prefix = rule_prefix(CONNECTORS[key]["server"])
-        for tool in CONNECTORS[key]["tools"]:
-            if prefix + tool not in allow:
-                allow.append(prefix + tool)
-    config.set_keys(brain.inst, "runner", {"allow": allow})
+    claude = bool(shutil.which("claude"))
+    if claude:                                                   # allow-rules são o vocabulário do Claude Code
+        allow = [r for r in brain.inst.cfg["runner"].get("allow", []) if not r.startswith(off_prefixes)]
+        for key in keys:
+            prefix = rule_prefix(CONNECTORS[key]["server"])
+            for tool in CONNECTORS[key]["tools"]:
+                if prefix + tool not in allow:
+                    allow.append(prefix + tool)
+        config.set_keys(brain.inst, "runner", {"allow": allow})
+        rules = "liberadas"
+    else:
+        allow = [r for r in brain.inst.cfg["runner"].get("allow", []) if not r.startswith(off_prefixes)]
+        config.set_keys(brain.inst, "runner", {"allow": allow})  # só a limpeza: sem Claude não há regra nova
+        rules = "puladas — permissões de ferramenta são do seu agente (Hermes/Cursor/Codex)"
     have = {s.get("key") for s in watch.list_sources(brain.inst)}
     removed = []
     for key in off:                                             # só as fontes simples que este passo cria
@@ -504,7 +519,37 @@ def enable_connectors(brain, data: dict) -> dict:
     brain.reload()
     perms.try_sync(brain.inst)                                  # a sessão interativa enxerga a lista nova
     _mark(brain.inst, "conectores")
-    return {"enabled": keys, "sources": added, "removed": removed}
+    return {"enabled": keys, "sources": added, "removed": removed, "allow_rules": rules}
+
+
+# ── editor de fontes (plano F4): o watch.toml na tela, com validação na hora ──
+_SOURCE_FIELDS = ("channel", "folder", "jql", "path", "doc", "query", "note", "window")
+
+
+def source_add(brain, data: dict) -> dict:
+    from . import watch
+    kind = _text(data.get("kind"), 40)
+    key = _text(data.get("key"), 80)
+    if not key or not kind:
+        raise util.BrainError("key e kind são obrigatórios (ex.: slack-#time, slack)", code=4)
+    if kind not in {k for k, _ in watch.KINDS}:
+        raise util.BrainError(f"tipo de fonte desconhecido: {kind!r}", code=4)
+    fields = {"kind": kind}
+    for f in _SOURCE_FIELDS:
+        v = _text(data.get(f), 400)
+        if v:
+            fields[f] = v
+    src = watch.add(brain.inst, key, fields)                    # valida key, janela e id do Drive — ou recusa
+    return {"source": src}
+
+
+def source_remove(brain, data: dict) -> dict:
+    from . import watch
+    key = _text(data.get("key"), 80)
+    if key not in {s.get("key") for s in watch.list_sources(brain.inst)}:
+        raise util.BrainError(f"fonte '{key}' não existe", code=4)
+    watch.remove(brain.inst, key)
+    return {"removed": key}
 
 
 def apply_permissions(brain) -> dict:
@@ -869,6 +914,7 @@ ACTIONS = {
     "profile_save": save_profile, "routine": save_routine,
     "connectors_scan": lambda b, d: scan_connectors(bool(d.get("force"))),
     "connectors_enable": enable_connectors, "permissions": lambda b, d: apply_permissions(b),
+    "source_add": source_add, "source_remove": source_remove,
     "keys": save_keys, "memory": apply_memory, "maquina": apply_maquina,
     "agent_connect": connect_agent, "agent_later": agent_later,
     "planning_note": save_planning_note,
