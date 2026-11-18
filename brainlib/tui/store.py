@@ -22,8 +22,10 @@ from ..core import Brain
 PLAN_VIEWS = ["Todos", "Ativo", "Congelado", "Depois", "Finalizado"]
 PLAN_TAB_STATUS = [None, "ativo", "congelado", "depois", "finalizado"]
 
+SYS_TAB = "Sistema"
+
 PANELS_EXEC = {
-    1: ("Status", ["Resumo", "Fontes", "Sistema"]),
+    1: ("Status", ["Resumo", "Fontes", SYS_TAB]),
     2: ("Ações", ["mine", "waiting", "watching"]),
     3: ("Plano", PLAN_VIEWS),
     4: ("Aprovar", ["Perguntas", "Propostas", "Outbox", "Foco", "Publicar"]),

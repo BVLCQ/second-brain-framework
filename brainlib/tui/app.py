@@ -13,7 +13,6 @@ import shlex
 import subprocess
 import tempfile
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
@@ -40,7 +39,7 @@ from .ask_keys import AskKeys
 from .config_keys import ConfigKeys
 from .feedback_keys import FeedbackKeys
 from .portfolio_keys import PortfolioKeys
-from .store import ACTION_SORTS, ACTION_VIEWS, FACE_START, FACES, PLAN_TAB_STATUS, SYS_OPS, Item, Store
+from .store import ACTION_SORTS, ACTION_VIEWS, FACE_START, FACES, PLAN_TAB_STATUS, SYS_OPS, SYS_TAB, Item, Store
 
 UCAP = 3                      # linhas visíveis de um painel sem foco
 
@@ -372,7 +371,7 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
         self._lock = asyncio.Lock()
         self.query_one("#detailwrap").border_title = "Detalhe"
         for pid in (1, 2, 3, 4, 5, 6):
-            self.query_one(f"#p{pid}").border_subtitle_align = "right"
+            self.query_one(f"#p{pid}").styles.border_subtitle_align = "right"
         try:
             self.store = await asyncio.to_thread(Store, self.inst)
         except util.BrainError as e:
@@ -393,7 +392,10 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
         key = (p, t)
         if key not in self._items:
             if self.store is None:
-                self._items[key] = []
+                if self.face == 0 and p == 1 and self.panels.get(1, ("", []))[1][t:t + 1] == [SYS_TAB]:
+                    self._items[key] = [Item(o["id"], "sys", o) for o in SYS_OPS]
+                else:
+                    self._items[key] = []
             else:
                 self._items[key] = self.store.items(self.face, p, t, self.show_all, self.filt_levels(key), self.collapsed,
                                               self.view if p == 2 and self.face == 0 else 0, self.sort if p == 2 and self.face == 0 else 0)
@@ -571,7 +573,7 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
 
     def redraw(self) -> None:
         self._items = {}
-        if not self.is_mounted:
+        if not self.is_mounted or not self.screen_stack:
             return
         fill = self.fill_panel()
         for pid in (1, 2, 3, 4, 5):
@@ -584,7 +586,8 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
             n = len(self.items(pid)) if self.store and live and not compact else 0
             panel.border_subtitle = self._panel_subtitle(pid, n)
             panel.refresh(layout=True)
-        self.query_one("#detail", Static).update(rows.detail(self.store, self.cur()) if self.store else Text(""))
+        cur = self.cur()
+        self.query_one("#detail", Static).update(rows.detail(self.store, cur if hasattr(cur, "kind") else None) if self.store else Text(""))
         self.query_one("#detailwrap").scroll_home(animate=False)
         self.query_one("#detailwrap").border_subtitle = self._detail_subtitle()
         log, on = self.query_one("#log"), self.p == 6
@@ -686,7 +689,7 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
     # ── log ────────────────────────────────────────────────────────────────
     def log_line(self, text: str, style: str = "") -> None:
         t = Text()
-        t.append(datetime.now().strftime("%H:%M ") if self.is_mounted else "", "dim")
+        t.append(util.now().strftime("%H:%M ") if self.is_mounted else "", "dim")
         t.append(text, style)
         try:
             self.query_one("#log", RichLog).write(t)
@@ -871,6 +874,8 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
         self.redraw()
 
     def tab_move(self, d: int) -> None:
+        if self.p not in self.panels:
+            return
         n = len(self.panels[self.p][1])
         self.tab[self.p] = min(max(self.tab[self.p] + d, 0), n - 1)
         self.redraw()
@@ -927,8 +932,12 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
     def ctx_keys(self, every: bool = False, panel: int | None = None, tab: int | None = None) -> list[Key]:
         """Teclas do contexto atual. `every=True` lista todas, sem olhar o item (para o mapa de teclas)."""
         p = self.p if panel is None else panel
+        if p not in self.panels:
+            return []
         t = self.tab[p] if tab is None else tab
         it = None if every else self.cur()
+        if it is not None and not hasattr(it, "kind"):
+            it = None
         K: list[Key] = []
         add = lambda k, label, fn, **kw: K.append(Key(k, label, fn, **kw))  # noqa: E731
         w = lambda cond: every or cond  # noqa: E731
@@ -1101,8 +1110,7 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
                 if not ok and on_fail:
                     on_fail()
                 if ok and render:
-                    r = await asyncio.to_thread(bridge.run_brain, self.inst, ["render"])
-                    self.log_line("↻ brain render · " + (r.out.splitlines()[0] if r.out else "views regeneradas"), "dim")
+                    await self._render_after()
                 await self._reload()
             finally:
                 # o worker pode morrer no meio (binário do brain sumiu, callback quebrou): sem isto o busy
@@ -1132,6 +1140,15 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
             await self._reload()
         self.log_line("↻ o vault mudou fora do TUI; releitura feita", "dim")
         self.redraw()
+
+    async def _render_after(self) -> None:
+        r = await asyncio.to_thread(bridge.run_brain, self.inst, ["render"])
+        if r.ok:
+            self.log_line("↻ brain render · " + (r.out.splitlines()[0] if r.out else "views regeneradas"), "dim")
+            return
+        lines = (r.err or r.out or "").strip().splitlines()
+        self.log_line(f"⚠ brain render falhou (código {r.rc}) — FRESH e o painel HTML ficaram velhos: "
+                      f"{lines[-1][:160] if lines else 'sem saída'}", "yellow")
 
     async def _reload(self) -> None:
         try:
@@ -1378,7 +1395,7 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
 
     def cycle_status(self) -> None:
         a = self.cur().data
-        blk = a.get("blocked_by_all") or a.get("blocked_by") or []
+        blk = a.get("blocked_by") or []
         if blk:
             self.log_line(f"{a['id']} segue bloqueada por {', '.join(blk)} — resolva o bloqueio para movê-la", "yellow")
             return
@@ -1605,6 +1622,15 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
         self.external([*shlex.split(os.environ.get("PAGER") or "less"), str(path)])
 
     # ── painel 1 ───────────────────────────────────────────────────────────
+    def _locate_tab(self, pid: int, label: str) -> tuple[int, int] | None:
+        """(face, aba) onde o painel `pid` mostra a aba `label` — a face atual primeiro."""
+        order = [(self.face, self.panels)] + [(i, p) for i, (_, p) in enumerate(FACES) if i != self.face]
+        for face, panels in order:
+            tabs = panels.get(pid, ("", []))[1]
+            if label in tabs:
+                return (face, tabs.index(label))
+        return None
+
     def fix_doc(self) -> None:
         it = self.cur()
         fix = it.extra.get("fix") if it else None
@@ -1615,12 +1641,22 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
         elif fix.get("agent") == "connect":
             self.agent_connect(fix["key"])
         elif fix.get("sys"):
+            loc = self._locate_tab(1, SYS_TAB)
+            if loc is None:
+                self.log_line("operação de sistema não encontrada nesta face", "yellow")
+                return
+            face, tab = loc
+            if face != self.face:
+                self.face_to(face)
+                self.face = face
             self.p = 1
-            self.tab[1] = 3
+            self.tab[1] = tab
             self.set_sel(1, [o["id"] for o in SYS_OPS].index(fix["sys"]))
             self.redraw()
         elif fix.get("go"):
             gp, gt = fix["go"]
+            if gp in self.panels:
+                gt = min(gt, len(self.panels[gp][1]) - 1)
             self.p, self.tab[gp] = gp, gt
             self.redraw()
 
@@ -1683,8 +1719,7 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
                 if info.session_id:
                     self.last_run = info
                 self.log_line("✓ agente terminou" if rc == 0 else f"✗ agente saiu com código {rc}", "green" if rc == 0 else "red")
-                r = await asyncio.to_thread(bridge.run_brain, self.inst, ["render"])
-                self.log_line("↻ brain render · " + (r.out.splitlines()[0] if r.out else "views regeneradas"), "dim")
+                await self._render_after()
                 await self._reload()
                 self.report_run(info)
                 if resumed_from and rc != 0:
@@ -1882,7 +1917,8 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
         self.push_screen(FilterModal("", change, base=base))
 
     def help(self) -> None:
-        name, tabs = self.panels[self.p]
+        name, tabs = self.panels.get(self.p, (f"painel {self.p} (fora desta face)", ["—"]))
+        tab_label = tabs[min(self.tab[self.p], len(tabs) - 1)]
         body = Text()
         body.append("Neste contexto\n", "dim")
         for k in self.ctx_keys():
@@ -1900,7 +1936,7 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
             body.append(d + "\n")
         body.append("\n⚡ roda o agente  ·  ◆ pede aprovação digitada\n", "dim")
         face = f"{FACES[self.face][0]} · " if self.face else ""
-        self.push_screen(TextModal(f"Atalhos · {face}{name} › {tabs[self.tab[self.p]]}", body))
+        self.push_screen(TextModal(f"Atalhos · {face}{name} › {tab_label}", body))
 
 
 def run(inst) -> None:
