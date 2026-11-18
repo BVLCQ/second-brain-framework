@@ -14,6 +14,7 @@ function normalizeBrain(m){
   m.actions = m.actions || []; m.publishes = m.publishes || []; m.focus = m.focus || null;
   m.deliverables_done = m.deliverables_done || [];
   m.timeline = m.timeline || {past: [], ahead: []}; m.people = m.people || [];
+  m.people = m.people.map(p => Object.assign({owes_me: [], i_owe: [], decisions: [], projects: [], artifacts: [], aliases: []}, p));
   m.goals = m.goals || []; m.projects = m.projects || []; m.decisions = m.decisions || [];
   m.artifacts = m.artifacts || []; m.shares = m.shares || []; m.notes = m.notes || [];
   if (m.portfolio) m.portfolio.ice_rubric = m.portfolio.ice_rubric || {success_measures: [], principles: [], axes: {}};   // instância antiga: metodologia some, painel sobe
@@ -312,17 +313,17 @@ V.wins = () => {
 };
 V.people = () => '<div class="pagehead"><div><h1>Pessoas</h1><p class="sub">Uma ficha por pessoa — nunca duas.</p></div></div>' +
   panel("", '<div class="twrap"><table><tr><th>Pessoa</th><th>Papel</th><th>Última interação</th><th>Me deve</th><th>Devo</th><th>Decisões</th></tr>' +
-  M.people.map(p => "<tr><td>" + peL(p.id) + (p.is_owner ? " " + chip("info", "você") : "") + "</td><td>" + esc(p.role || "—") + '</td><td class="muted">' + (p.last_interaction ? fmtD(p.last_interaction.date) + " " + esc(p.last_interaction.title) : "—") +
-    '</td><td class="num">' + p.owes_me.length + '</td><td class="num">' + p.i_owe.length + '</td><td class="num">' + p.decisions.length + "</td></tr>").join("") + "</table></div>");
+  (M.people || []).map(p => "<tr><td>" + peL(p.id) + (p.is_owner ? " " + chip("info", "você") : "") + "</td><td>" + esc(p.role || "—") + '</td><td class="muted">' + (p.last_interaction ? fmtD(p.last_interaction.date) + " " + esc(p.last_interaction.title) : "—") +
+    '</td><td class="num">' + (p.owes_me || []).length + '</td><td class="num">' + (p.i_owe || []).length + '</td><td class="num">' + (p.decisions || []).length + "</td></tr>").join("") + "</table></div>");
 V.person = (q, id) => {
   const p = PE[decodeURIComponent(id)]; if (!p) return empty("Pessoa não encontrada");
   let h = '<p class="crumb muted"><a href="#people">← pessoas</a></p><div class="pagehead"><div><h1>' + esc(p.name) + "</h1>" +
     '<p class="sub">' + esc(p.role || "papel não registrado") + " · relação: " + esc(p.relation || "—") +
-    " · aliases: " + (p.aliases.map(esc).join(", ") || "—") + "</p></div></div>";
+    " · aliases: " + ((p.aliases || []).map(esc).join(", ") || "—") + "</p></div></div>";
   h += "<p><b>Última interação:</b> " + (p.last_interaction ? fmtDL(p.last_interaction.date) + " — " + esc(p.last_interaction.title) : "não consta") + "</p>";
-  h += '<div class="grid g2">' + panel("O que me deve", actionTable(p.owes_me, ["age", "project"]) + "<h2>O que eu devo</h2>" + actionTable(p.i_owe, ["project"]));
-  h += panel("Decisões que tomou", (p.decisions.length ? '<ul class="feed">' + p.decisions.map(d => '<li><span class="muted">' + fmtD(D[d].date) + "</span> · " + dL(d) + " " + esc(D[d].title) + "</li>").join("") + "</ul>" : empty("nenhuma registrada")) +
-    "<h2>Projetos</h2>" + (p.projects.map(x => pL(x, true)).join(" · ") || empty("—")) + '<h2>Menções recentes</h2><ul class="feed">' + p.artifacts.filter(a => ART[a]).map(a => '<li><span class="muted">' + fmtD(ART[a].date) + "</span> · " + esc(ART[a].title) + "</li>").join("") + "</ul>") + "</div>";
+  h += '<div class="grid g2">' + panel("O que me deve", actionTable(p.owes_me || [], ["age", "project"]) + "<h2>O que eu devo</h2>" + actionTable(p.i_owe || [], ["project"]));
+  h += panel("Decisões que tomou", ((p.decisions || []).length ? '<ul class="feed">' + (p.decisions || []).map(d => '<li><span class="muted">' + fmtD(D[d] ? D[d].date : "") + "</span> · " + dL(d) + " " + esc(D[d] ? D[d].title : d) + "</li>").join("") + "</ul>" : empty("nenhuma registrada")) +
+    "<h2>Projetos</h2>" + ((p.projects || []).map(x => pL(x, true)).join(" · ") || empty("—")) + '<h2>Menções recentes</h2><ul class="feed">' + (p.artifacts || []).filter(a => ART[a]).map(a => '<li><span class="muted">' + fmtD(ART[a].date) + "</span> · " + esc(ART[a].title) + "</li>").join("") + "</ul>") + "</div>";
   return h;
 };
 V.timeline = () => {
@@ -734,18 +735,19 @@ V.ask = (q) => {
 
 // ── router + faces (mesma lógica da TUI: Execução | Portfólio, cada face lembra onde estava) ──
 const TABS_EXEC = [["home", "Início"], ["sources", "Fontes", () => (M.sources || []).filter(s => s.failures).length || 0], ["todo", "TODO", () => M.counts.mine_overdue], ["projects", "Projetos"], ["decisions", "Decisões"], ["ask", "Perguntas", () => ((M.questions || []).filter(q => q.status === "aberta").length + M.proposals.length) || 0], ["wins", "Conquistas"],
-  ["people", "Pessoas"], ["timeline", "Linha do tempo"], ["focus", "Foco", () => M.focus && M.focus.status === "proposto" ? 1 : 0],
+  ["timeline", "Linha do tempo"], ["focus", "Foco", () => M.focus && M.focus.status === "proposto" ? 1 : 0],
   ["outbox", "Mensagens", () => M.counts.outbox_pending], ["feedback", "Sugestões", () => (M.feedback || []).filter(f => f.status !== "criado").length || 0]];
   // (Saúde saiu daqui com a face Configurações — mesma decisão da TUI: mora só lá, com o badge de avisos)
 const TABS_PF = [["pf/visao", "Visão geral"], ["pf/opps", "Oportunidades", () => PF.opportunities.filter(o => o.status !== "descartada").length],
   ["pf/matrix", "Matriz"], ["pf/procs", "Processos", () => PF.processes.filter(p => p.status === "ativo").length], ["pf/areas", "Áreas", () => PF.areas.length],
-  ["pf/docs", "Documentos", () => PF.processes.concat(PF.opportunities).reduce((n, x) => n + x.docs.length, 0)]];
+  ["pf/docs", "Documentos", () => PF.processes.concat(PF.opportunities).reduce((n, x) => n + x.docs.length, 0)],
+  ["people", "Pessoas"]];
 const TABS_CFG = [["cfg/inicio", "Visão geral"], ["cfg/perfil", "Perfil"], ["cfg/rotina", "Rotina"], ["cfg/conectores", "Conectores"],
   ["cfg/memoria", "Memória"], ["cfg/integracoes", "Integrações"],
   ["cfg/saude", "Saúde", () => (M.health || []).filter(c => c.level !== "ok").length]];   // o único contador da face: passo pulado não vira pendência
 const FACES = [["execucao", "Execução", TABS_EXEC], ["portfolio", "Portfólio", TABS_PF], ["configuracoes", "Configurações", TABS_CFG]];
 if (window.PF_ONLY) { FACES.length = 0; FACES.push(["portfolio", "Portfólio", TABS_PF]); }
-const faceOf = v => v.indexOf("pf/") === 0 ? "portfolio" : (v.indexOf("cfg/") === 0 ? "configuracoes" : "execucao");
+const faceOf = v => (v.indexOf("pf/") === 0 || v === "people" || v === "person") ? "portfolio" : (v.indexOf("cfg/") === 0 ? "configuracoes" : "execucao");
 const PARENT = {project: "projects", person: "people", action: "todo", decision: "decisions", "pf/opp": "pf/opps", "pf/area": "pf/areas"};
 function go(view, params){ const q = new URLSearchParams(Object.entries(params || {}).filter(([, v]) => v)).toString(); location.hash = view + (q ? "?" + q : ""); }
 function route(){

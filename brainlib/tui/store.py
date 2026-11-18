@@ -29,7 +29,7 @@ PANELS_EXEC = {
     2: ("Ações", ["mine", "waiting", "watching"]),
     3: ("Plano", PLAN_VIEWS),
     4: ("Aprovar", ["Perguntas", "Propostas", "Outbox", "Foco", "Publicar"]),
-    5: ("Registro", ["Decisões", "Entregas", "Pessoas", "Artefatos"]),
+    5: ("Registro", ["Decisões", "Entregas", "Artefatos"]),
     6: ("Log de comandos", ["Log", "Feedback"]),
 }
 
@@ -57,7 +57,7 @@ PANELS_PORT = {
     2: ("Processos", ["Todos", "Por área", "Lacunas"]),
     3: ("Oportunidades", ["Triagem", "Priorizadas", "Em curso", "Arquivo"]),
     4: ("Matriz", ["Matriz", "Ranking"]),
-    5: ("Registro", ["Áreas", "Documentos"]),
+    5: ("Registro", ["Áreas", "Documentos", "Pessoas"]),
     6: ("Log de comandos", ["Log", "Feedback"]),
 }
 
@@ -615,8 +615,6 @@ class Store:
                 out = [Item(d["id"], "dec", d, q=f"{d['id']} {d['title']}") for d in m["decisions"]]
             elif tab == 1:
                 out = [Item(e["id"], "del", e, q=f"{e['id']} {e['title']}") for e in m["deliveries"]]
-            elif tab == 2:
-                out = [Item(p["id"], "per", p, q=f"{p['id']} {p['name']} {' '.join(p['aliases'])}") for p in m["people"]]
             else:
                 out = [Item(a["id"], "art", a, q=f"{a['title']} {a['kind']} {a['summary']}") for a in m["artifacts"]]
         if filt:
@@ -686,11 +684,13 @@ class Store:
         elif panel == 5:
             if tab == 0:
                 out = [Item(a["id"], "area", a, q=f"{a['id']} {a['name']} {' '.join(a['aliases'])}") for a in pf["areas"]]
-            else:
+            elif tab == 1:
                 for t in [*pf["processes"], *pf["opportunities"]]:
                     for n, d in enumerate(t["docs"]):
                         out.append(Item(f"{t['id']}#{n}", "docl", {**d, "target": t["id"], "target_title": t["title"], "n": n},
                                         q=f"{t['id']} {d['kind']} {d['title']} {d['ref']}"))
+            else:
+                out = [Item(p["id"], "per", p, q=f"{p['id']} {p['name']} {' '.join(p['aliases'])}") for p in self.m["people"]]
         if filt:
             f = util.fold(filt)
             out = [i for i in out if f in util.fold(i.q)]
@@ -711,6 +711,8 @@ class Store:
             return (1, 3, next((i for i, g in enumerate(OPP_TABS) if status in g), len(OPP_TABS) - 1))
         if node in self.by_proc:
             return (1, 2, 0)
+        if node in self.by_person:
+            return (1, 5, 2)
         loc = self._locate_exec(node)
         return (0, *loc) if loc else None
 
@@ -725,10 +727,8 @@ class Store:
                             ("DEC-", (5, 0)), ("WIN-", (5, 1))):
             if node.startswith(prefix):
                 return loc
-        if node in self.by_person:
-            return (5, 2)
         if any(a["id"] == node for a in self.m["artifacts"]):
-            return (5, 3)
+            return (5, 2)
         return None
 
     def _items_cfg(self, panel: int, tab: int, filt: str) -> list[Item]:

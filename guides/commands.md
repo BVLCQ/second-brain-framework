@@ -259,7 +259,7 @@ Códigos de saída: `4` key inválida ou repetida, ou arquivo que ficaria invál
 key deixa o histórico de pulls na key antiga.
 
 ### `brain tui`
-Cockpit de terminal (Textual): cinco painéis numerados (status, ações, plano, aprovações, registro), o
+Cockpit de terminal (Textual): cinco painéis numerados por face (Execução: status, ações, plano, aprovações, registro; Portfólio: visão, processos, oportunidades, matriz, registro [áreas, documentos, pessoas]; Configurações: memória, instância), o
 detalhe do item, o log de comandos (o painel `6`, que expande quando selecionado) e uma barra com as teclas do contexto, como no lazygit. A leitura é
 em processo; **toda escrita é `./brain …` como subprocesso**, e a linha exata aparece no formulário (antes
 de confirmar) e no log (depois). Em gates e portas, confirmar no formulário já aprova (`tui` — o único
@@ -279,7 +279,7 @@ brain tui             # abre; usa a .venv-tui sozinho
 Sem o extra, `brain tui` sai com código 3 e a instrução. A aba **Fontes** do painel 1 gerencia o `watch.toml` (`n` adiciona, `e` edita, `d` remove, `w` inclui um pull avulso) e mostra o
 último pull e as falhas de cada fonte. `u` (`/update`) atualiza tudo e `c` (`/connect`) puxa uma fonte: rodam o agente de `[runner]`,
 que precisa de permissão para as ferramentas MCP de leitura (`[runner].allow`, ou `[runner].command`). Teclas: `?` ajuda do contexto · `:` paleta de
-comandos · `g` busca · `/` filtro (com um id exato, `TASK-####`, `GOAL-#`, `PROJ-#`, `PROJ-#.#`, `DEC-####`…, mostra tudo que está associado a ele: o plano acima e abaixo, ações, decisões, entregas, pessoas; texto livre continua sendo busca no texto) · `N` nova nota (veja `brain note`) · `1`–`6` painéis (só pelos números; `6` é o log: `j` `k` rolam, `c` limpa) · `[` `]` ou `←` `→` abas · `⏎` ou duplo clique amplia o detalhe · `ctrl+t` troca o tema · `q` sai. O mouse também funciona: clique nas abas, nas linhas e nas dicas da barra, e a roda rola a lista. O TUI relê o vault sozinho quando ele muda fora dele (agente, outro terminal). O mapa
+comandos · `g` busca · `/` filtro (com um id exato, `TASK-####`, `GOAL-#`, `PROJ-#`, `PROJ-#.#`, `DEC-####`…, mostra tudo que está associado a ele: o plano acima e abaixo, ações, decisões, entregas, pessoas; texto livre continua sendo busca no texto) · `N` nova nota (veja `brain note`) · `1`–`6` painéis (só pelos números; `6` é o log: `j` `k` rolam, `c` limpa) · `[` `]` ou `←` `→` abas · `Tab` / `Shift+Tab` giram as faces · `⏎` ou duplo clique amplia o detalhe · `ctrl+t` troca o tema · `q` sai. O mouse também funciona: clique nas abas, nas linhas e nas dicas da barra, e a roda rola a lista. O TUI relê o vault sozinho quando ele muda fora dele (agente, outro terminal). O mapa
 completo por contexto está na ajuda da própria TUI (`?`). Fora do TUI ficam só o que é do agente (`init`, `snapshot`, `add`,
 `proposal add`; `outbox sent` e `publish done` ele registra ao enviar e publicar) e `demo`; o teste
 `tests/test_tui.py::CoverageTest` garante que nenhum subcomando novo da CLI fique sem lugar ou sem justificativa. `[runner].allow` do `brain.toml` lista as ferramentas MCP de leitura do agente headless (noturno e TUI). Em `[tui]`, `model` e `effort` escolhem o modelo e o esforço do claude nas ações ⚡ (ex.: `haiku` · `high`; vazio = padrão; não valem com `[runner].command`), e `agent_allow` lista ferramentas extras, só do TUI, que o

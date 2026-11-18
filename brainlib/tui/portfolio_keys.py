@@ -56,9 +56,16 @@ class PortfolioKeys:
                 add("n", "nova", self.f_area_new)
                 if w(it):
                     add("e", "editar", self.f_area_edit)
-            elif w(it):
-                add("enter", "abrir", self.open_current_doc)
-                add("d", "desligar", self.f_doc_unlink)
+            elif t == 1:
+                if w(it):
+                    add("enter", "abrir", self.open_current_doc)
+                    add("d", "desligar", self.f_doc_unlink)
+            else:
+                add("n", "nova", self.f_person)
+                if w(it):
+                    add("e", "editar", self.f_person_update)
+                    add("a", "alias", self.f_alias)
+                add("R", "resolver nome", self.f_resolve)
 
     # ── apoio ──────────────────────────────────────────────────────────────
     def _need_area(self) -> bool:
@@ -77,7 +84,7 @@ class PortfolioKeys:
                 continue
             cands = people_mod.resolve(self.store.brain.state, name)
             if not cands:
-                return f"pessoa '{name}' não encontrada. Cadastre em Execução › Registro › Pessoas."
+                return f"pessoa '{name}' não encontrada. Cadastre em Portfólio › Registro › Pessoas."
             if len(cands) > 1:
                 return f"'{name}' é ambíguo: {', '.join(cands)}."
         return ""

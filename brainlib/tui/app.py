@@ -88,7 +88,6 @@ CMD_CATALOG = [               # paleta de comandos: nome, linha da CLI, (face, p
     ("Sincronizar estado dos issues", "brain feedback sync", (0, 6, 1, "s")),
     ("Nova decisão", 'brain decision add "…" --decided-by …', (0, 5, 0, "n")),
     ("Registrar entrega", 'brain delivery "…" --ref …', (0, 5, 1, "n")),
-    ("Nova pessoa", 'brain person add "…" --id …', (0, 5, 2, "n")),
     ("Saúde da instância", "brain doctor --online", (2, 2, 0, None)),
     ("Regenerar views", "brain render", (0, 1, 2, "enter", "sys:render")),
     ("Abrir painel HTML", "brain render --open", (0, 1, 2, "enter", "sys:open")),
@@ -109,8 +108,6 @@ CMD_CATALOG = [               # paleta de comandos: nome, linha da CLI, (face, p
     ("Wizard da memória", "brain setup --only memoria", (2, 1, 0, "w", "sys:wizmem")),
     ("Conectar harness", "brain memory harness install claude-code|cursor-cli|codex|hermes", (2, 1, 1, "i")),
     ("Verificar harnesses", "brain memory harness verify", (2, 1, 1, "v")),
-    ("Editar pessoa", "brain person update ID …", (0, 5, 2, "e")),
-    ("Quem é…?", 'brain person resolve "…"', (0, 5, 2, "R")),
     ("Sincronizar o foco", "brain focus sync [--dry-run]", (0, 4, 3, "s")),
     ("Primeira entrevista", "agente: /init", (0, 1, 0, "i")),
     ("Cockpit da semana", "agente: /week", (0, 1, 3, "enter", "sys:ai-week")),
@@ -158,13 +155,16 @@ CMD_CATALOG = [               # paleta de comandos: nome, linha da CLI, (face, p
     ("Editar área", "brain area update <slug> …", (1, 5, 0, "e")),
     ("Documentos ligados", "brain doc link … · brain doc unlink …", (1, 5, 1, None)),
     ("Desligar documento", "brain doc unlink PROC-####|OPP-#### --ref …", (1, 5, 1, "d")),
+    ("Nova pessoa", 'brain person add "…" --id …', (1, 5, 2, "n")),
+    ("Editar pessoa", "brain person update ID …", (1, 5, 2, "e")),
+    ("Quem é…?", 'brain person resolve "…"', (1, 5, 2, "R")),
 ]
 
 
 # Teclas que mudaram na padronização (2.10): ainda funcionam, escondidas, por uma versão. (face, painel, aba|None) → {antiga: nova}
 KEY_ALIASES = {
     (0, 2, None): {"D": "d", "a": "T"},          # Ações: descartar e alternar "todas"
-    (0, 5, 2): {"u": "e"},                       # Registro › Pessoas: editar
+    (1, 5, 2): {"u": "e"},                       # Registro › Pessoas: editar
 }
 
 
@@ -1066,12 +1066,6 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
                     add("S", "superar", self.f_supersede)
             elif t == 1:
                 add("n", "nova", self.f_delivery)
-            elif t == 2:
-                add("n", "nova", self.f_person)
-                if w(it):
-                    add("e", "editar", self.f_person_update)
-                    add("a", "alias", self.f_alias)
-                add("R", "resolver nome", self.f_resolve)
             else:
                 if w(it):
                     add("o", "abrir RAW", self.open_raw)

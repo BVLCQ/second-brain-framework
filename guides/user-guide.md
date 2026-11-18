@@ -728,7 +728,6 @@ por uma versão.
 - **Decisões** — quem decidiu, quando, com base em quê, cadeia de
   supersedes. `n` nova, `S` supera a selecionada.
 - **Conquistas** — wins por semana. `n` registra uma entrega.
-- **Pessoas** — ficha por pessoa. `n` nova pessoa, `e` edita, `a` alias, `R` "quem é…?" (resolve um nome ou alias, sem gravar).
 - **Linha do tempo** — o que aconteceu e o que vem.
 - **Foco** (badge: plano proposto) — o plano da semana **com o seu
   calendário real**: eventos ocupados em cinza, blocos propostos em azul,
@@ -760,7 +759,8 @@ ficha as mesmas teclas), **Matriz** impacto × facilidade (`s` status, `i` ICE n
 **Processos** (`n` novo, `e` edita, `a` abre a opp a partir daqui, `d`
 aposenta, `L` liga documento, `o` abre o playbook), **Áreas** (`n` nova;
 clicar numa área abre a página da área com processos, oportunidades e
-pessoas dela) e **Documentos** (tudo que está ligado a processos e oportunidades: `L` liga, `d` desliga, `enter` abre).
+pessoas dela), **Documentos** (tudo que está ligado a processos e oportunidades: `L` liga, `d` desliga, `enter` abre)
+e **Pessoas** (ficha por pessoa: `n` nova pessoa, `e` edita, `a` alias, `R` "quem é…?" resolve um nome ou alias, sem gravar).
 
 `/` filtra a lista da página — de novo, refina o que sobrou (filtros em cascata, `esc` tira um por vez, igual à TUI; uma barra no topo mostra a corrente e quantos itens restam); `g`, `:` ou ⌘K busca em tudo; `?` mostra o mapa de teclas; `` ` `` abre o console. O mapa de oportunidades
 também sai como arquivo próprio — `vault/FRESH/dashboard/portfolio.html`,
@@ -1012,8 +1012,8 @@ aprovação (no chat/CLI, "ok" literal; na TUI/painel, confirmar no formulário)
 onde você estava; dentro de formulários o Tab continua mudando de campo). Painéis do Portfólio: **1 Visão** (funil,
 top 5 por ICE, lacunas; por área; por goal) · **2 Processos** (todos, por área, lacunas) · **3 Oportunidades**
 (triagem, priorizadas, em curso, arquivo) · **4 Matriz** (impacto × facilidade em 2×2, ranking) · **5 Registro**
-(áreas, documentos). Teclas: `o` na Visão e na Matriz abre o mapa de oportunidades em HTML; processos `n e L o a d`; oportunidades `n e s i c L v p d` (`O` pede o one-pager ao agente);
-áreas `n e`; documentos `enter` abre e `d` desliga. Em Processos e Oportunidades, `L` (maiúsculo) liga documento — `h`/`l`
+(áreas, documentos, pessoas). Teclas: `o` na Visão e na Matriz abre o mapa de oportunidades em HTML; processos `n e L o a d`; oportunidades `n e s i c L v p d` (`O` pede o one-pager ao agente);
+áreas `n e`; documentos `enter` abre e `d` desliga; pessoas `n e a R`. Em Processos e Oportunidades, `L` (maiúsculo) liga documento — `h`/`l`
 continuam trocando de aba em todas as telas.
 
 **Nos outros lugares:** `FRESH/processes.md`, `FRESH/opportunities.md` e as fichas em `FRESH/records/processes|opportunities/`

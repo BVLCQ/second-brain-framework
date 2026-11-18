@@ -1933,7 +1933,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             await pilot.press("enter")
             await self.settle(app, pilot)
             self.assertTrue(any(e.title == "Painel no ar" for e in self.state(app).deliveries.values()))
-            await pilot.press("]", "n")                             # pessoa
+            await pilot.press("tab", "5", "]", "]", "n")           # pessoa (Portfólio › Registro › Pessoas)
             await pilot.pause(0.3)
             await self.typ(pilot, "Lia Prado")
             await pilot.press("enter")
@@ -1954,7 +1954,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             await pilot.pause(1.2)
             self.assertIn("marina-demo", self.log_text(app))
             # exportar status → pedir → aprovar → publicar pelo agente
-            await pilot.press("3", "S")
+            await pilot.press("shift+tab", "3", "S")
             await pilot.pause(0.3)
             await pilot.press("enter")
             await self.settle(app, pilot)

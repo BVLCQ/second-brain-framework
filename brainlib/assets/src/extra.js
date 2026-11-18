@@ -181,15 +181,17 @@ const pal = {open: false, sel: 0, items: [], confirmCmd: null, confirmMut: null}
 function navEntries(){
   const pfOnly = !!window.PF_ONLY;                     // portfolio.html: só a face Portfólio existe
   const tabs = pfOnly ? [["face/portfolio", "→ face Portfólio"],
-    ["pf/visao", "Portfólio · Visão"], ["pf/opps", "Portfólio · Oportunidades"], ["pf/matrix", "Portfólio · Matriz"], ["pf/procs", "Portfólio · Processos"], ["pf/areas", "Portfólio · Áreas"], ["pf/docs", "Portfólio · Documentos"]]
+    ["pf/visao", "Portfólio · Visão"], ["pf/opps", "Portfólio · Oportunidades"], ["pf/matrix", "Portfólio · Matriz"], ["pf/procs", "Portfólio · Processos"], ["pf/areas", "Portfólio · Áreas"], ["pf/docs", "Portfólio · Documentos"],
+    ["people", "Portfólio · Pessoas"]]
     : [["face/execucao", "→ face Execução"], ["face/portfolio", "→ face Portfólio"], ["face/configuracoes", "→ face Configurações"],
     ["home", "Início"], ["sources", "Fontes"], ["todo", "TODO"], ["projects", "Projetos"], ["decisions", "Decisões"], ["wins", "Conquistas"],
-    ["people", "Pessoas"], ["timeline", "Linha do tempo"], ["focus", "Foco"], ["outbox", "Mensagens"], ["feedback", "Sugestões"],
+    ["timeline", "Linha do tempo"], ["focus", "Foco"], ["outbox", "Mensagens"], ["feedback", "Sugestões"],
     ["cfg/inicio", "Configurações · Visão geral"], ["cfg/perfil", "Configurações · Perfil"], ["cfg/rotina", "Configurações · Rotina"],
     ["cfg/conectores", "Configurações · Conectores"], ["cfg/memoria", "Configurações · Memória"], ["cfg/integracoes", "Configurações · Integrações"],
     ["cfg/saude", "Configurações · Saúde"],
     ["pf/visao", "Portfólio · Visão"], ["pf/opps", "Portfólio · Oportunidades"], ["pf/matrix", "Portfólio · Matriz"],
-    ["pf/procs", "Portfólio · Processos"], ["pf/areas", "Portfólio · Áreas"], ["pf/docs", "Portfólio · Documentos"]];
+    ["pf/procs", "Portfólio · Processos"], ["pf/areas", "Portfólio · Áreas"], ["pf/docs", "Portfólio · Documentos"],
+    ["people", "Portfólio · Pessoas"]];
   return tabs.map(t => ({group: t[0].startsWith("face/") ? "faces" : "ir para", label: t[1], view: t[0]}));
 }
 function entEntries(){
@@ -1548,7 +1550,7 @@ function renderKeyBar(){
     else if (b.dataset.g === "g") openPal();
     else if (b.dataset.g === "esc") lfPop();
     else if (b.dataset.g === "?") helpOverlay();
-    else location.hash = "#face/" + (location.hash.startsWith("#pf/") ? "execucao" : "portfolio");
+    else location.hash = "#face/" + ((faceCur === "portfolio" || location.hash.startsWith("#pf/") || location.hash === "#people" || location.hash.startsWith("#person/")) ? "execucao" : "portfolio");
   });
 }
 
