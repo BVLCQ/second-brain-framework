@@ -149,10 +149,30 @@ Cada item = um commit com testes.
 
 ## Riscos e armadilhas
 
-1. **Não há máquina Windows no parque do dono** (só Macs). Fases 0 e 2 dependem de
-   hardware externo — colaborador, comunidade do repo público (issue "testers
-   wanted" pós-push) ou máquina emprestada. Sem isso, WSL2 fica "documentado com
-   melhor-esforço" e o smoke fica pendente com a limitação dita em voz alta.
+1. **Hardware Windows: resolvido por máquina de um amigo** (2026-11-18) — usuário
+   novo + acesso **SSH**. Cobertura e limites do modo de acesso:
+   - **SSH cobre ~90% do smoke programaticamente** (instalação, suite, cron, doctor,
+     probes, existência do `.desktop` e do atalho que o WSLg gera no Start Menu —
+     verificável listando `%APPDATA%\Microsoft\Windows\Start Menu\Programs\`).
+   - **10% exige olhos do amigo no console (~10 min no total):** ícone visível +
+     clicável no Start Menu, aba do navegador abrindo, TUI renderizando no Windows
+     Terminal. Browser lançado de sessão SSH pode cair em sessão escondida — para o
+     teste do `wslview`, preferir amigo executando 1 comando na máquina.
+   - **Gate de versão:** WSLg (e o Start Menu) é Windows 11; rede espelhada é WSL
+     2.0+/Win11. Se a máquina do amigo for Windows 10, o smoke vale para tudo MENOS
+     Start Menu e modo espelhado (LM Studio só rota por IP do host).
+   - **Passos elevados o amigo faz UMA vez na máquina (admin):** habilitar OpenSSH
+     Server + firewall, `wsl --install --no-distribution` (ou tornar o usuário novo
+     admin), reboot, desligar sleep durante os testes; ao fim, parar/desabilitar o
+     sshd.
+   - **Primeiro boot do Ubuntu pela sessão SSH** pede usuário/senha unix no console —
+     funciona via SSH; se empacar, fallback não-interativo `wsl --import` + usuário
+     default no `/etc/wsl.conf`.
+   - **Segredo do dono NUNCA na máquina do amigo:** OAuth testado com servidor de
+     callback falso em localhost (o alvo é a mecânica Windows→WSL2, não o Google);
+     rota LM Studio validada com `python -m http.server` no lado Windows (mesma
+     prova de rede, sem instalar 1 GB de modelo). Chave SSH, não senha; sshd
+     desligado ao fim.
 2. **WSLg → Start Menu: alta confiança, não verificado daqui.** É exatamente para
    isso que existe a Fase 0. Se falhar: fallback `.lnk` emitido de dentro do WSL
    chamando `powershell.exe` (interop) — continua sem codebase Windows (decisão D4).
@@ -190,15 +210,13 @@ Cada item = um commit com testes.
    `swift_tool()` nasce com o caminho sem-mac definido.
 6. Paridade CLI+TUI+painel continua valendo para qualquer flag nova (regra de casa).
 
-## Decisões do dono (não re-litigar)
+## Decisões do dono (registradas em 2026-11-18 — "Perfect" à folha de respostas + arranjo do hardware da Fase 0)
 
-1. **Estratégia Windows = WSL2**, sem código nativo e sem Docker como shim; imagem
-   appliance = plano separado opcional. ✓?
-2. **Tier oficial:** Linux/WSL2 = tudo exceto transcrição/quadros on-device (Swift),
-   com dica whisper.cpp na doc. ✓?
-3. **CI ganha `macos-latest`** na matrix (protege ramos darwin; custo zero em repo
-   público). ✓?
-4. **Fallback `.lnk`** só se o smoke da Fase 0 mostrar que o WSLg não registra o
-   `.desktop` no Start Menu (YAGNI até prova). ✓?
-5. **Guard win32** com mensagem amigável apontando pro guia (em vez de traceback).
-   ✓?
+1. **Estratégia Windows = WSL2** (1a): sem código nativo Windows, sem Docker como
+   shim. Imagem appliance = plano separado, só se o dono pedir. ✓
+2. **Tier oficial** (2a): Linux/WSL2 = tudo exceto transcrição/quadros on-device,
+   com dica whisper.cpp na documentação. ✓
+3. **CI ganha `macos-latest`** na matrix (3a). ✓
+4. **Fallback `.lnk` fica YAGNI** (4b): só se o smoke da Fase 0 mostrar que o WSLg
+   não registra o `.desktop` no Start Menu. ✓
+5. **Guard win32 amigável** apontando para o guia (5a). ✓
