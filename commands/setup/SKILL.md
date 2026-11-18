@@ -8,7 +8,10 @@ acusa `comando`/`tui`/`memória` pendentes.
 
 - **`./brain setup`** — wizard interativo e idempotente (tabela de passos, re-executável,
   `--only <ids>` re-visita). Passos: instancia, identidade, rotina, comando (`brain` no
-  PATH), foco, noturno, TUI, **memória (none/embed/full)**, portas, fontes, runner, fechamento.
+  PATH), foco, noturno, TUI, **memória (apenas livro-razão/embed/full)**, portas, fontes, runner, fechamento.
+  Desde a 2.23 o wizard do navegador (`/onboarding`) renderiza o mesmo registro de passos
+  (`setup.WEB_STEPS`) e cobre também o agente, conectores+fontes e "A máquina" — sem
+  terminal, a porta de entrada é o `Abrir o Brain.command` na raiz do repo.
 - **`./brain setup --yes [--only ids] [--mode none|embed|full]`** — não-interativo com
   defaults: é o caminho do AGENTE. Nunca grave segredo nem aceite o gate do full por conta
   própria — segredo vai no `config/.env` (diga ao dono para colar lá), e o modo `full`

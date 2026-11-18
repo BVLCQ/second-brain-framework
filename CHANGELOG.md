@@ -1,3 +1,33 @@
+## 2.23.0 — onboarding unificado: um cérebro, uma configuração
+
+- **Um registro de passos, duas renderizações.** O wizard do navegador e o de terminal agora falam a
+  mesma língua: `setup.WEB_STEPS` é a fonte única (id · título · grupo) e o `/onboarding` renderiza
+  dela. "Você" e "Sua rotina" viram uma tela; a tela "Permissões" separada deixa de existir.
+- **O wizard cobre a máquina inteira (o buraco do `curl | sh`).** Tela "A máquina": noturno, comando
+  `brain` no PATH, TUI (ligada por padrão), foco `.ics` e regra de fetch/hook do framework — cada item
+  um trabalho visível rodando em segundo plano, com log linha a linha. Quem termina o onboarding no
+  navegador chega ao `doctor` sem pendências obrigatórias.
+- **Tela "Seu agente" (antes dos conectores).** Detecta Claude Code, Hermes, Cursor e Codex na máquina;
+  "Conectar" grava o `[runner].agent`, registra o MCP somente-leitura do cérebro e libera as permissões
+  — como job, com cada passo aparecendo. "Fazer depois" cria uma tarefa com nome no TODO, não uma
+  frase de ajuda.
+- **Conectores sem Claude Code + fontes na tela.** Sem o Claude, ligar Gmail/Slack/Calendar continua
+  valendo (as fontes é que provam) e as allow-rules ficam para quem as usa. Novo editor de fontes:
+  botão "+" cria a fonte do `watch.toml` (tipo · key · janela · parâmetro) com validação na hora, e o
+  × remove — o universo observável deixou de ser arquivo escondido.
+- **Memória completa no wizard.** Os três modos na ordem que o dono escolheu — **apenas livro-razão**
+  · **embed** · **full** — e os três motores (LLM · embeddings · reranker) com o registry inteiro de
+  provedores, defaults "✓ recomendado", chave por slot, aviso de egresso para nuvem e fail-fast de
+  chave antes de qualquer job. O modo full segue exigindo o aceite explícito.
+- **O onboarding termina de verdade.** `finish` grava `onboarding.finished` no ledger e deixa a
+  entrevista de profundidade como pergunta aberta (pessoas + fontes) — o `/init` passa a disparar por
+  ela também, então quem onboardou no navegador não perde a conversa.
+- **Entrada sem terminal.** `Abrir o Brain.command` na raiz do repo: duplo clique no Finder roda tudo
+  (a janela que abre trabalha sozinha) e uma pasta baixada como ZIP do GitHub vira repositório git com
+  origin configurado — o `brain update` funciona desde o primeiro dia.
+- **Identidade visual única.** O wizard trocou o tema navy próprio pelos tokens do painel (claro e
+  escuro, com o mesmo alternador) — configurar o Brain e usá-lo são o mesmo aplicativo agora.
+
 ## 2.22.0 — os canais do cérebro nos agentes e multi-instância de verdade
 
 - **O cérebro alcança os agentes de código (#5, #20).** `brain memory harness install` registra, além do

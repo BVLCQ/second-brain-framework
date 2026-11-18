@@ -4,6 +4,12 @@ O setup assistido configura a **estrutura** da instância (config, memória, TUI
 portas). A **vida** (PROFILE, goals, pessoas) continua da entrevista `/init` com o
 seu agente — o wizard termina oferecendo-a.
 
+> **2.23:** o wizard do navegador (`/onboarding`) e este daqui renderizam o MESMO
+> registro de passos (`setup.WEB_STEPS`) — mesmos ids, mesmos títulos. O do navegador
+> cobre também identidade/perfil, agente, conectores+fontes, memória completa e
+> "A máquina" (noturno · comando · TUI · foco · framework), com cada ação como job
+> visível. A entrada sem terminal é o `Abrir o Brain.command` na raiz do repo.
+
 ## Três caminhos de instalar
 
 | Caminho | Como | Para quem |
