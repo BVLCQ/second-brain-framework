@@ -291,6 +291,38 @@ class RunnerFallbackTests(unittest.TestCase):
              mock.patch.object(runner, "probe", side_effect=AssertionError("probe não deve rodar sem probe_agent")):
             doctor.checks(b)
 
+    def test_probe_custom_command_runner(self):
+        """[runner].command próprio: a sonda roda O COMANDO com o prompt mínimo (regressão do
+        doctor --online, que reportava 'binário não encontrado' para comando customizado)."""
+        import sys as _sys
+        cfg = self._cfg(command=f"{_sys.executable} /tmp/agente-falso.py {{prompt}}")
+        seen = {}
+
+        def fake_run(a, **k):
+            seen["argv"] = a
+            return subprocess.CompletedProcess(a, 0, "ok", "")
+
+        r = runner.probe("command", cfg, run=fake_run)
+        self.assertTrue(r["ok"])
+        self.assertIn("Responda apenas: ok", seen["argv"][-1])
+
+        cfg_bad = self._cfg(command="/binario-que-nao-existe-xyz {prompt}")
+        r_bad = runner.probe("command", cfg_bad)
+        self.assertFalse(r_bad["ok"])
+        self.assertIn("não encontrado no PATH", r_bad["reason"])
+
+    def test_doctor_online_custom_command_probe_is_ok(self):
+        """Doctor --online com runner de comando próprio: sonda ok não gera check de erro."""
+        import sys as _sys
+        b = _brain(self.tmp / "inst2")
+        config.set_keys(b.inst, "runner", {"command": f"{_sys.executable} -c 'print(\"ok\")' {{prompt}}"})
+        b.inst = config.load(b.inst.root)
+        b.reload()
+        with mock.patch.object(runner, "probe",
+                               return_value={"name": "command", "ok": True, "auth": False, "reason": ""}):
+            cs = doctor.checks(b, probe_agent=True)
+        self.assertEqual([c["level"] for c in cs if c["title"] == "runner"], ["ok"])
+
 
 if __name__ == "__main__":
     unittest.main()

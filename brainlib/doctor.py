@@ -81,8 +81,9 @@ def checks(brain, online: bool = False, probe_agent: bool = False) -> list[dict]
         if c:
             pr = runner.probe(c[0][0], cfg, cwd=inst.root)
             name, reason, auth = pr["name"], pr["reason"], pr["auth"]
+            hint = runner.LOGIN_HINT.get(name, "verifique o login do comando em [runner].command")
             out.append(_c("ok", "runner", f"{name} respondeu à sonda") if pr["ok"]
-                       else _c("error", "runner", f"{name}: {reason}" + (f" — {runner.LOGIN_HINT[name]}" if auth else "")))
+                       else _c("error", "runner", f"{name}: {reason}" + (f" — {hint}" if auth else "")))
     for c in st.connectors.values():
         if c.consecutive_failures >= 2:
             out.append(_c("error", f"fonte {c.key}", f"{c.consecutive_failures} falhas seguidas — último erro: "

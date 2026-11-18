@@ -94,11 +94,25 @@ def failure_reason(text: str) -> str:
     return (hit or (lines[-1] if lines else ""))[:160]
 
 
+def _probe_argv(name: str, cfg: dict) -> list[str] | None:
+    """argv da sonda: preset com prompt mínimo, ou `[runner].command` próprio com o mesmo prompt."""
+    if name == "command":
+        cmd = cfg["runner"].get("command") or ""
+        if not cmd:
+            return None
+        return [p.replace("{prompt}", PROBE_PROMPT) for p in shlex.split(cmd)]
+    return preset_argv(name, cfg, PROBE_PROMPT)
+
+
 def probe(name: str, cfg: dict, cwd: Path | None = None, timeout: int = 60, run=subprocess.run) -> dict:
-    """Sonda barata: o preset de verdade com um prompt mínimo. → {'name','ok','auth','reason'}"""
-    argv = preset_argv(name, cfg, PROBE_PROMPT)
-    if argv is None:
-        return {"name": name, "ok": False, "auth": False, "reason": "binário não encontrado no PATH"}
+    """Sonda barata: o runner de verdade (preset ou [runner].command) com um prompt mínimo.
+    → {'name','ok','auth','reason'}"""
+    argv = _probe_argv(name, cfg)
+    if argv is None or not shutil.which(argv[0]):
+        return {"name": name, "ok": False, "auth": False,
+                "reason": "binário não encontrado no PATH"
+                          + ("" if name == "command" else f" ({name})")}
+
     try:
         p = run(argv, cwd=cwd, env={**os.environ, "BRAIN_NIGHTLY": "1"}, capture_output=True, text=True,
                 stdin=subprocess.DEVNULL, timeout=timeout, check=False)
