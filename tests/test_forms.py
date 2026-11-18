@@ -111,6 +111,16 @@ class SingleSourceTest(unittest.TestCase):
         js = _js_src()
         self.assertNotRegex(js, r"--approval \"ok\"|--approval ok\b", "o painel não aprova por você")
 
+    def test_dynamic_sources_never_empty(self):
+        """Cardápio dinâmico com depends fora da tabela (ex.: modo none) cai no default — o Select
+        do FormModal exige opções (regressão 2.20.1: IndexError no compose do memory.mode)."""
+        f = forms.F("embeddings", "embeddings", choices="@memory_embs", depends="mode")
+        m = {"form_static": forms.static()}
+        for mode, first in (("full", "fireworks"), ("embed", "local"), ("none", "local"), ("", "local")):
+            opts = forms.options(f, m, {"mode": mode})
+            self.assertTrue(opts, f"modo {mode!r}: cardápio vazio")
+            self.assertEqual(opts[0][0], first)
+
 
 def _ctx_for(m: dict) -> dict[str, dict]:
     """Um contexto realista por formulário, tirado do view model da demo (o mesmo que as pontas montam)."""

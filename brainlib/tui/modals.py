@@ -113,6 +113,8 @@ class FormModal(ModalScreen):
                             yield TextArea(f.value, placeholder=f.ph, id=f"f_{f.id}", classes="fin")
                         elif f.choice or f.options:
                             pairs = _pairs(f, {x.id: x.value for x in s.fields})
+                            if not pairs:                  # fonte dinâmica sem opções: campo inerte, o form segue
+                                pairs = [("—", "")]
                             val = f.value if f.value in [v for _, v in pairs] else pairs[0][1]
                             # opção vazia ("— escolha —") no topo: o estado sem escolha mostra o prompt dela
                             prompt = pairs[0][0] if pairs and pairs[0][1] == "" else "Select"

@@ -143,7 +143,8 @@ const BRAIN_FORMS = (function(){
     reports: M => (st(M).reports || []).map(r => [r, r]),
     destinations: M => (st(M).destinations || []).map(d => [d, d]),
     providers: (M, v) => (((st(M).providers || {})[(v && v.slot) || "embeddings"]) || []).map(x => [x[0], x[1]]),
-    memory_embs: (M, v) => (((st(M).memory_embs || {})[(v && v.mode) || "embed"]) || []).map(x => [x[0], x[1]]),
+    memory_embs: (M, v) => { const t = st(M).memory_embs || {};
+      return ((t[(v && v.mode) || "embed"]) || t.embed || []).map(x => [x[0], x[1]]); },
     "ice:impact": ice("impact"), "ice:confidence": ice("confidence"), "ice:ease": ice("ease"),
   };
   function options(f, M, v, ctx){

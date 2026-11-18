@@ -614,6 +614,13 @@ def _src_providers(m, v, ctx):
     return [tuple(x) for x in (m.get("form_static") or {}).get("providers", {}).get(slot, [])]
 
 
+def _src_memory_embs(m, v, ctx):
+    """Cardápio de embeddings pelo modo — modo fora da tabela (ex.: none) cai no cardápio do embed.
+    Fonte dinâmica nunca devolve vazio: o Select do formulário exige opções (IndexError no compose)."""
+    tbl = (m.get("form_static") or {}).get("memory_embs", {})
+    return [tuple(x) for x in tbl.get((v or {}).get("mode") or "embed", tbl.get("embed", []))]
+
+
 SOURCES = {
     "people": lambda m, v, ctx: [(p["id"], p["name"]) for p in m.get("people", [])],
     "recipients": lambda m, v, ctx: [(p["id"], p["name"]) for p in m.get("people", []) if not p.get("is_owner")],
@@ -649,8 +656,7 @@ SOURCES = {
     "reports": lambda m, v, ctx: [(r, r) for r in (m.get("form_static") or {}).get("reports", [])],
     "destinations": lambda m, v, ctx: [(d, d) for d in (m.get("form_static") or {}).get("destinations", [])],
     "providers": _src_providers,
-    "memory_embs": lambda m, v, ctx: [tuple(x) for x in (m.get("form_static") or {})
-                                      .get("memory_embs", {}).get((v or {}).get("mode") or "embed", [])],
+    "memory_embs": _src_memory_embs,
     "ice:impact": _ice("impact"), "ice:confidence": _ice("confidence"), "ice:ease": _ice("ease"),
 }
 

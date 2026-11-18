@@ -533,6 +533,20 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             await pilot.pause(0.2)
             self.assertEqual(got[-1][0], [["doc", "link", ids["sugerida"], "--kind", "playbook", "--ref", "1AbCdEfGhIjKlMnOpQrS", "--by", "owner", "--watch"]])
 
+    async def test_memory_mode_form_opens_when_memory_is_off(self):
+        """Regressão 2.20.1: abrir o formulário do modo com memória desligada (mode=none) não
+        derruba a TUI — o cardápio de embeddings cai no default e o Select nunca fica vazio."""
+        app = self.app()
+        async with app.run_test(size=(150, 46)) as pilot:
+            await pilot.pause(0.4)
+            app.open_form("memory.mode", None, values={"mode": "none"})
+            await pilot.pause(0.3)
+            self.assertEqual(type(app.screen).__name__, "FormModal")
+            from textual.widgets import Select as _Select
+            sel = app.screen.query_one("#f_mode", expect_type=_Select)
+            self.assertEqual(str(sel.value), "none")
+            await pilot.press("escape")
+
     async def test_ice_form_dropdowns_methodology_and_palette(self):
         from brainlib import ice_rubric
         ids = self.seed_portfolio()

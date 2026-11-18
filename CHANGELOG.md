@@ -1,3 +1,13 @@
+## 2.20.1 — hotfix: tecla m com a memória desligada não derruba mais a TUI
+
+- **Correção.** Abrir o formulário "Memória: modo e provedores" com o modo atual `nenhuma` derrubava a
+  TUI (IndexError no compose do FormModal): o cardápio de embeddings é dinâmico por modo e a tabela
+  não tem chave `none` — o Select ficava sem opções. Agora a fonte cai no cardápio do embed quando o
+  modo está fora da tabela (e o painel idem no forms.js), e o FormModal degrada para um campo inerte
+  ("—") se alguma fonte dinâmica um dia devolver vazio — o formulário abre, nunca trava.
+- Testes de regressão nos dois níveis: fonte nunca vazia (`test_forms`) e abertura real do
+  formulário com modo none (`test_tui`).
+
 ## 2.20.0 — o fluxo da memória nas três superfícies: LLM · embeddings · reranker, lado a lado
 
 - **Full com reranker no cardápio.** O passo Memória agora monta os três pares — LLM, Embeddings e
