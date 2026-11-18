@@ -23,7 +23,7 @@ import sys
 from datetime import timedelta
 from pathlib import Path
 
-from . import util
+from . import rawsort, util
 
 EXT_RE = re.compile(r"^[A-Za-z0-9]{1,10}(?:\.[A-Za-z0-9]{1,10})?$")
 HEARTBEAT_MIN = 5  # item sem novidade só registra evento se a fonte não pulsou há pouco (evita inundar o ledger)
@@ -102,7 +102,12 @@ def _take_locked(brain, key: str, content: str, prefix: str | None, ext: str,
         return {"changed": False, "failed": False, "path": None, "why": "alias", "alias": twin}
     inst.inbox.mkdir(parents=True, exist_ok=True)
     stamp = util.now().strftime("%Y-%m-%dT%H%M%S")
-    parts = [util.slugify(prefix or key.split("-")[0], 16)]
+    slug = util.slugify(prefix or key.split("-")[0], 16)
+    warning = None
+    if prefix is not None and not rawsort.known_prefix(slug):
+        warning = (f"prefixo '{slug}' não classifica no RAW — o arquivo vai para a pasta da extensão "
+                   f"(documents/, notes/…). Prefixos que classificam: {', '.join(sorted(rawsort.SNAPSHOT_PREFIXES))}")
+    parts = [slug]
     if with_key or not item:                 # `with_key=False`: o item já é o nome (github-<repo>-<ts>)
         parts.append(util.slugify(key, 40 if not item else 32))
     if item:
@@ -121,7 +126,10 @@ def _take_locked(brain, key: str, content: str, prefix: str | None, ext: str,
     state[slot] = {"hash": h, "at": util.iso_now(), "path": inst.rel(path), **({"rev": rev} if rev else {})}
     util.write_json(inst.state_file, state)
     _pulled(brain, key, item, True, snapshot=inst.rel(path))
-    return {"changed": True, "failed": False, "path": path}
+    res = {"changed": True, "failed": False, "path": path}
+    if warning:
+        res["warning"] = warning
+    return res
 
 
 def cli(args, brain) -> None:
@@ -146,6 +154,8 @@ def cli(args, brain) -> None:
     skip_read = bool(args.rev) and unchanged(brain, args.key, args.rev, item)
     content = "" if skip_read else (Path(args.file).read_text(encoding="utf-8") if args.file else sys.stdin.read())
     res = take(brain, args.key, content, args.prefix, args.ext, item=item, rev=args.rev, name=args.name)
+    if "warning" in res:
+        print("⚠ " + res["warning"], file=sys.stderr)
     if res["failed"]:
         print(f"⚠ {label}: conteúdo vazio — registrado como falha")
     elif res["changed"]:

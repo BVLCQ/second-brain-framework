@@ -18,11 +18,19 @@ from pathlib import Path
 
 from . import util
 
-CATEGORIES = ("slack", "meetings", "documents", "videos", "artifacts", "notes", "images", "connectors", "github", "misc")
+TYPES = ("slack", "meetings", "documents", "videos", "artifacts", "notes", "images", "connectors", "github", "misc")
+CATEGORIES = TYPES
 
 SNAPSHOT_PREFIXES = {"slack": "slack", "jira": "connectors", "gmail": "connectors", "gcal": "connectors",
                      "drive": "connectors", "databricks": "connectors", "github": "github",
                      "granola": "meetings"}
+for _t in TYPES:                        # o nome do TIPO também é prefixo: connectors-*.md → connectors/
+    SNAPSHOT_PREFIXES.setdefault(_t, _t)
+
+
+def known_prefix(prefix: str) -> bool:
+    """O prefixo classifica no RAW (kind de fonte ou nome de tipo)?"""
+    return prefix.lower() in SNAPSHOT_PREFIXES
 VIDEO_EXT = {".mp4", ".mov", ".m4v", ".mkv", ".webm", ".avi", ".m4a", ".mp3", ".wav", ".aac", ".ogg", ".flac"}
 IMAGE_EXT = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".heic", ".svg", ".tiff", ".bmp"}
 DOC_EXT = {".pdf", ".doc", ".docx", ".ppt", ".pptx", ".xls", ".xlsx", ".odt", ".rtf", ".txt", ".md", ".csv", ".key",
