@@ -434,3 +434,21 @@ main.col{padding-bottom:120px}
 .stopt span{font-size:12.5px;color:var(--muted)}
 .stopt:hover{border-color:var(--accent)}
 .stopt.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+
+/* ── arrastar arquivo ou pasta para a inbox ── */
+.inbox-drop-ov{position:fixed;inset:0;z-index:100;display:flex;flex-direction:column;gap:14px;padding:24px;
+  background:color-mix(in srgb,var(--bg) 82%,transparent);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+.inbox-drop-ov[hidden]{display:none}
+.inbox-drop-zone{flex:1;display:flex;align-items:center;justify-content:center;border:2px dashed var(--line);
+  border-radius:18px;background:color-mix(in srgb,var(--panel) 88%,transparent);
+  transition:border-color .12s ease,background .12s ease,transform .12s ease;pointer-events:none}
+.inbox-drop-zone.active{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,var(--panel));
+  transform:scale(1.005);box-shadow:var(--shadow-lg)}
+.inbox-drop-card{text-align:center;padding:20px 28px;max-width:460px;pointer-events:none}
+.inbox-drop-card strong{display:block;font-size:18px;font-weight:700;color:var(--ink);margin-bottom:4px}
+.inbox-drop-zone.active .inbox-drop-card strong{color:var(--accent)}
+.inbox-drop-card span{display:block;font-size:13px;color:var(--muted)}
+.inbox-drop-offline{margin:auto;max-width:520px;padding:24px 28px;border-radius:16px;border:2px dashed var(--warn);
+  background:var(--panel);color:var(--ink);text-align:center;box-shadow:var(--shadow-lg);pointer-events:none}
+.inbox-drop-offline strong{display:block;font-size:15px;margin-bottom:6px;color:var(--warn)}
+.inbox-drop-offline span{display:block;font-size:13px;color:var(--muted)}

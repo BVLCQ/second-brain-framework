@@ -42,8 +42,8 @@ window.renderFaces = function(face, F){   // F vem por parâmetro (padrão da ca
 
 // ── toast + console ─────────────────────────────────────────────────────
 let toastTmr;
-function toast(msg){ const t = $("#toast"); t.textContent = msg; t.classList.add("show");
-  clearTimeout(toastTmr); toastTmr = setTimeout(() => t.classList.remove("show"), 2800); }
+function toast(msg, ms){ const t = $("#toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(toastTmr); toastTmr = setTimeout(() => t.classList.remove("show"), ms || 2800); }
 let conAuto = sessionStorage.getItem("con-fechado") !== "1";   // quem fechou, ficou fechado
 let conUnread = 0;
 function conToggle(force){
@@ -1680,5 +1680,214 @@ function renderKeyBar(){
     else location.hash = "#face/" + ((faceCur === "portfolio" || location.hash.startsWith("#pf/") || location.hash === "#people" || location.hash.startsWith("#person/")) ? "execucao" : "portfolio");
   });
 }
+
+// ── arrastar arquivo ou pasta para a inbox (ponte ./brain serve) ─────────
+const INBOX_OFFLINE_MSG = "Ponte CLI inativa — rode ./brain serve para arrastar arquivos para o painel, ou salve direto em vault/RAW/inbox/.";
+const INBOX_SKIP = new Set([".DS_Store", ".keep.md"]);
+let inboxDragDepth = 0;
+
+function isFileDrag(e){
+  if (dragId) return false;
+  const dt = e && e.dataTransfer;
+  if (!dt || !dt.types) return false;
+  return Array.from(dt.types).includes("Files");
+}
+function ensureInboxDropOverlay(){
+  let ov = document.getElementById("inbox-drop-ov");
+  if (ov) return ov;
+  ov = document.createElement("div");
+  ov.id = "inbox-drop-ov";
+  ov.className = "inbox-drop-ov";
+  ov.hidden = true;
+  if (LIVE) {
+    ov.innerHTML =
+      '<div class="inbox-drop-zone" data-drop-mode="move"><div class="inbox-drop-card">' +
+      "<strong>Mover arquivo para a inbox</strong>" +
+      "<span>remove o original quando permitido pelo navegador</span></div></div>" +
+      '<div class="inbox-drop-zone" data-drop-mode="copy"><div class="inbox-drop-card">' +
+      "<strong>Copiar arquivo para a inbox</strong>" +
+      "<span>mantém o original</span></div></div>";
+  } else {
+    ov.innerHTML =
+      '<div class="inbox-drop-offline" role="status">' +
+      "<strong>Ponte CLI inativa</strong>" +
+      "<span>" + esc(INBOX_OFFLINE_MSG) + "</span></div>";
+  }
+  document.body.appendChild(ov);
+  return ov;
+}
+function hideInboxDropOverlay(){
+  inboxDragDepth = 0;
+  const ov = document.getElementById("inbox-drop-ov");
+  if (!ov) return;
+  ov.hidden = true;
+  ov.querySelectorAll(".active").forEach(el => el.classList.remove("active"));
+}
+function inboxDropModeAt(e, ov){
+  const r = ov.getBoundingClientRect();
+  const mid = r.height ? r.top + r.height / 2 : window.innerHeight / 2;
+  return e.clientY < mid ? "move" : "copy";
+}
+function paintInboxDropZone(mode){
+  const ov = document.getElementById("inbox-drop-ov");
+  if (!ov) return;
+  ov.querySelectorAll("[data-drop-mode]").forEach(z => z.classList.toggle("active", z.dataset.dropMode === mode));
+}
+async function readAllDirEntries(reader){
+  const all = [];
+  for (;;) {
+    const batch = await new Promise((resolve, reject) => reader.readEntries(resolve, reject));
+    if (!batch || !batch.length) break;
+    all.push(...batch);
+  }
+  return all;
+}
+async function collectEntryFiles(entry, collected, rejected){
+  if (!entry) return;
+  if (INBOX_SKIP.has(entry.name)) { rejected.push(entry.name); return; }
+  if (entry.isFile) {
+    try {
+      const f = await new Promise((resolve, reject) => entry.file(resolve, reject));
+      if (INBOX_SKIP.has(f.name)) rejected.push(f.name);
+      else collected.push({file: f, sourcePath: f.path || ""});
+    } catch (err) {
+      rejected.push(entry.name || "arquivo ilegível");
+    }
+    return;
+  }
+  if (entry.isDirectory) {
+    try {
+      const children = await readAllDirEntries(entry.createReader());
+      for (const ch of children) await collectEntryFiles(ch, collected, rejected);
+    } catch (err) {
+      rejected.push(entry.name || "pasta ilegível");
+    }
+    return;
+  }
+  rejected.push(entry.name || "item ignorado");
+}
+async function handleInboxDrop(mode, entries, fallbackFiles, rejected){
+  const collected = [];
+  if (entries.length) {
+    for (const entry of entries) await collectEntryFiles(entry, collected, rejected);
+  } else {
+    for (const f of fallbackFiles) {
+      if (INBOX_SKIP.has(f.name)) rejected.push(f.name);
+      else collected.push({file: f, sourcePath: f.path || ""});
+    }
+  }
+  if (!collected.length) {
+    conOpen();
+    const emptyMsg = "Nenhum arquivo válido para enviar à inbox" +
+      (rejected.length ? " (ignorados: " + rejected.join(", ") + ")" : "") + ".";
+    conLine('<span class="dim">' + esc(emptyMsg) + "</span>");
+    toast(emptyMsg, 4000);
+    return;
+  }
+  conOpen();
+  conLine('<span class="dim">$</span> inbox (' + esc(mode) + ") · " + collected.length + " arquivo(s)");
+  const uploaded = [], failed = [];
+  let hadFallbackCopy = false;
+  for (const item of collected) {
+    const fd = new FormData();
+    fd.append("mode", mode);
+    if (item.sourcePath) fd.append("source_path", item.sourcePath);
+    fd.append("file", item.file, item.file.name);
+    let r, j = null;
+    try {
+      r = await fetch("/api/inbox", {method: "POST", headers: {"X-Brain-Token": TOK}, body: fd});
+      if (r.status === 401) {
+        toast("token inválido — rode ./brain serve e abra a URL impressa");
+        conLine('<span class="late">✗ token inválido</span>');
+        return;
+      }
+      try { j = await r.json(); } catch (e) {}
+    } catch (err) {
+      failed.push(item.file.name);
+      conLine('<span class="late">✗ ' + esc(item.file.name) + ": ponte fora do ar — ./brain serve</span>");
+      continue;
+    }
+    if (r.ok && j && j.ok) {
+      uploaded.push(j);
+      if (j.fallback_copy) hadFallbackCopy = true;
+      const renamed = j.name !== j.original ? " → " + j.name : "";
+      const movedNote = j.moved ? " (original removido)" : "";
+      conLine('<span class="ok">✓ ' + esc(j.original) + esc(renamed) + esc(movedNote) + "</span>");
+    } else {
+      const errMsg = (j && j.error) || ("erro " + r.status);
+      failed.push(item.file.name);
+      conLine('<span class="late">✗ ' + esc(item.file.name) + ": " + esc(errMsg) + "</span>");
+    }
+  }
+  const summary = uploaded.length + " item(ns) enviado(s) para a inbox" +
+    (rejected.length ? " · ignorados: " + rejected.join(", ") : "") +
+    (failed.length ? " · falhas: " + failed.join(", ") : "");
+  conLine('<span class="' + (uploaded.length ? "ok" : "late") + '">' + esc(summary) + "</span>");
+  if (mode === "move" && hadFallbackCopy && uploaded.length) {
+    const note = "Navegadores não permitem apagar o arquivo original no arraste — o(s) arquivo(s) foram copiados para a inbox (apague o original se quiser mover).";
+    conLine('<span class="dim">' + esc(note) + "</span>");
+    toast(summary + " — " + note, 5500);
+  } else {
+    toast(summary, 3800);
+  }
+  if (uploaded.length) {
+    try {
+      const d = await api("/api/data");
+      if (window.BRAIN && window.BRAIN.refresh) window.BRAIN.refresh(d.model);
+    } catch (e) { /* views regeneram no próximo brain render */ }
+  }
+}
+
+document.addEventListener("dragenter", e => {
+  if (!isFileDrag(e)) return;
+  e.preventDefault();
+  inboxDragDepth++;
+  const ov = ensureInboxDropOverlay();
+  ov.hidden = false;
+  if (LIVE) paintInboxDropZone(inboxDropModeAt(e, ov));
+  else if (inboxDragDepth === 1) toast(INBOX_OFFLINE_MSG, 4500);
+});
+document.addEventListener("dragover", e => {
+  if (!isFileDrag(e)) return;
+  e.preventDefault();
+  if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+  const ov = ensureInboxDropOverlay();
+  ov.hidden = false;
+  if (LIVE) paintInboxDropZone(inboxDropModeAt(e, ov));
+});
+document.addEventListener("dragleave", e => {
+  if (!isFileDrag(e)) return;
+  inboxDragDepth = Math.max(0, inboxDragDepth - 1);
+  if (inboxDragDepth === 0) hideInboxDropOverlay();
+});
+document.addEventListener("drop", e => {
+  if (!isFileDrag(e)) return;
+  e.preventDefault();
+  const ov = ensureInboxDropOverlay();
+  const mode = LIVE ? inboxDropModeAt(e, ov) : "copy";
+  hideInboxDropOverlay();
+  if (!LIVE) {
+    toast(INBOX_OFFLINE_MSG, 5000);
+    return;
+  }
+  const dt = e.dataTransfer;
+  const entries = [], fallbackFiles = [], rejected = [];
+  if (dt && dt.items && dt.items.length) {
+    for (const item of Array.from(dt.items)) {
+      if (item.kind !== "file") continue;
+      if (typeof item.webkitGetAsEntry === "function") {
+        const entry = item.webkitGetAsEntry();
+        if (entry) entries.push(entry);
+      } else if (typeof item.getAsFile === "function") {
+        const f = item.getAsFile();
+        if (f) fallbackFiles.push(f);
+      }
+    }
+  } else if (dt && dt.files) {
+    fallbackFiles.push(...Array.from(dt.files));
+  }
+  handleInboxDrop(mode, entries, fallbackFiles, rejected);
+});
+window.addEventListener("blur", hideInboxDropOverlay);
 
 })();

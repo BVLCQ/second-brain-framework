@@ -11,6 +11,8 @@ O token vive no fragmento da URL (não vai ao servidor) e é guardado no localSt
 from __future__ import annotations
 
 import asyncio
+import email.parser
+import email.policy
 import json
 import os
 import secrets
@@ -19,8 +21,11 @@ import shutil
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 
 from . import __version__, util
+
+INBOX_UPLOAD_MAX = 50 * 1024 * 1024  # 50 MB por upload para a inbox via ponte
 
 # (comando, subcomando | None) que o painel emite — nada além disso passa pela ponte.
 # Tudo que muda o mundo exterior continua nos gates do próprio CLI (--quote, aprovações).
@@ -75,6 +80,104 @@ def _allowed_argv(args: list[str]) -> bool:
     if not subs:
         return False
     return len(args) >= 2 and args[1] in subs
+
+
+def _valid_inbox_filename(name: str | None) -> bool:
+    """Aceita apenas nomes simples de arquivo, sem separadores, controles ou reservados."""
+    if not isinstance(name, str) or not name or not name.strip():
+        return False
+    if name in (".", "..", ".keep.md"):
+        return False
+    if "/" in name or "\\" in name:
+        return False
+    if any(ord(c) < 32 or ord(c) == 127 for c in name):
+        return False
+    return Path(name).name == name
+
+
+def _parse_inbox_multipart(ctype: str, body: bytes) -> tuple[str | None, bytes, str, str] | None:
+    """Decodifica multipart/form-data com stdlib email.parser (sem cgi)."""
+    clean_ct = ctype.replace("\r", "").replace("\n", "")
+    if "multipart/form-data" not in clean_ct.lower() or "boundary=" not in clean_ct.lower():
+        return None
+    hdr = f"Content-Type: {clean_ct}\r\nMIME-Version: 1.0\r\n\r\n".encode("latin-1", errors="replace")
+    msg = email.parser.BytesParser(policy=email.policy.default).parsebytes(hdr + body)
+    if not msg.is_multipart():
+        return None
+    has_file = False
+    raw_filename: str | None = None
+    file_bytes = b""
+    mode = "copy"
+    source_path = ""
+    for part in msg.iter_parts():
+        if part.is_multipart():
+            continue
+        field = part.get_param("name", header="content-disposition")
+        payload = part.get_payload(decode=True)
+        if payload is None:
+            payload = b""
+        if field == "file" and not has_file:
+            has_file = True
+            raw_cd = next((v for k, v in part.raw_items() if k.lower() == "content-disposition"), "")
+            raw_filename = "" if (part.defects or "\\" in raw_cd) else part.get_filename()
+            file_bytes = payload
+        elif field == "mode":
+            mode = payload.decode("utf-8", errors="replace").strip() or "copy"
+        elif field == "source_path":
+            source_path = payload.decode("utf-8", errors="replace").strip()
+    if not has_file:
+        return None
+    return raw_filename, file_bytes, mode, source_path
+
+
+def _write_inbox_exclusive(dest_dir: Path, filename: str, data: bytes) -> Path | None:
+    """Grava arquivo na inbox com O_CREAT|O_EXCL e sufixo -2, -3... (brainlib/rawsort.py:75-77)."""
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest_resolved = dest_dir.resolve()
+    if (dest_resolved / filename).resolve().parent != dest_resolved:
+        return None
+    stem, suffix = Path(filename).stem, Path(filename).suffix
+    candidate = dest_resolved / filename
+    idx = 2
+    while True:
+        if candidate.resolve().parent != dest_resolved:
+            return None
+        try:
+            fd = os.open(candidate, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+        except FileExistsError:
+            candidate = dest_resolved / f"{stem}-{idx}{suffix}"
+            idx += 1
+            continue
+        try:
+            with os.fdopen(fd, "wb") as fh:
+                fh.write(data)
+        except Exception:
+            try:
+                candidate.unlink()
+            except OSError:
+                pass
+            raise
+        return candidate
+
+
+def _try_move_source(source_path: str, inst) -> bool:
+    """Remove o original apenas quando é arquivo regular dentro de HOME e fora do vault/instância."""
+    if not source_path:
+        return False
+    p = Path(source_path)
+    if not p.is_absolute() or p.is_symlink():
+        return False
+    try:
+        rp = p.resolve()
+        home = Path.home().resolve()
+        in_home = rp.is_relative_to(home)
+        in_inst = rp.is_relative_to(inst.root.resolve()) or rp.is_relative_to(inst.vault.resolve())
+        if not rp.is_file() or rp.is_symlink() or not in_home or in_inst:
+            return False
+        p.unlink()
+        return True
+    except OSError:
+        return False
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -235,6 +338,9 @@ class _Handler(BaseHTTPRequestHandler):
             if path == "/api/agent":
                 self._agent_post()
                 return
+            if path == "/api/inbox":
+                self._inbox_post()
+                return
             if path != "/api/cmd":
                 self._deny(404, "rota desconhecida")
                 return
@@ -265,6 +371,62 @@ class _Handler(BaseHTTPRequestHandler):
         except Exception as e:                          # noqa: BLE001
             self._deny(500, f"erro interno: {e}")
             raise
+
+    def _inbox_post(self):
+        """Recebe arquivo arrastado no painel (multipart/form-data) e grava em vault/RAW/inbox/."""
+        if os.environ.get("BRAIN_NIGHTLY"):
+            self._deny(403, "o noturno nunca recebe arquivos pelo painel")
+            return
+        raw_cl = self.headers.get("Content-Length")
+        if self.headers.get("Transfer-Encoding") or raw_cl is None:
+            self._deny(411, "use Content-Length — a ponte não lê chunked")
+            return
+        try:
+            n = int(raw_cl)
+        except ValueError:
+            self._deny(400, "Content-Length inválido")
+            return
+        if n < 0:
+            self._deny(400, "Content-Length inválido")
+            return
+        if n > INBOX_UPLOAD_MAX:
+            self._deny(413, "arquivo grande demais (máximo 50 MB)")
+            return
+        ctype = self.headers.get("Content-Type") or ""
+        if "multipart/form-data" not in ctype.lower():
+            self._deny(400, "Content-Type deve ser multipart/form-data")
+            return
+        raw_body = self.rfile.read(n)
+        if len(raw_body) != n:
+            self._deny(400, "corpo incompleto")
+            return
+        parsed = _parse_inbox_multipart(ctype, raw_body)
+        if parsed is None:
+            self._deny(400, "multipart/form-data inválido ou campo file ausente")
+            return
+        raw_filename, file_bytes, mode, source_path = parsed
+        if mode not in ("copy", "move"):
+            self._deny(400, "mode inválido — use copy ou move")
+            return
+        if not _valid_inbox_filename(raw_filename):
+            self._deny(400, "nome de arquivo inválido — só caminhos dentro da inbox são aceitos")
+            return
+        assert raw_filename is not None
+        with self.state.lock:
+            inst = self._brain().inst
+            saved_path = _write_inbox_exclusive(inst.inbox, raw_filename, file_bytes)
+            if saved_path is None:
+                self._deny(400, "nome de arquivo inválido — só caminhos dentro da inbox são aceitos")
+                return
+            if mode == "move":
+                moved = _try_move_source(source_path, inst)
+                fallback_copy = not moved
+            else:
+                moved = False
+                fallback_copy = False
+        print(f"[serve] inbox: {saved_path.name} ({mode})", flush=True)
+        self._json(200, {"ok": True, "name": saved_path.name, "original": raw_filename,
+                         "moved": moved, "fallback_copy": fallback_copy})
 
     def _agent_post(self):
         """Executa uma ação ⚡ do agente (store.SYS_OPS) pelo mesmo caminho da TUI (`tui/bridge`)."""
