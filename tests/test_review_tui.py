@@ -187,7 +187,7 @@ class ReviewTuiTest(unittest.IsolatedAsyncioTestCase):
             with mock.patch.object(bridge, "run_brain", failing):
                 app.gate_for_plan(before, after)
                 await pilot.pause(0.2)
-                for k, v in (("diff", "GOAL-9 nasce"), ("reason", "nova meta"), ("quote", "ok")):
+                for k, v in (("diff", "GOAL-9 nasce"), ("reason", "nova meta")):   # aprovação: confirmar já aprova (tui)
                     app.screen.query_one(f"#f_{k}").value = v
                 await pilot.pause(0.1)
                 app.screen.action_submit()
