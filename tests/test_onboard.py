@@ -4,9 +4,11 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import os
 import sys
 import tempfile
 import threading
+import time
 import tomllib
 import unittest
 import urllib.error
@@ -433,6 +435,91 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(json.loads(body)["name"], "metas-2027.md")
         code, _ = self._req("/api/onboard/upload", raw=b"MZ", headers={"X-File-Name": "x.exe"})
         self.assertEqual(code, 400)
+
+
+class RegistryTests(unittest.TestCase):
+    """Registro único de passos (plano onboarding-unification F2)."""
+
+    def setUp(self):
+        self._td = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._td.name)
+        self.b = Brain(_inst(self.tmp))
+
+    def tearDown(self):
+        self._td.cleanup()
+
+    def test_web_steps_is_the_single_source(self):
+        from brainlib import setup as _s
+        self.assertEqual(onboard.STEPS, tuple(s[0] for s in _s.WEB_STEPS))
+        self.assertIn("maquina", onboard.STEPS)
+        self.assertIn("agente", onboard.STEPS)
+        self.assertNotIn("permissoes", onboard.STEPS)
+        self.assertTrue(all(g for _, _, g in _s.WEB_STEPS))          # grupos preenchidos
+
+    def test_old_progress_marks_are_harmless(self):
+        pg = onboard._save_progress(self.b.inst, done=["voce", "rotina", "permissoes"])
+        self.assertIn("rotina", pg["done"])
+        self.assertTrue(onboard.needed(self.b))
+
+
+def _wait_job(job_id: str, timeout: float = 15.0) -> dict:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        j = onboard.job(job_id)
+        if j and j["status"] != "running":
+            return j
+        time.sleep(0.05)
+    raise AssertionError("job não terminou")
+
+
+class MaquinaTests(unittest.TestCase):
+    """Passo "A máquina": noturno · comando · TUI · foco ics · framework — dirigido por job."""
+
+    def setUp(self):
+        self._td = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._td.name)
+        (self.tmp / "bin").mkdir()
+        # HOME e PATH isolados: o symlink `brain` e os detectores de harness nunca tocam a máquina real
+        self._env = {"HOME": str(self.tmp), "PATH": str(self.tmp / "bin")}
+        self._old = {k: os.environ.get(k) for k in self._env}
+        os.environ.update(self._env)
+        self.b = Brain(_inst(self.tmp))
+
+    def tearDown(self):
+        for k, v in self._old.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        self._td.cleanup()
+
+    def test_maquina_sets_ics_focus_and_marks_the_step(self):
+        r = onboard.apply_maquina(self.b, {"comando": False, "tui": False, "framework": False,
+                                           "noturno": "", "foco": "ics"})
+        j = _wait_job(r["job"])
+        self.assertEqual(j["status"], "done", j["log"])
+        cfg = tomllib.loads((self.tmp / "config" / "brain.toml").read_text(encoding="utf-8"))
+        self.assertEqual(cfg["focus"]["mode"], "ics")
+        self.assertIn("maquina", onboard.progress(self.b.inst).get("done", []))
+
+    def test_maquina_installs_the_command_under_isolated_home(self):
+        r = onboard.apply_maquina(self.b, {"comando": True, "tui": False, "framework": False,
+                                           "noturno": "", "foco": "ics"})
+        j = _wait_job(r["job"])
+        self.assertEqual(j["status"], "done", j["log"])
+        self.assertIn("comando", j["result"]["done"])
+        link = self.tmp / "bin" / "brain"
+        self.assertTrue(link.is_symlink(), j["log"])
+
+    def test_maquina_validates_before_starting_anything(self):
+        before = set(onboard._JOBS)
+        with self.assertRaises(util.BrainError):
+            onboard.apply_maquina(self.b, {"noturno": "25:99"})
+        with self.assertRaises(util.BrainError):
+            onboard.apply_maquina(self.b, {"foco": "google"})       # OAuth interativo: não é porta roteada
+        with self.assertRaises(util.BrainError):
+            onboard.apply_maquina(self.b, {"foco": "carro"})
+        self.assertEqual(set(onboard._JOBS), before)                # nada rodou
 
 
 if __name__ == "__main__":

@@ -34,9 +34,10 @@ import threading
 import time
 from pathlib import Path
 
-from . import config, runner, util
+from . import config, runner, setup, util
 
-STEPS = ("voce", "sobre", "rotina", "conectores", "permissoes", "memoria", "chaves", "planejamento", "pronto")
+STEPS = tuple(s[0] for s in setup.WEB_STEPS)      # registro único (setup.WEB_STEPS): ids que o navegador grava
+WEB_STEPS = setup.WEB_STEPS                       # (id, título, grupo) — a barra lateral agrupa por grupo
 PROFILE_TEMPLATE_MARK = "(a preencher no /init)"
 KEY_NAMES = {
     "GITHUB_TOKEN": "Token do GitHub (sugestões e bugs do Brain viram issues)",
@@ -187,6 +188,37 @@ def job(job_id: str) -> dict | None:
     return j.as_dict() if j else None
 
 
+class _JobUI:
+    """UI de passos do setup dirigida por JOB (plano F2/F6): `say` vira linha do log, perguntas vêm
+    de respostas programadas da tela — nenhuma pergunta sem resposta pode existir na porta roteada."""
+
+    interactive = False
+
+    def __init__(self, job_: _Job, answers: dict[str, str] | None = None):
+        self.job, self.answers = job_, answers or {}
+
+    def say(self, msg: str) -> None:
+        self.job.say(str(msg))
+
+    def ask(self, prompt: str, default: str = "") -> str:
+        for k, v in self.answers.items():
+            if prompt.startswith(k):
+                return v
+        return default
+
+    def choice(self, prompt: str, options: list[str], default: str) -> str:
+        for k, v in self.answers.items():
+            if prompt.startswith(k) and v in options:
+                return v
+        return default
+
+    def confirm(self, prompt: str, default: bool = False) -> bool:
+        return default
+
+    def secret(self, prompt: str) -> str:
+        raise util.BrainError("este passo não pede segredo pela ponte — grave no config/.env", code=4)
+
+
 # ── leitura do estado ────────────────────────────────────────────────────────
 def _agent_name(argv) -> str | None:
     if isinstance(argv, dict):
@@ -317,6 +349,7 @@ def state(brain) -> dict:
                                    or env.get("HINDSIGHT_API_RERANKER_COHERE_API_KEY"))},
         "keys": {k: {"label": v, "set": bool(env.get(k))} for k, v in KEY_NAMES.items()},
         "planning": {"goals": plan_goals, "proposal": progress(inst).get("proposal")},
+        "maquina": maquina_state(brain),
         "inbox": sum(1 for p in inst.inbox.iterdir() if p.is_file() and p.name != ".keep.md")
         if inst.inbox.exists() else 0,
         "progress": progress(inst),
@@ -518,6 +551,68 @@ def apply_memory(brain, data: dict) -> dict:
     return {"job": _start("memory", run).id}
 
 
+def maquina_state(brain) -> dict:
+    """Estado dos passos de máquina (plano F2) — derivado, mesma régua do `brain setup`."""
+    return {
+        "comando": setup._st_comando(brain),
+        "noturno": setup._st_noturno(brain),
+        "tui": setup._st_tui(brain),
+        "foco": setup._st_foco(brain),
+        "framework": setup._st_framework(brain),
+    }
+
+
+def apply_maquina(brain, data: dict) -> dict:
+    """Passo "A máquina" (plano F2): noturno · comando no PATH · TUI · foco ics · regra de fetch/hook.
+    Cada item é opcional e idempotente — o default da tela é "ligar tudo" com os horários dados."""
+    if os.environ.get("BRAIN_NIGHTLY") == "1":
+        raise util.BrainError("a máquina não se configura no noturno — abra o app com o dono presente", code=4)
+    hhmm = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
+    noturno = str(data.get("noturno") or "").strip()          # "" = não mexer; "05:00" = instalar no horário
+    if noturno and not hhmm.match(noturno):
+        raise util.BrainError("horário do noturno inválido — use HH:MM", code=4)
+    foco = str(data.get("foco") or "ics").strip()
+    if foco not in ("ics", "google"):
+        raise util.BrainError("modo de foco inválido — ics ou google", code=4)
+    if foco == "google":
+        raise util.BrainError("o modo google pede OAuth interativo — configure depois com `brain setup --only foco` "
+                              "ou peça ao agente \"configurar foco no Google\"", code=4)
+    wants = {"comando": bool(data.get("comando", True)), "tui": bool(data.get("tui", True)),
+             "framework": bool(data.get("framework", True))}
+    inst0 = brain.inst
+
+    def run(j: _Job) -> dict:
+        from .core import Brain
+        b = Brain(config.reload(inst0))
+        ui = _JobUI(j)
+        done: list[str] = []
+        if wants["comando"]:
+            setup._run_comando(b, ui)
+            done.append("comando")
+        else:
+            j.say("– comando `brain` no PATH: deixado como está")
+        if noturno:
+            ui.answers["Horário do noturno"] = noturno
+            setup._run_noturno(b, ui)
+            done.append("noturno")
+        else:
+            j.say("– noturno: sem mudança")
+        if wants["tui"]:
+            setup._run_tui(b, ui)
+            done.append("tui")
+        else:
+            j.say("– TUI: fica para depois (`brain tui --setup` quando quiser)")
+        config.set_keys(b.inst, "focus", {"mode": "ics"})
+        b.inst = config.reload(b.inst)
+        j.say("✓ foco em modo ics (arquivo local, zero configuração — Google liga depois com OAuth)")
+        if wants["framework"]:
+            setup._run_framework(b, ui)
+            done.append("framework")
+        _mark(b.inst, "maquina")
+        return {"done": done}
+    return {"job": _start("maquina", run).id}
+
+
 # ── goals e projetos ─────────────────────────────────────────────────────────
 def save_planning_note(brain, data: dict) -> dict:
     from . import notes
@@ -692,7 +787,8 @@ ACTIONS = {
     "profile_save": save_profile, "routine": save_routine,
     "connectors_scan": lambda b, d: scan_connectors(bool(d.get("force"))),
     "connectors_enable": enable_connectors, "permissions": lambda b, d: apply_permissions(b),
-    "keys": save_keys, "memory": apply_memory, "planning_note": save_planning_note,
+    "keys": save_keys, "memory": apply_memory, "maquina": apply_maquina,
+    "planning_note": save_planning_note,
     "planning_draft": lambda b, d: draft_planning(b), "planning_apply": apply_planning,
     "skip": lambda b, d: (_mark(b.inst, str(d.get("step"))) if d.get("step") in STEPS else None) or {},
     "finish": lambda b, d: finish(b),

@@ -981,6 +981,23 @@ STEPS: list[dict] = [
 
 ICON = {"done": "✓", "pending": "○", "off": "–", "warn": "⚠"}
 
+# O onboarding no navegador e o wizard de terminal compartilham o MESMO registro de passos
+# (plano guides/plans/onboarding-unification.md F2): um id, um título — duas renderizações.
+# Grupo é só cosmético (a barra lateral do /onboarding agrupa por ele).
+WEB_STEPS: list[tuple[str, str, str]] = [
+    ("inicio", "Boas-vindas", "Você"),
+    ("voce", "Você e sua rotina", "Você"),
+    ("sobre", "Sobre você", "Você"),
+    ("agente", "Seu agente", "Conexões"),
+    ("conectores", "Conectores e fontes", "Conexões"),
+    ("memoria", "Memória", "Conexões"),
+    ("chaves", "Chaves e portas", "Conexões"),
+    ("maquina", "A máquina", "O cérebro"),
+    ("planejamento", "Goals e projetos", "Começando"),
+    ("conversa", "A conversa", "Começando"),
+    ("pronto", "Pronto", "Começando"),
+]
+
 
 def run(brain, only: list[str] | None = None, auto: bool = False, mode: str | None = None) -> None:
     ui = AutoUI() if auto else ConsoleUI()
