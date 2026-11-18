@@ -218,7 +218,9 @@ table.src td .d{color:var(--muted);font-size:12.5px}
 .hier span.g{color:var(--accent);font-weight:600}
 .hier span.p{color:var(--dsug);font-weight:600}
 .welcome{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:26px;align-items:center}
-.welcome img{width:210px;height:210px}
+.app-tile{text-align:center}
+.app-tile img{width:148px;height:148px;border-radius:32px;box-shadow:var(--shadow-lg);display:block;margin:0 auto}
+.app-tile small{display:block;margin-top:10px;color:var(--muted);font-size:12px}
 .feat{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-top:8px}
 .feat div{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:13px 14px;font-size:13px;color:var(--muted);box-shadow:var(--shadow)}
 .feat b{display:block;color:var(--ink);margin-bottom:3px;font-size:13.5px}
@@ -409,7 +411,7 @@ V.inicio = () => {
         <div><b>Seus dados são seus</b>Tudo fica nesta máquina. Nada é enviado sem você aprovar.</div>
         <div><b>Ele observa, você decide</b>O Brain sugere; enviar, publicar e mudar objetivos é sempre com o seu "ok".</div>
       </div>
-    </div><img src="/brain-hero.svg" alt=""></div>
+    </div><div class="app-tile"><img src="/brain.svg" alt="Ícone do app Brain"><small>o app que acaba de entrar nos seus Aplicativos</small></div></div>
     ${nav({main: "Começar"})}`;
   bindNav(() => next());
 };

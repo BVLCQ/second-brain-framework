@@ -423,9 +423,10 @@ class BridgeTests(unittest.TestCase):
         code, html = self._req("/onboarding", token=False)
         self.assertEqual(code, 200)
         self.assertIn("Vamos montar o seu Brain", html)
-        for icon in ("/brain.svg", "/brain-mark.svg", "/brain-hero.svg"):    # ícone do app, marca ≤32 px, arte da boas-vindas
+        for icon in ("/brain.svg", "/brain-mark.svg", "/brain-hero.svg"):    # ícone do app, marca ≤32 px, arte detalhada (rota mantida)
             self.assertEqual(self._req(icon, token=False)[0], 200)
-        self.assertIn('src="/brain-hero.svg"', html)
+        self.assertIn('src="/brain.svg"', html)                 # boas-vindas mostra o ÍCONE DO APP, não a arte navy
+        self.assertNotIn('src="/brain-hero.svg"', html)
         self.assertEqual(self._req("/api/onboard/state", token=False)[0], 401)
         self.assertEqual(self._req("/api/onboard/about", {"name": "X"}, token=False)[0], 401)
 
