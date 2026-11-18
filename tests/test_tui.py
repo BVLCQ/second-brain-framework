@@ -2000,7 +2000,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             await pilot.pause(0.4)
             await pilot.press("1", "]")
             self.assertEqual((app.p, app.tab[1]), (1, 1))
-            self.assertEqual([i.id for i in app.items(1)], ["src:slack-dados", "src:gcal-14d"])
+            self.assertEqual([i.id for i in app.items(1)], ["sgrp:gcal", "src:gcal-14d", "sgrp:slack", "src:slack-dados"])
             await pilot.press("n")                                  # adicionar
             await pilot.pause(0.3)
             await self.fill(pilot, key="gmail-hoje", kind="gmail", window="1d", other="label=inbox; x=1")
