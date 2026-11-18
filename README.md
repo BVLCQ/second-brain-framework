@@ -57,7 +57,13 @@ O app se chama **Brain** (Segundo Cérebro é o nome do framework). Numa máquin
 curl -fsSL https://raw.githubusercontent.com/BVLCQ/second-brain-framework/main/install.sh | sh -
 ```
 
-ou, dentro do clone, `sh install.sh`. O instalador clona o repo, confere o Python, cria o app **Brain**
+ou, dentro do clone, `sh install.sh`.
+
+Sem terminal: clonar (ou **Code → Download ZIP** no GitHub), abrir a pasta e
+**duplo clique em `Abrir o Brain.command`** — ele confere o Python, cria o app
+Brain e abre a configuração guiada; ZIP vira repositório automaticamente.
+
+O instalador clona o repo, confere o Python, cria o app **Brain**
 na pasta Aplicativos e abre a **configuração guiada no navegador**:
 
 1. **Você** — nome completo, apelido, cargo e e-mail (o id interno sai do nome; ninguém escolhe id).
