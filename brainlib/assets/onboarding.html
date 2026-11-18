@@ -440,18 +440,12 @@ V.voce = () => {
       <label class="f"><span>Fuso horário</span><select id="tz">${zones.map(z => `<option ${z === curTz ? "selected" : ""}>${esc(z)}</option>`).join("")}</select></label>
       <div class="grid2">
         <label class="f"><span>Começo do expediente</span><input type="time" id="st" value="${esc(r.start || "09:00")}"></label>
-        <label class="f"><span>Fim do expediente</span><input type="time" id="en" value="${esc(r.end || "18:00")}"></label>
+        <label class="f" style="margin-bottom:0"><span>Fim do expediente</span><input type="time" id="en" value="${esc(r.end || "18:00")}"></label>
       </div>
-      <label class="check"><input type="checkbox" id="lon" ${r.lunch !== "" ? "checked" : ""}> Reservar horário de almoço</label>
-      <div class="grid2" id="lunch" style="margin-top:10px">
-        <label class="f" style="margin-bottom:0"><span>Almoço — início</span><input type="time" id="ls" value="${esc(ls || "12:00")}"></label>
-        <label class="f" style="margin-bottom:0"><span>Almoço — fim</span><input type="time" id="le" value="${esc(le || "13:00")}"></label>
-      </div>
+      <small>O planejador de foco desvia do almoço (12:00–13:00 por padrão). Detalhes finos ficam em <span class="kbd">config/brain.toml</span> seção <span class="kbd">[work]</span>.</small>
     </div>
     <div class="msg" id="m"></div>
     ${nav()}`;
-  const syncLunch = () => $("#lunch").classList.toggle("hidden", !$("#lon").checked);
-  $("#lon").onchange = syncLunch; syncLunch();
   $("#name").focus();
   bindNav(async btn => {
     const aboutBody = {name: $("#name").value, nickname: $("#nick").value, role: $("#role").value, email: $("#email").value};
@@ -460,7 +454,7 @@ V.voce = () => {
       timezone: $("#tz").value,
       start: $("#st").value,
       end: $("#en").value,
-      lunch: $("#lon").checked ? ($("#ls").value + "-" + $("#le").value) : "",
+      lunch: r.lunch || "",      // não se pergunta (ruling do dono): o que já está gravado atravessa
     };
     busy(btn, true);
     try {
