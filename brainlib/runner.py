@@ -7,6 +7,7 @@ qualquer evento "do dono", aprovação, envio ou publicação — não há dono 
 """
 from __future__ import annotations
 
+import hashlib
 import os
 import plistlib
 import re
@@ -258,16 +259,49 @@ def nightly(brain, skip_agent: bool = False) -> dict:
 MARK = "# segundo-cerebro nightly"
 
 
-def _crontab() -> list[str]:
-    res = subprocess.run(["crontab", "-l"], capture_output=True, text=True, check=False)
+def _crontab(run=None) -> list[str]:
+    try:
+        res = (run or subprocess.run)(["crontab", "-l"], capture_output=True, text=True, check=False)
+    except OSError:
+        return []
     return res.stdout.splitlines() if res.returncode == 0 else []
 
 
-LAUNCHD_LABEL = "com.segundo-cerebro.nightly"
+def _cron_matches(line: str, root: Path) -> bool:
+    if MARK not in line:
+        return False
+    for r in {str(root), str(Path(root).resolve())}:
+        if f"cd {r} " in line or f"cd {shlex.quote(r)} " in line:
+            return True
+    return False
 
 
-def _launchd_plist() -> Path:
-    return Path.home() / "Library" / "LaunchAgents" / f"{LAUNCHD_LABEL}.plist"
+LAUNCHD_LABEL = "com.segundo-cerebro.nightly"          # legado: um rótulo para a máquina toda (só migração/leitura)
+
+
+def launchd_label(root: Path) -> str:
+    r = Path(root).resolve()
+    return f"{LAUNCHD_LABEL}.{util.slugify(r.name, 24)}-{hashlib.sha1(str(r).encode()).hexdigest()[:8]}"
+
+
+def _launchd_plist(root: Path | None = None) -> Path:
+    """Plist desta instância; root=None = o plist legado."""
+    label = launchd_label(root) if root is not None else LAUNCHD_LABEL
+    return Path.home() / "Library" / "LaunchAgents" / f"{label}.plist"
+
+
+def plist_root(plist: Path) -> Path | None:
+    """Raiz da instância que o plist roda (WorkingDirectory ou a pasta de ProgramArguments[0]); None se ilegível."""
+    try:
+        with open(plist, "rb") as fh:
+            d = plistlib.load(fh)
+    except Exception:  # noqa: BLE001
+        return None
+    env = d.get("EnvironmentVariables") or {}
+    wd = (env.get("BRAIN_HOME")
+          or d.get("WorkingDirectory")
+          or (Path(d["ProgramArguments"][0]).parent if d.get("ProgramArguments") else None))
+    return Path(wd).resolve() if wd else None
 
 
 def _use_launchd() -> bool:
@@ -276,20 +310,53 @@ def _use_launchd() -> bool:
     return sys.platform == "darwin" and shutil.which("launchctl") is not None
 
 
-def _launchctl(*args: str) -> subprocess.CompletedProcess:
-    return subprocess.run(["launchctl", *args], capture_output=True, text=True, check=False)
+def _launchctl(*args: str, run=None) -> subprocess.CompletedProcess:
+    return (run or subprocess.run)(["launchctl", *args], capture_output=True, text=True, check=False)
 
 
-def _launchd_remove() -> None:
-    _launchctl("bootout", f"gui/{os.getuid()}/{LAUNCHD_LABEL}")
-    _launchd_plist().unlink(missing_ok=True)
+def _launchd_remove(root: Path) -> None:
+    r = Path(root).resolve()
+    plist = _launchd_plist(r)
+    _launchctl("bootout", f"gui/{os.getuid()}/{launchd_label(r)}")
+    plist.unlink(missing_ok=True)
+    legacy = _launchd_plist(None)
+    if legacy != plist and legacy.exists() and plist_root(legacy) == r:
+        _launchctl("bootout", f"gui/{os.getuid()}/{LAUNCHD_LABEL}")
+        legacy.unlink(missing_ok=True)
 
 
-def _schedule_launchd(args, brain) -> None:
-    plist = _launchd_plist()
+def scheduled_here(root: Path) -> bool:
+    r = Path(root).resolve()
+    if _use_launchd():
+        if _launchd_plist(r).exists():
+            return True
+        legacy = _launchd_plist(None)
+        return legacy.exists() and plist_root(legacy) == r
+    return any(_cron_matches(ln, r) for ln in _crontab())
+
+
+def foreign_schedule(root: Path) -> Path | None:
+    """Legado apontando para outra raiz."""
+    r = Path(root).resolve()
+    if _use_launchd():
+        legacy = _launchd_plist(None)
+        other = plist_root(legacy) if legacy.exists() else None
+        return other if other and other != r else None
+    return None
+
+
+def _schedule_launchd(args, brain, run=None) -> None:
+    root = brain.inst.root
+    label = launchd_label(root)
+    plist = _launchd_plist(root)
     if args.action == "status":
         if plist.exists():
             spec = plistlib.loads(plist.read_bytes()).get("StartCalendarInterval", {})
+            loaded = _launchctl("print", f"gui/{os.getuid()}/{label}").returncode == 0
+            print(f"launchd: {label} às {spec.get('Hour', 0):02d}:{spec.get('Minute', 0):02d}"
+                  + ("" if loaded else " (plist existe, mas não carregado)"))
+        elif (legacy := _launchd_plist(None)).exists() and plist_root(legacy) == root.resolve():
+            spec = plistlib.loads(legacy.read_bytes()).get("StartCalendarInterval", {})
             loaded = _launchctl("print", f"gui/{os.getuid()}/{LAUNCHD_LABEL}").returncode == 0
             print(f"launchd: {LAUNCHD_LABEL} às {spec.get('Hour', 0):02d}:{spec.get('Minute', 0):02d}"
                   + ("" if loaded else " (plist existe, mas não carregado)"))
@@ -297,19 +364,20 @@ def _schedule_launchd(args, brain) -> None:
             print("não agendado — `./brain schedule install --time 05:00`")
         return
     old = _crontab()
-    if any(MARK in ln for ln in old):  # migra: tira a linha antiga do cron
-        keep = [ln for ln in old if MARK not in ln]
-        subprocess.run(["crontab", "-"], input="\n".join(keep) + ("\n" if keep else ""), text=True, check=True)
-    _launchd_remove()
+    if any(_cron_matches(ln, root) for ln in old):  # migra: tira a linha antiga do cron
+        keep = [ln for ln in old if not _cron_matches(ln, root)]
+        (run or subprocess.run)(["crontab", "-"], input="\n".join(keep) + ("\n" if keep else ""), text=True, check=True)
     if args.action == "remove":
+        _launchd_remove(root)
         print("✓ agendamento removido")
         return
+    _launchctl("bootout", f"gui/{os.getuid()}/{label}")
+    plist.unlink(missing_ok=True)
     hh, mm = args.time.split(":")
-    root = brain.inst.root
     brain.inst.logs.mkdir(parents=True, exist_ok=True)
     plist.parent.mkdir(parents=True, exist_ok=True)
     plist.write_bytes(plistlib.dumps({
-        "Label": LAUNCHD_LABEL,
+        "Label": label,
         "ProgramArguments": [str(root / "brain"), "nightly"],
         "WorkingDirectory": str(root),
         # PATH de quem instalou (mise/agente), como no cron
@@ -322,7 +390,12 @@ def _schedule_launchd(args, brain) -> None:
     res = _launchctl("bootstrap", f"gui/{os.getuid()}", str(plist))
     if res.returncode:
         raise util.BrainError(f"launchctl bootstrap falhou: {(res.stderr or res.stdout).strip()}", code=3)
-    print(f"✓ noturno agendado às {args.time} (launchd: {LAUNCHD_LABEL})")
+    legacy = _launchd_plist(None)
+    if legacy != plist and legacy.exists() and plist_root(legacy) == root.resolve():
+        _launchctl("bootout", f"gui/{os.getuid()}/{LAUNCHD_LABEL}")
+        legacy.unlink(missing_ok=True)
+        print("↻ agendamento antigo (rótulo único da máquina) migrado para o rótulo desta instância")
+    print(f"✓ noturno agendado às {args.time} (launchd: {label})")
 
 
 def _check_time(value: str) -> None:
@@ -332,25 +405,26 @@ def _check_time(value: str) -> None:
         raise util.BrainError(f"--time inválido: {value!r} (use HH:MM, ex.: 05:00)", code=2)
 
 
-def schedule_cli(args, brain) -> None:
+def schedule_cli(args, brain, run=None) -> None:
     if args.action == "install":
         _check_time(args.time)
     if _use_launchd():
-        return _schedule_launchd(args, brain)
+        return _schedule_launchd(args, brain, run=run)
     if not shutil.which("crontab"):
         raise util.BrainError("crontab não encontrado — agende `./brain nightly` no agendador do seu sistema "
                               "(launchd no macOS: guides/user-guide.md §Noturno)", code=3)
-    lines = [ln for ln in _crontab() if MARK not in ln]
+    root = brain.inst.root
+    lines = [ln for ln in _crontab() if not _cron_matches(ln, root)]
     if args.action == "status":
-        mine = [ln for ln in _crontab() if MARK in ln]
+        mine = [ln for ln in _crontab() if _cron_matches(ln, root)]
         print(mine[0] if mine else "não agendado — `./brain schedule install --time 05:00`")
         return
     if args.action == "install":
         hh, mm = args.time.split(":")
-        root = shlex.quote(str(brain.inst.root))
+        qroot = shlex.quote(str(root))
         # cron roda com PATH mínimo (python do sistema, sem mise/agente) — fixa o PATH de quem instalou
         path = shlex.quote(os.environ.get("PATH", "/usr/bin:/bin"))
-        lines.append(f"{int(mm)} {int(hh)} * * * cd {root} && PATH={path} ./brain nightly "
+        lines.append(f"{int(mm)} {int(hh)} * * * cd {qroot} && PATH={path} ./brain nightly "
                      f">> vault/logs/cron.log 2>&1 {MARK}")
-    subprocess.run(["crontab", "-"], input="\n".join(lines) + "\n", text=True, check=True)
+    (run or subprocess.run)(["crontab", "-"], input="\n".join(lines) + "\n", text=True, check=True)
     print(f"✓ noturno agendado às {args.time} (crontab)" if args.action == "install" else "✓ agendamento removido")

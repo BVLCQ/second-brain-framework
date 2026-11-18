@@ -139,15 +139,38 @@ def brain_command_status(root: Path) -> str | None:
     return None
 
 
-def install_brain_command(root: Path, ui: ConsoleUI) -> str:
-    """Cria o comando `brain` (symlink num diretório do PATH). Devolve o caminho criado."""
+def _brain_link_target(create: bool = False) -> tuple[Path | None, Path | None]:
     home_local = Path.home() / ".local" / "bin"
     candidates = [home_local] + [Path(p) for p in os.environ.get("PATH", "").split(os.pathsep) if p]
     target = next((c for c in candidates if c.is_dir() and os.access(c, os.W_OK)), None)
-    if target is None:
+    if target is None and create:
         home_local.mkdir(parents=True, exist_ok=True)
         target = home_local
-    link = target / "brain"
+    return (target, target / "brain") if target is not None else (None, None)
+
+
+def brain_command_other(root: Path) -> Path | None:
+    """Se o symlink `brain` no destino do PATH aponta para outra instância existente, devolve a raiz dela."""
+    _, link = _brain_link_target(create=False)
+    if link is None or not link.is_symlink():
+        return None
+    try:
+        cur = link.resolve()
+    except OSError:
+        return None
+    if cur.exists() and cur != (root / "brain").resolve():
+        return cur.parent
+    return None
+
+
+def install_brain_command(root: Path, ui: ConsoleUI, *, replace: bool = False) -> str | None:
+    """Cria o comando `brain` (symlink num diretório do PATH). Devolve o caminho criado, ou None se
+    apontava para outra instância e `replace=False`."""
+    target, link = _brain_link_target(create=True)
+    cur = link.resolve() if link.is_symlink() else None
+    other = cur.parent if (cur and cur.exists() and cur != (root / "brain").resolve()) else None
+    if other and other.exists() and not replace:
+        return None
     if link.exists() or link.is_symlink():
         link.unlink()
     link.symlink_to(root / "brain")
@@ -239,13 +262,10 @@ def github_repo_access(token: str, repo: str) -> tuple[bool, str]:
     return True, "repo visível e com Issues ligadas"
 
 
-def nightly_installed() -> bool:
+def nightly_installed(root: Path) -> bool:
     try:
         from . import runner
-        if runner._use_launchd():
-            return runner._launchd_plist().exists()
-        r = subprocess.run(["crontab", "-l"], capture_output=True, text=True)
-        return runner.MARK in (r.stdout or "")
+        return runner.scheduled_here(root)
     except Exception:                                   # noqa: BLE001 — status é informativo
         return False
 
@@ -445,12 +465,21 @@ def _run_framework(brain, ui) -> None:
 
 
 def _st_comando(brain) -> str:
-    return "done" if brain_command_status(brain.inst.root) else "pending"
+    if brain_command_status(brain.inst.root):
+        return "done"
+    return "warn" if brain_command_other(brain.inst.root) else "pending"
 
 
 def _run_comando(brain, ui) -> None:
     if brain_command_status(brain.inst.root):
         ui.say(f"✓ `brain` já no PATH ({brain_command_status(brain.inst.root)})")
+        return
+    other = brain_command_other(brain.inst.root)
+    if other and other.exists():
+        if ui.interactive and ui.confirm(f"O comando `brain` aponta para outra instância ({other}). Trocar para esta?", False):
+            install_brain_command(brain.inst.root, ui, replace=True)
+        else:
+            ui.say(f"⚠ o comando `brain` continua apontando para {other} — para trocar, rode `brain setup --only comando` num terminal")
         return
     install_brain_command(brain.inst.root, ui)
 
@@ -469,6 +498,14 @@ def _run_painel(brain, ui) -> None:
         return
     if launcher.is_installed(brain.inst.root):
         ui.say("✓ ícone do painel já instalado (reinstale com `brain app install` se mudou a pasta)")
+        return
+    other = launcher.other_owner(brain.inst.root)
+    if other:
+        replace = bool(ui.interactive and ui.confirm(
+            f"O app Brain abre outra instância ({other}). Trocar para esta?", False))
+        target = launcher.install(brain.inst, replace_other=replace)
+        if replace:
+            ui.say(f"✓ ícone criado: {target}")
         return
     if ui.confirm("Criar o app Brain (clique duplo abre o Brain, sem terminal)?", True):
         ui.say(f"✓ ícone criado: {launcher.install(brain.inst)}")
@@ -507,11 +544,11 @@ def _run_foco(brain, ui) -> None:
 
 
 def _st_noturno(brain) -> str:
-    return "done" if nightly_installed() else "pending"
+    return "done" if nightly_installed(brain.inst.root) else "pending"
 
 
 def _run_noturno(brain, ui) -> None:
-    if nightly_installed():
+    if nightly_installed(brain.inst.root):
         ui.say("✓ noturno já agendado")
         return
     hh = ui.ask("Horário do noturno (HH:MM)", "05:30")

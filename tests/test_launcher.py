@@ -135,7 +135,7 @@ class InstallTests(unittest.TestCase):
         app = self._install()
         (app / "Contents" / "stale.txt").write_text("x", encoding="utf-8")
         other = _inst(self.tmp / "other")
-        again = launcher.install(other, self.dest, framework=self.fw, platform="darwin")
+        again = launcher.install(other, self.dest, framework=self.fw, platform="darwin", replace_other=True)
         self.assertEqual(again, app)
         self.assertFalse((app / "Contents" / "stale.txt").exists())
         self.assertEqual(launcher.owner_of(app), str(other.root))

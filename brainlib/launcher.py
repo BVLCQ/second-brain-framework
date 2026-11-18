@@ -182,7 +182,8 @@ def _swap(tmp: Path, target: Path) -> None:
 
 
 def install(inst, dest: Path | None = None, name: str = DEFAULT_NAME, *, framework: Path | None = None,
-            python: str | None = None, platform: str | None = None) -> Path:
+            python: str | None = None, platform: str | None = None,
+            replace_other: bool | None = None) -> Path:
     """Cria (ou recria) o launcher e devolve o caminho. Recusa sobrescrever algo que não foi feito por nós."""
     platform = platform or _platform()
     name = _safe_name(name)
@@ -193,8 +194,15 @@ def install(inst, dest: Path | None = None, name: str = DEFAULT_NAME, *, framewo
     dest = Path(dest).expanduser() if dest else default_dest(platform)
     dest.mkdir(parents=True, exist_ok=True)
     target = _target(dest, name, platform)
-    if (target.exists() or target.is_symlink()) and owner_of(target) is None:
+    owner = owner_of(target)
+    if (target.exists() or target.is_symlink()) and owner is None:
         raise util.BrainError(f"{target} já existe e não é um launcher do Brain — escolha outro --name ou --dest")
+    if owner and Path(owner).resolve() != Path(inst.root).resolve():
+        if replace_other is True:
+            print(f"↻ o app Brain apontava para {owner} — agora aponta para esta instância")
+        else:
+            print(f"⚠ o app Brain já abre outra instância ({owner}) — mantido; rode `brain app install` num terminal para trocar")
+            return target
     extra = {k: os.environ[k] for k in ("BRAIN_VAULT", "BRAIN_CONFIG") if os.environ.get(k)}
     script = launcher_script(inst.root, framework, inst.logs, python or sys.executable, platform=platform,
                              extra_env=extra)
@@ -274,13 +282,34 @@ def is_installed(root: Path, dest: Path | None = None, name: str = DEFAULT_NAME)
     return owner is not None and Path(owner or "/nonexistent").resolve() == Path(root).resolve()
 
 
+def other_owner(root: Path, dest: Path | None = None, name: str = DEFAULT_NAME, *,
+                platform: str | None = None) -> str | None:
+    """Se o launcher no destino aponta para OUTRA instância, devolve o caminho dela; senão None."""
+    try:
+        platform = platform or _platform()
+    except util.BrainError:
+        return None
+    name = _safe_name(name)
+    d = Path(dest).expanduser() if dest else default_dest(platform)
+    owner = owner_of(_target(d, name, platform))
+    if owner and Path(owner).resolve() != Path(root).resolve():
+        return str(owner)
+    return None
+
+
 # ── CLI ──────────────────────────────────────────────────────────────────────
 def cli(args) -> None:
     from . import config
     dest = Path(args.dest) if args.dest else None
     if args.acmd == "install":
         inst = config.load()
-        target = install(inst, dest, args.name)
+        other = other_owner(inst.root, dest, args.name)
+        replace = (sys.stdin.isatty() and input(
+            f"O app Brain abre outra instância ({other}). Trocar para esta? [s/N] "
+        ).strip().lower() in ("s", "sim")) if other else None
+        target = install(inst, dest, args.name, replace_other=replace)
+        if other and not replace:
+            return
         print(f"✓ ícone criado: {target}")
         print(f"  aponta para: {inst.root}")
         if sys.platform == "darwin":

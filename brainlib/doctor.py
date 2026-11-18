@@ -68,9 +68,15 @@ def checks(brain, online: bool = False, probe_agent: bool = False) -> list[dict]
             detail += f" — agente: {steps['agente']} (faça o login do escolhido ou troque o runner)"
         out.append(_c(lvl, "noturno", detail))
     else:
-        from . import setup as _setup
-        hint = ("agendado — primeira execução ainda não aconteceu" if _setup.nightly_installed()
-                else "nunca rodou — `brain setup --only noturno` (ou `./brain schedule install`)")
+        from . import setup as _setup, runner as _runner
+        foreign = _runner.foreign_schedule(inst.root)
+        if _setup.nightly_installed(inst.root):
+            hint = "agendado — primeira execução ainda não aconteceu"
+        elif foreign:
+            hint = (f"o agendamento desta máquina roda outra instância ({foreign}) — esta não tem noturno: "
+                    "`brain setup --only noturno`")
+        else:
+            hint = "nunca rodou — `brain setup --only noturno` (ou `./brain schedule install`)"
         out.append(_c("warn", "noturno", hint))
     from . import runner
     gap = runner.mcp_gap(brain)
@@ -251,7 +257,9 @@ def fix_for(c: dict) -> dict | None:
     if t == "inbox":
         return {"label": "processar com o agente", "agent": "dump"}
     if t == "noturno":
-        return {"label": "agendar o noturno", "sys": "sys:schedule"} if "nunca rodou" in c["detail"] else None
+        detail = c["detail"]
+        return ({"label": "agendar o noturno", "sys": "sys:schedule"}
+                if ("nunca rodou" in detail or "não tem noturno" in detail) else None)
     if t == "ações sem prazo":
         return {"label": "ir às ações e dar prazo", "go": (2, 0), "page": "todo"}
     if t.startswith("fonte "):
