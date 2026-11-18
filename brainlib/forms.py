@@ -508,6 +508,35 @@ def _forms() -> list[Form]:
              sub="O /update e o noturno deixam de puxá-la. Snapshots já gravados e o ledger ficam como estão."),
 
         # ── configurações ────────────────────────────────────────────────────
+        Form("memory.mode", "Memória: modo e provedores", ("memory", "setup", "--mode", "{mode}"), (
+            F("mode", "modo", choices=(("none", "nenhuma — busca por palavra"),
+                                       ("embed", "embed — semântica; local ou nuvem"),
+                                       ("full", "full — fatos; só-nuvem")), value="embed"),
+            F("provider", "LLM", choices=(("anthropic", "Anthropic — Haiku/Sonnet por operação"),
+                                          ("openai", "OpenAI — pede o modelo")),
+              show={"mode": ["full"]}, arg="--provider"),
+            F("model", "modelo do LLM", ph="gpt-… (exigido no OpenAI)",
+              show={"mode": ["full"], "provider": ["openai"]}, arg="--model"),
+            F("embeddings", "embeddings", choices="@memory_embs", depends="mode",
+              show={"mode": ["embed", "full"]}, arg="--embeddings"),
+            F("reranker", "reranker", choices=(("off", "desligado — fusão RRF"),
+                                               ("fireworks", "Fireworks — Qwen3-Reranker-8B"),
+                                               ("cohere", "Cohere — rerank-v3.5")),
+              show={"mode": ["embed", "full"]}, arg="--reranker"),
+            F("key", "API key (LLM)", secret=True, ph="vazio = mantém a do .env",
+              show={"mode": ["full"]}, arg="--key"),
+            F("emb_key", "API key (embeddings)", secret=True, ph="vazio = mantém a do .env",
+              show={"mode": ["embed", "full"]}, arg="--emb-key"),
+            F("reranker_key", "API key (reranker)", secret=True,
+              ph="vazio = mantém (fireworks nos embeddings e no reranker usam a mesma conta)",
+              show={"mode": ["embed", "full"], "reranker!": ["", "off"]}, arg="--reranker-key"),
+            F("quote", "sua aprovação", req=True, ph="digite a resposta literal, ex.: ok",
+              show={"mode": ["full"]}, arg="--approval")),
+            sub="O modo define o cardápio: embed aceita embeddings locais (bge-m3) ou de nuvem; full é "
+                "só-nuvem (LLM + embeddings de provedor). As chaves vão ao config/.env (nunca voltam em "
+                "output) e o container é recriado pelo fluxo. No painel: Configurações › Memória.",
+            gate=True, where="tui",
+            why="o painel tem o passo Memória dedicado (Configurações), com o mesmo resultado"),
         Form("memory.provider", "Provedor da memória", ("memory", "providers", "set", "{slot}", "--provider", "{provider}"), (
             F("slot", "slot", choices=(("llm", "LLM — só vale no modo full"), ("embeddings", "embeddings"),
                                        ("reranker", "reranker")), value="embeddings"),
@@ -620,6 +649,8 @@ SOURCES = {
     "reports": lambda m, v, ctx: [(r, r) for r in (m.get("form_static") or {}).get("reports", [])],
     "destinations": lambda m, v, ctx: [(d, d) for d in (m.get("form_static") or {}).get("destinations", [])],
     "providers": _src_providers,
+    "memory_embs": lambda m, v, ctx: [tuple(x) for x in (m.get("form_static") or {})
+                                      .get("memory_embs", {}).get((v or {}).get("mode") or "embed", [])],
     "ice:impact": _ice("impact"), "ice:confidence": _ice("confidence"), "ice:ease": _ice("ease"),
 }
 
@@ -1251,6 +1282,11 @@ def static(brain=None) -> dict:
     out = {"recurrence": sorted(schema.RECURRENCE), "opp_kinds": sorted(schema.OPP_KINDS),
            "providers": {slot: [(p, info.get("label") or p) for p, info in tbl.items()]
                          for slot, tbl in prov.PROVIDERS.items()},
+           "memory_embs": {"embed": [("local", "Local — LM Studio bge-m3 (nada sai)"),
+                                     ("fireworks", "Fireworks — Qwen3-Embedding-8B"),
+                                     ("openai", "OpenAI — text-embedding-3-small")],
+                           "full": [("fireworks", "Fireworks — Qwen3-Embedding-8B"),
+                                    ("openai", "OpenAI — text-embedding-3-small")]},
            "reports": [], "destinations": [], "re": _patterns(), "weekdays": util.WEEKDAYS_PT, "date_help": dates.HELP}
     if brain is not None:
         d = brain.inst.reports / "share"

@@ -656,6 +656,125 @@ def _run_memoria(brain, ui, mode_hint: str | None = None) -> None:
     _harness_step(brain, ui)
 
 
+class _SayOnly:
+    """Adaptador do wizard roteirizado quando não há _Job (CLI headless): ui.say vira print."""
+
+    def __init__(self, say=print):
+        self.say = say
+
+
+class ScriptedMemoriaUI:
+    """UI roteirizada do passo `memoria` — painel (via job) e CLI/TUI headless (`memory setup --provider …`).
+    A chave chega POR VARIÁVEL DE AMBIENTE — o prompt do wizard carrega o nome (ex.: `API key
+    (HINDSIGHT_API_EMBEDDINGS_OPENAI_API_KEY)`), e provedores diferentes pedem chaves diferentes."""
+
+    interactive = False
+
+    def __init__(self, out, choices: dict[str, str], keys: dict[str, str], model: str, consent: bool):
+        self.out, self.choices, self.keys = out, choices, keys
+        self.model, self.consent = model, consent
+
+    def say(self, msg: str) -> None:
+        self.out.say(msg)
+
+    def ask(self, prompt: str, default: str = "") -> str:
+        if prompt.startswith("Modo full"):
+            return "ok" if self.consent else ""
+        if prompt.startswith("Modelo default") and self.model:
+            return self.model                      # openai não tem default por operação: o dono digita
+        return default
+
+    def choice(self, prompt: str, options: list[str], default: str) -> str:
+        for slot in ("LLM", "embeddings", "reranker"):
+            if slot in prompt and self.choices.get(slot) in options:
+                return self.choices[slot]
+        return default
+
+    def confirm(self, prompt: str, default: bool = False) -> bool:
+        return default
+
+    def secret(self, prompt: str) -> str:
+        for env, key in self.keys.items():
+            if env in prompt and key:
+                return key
+        raise util.BrainError("falta a API key — preencha a chave do provedor correspondente", code=4)
+
+
+def _key_ok(v) -> str:
+    k = str(v or "").strip()
+    if k and (len(k) > 400 or any(ch.isspace() for ch in k)):
+        raise util.BrainError("API key inválida", code=4)
+    return k
+
+
+def validate_memory_setup(data: dict) -> dict:
+    """Valida o payload do passo Memória — UMA fonte para painel (job), TUI (form memory.mode) e CLI.
+    Devolve mode/provider/emb/rer/model/consent + as três chaves já formatadas."""
+    mode = {"lite": "embed"}.get(str(data.get("mode")), str(data.get("mode")))
+    if mode not in ("none", "embed", "full"):
+        raise util.BrainError("modo de memória inválido", code=4)
+    provider = str(data.get("provider") or "anthropic")
+    if provider not in ("anthropic", "openai"):
+        raise util.BrainError("provedor de LLM inválido", code=4)
+    emb = str(data.get("embeddings") or ("local" if mode == "embed" else "fireworks"))
+    if mode == "full" and emb not in ("fireworks", "openai"):
+        raise util.BrainError("no modo full os embeddings são de nuvem — fireworks ou openai", code=4)
+    if mode == "embed" and emb not in ("local", "fireworks", "openai"):
+        raise util.BrainError("provedor de embeddings inválido (embed: local ou nuvem)", code=4)
+    rer = str(data.get("reranker") or "off")
+    if rer not in ("off", "fireworks", "cohere"):
+        raise util.BrainError("reranker inválido — off, fireworks ou cohere "
+                              "(outros: brain memory providers set reranker)", code=4)
+    model = str(data.get("model") or "").strip()
+    if mode == "full" and provider == "openai" and not model:
+        raise util.BrainError("provedor openai precisa do nome do modelo (ex.: gpt-…)", code=4)
+    consent = bool(data.get("consent")) or str(data.get("approval") or "").strip().lower() == "ok"
+    if mode == "full" and not consent:
+        raise util.BrainError('o modo full precisa do seu aceite ("ok"/consent): o texto do vault vai para a API',
+                              code=4)
+    if mode == "full" and os.environ.get("BRAIN_NIGHTLY") == "1":
+        raise util.BrainError("o noturno não liga o modo full (gate de egress pede o dono presente)", code=4)
+    return {"mode": mode, "provider": provider, "emb": emb, "rer": rer, "model": model, "consent": consent,
+            "key": _key_ok(data.get("key")), "emb_key": _key_ok(data.get("emb_key")),
+            "rer_key": _key_ok(data.get("reranker_key"))}
+
+
+def configure_memory(brain, data: dict, say=print) -> str:
+    """Fluxo headless do passo Memória: valida, monta as chaves por variável de ambiente e roda o
+    wizard com o roteiro (proveedores → compose → modo → bancos → health/llm). Devolve o modo final."""
+    from . import memory
+    v = validate_memory_setup(data)
+    mode, provider, emb, rer = v["mode"], v["provider"], v["emb"], v["rer"]
+    if mode == "none":
+        memory._apply_mode(brain, "none")
+        return "none"
+    key, emb_key, rer_key = v["key"], v["emb_key"], v["rer_key"]
+    # fireworks embeddings+reranker = mesma conta: a chave de um serve no outro quando sobra
+    fw_shared = rer_key or (emb_key if emb == "fireworks" else "") or (key if (mode == "embed" and emb == "fireworks") else "")
+    keys: dict[str, str] = {}
+    if mode == "embed":
+        if key and emb != "local":
+            keys["HINDSIGHT_API_EMBEDDINGS_OPENAI_API_KEY"] = key
+    else:
+        if key:
+            keys["HINDSIGHT_API_LLM_API_KEY"] = key
+        if emb_key:
+            keys["HINDSIGHT_API_EMBEDDINGS_OPENAI_API_KEY"] = emb_key
+        elif key and provider == "openai" and emb == "openai":
+            keys["HINDSIGHT_API_EMBEDDINGS_OPENAI_API_KEY"] = key   # mesma conta OpenAI: uma chave serve
+    if rer == "fireworks" and fw_shared:
+        keys["HINDSIGHT_API_RERANKER_LITELLM_SDK_API_KEY"] = fw_shared
+    elif rer == "cohere" and rer_key:
+        keys["HINDSIGHT_API_RERANKER_COHERE_API_KEY"] = rer_key
+    ui = ScriptedMemoriaUI(_SayOnly(say), {"LLM": provider, "embeddings": emb, "reranker": rer},
+                           keys, v["model"], v["consent"])
+    _run_memoria(brain, ui, mode_hint=mode)
+    final = memory.mode(config.reload(brain.inst).cfg["memory"])
+    if final == "none":
+        raise util.BrainError("a memória não ligou — veja o que faltou acima", code=4)
+    return final
+
+
 def _harness_step(brain, ui) -> None:
     """Sub-passo Harnesses (plano memory-harness-wizard.md §4.1): o servidor do cérebro
     também guarda a memória dos agentes de código, em banco próprio (fora do rebuild)."""

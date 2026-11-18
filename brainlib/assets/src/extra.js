@@ -642,6 +642,8 @@ SETUP.memoria = box => {
   const embOpts = full => full ? [["fireworks", "Fireworks — Qwen3-Embedding-8B"], ["openai", "OpenAI — text-embedding-3-small"]]
     : [["local", "Local — LM Studio bge-m3 (nada sai)"], ["fireworks", "Fireworks — Qwen3-Embedding-8B"], ["openai", "OpenAI — text-embedding-3-small"]];
   const curEmb = full => embOpts(full).some(o => o[0] === m.emb_provider) ? m.emb_provider : (full ? "fireworks" : "local");
+  const rerOpts = [["off", "Desligado — fusão RRF"], ["fireworks", "Fireworks — Qwen3-Reranker-8B"], ["cohere", "Cohere — rerank-v3.5"]];
+  const curRer = () => rerOpts.some(o => o[0] === m.rer_provider) ? m.rer_provider : "off";
   const selHTML = (list, curv, id) => '<select id="' + id + '">' + list.map(o => '<option value="' + o[0] + '"' + (o[0] === curv ? " selected" : "") + ">" + esc(o[1]) + "</option>").join("") + "</select>";
   const keyChip = ok => ok ? ' <span class="chip h-em-dia">já salva</span>' : "";
   const keyInp = id => '<input type="password" id="' + id + '" autocomplete="off" placeholder="cole a chave">';
@@ -652,13 +654,17 @@ SETUP.memoria = box => {
       (sel === "embed" ? '<div class="stgrid">' + fld("Embeddings", selHTML(embOpts(false), curEmb(false), "s-emb")) +
         '<div id="s-ekey-wrap"' + (curEmb(false) === "local" ? " hidden" : "") + ">" + fld("API key do embeddings" + keyChip(m.emb_key), keyInp("s-ekey"), "Fireworks ou OpenAI, conforme o escolhido.") + "</div></div>" +
         '<p class="small" id="s-egress"' + (curEmb(false) === "local" ? " hidden" : "") + '>☁ com provedor de nuvem, o texto do vault vai à API para virar vetores.</p>' : "") +
-      (sel === "full" ? '<div class="stgrid">' +
+      (sel === "full" ?
+        '<div class="stgrid">' +
         fld("LLM", '<select id="s-prov"><option value="anthropic"' + (m.llm_provider === "openai" ? "" : " selected") + '>Anthropic (Claude) — Haiku/Sonnet por operação</option><option value="openai"' + (m.llm_provider === "openai" ? " selected" : "") + ">OpenAI</option></select>") +
-        '<div id="s-model-wrap"' + (m.llm_provider === "openai" ? "" : " hidden") + ">" + fld("Modelo do LLM", '<input type="text" id="s-model" placeholder="gpt-… (exigido no OpenAI)">') + "</div>" +
-        fld("Embeddings", selHTML(embOpts(true), curEmb(true), "s-emb")) +
-        fld("API key (LLM)" + keyChip(m.llm_key), keyInp("s-key")) +
+        fld("API key (LLM)" + keyChip(m.llm_key), keyInp("s-key")) + "</div>" +
+        '<div class="stgrid" id="s-model-wrap"' + (m.llm_provider === "openai" ? "" : " hidden") + ">" + fld("Modelo do LLM", '<input type="text" id="s-model" placeholder="gpt-… (exigido no OpenAI)">') + "</div>" +
+        '<div class="stgrid">' + fld("Embeddings", selHTML(embOpts(true), curEmb(true), "s-emb")) +
         '<div id="s-ekey-wrap">' + fld("API key do embeddings" + keyChip(m.emb_key), keyInp("s-ekey"), "Fireworks ou OpenAI — conta própria do embeddings.") + "</div></div>" +
+        '<div class="stgrid">' + fld("Reranking", selHTML(rerOpts, curRer(), "s-rer")) +
+        '<div id="s-rkey-wrap">' + fld("API key do reranker" + keyChip(m.rer_key), keyInp("s-rkey"), "Fireworks ou Cohere.") + "</div></div>" +
         '<p class="small" id="s-samekey" hidden>LLM e embeddings no OpenAI: a mesma chave serve nos dois.</p>' +
+        '<p class="small" id="s-rsame" hidden>Fireworks no embeddings e no reranker: a mesma chave serve nos dois.</p>' +
         '<label class="chk"><input type="checkbox" id="s-consent"> Entendo que trechos do vault vão à API dos provedores, com as minhas chaves, e que isso tem custo por uso.</label>' : "") +
       '<pre class="stlog" id="s-log" hidden></pre><div class="stactions"><span class="stmsg" id="s-m"></span><button class="btn primary" id="s-apply"' + (sel === cur && sel !== "full" ? " disabled" : "") + ">Aplicar</button></div>");
     const q = s => box.querySelector(s);
@@ -675,10 +681,15 @@ SETUP.memoria = box => {
         const same = openai && q("#s-emb").value === "openai";
         if (q("#s-ekey-wrap")) q("#s-ekey-wrap").hidden = same;
         if (q("#s-samekey")) q("#s-samekey").hidden = !same;
+        const rer = q("#s-rer") ? q("#s-rer").value : "off";
+        const rsame = rer === "fireworks" && q("#s-emb").value === "fireworks";
+        if (q("#s-rkey-wrap")) q("#s-rkey-wrap").hidden = rer === "off" || rsame;
+        if (q("#s-rsame")) q("#s-rsame").hidden = !rsame;
       }
     };
     if (q("#s-emb")) q("#s-emb").onchange = sync;
     if (q("#s-prov")) q("#s-prov").onchange = sync;
+    if (q("#s-rer")) q("#s-rer").onchange = sync;
     sync();
     q("#s-apply").onclick = e => stBusy(e.currentTarget, "aplicando…", async () => {
       const body = {mode: sel};
@@ -688,17 +699,26 @@ SETUP.memoria = box => {
       } else if (sel === "full") {
         body.provider = q("#s-prov").value; body.model = q("#s-model") ? q("#s-model").value.trim() : "";
         body.embeddings = q("#s-emb").value; body.key = q("#s-key").value;
-        body.emb_key = q("#s-ekey") ? q("#s-ekey").value : ""; body.consent = q("#s-consent").checked;
+        body.emb_key = q("#s-ekey") ? q("#s-ekey").value : "";
+        body.reranker = q("#s-rer") ? q("#s-rer").value : "off";
+        body.reranker_key = q("#s-rkey") ? q("#s-rkey").value : "";
+        body.consent = q("#s-consent").checked;
         if (!body.consent) return stMsg(q("#s-m"), "late", "marque o aceite de envio à API");
         if (!body.key && !m.llm_key) return stMsg(q("#s-m"), "late", "cole a API key do LLM");
         if (body.provider === "openai" && !body.model) return stMsg(q("#s-m"), "late", "digite o modelo do OpenAI");
         const sameAcct = body.provider === "openai" && body.embeddings === "openai";
         if (!sameAcct && !body.emb_key && !m.emb_key) return stMsg(q("#s-m"), "late", "cole a API key do embeddings (" + (body.embeddings === "fireworks" ? "Fireworks" : "OpenAI") + ")");
+        const rsame = body.reranker === "fireworks" && body.embeddings === "fireworks";
+        if (rsame && !body.emb_key && !m.emb_key && !body.reranker_key)
+          return stMsg(q("#s-m"), "late", "cole a API key do Fireworks (embeddings e reranker usam a mesma conta)");
+        if (body.reranker !== "off" && !rsame && !body.reranker_key && !m.rer_key)
+          return stMsg(q("#s-m"), "late", "cole a API key do reranker (" + (body.reranker === "fireworks" ? "Fireworks" : "Cohere") + ")");
       }
       try {
         const r = await obAct("memory", body);
         if (q("#s-key")) q("#s-key").value = "";
         if (q("#s-ekey")) q("#s-ekey").value = "";
+        if (q("#s-rkey")) q("#s-rkey").value = "";
         if (r.job) { const log = q("#s-log"); log.hidden = false;
           const j = await obJob(r.job, jj => { log.textContent = (jj.log || []).join("\n"); log.scrollTop = 1e9; });
           if (j.status === "error") return stMsg(q("#s-m"), "late", (j.result && j.result.error) || "não consegui mudar a memória"); }

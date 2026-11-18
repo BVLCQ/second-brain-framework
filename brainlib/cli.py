@@ -1448,6 +1448,17 @@ def build_parser() -> argparse.ArgumentParser:
         if name == "setup":
             x.add_argument("--mode", choices=["none", "embed", "full"],
                            help="grava as chaves do modo antes de criar os bancos (guides/memory.md)")
+            x.add_argument("--provider", choices=["anthropic", "openai"],
+                           help="fluxo headless (wizard roteirizado): provedor de LLM — exige --mode full")
+            x.add_argument("--model", help="modelo do LLM (exigido quando --provider openai)")
+            x.add_argument("--embeddings", choices=["local", "fireworks", "openai"],
+                           help="provedor de embeddings (full é só-nuvem: local não)")
+            x.add_argument("--reranker", choices=["off", "fireworks", "cohere"],
+                           help="reranker (default off — fusão RRF)")
+            x.add_argument("--key", help="chave do LLM (full) — vai ao config/.env, nunca sai em output")
+            x.add_argument("--emb-key", help="chave do provedor de embeddings")
+            x.add_argument("--reranker-key", help="chave do reranker (fireworks/cohere)")
+            x.add_argument("--approval", help='aceite do egress do full: "ok" literal')
     x = ms.add_parser("dossier", help="página \"onde estamos com X\" montada na leitura (Fase 5) — "
                                        "ficha + DEC/WIN ligados + trechos, tudo com fonte")
     x.add_argument("ref", help="ID (PROJ-1, GOAL-1) ou nome/alias de pessoa")

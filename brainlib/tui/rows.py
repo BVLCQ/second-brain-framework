@@ -1111,7 +1111,7 @@ def d_prov(store, it) -> Doc:
          else (Text(f"ausente — brain memory providers set {d['slot']} --provider {d['provider']} --key …", RED)
                if d.get("key_env") else Text("não usa", DIM))),
     ])
-    doc.blank().p(Text("Tecla s troca o provedor (formulário) · w abre o wizard da memória.", DIM))
+    doc.blank().p(Text("Tecla m muda modo e provedores · s troca um provedor · w abre o wizard da memória.", DIM))
     doc.p(Text("Trocou embeddings? brain memory rebuild re-deriva os vetores do vault.", DIM))
     return doc
 

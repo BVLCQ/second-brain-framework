@@ -1,3 +1,19 @@
+## 2.20.0 — o fluxo da memória nas três superfícies: LLM · embeddings · reranker, lado a lado
+
+- **Full com reranker no cardápio.** O passo Memória agora monta os três pares — LLM, Embeddings e
+  Reranking, cada um com provedor + API key lado a lado (era provedor-provedor-chave-chave). Reranker:
+  desligado (RRF, default) · Fireworks Qwen3-Reranker-8B · Cohere rerank-v3.5. Fireworks nos embeddings
+  e no reranker usam a mesma conta — o fluxo avisa e reusa a chave; OpenAI de LLM e embeddings idem.
+- **TUI tem o mesmo fluxo do painel.** Configurações › Provedores, tecla `m`: formulário com modo
+  (nenhuma/embed/full), LLM (+modelo no OpenAI), embeddings pelo modo, reranker, as três chaves e a
+  aprovação literal do full. Antes a TUI só tinha a troca por slot e o wizard em terminal suspenso.
+- **CLI headless.** `brain memory setup --mode full --provider anthropic --embeddings fireworks
+  --reranker fireworks --key … --emb-key … --approval ok` roda o mesmo wizard roteirizado do painel
+  (provedores → compose → modo → bancos → health/llm). O noturno não liga o full (gate de egress).
+- **Uma fonte para as três pontas.** `setup.validate_memory_setup` + `configure_memory` validam e
+  rodam o mesmo fluxo para painel (job), TUI (formulário) e CLI; o wizard interativo segue existindo
+  (`brain setup --only memoria`, tecla `w`).
+
 ## 2.19.0 — full é só-nuvem; o painel liga a memória sem LM Studio
 
 - **Modos com cardápio próprio (decisão do dono).** `embed` aceita embeddings locais (bge-m3 no LM Studio,

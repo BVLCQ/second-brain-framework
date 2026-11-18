@@ -189,6 +189,34 @@ class RunTests(unittest.TestCase):
             b.inst = config.load(b.inst.root)
             self.assertEqual(memory.mode(b.inst.cfg["memory"]), "none")
 
+    def test_configure_memory_headless_with_reranker(self):
+        """CLI/TUI headless: aceite literal, cardápio do reranker e a conta compartilhada do Fireworks."""
+        from unittest import mock
+        from brainlib import memory
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            with self.assertRaises(util.BrainError):      # full sem aceite
+                setup.validate_memory_setup({"mode": "full", "provider": "anthropic", "key": "k"})
+            with self.assertRaises(util.BrainError):      # reranker fora do cardápio do fluxo
+                setup.validate_memory_setup({"mode": "full", "consent": True, "key": "k",
+                                             "reranker": "zeroentropy"})
+            self.assertTrue(setup.validate_memory_setup(
+                {"mode": "full", "approval": "OK", "key": "k"})["consent"])   # literal, qualquer caixa
+            with mock.patch.object(setup, "docker_available", return_value=True), \
+                    mock.patch.object(setup, "hindsight_health", return_value={"status": "ok"}), \
+                    mock.patch.object(setup, "compose_up", return_value=True), \
+                    mock.patch.object(setup, "wait_hindsight", return_value=True), \
+                    mock.patch.object(memory, "setup", side_effect=lambda bb: ["brain"]):
+                final = setup.configure_memory(b, {"mode": "full", "provider": "anthropic", "key": "sk-1",
+                                                   "emb_key": "fw-1", "reranker": "fireworks", "consent": True})
+            self.assertEqual(final, "full")
+            env = config.load_env(b.inst)
+            self.assertEqual(env.get("HINDSIGHT_API_LLM_API_KEY"), "sk-1")
+            self.assertEqual(env.get("HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL"), "fireworks/qwen3-embedding-8b")
+            self.assertEqual(env.get("HINDSIGHT_API_RERANKER_LITELLM_SDK_MODEL"),
+                             "fireworks_ai/fireworks/qwen3-reranker-8b")
+            self.assertEqual(env.get("HINDSIGHT_API_RERANKER_LITELLM_SDK_API_KEY"), "fw-1")   # mesma conta
+
     def test_auto_ui_full_gate_refuses(self):
         """--yes + full: o gate literal não vem de default — modo não é gravado."""
         with tempfile.TemporaryDirectory() as td:

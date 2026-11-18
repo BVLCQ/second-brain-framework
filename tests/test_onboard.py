@@ -178,6 +178,10 @@ class StepTests(unittest.TestCase):
         # embed aceita local ou nuvem — nada além disso
         with self.assertRaises(util.BrainError):
             onboard.apply_memory(self.b, {"mode": "embed", "embeddings": "turbo"})
+        # reranker fora do cardápio do fluxo (off/fireworks/cohere) — outros: brain memory providers set
+        with self.assertRaises(util.BrainError):
+            onboard.apply_memory(self.b, {"mode": "full", "consent": True, "key": "sk-x",
+                                          "provider": "anthropic", "reranker": "zeroentropy"})
 
     def test_upload_lands_in_the_inbox_with_a_safe_name(self):
         r = onboard.save_upload(self.b, "../../../etc/Planejamento 2027 (v2).PDF", b"%PDF-1.4 teste")

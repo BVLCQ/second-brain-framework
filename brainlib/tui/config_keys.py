@@ -22,6 +22,7 @@ class ConfigKeys:
         w = lambda cond: every or cond  # noqa: E731
         if p == 1:
             if t == 0:                                    # Provedores
+                add("m", "modo da memória", self.f_memory_mode)
                 add("s", "mudar provedor", self.f_providers_set)
                 add("w", "wizard da memória", self.f_wizard_memoria)
                 if w(it):
@@ -41,6 +42,22 @@ class ConfigKeys:
             add("enter", "ampliar", self.toggle_zoom)
 
     # ── formulários ─────────────────────────────────────────────────────────
+    def f_memory_mode(self) -> None:
+        """Modo + provedores da memória num formulário — o mesmo fluxo do painel (Configurações ›
+        Memória) e do CLI headless (`memory setup --mode … --provider …`)."""
+        from .. import memory as _memory
+        st = prov.stack(self.store.brain) if self.store else {}
+        cfg = self.store.brain.inst.cfg["memory"] if self.store else {}
+        cur = _memory.mode(cfg) if cfg else "embed"
+        vals = {"mode": cur if cur in ("none", "embed", "full") else "embed"}
+        for fld, slot, menu in (("provider", "llm", ("anthropic", "openai")),
+                                ("embeddings", "embeddings", ("local", "fireworks", "openai")),
+                                ("reranker", "reranker", ("off", "fireworks", "cohere"))):
+            p = st.get(slot, {}).get("provider", "")
+            if p in menu:
+                vals[fld] = p
+        self.open_form("memory.mode", None, values=vals, render=False, show="Provedores")
+
     def f_providers_set(self) -> None:
         """Muda um slot (llm · embeddings · reranker) — mesmo caminho do wizard, sem refazer setup."""
         cur = prov.stack(self.store.brain) if self.store else {}

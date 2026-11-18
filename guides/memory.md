@@ -196,9 +196,12 @@ Regras do desenho:
 
 - **O modo define o cardápio (decisão 2026-11-17).** `embed`: embeddings local (default) ou de nuvem.
   **`full` é só-nuvem** — o wizard não oferece `local`, o CLI recusa (`providers set embeddings --provider
-  local`) e o doctor avisa instâncias legadas; o painel pede a chave de cada conta (LLM e embeddings —
-  OpenAI nos dois usa a mesma) e, no LLM OpenAI, o nome do modelo. Ligou o full? O wizard verifica o LLM
-  no servidor (`health/llm`) e conta se falhou.
+  local`) e o doctor avisa instâncias legadas. O passo Memória monta os três pares (LLM · embeddings ·
+  reranker, cada um com provedor e chave; reranker: off/RRF default · Fireworks · Cohere) no painel
+  (Configurações › Memória), na TUI (Configurações › Provedores, tecla `m`) e no CLI headless
+  (`brain memory setup --mode full --provider … --approval ok`). Fireworks embeddings+reranker usam a
+  mesma conta; OpenAI de LLM+embeddings idem. Ligou o full? O fluxo verifica o LLM no servidor
+  (`health/llm`) e conta se falhou.
 - **A escolha mora no `[memory]`** (`llm_provider`, `embeddings_provider`, `reranker_provider`…);
   **a chave mora no `config/.env`** (0600) e nunca volta em output, view ou painel.
 - **Egress é dito na tela**: qualquer provedor de nuvem manda texto do vault para fora

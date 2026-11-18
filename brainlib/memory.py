@@ -958,6 +958,13 @@ def cli(args, brain) -> None:
         raise util.BrainError("memória desligada: ponha [memory] engine = \"hindsight\" no config/brain.toml "
                               "depois de subir o servidor (guides/memory.md)", code=1)
     if c == "setup":
+        _headless = ("provider", "embeddings", "reranker", "key", "emb_key", "reranker_key", "model", "approval")
+        if any(getattr(args, k, None) for k in _headless):
+            # fluxo roteirizado (mesma fonte do painel e do formulário memory.mode da TUI)
+            from .setup import configure_memory
+            final = configure_memory(brain, {k: getattr(args, k, None) for k in _headless + ("mode",)})
+            print(f"✓ memória {final}")
+            return
         if getattr(args, "mode", None):
             _apply_mode(brain, args.mode)      # grava [memory] e valida os contratos do modo
             brain.reload()
