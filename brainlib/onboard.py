@@ -690,14 +690,16 @@ def connect_agent(brain, data: dict) -> dict:
 
 
 def agent_later(brain, data: dict) -> dict:
-    """"Fazer depois" com entidade: TASK nomeada no ledger, não frase de ajuda (plano F3)."""
+    """"Fazer depois" com entidade: TASK nomeada no ledger, não frase de ajuda (plano F3).
+    Só nomeia o agente que o dono ESCOLHEU na tela (clique no card); sem escolha, genérico —
+    detecção no PATH nunca decide por ele (ruling: "allow the user to choose")."""
     if brain.owner not in brain.state.people:
         raise util.BrainError("preencha o passo Você primeiro — a tarefa precisa do dono registrado", code=4)
     key = str(data.get("agent") or "")
-    label = _agent_label(key) if key in AGENT_KEYS else "um agente de IA"
+    title = (f"Conectar o {_agent_label(key)} ao Brain (MCP somente-leitura + permissões)"
+             if key in AGENT_KEYS else "Conectar o seu agente de IA ao Brain (MCP somente-leitura + permissões)")
     ev = brain.record_one({"type": "action.opened", "by": "owner", "prov": "declarado", "source": "onboarding",
-                           "data": {"title": f"Conectar o {label} ao Brain (MCP somente-leitura + permissões)",
-                                    "owner": brain.owner, "list": "mine"}})
+                           "data": {"title": title, "owner": brain.owner, "list": "mine"}})
     _mark(brain.inst, "agente")
     return {"id": ev["id"]}
 

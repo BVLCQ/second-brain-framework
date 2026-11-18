@@ -601,6 +601,13 @@ class AgentStepTests(unittest.TestCase):
         self.assertIn("Hermes", a.title)
         self.assertIn("agente", onboard.progress(self.b.inst).get("done", []))
 
+    def test_agent_later_without_choice_is_generic_never_detected(self):
+        onboard.save_about(self.b, {"name": "Marina Demo"})
+        r = onboard.agent_later(self.b, {})                         # ninguém clicou em card
+        a = self.b.state.actions[r["id"]]
+        self.assertEqual(a.title, "Conectar o seu agente de IA ao Brain (MCP somente-leitura + permissões)")
+        self.assertNotIn("Hermes", a.title)                         # detecção no PATH não decide
+
     def test_agent_later_without_registered_owner_refuses(self):
         with self.assertRaises(util.BrainError):
             onboard.agent_later(self.b, {"agent": "hermes"})

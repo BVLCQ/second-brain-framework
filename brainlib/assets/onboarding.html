@@ -517,14 +517,17 @@ const AGENT_URLS = {
   "codex": "https://openai.com/codex",
 };
 const AGENT_ICONS = {"claude-code": "⌘", "hermes": "✳", "cursor-cli": "▷", "codex": "◇"};
-let pickedAgent = null;
+let pickedAgent = null;   // destaque (sugestão de detecção conta)
+let agentChosen = false;  // mas só o clique do dono é escolha — é o que nomeia a TASK do "Fazer depois"
 V.agente = () => {
   const agents = S.agents || [];
   const detected = agents.filter(a => a.detected);
   if (!pickedAgent || !detected.some(a => a.key === pickedAgent)) {
     const pre = detected.find(a => a.selected) || detected.find(a => a.mcp) || detected[0];
     pickedAgent = pre ? pre.key : null;
+    agentChosen = false;               // destaque é sugestão; escolha é clique (ruling)
   }
+  if (!detected.some(a => a.key === pickedAgent)) agentChosen = false;
   const currentObj = () => detected.find(a => a.key === pickedAgent) || null;
   const anyConnected = agents.some(a => a.detected && (a.mcp || a.selected));
   $("#view").innerHTML = `${head("Conexões · primeiro o agente", "Seu agente", "O cérebro funciona com um agente de IA para ler suas fontes e ajudar nas rotinas. Escolha o principal detectado na máquina.")}
@@ -566,6 +569,7 @@ V.agente = () => {
   $$("#ag-list .agentcard[data-ag]").forEach(card => {
     card.onclick = () => {
       pickedAgent = card.dataset.ag;
+      agentChosen = true;
       $$("#ag-list .agentcard[data-ag]").forEach(c => c.classList.toggle("sel", c.dataset.ag === pickedAgent));
       updateConnectLabel();
     };
@@ -574,7 +578,7 @@ V.agente = () => {
   const doLater = async btn => {
     busy(btn, true, "Criando tarefa…");
     try {
-      const r = await act("agent_later", pickedAgent ? {agent: pickedAgent} : {});
+      const r = await act("agent_later", agentChosen ? {agent: pickedAgent} : {});
       await refresh();
       msg($("#m"), "ok", `✓ Tarefa ${r.id} criada — ficou no seu TODO.`);
       setTimeout(next, 1100);
@@ -586,6 +590,7 @@ V.agente = () => {
     $("#ag-connect").onclick = async () => {
       const obj = currentObj();
       if (!obj) return;
+      agentChosen = true;               // o botão nomeia o agente: conectar é escolher
       const btn = $("#ag-connect"), log = $("#ag-log");
       busy(btn, true, "Conectando…");
       try {
