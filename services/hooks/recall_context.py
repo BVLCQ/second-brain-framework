@@ -49,6 +49,17 @@ def _brainlib():
     return route
 
 
+def _find_instance() -> Path | None:
+    env = os.environ.get("BRAIN_HOME")
+    start = Path(env).resolve() if env else Path.cwd().resolve()
+    for cand in (start, *start.parents):
+        if ((cand / "config" / "brain.toml").exists()
+                or (cand / "vault" / "PLANNING" / "goals.md").exists()
+                or (cand / "vault" / "FRESH" / "_index" / "brain.sqlite").exists()):
+            return cand
+    return None
+
+
 def recall(bank, query, timeout):
     body = json.dumps({"query": query, "budget": "low", "max_tokens": 1500,
                        "include": {"source_facts": {"max_tokens": 500}}}).encode()
@@ -65,25 +76,30 @@ def recall(bank, query, timeout):
     return bank, data.get("results", [])
 
 
-def _ledger_leg(prompt):
+def _ledger_leg(prompt, inst: Path | None = None):
     """(classificação, ≤3 linhas do ledger) — nunca lança."""
     try:
         route = _brainlib()
-        return route.classify(prompt), route.ledger_lines(prompt)
+        inst = inst or _find_instance()
+        if inst is None:
+            return {}, []
+        db = inst / "vault" / "FRESH" / "_index" / "brain.sqlite"
+        return route.classify(prompt, db), (route.ledger_lines(prompt, db) if db.exists() else [])
     except Exception:  # noqa: BLE001 — hook nunca quebra a conversa
         return {}, []
 
 
-def _expand(prompt: str, cls: dict) -> list[str]:
+def _expand(prompt: str, cls: dict, inst: Path | None = None) -> list[str]:
     """Fase 4.1: consulta original + variante com aliases da pessoa detectada (dedup)."""
     queries = [prompt]
     people = (cls or {}).get("people") or []
     if people:
         try:
             route = _brainlib()
-            db = route._find_db()
+            inst = inst or _find_instance()
+            db = (inst / "vault" / "FRESH" / "_index" / "brain.sqlite") if inst else None
             aliases = []
-            if db is not None:
+            if db is not None and db.exists():
                 for pid in people[:2]:
                     aliases += route.person_aliases(pid, db)[:3]
             extra = (prompt + " " + " ".join(dict.fromkeys(aliases))).strip()
@@ -131,13 +147,16 @@ def _emit(header: str, lines: list[str]) -> None:
 
 
 def main():
-    if os.environ.get("BRAIN_RECALL_OFF") == "1" or ROUTE == "off":
-        return
+    if os.environ.get("BRAIN_NIGHTLY") == "1" or os.environ.get("BRAIN_RECALL_OFF") == "1" or ROUTE == "off":
+        sys.exit(0)
+    inst = _find_instance()
+    if inst is None:
+        sys.exit(0)
     prompt = (json.load(sys.stdin).get("prompt") or "").strip()
     cls: dict = {}
     lines: list[str] = []
     if ROUTE in ("ledger", "embed"):
-        cls, lines = _ledger_leg(prompt)
+        cls, lines = _ledger_leg(prompt, inst)
     if ROUTE == "ledger":
         if lines:
             _emit(HEADER_LEDGER, lines)
@@ -152,7 +171,7 @@ def main():
             _emit(HEADER_LEDGER, lines)
         return
     sem_cap = min(2 if cls.get("literal") else 3, MAX_ITEMS - len(lines))
-    items = _semantic_leg(_expand(prompt, cls), sem_cap, min(SEMANTIC_MS / 1000, TIMEOUT_S - 0.3))
+    items = _semantic_leg(_expand(prompt, cls, inst), sem_cap, min(SEMANTIC_MS / 1000, TIMEOUT_S - 0.3))
     out = list(lines)
     for score, text, doc, date in items:
         if len(text) > 400:

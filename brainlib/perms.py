@@ -16,12 +16,15 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 from pathlib import Path
 
 from . import config, runner, util
 
+FRAMEWORK = Path(__file__).resolve().parents[1]
 STATIC_FILE = ".claude/settings.json"
 LOCAL_FILE = ".claude/settings.local.json"
+RECALL_HOOK = "services/hooks/recall_context.py"
 
 # Limites duros da Constituição que valem mesmo com tudo liberado (deny vence allow).
 DENY = [
@@ -94,6 +97,29 @@ def local_permissions(inst) -> dict:
     return {"allow": mcp_rules(inst.cfg), "deny": abs_denies(inst), "additionalDirectories": extra_directories(inst)}
 
 
+def recall_hook_on(inst) -> bool:
+    v = inst.cfg["memory"].get("recall_hook", "auto")
+    return v is True or (v == "auto" and "claude-code" in (inst.cfg["memory"].get("harnesses") or []))
+
+
+def recall_hook_command(inst) -> str:
+    mem = inst.cfg["memory"]
+    env = {"BRAIN_HOME": str(inst.root),
+           "BRAIN_RECALL_ROUTE": "embed" if mem.get("engine") == "hindsight" else "ledger",
+           "BRAIN_HINDSIGHT_URL": mem["url"],
+           "BRAIN_RECALL_BANKS": mem["bank"]}
+    return (" ".join(f"{k}={shlex.quote(v)}" for k, v in env.items())
+            + " python3 " + shlex.quote(str(FRAMEWORK / RECALL_HOOK)))
+
+
+def recall_hook_entry(inst) -> dict:
+    return {"hooks": [{"type": "command", "command": recall_hook_command(inst), "timeout": 5}]}
+
+
+def _is_recall(entry: dict) -> bool:
+    return any(RECALL_HOOK in (h.get("command") or "") for h in entry.get("hooks", []))
+
+
 def session_roots(inst) -> list[Path]:
     """Onde uma sessão do Claude Code lê `.claude/settings.local.json`: a raiz da instância e os worktrees dela
     (`.claude/worktrees/*` — o app desktop abre a sessão no worktree e lê o arquivo de lá, não o da raiz)."""
@@ -133,6 +159,18 @@ def _merged(inst, root: Path | None = None) -> dict:
         perms[key] = have + [x for x in mine[key] if x not in have]
     cur["permissions"] = perms
     cur["brainManaged"] = mine
+    hooks = dict(cur.get("hooks")) if isinstance(cur.get("hooks"), dict) else {}
+    ups = [e for e in (hooks.get("UserPromptSubmit") or []) if isinstance(e, dict) and not _is_recall(e)]
+    if recall_hook_on(inst):
+        ups.append(recall_hook_entry(inst))
+    if ups:
+        hooks["UserPromptSubmit"] = ups
+    else:
+        hooks.pop("UserPromptSubmit", None)
+    if hooks:
+        cur["hooks"] = hooks
+    else:
+        cur.pop("hooks", None)
     return cur
 
 

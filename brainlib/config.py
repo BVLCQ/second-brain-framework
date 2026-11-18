@@ -45,6 +45,7 @@ DEFAULTS: dict = {
         "raw_bank": "brain-raw",           # legado — idem
         "harness_bank": "hermes",          # banco dos agentes (plano memory-harness-wizard.md) — fora do rebuild
         "harnesses": [],                   # conectados: claude-code · cursor-cli · codex · hermes
+        "recall_hook": "auto",             # hook de recall no Claude Code: auto = ligado quando o harness claude-code está conectado
         "max_file_mb": 25,
         "timeout_s": 120,
         # modos (guides/memory.md): embed = dois bancos de chunks, zero LLM, zero egress.
@@ -185,6 +186,9 @@ def _read_cfg(config_dir: Path) -> dict:
         util.set_timezone(cfg["timezone"])
     except (KeyError, ValueError, TypeError) as e:     # ZoneInfoNotFoundError é KeyError: BrainError em vez de traceback
         raise util.BrainError(f"config/brain.toml: timezone inválido {cfg['timezone']!r}", code=5) from e
+    rh = cfg["memory"].get("recall_hook", "auto")
+    if not (rh is True or rh is False or rh == "auto"):
+        raise util.BrainError(f'config/brain.toml: [memory].recall_hook inválido {rh!r} — use true, false ou "auto"', code=5)
     return cfg
 
 
