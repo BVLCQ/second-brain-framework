@@ -868,6 +868,7 @@ D0.feedback = D0.feedback || [];
 D0.actions = D0.actions || []; D0.shares = D0.shares || []; D0.people = D0.people || [];
 D0.projects = D0.projects || []; D0.goals = D0.goals || []; D0.decisions = D0.decisions || [];
 D0.portfolio = D0.portfolio || {areas: [], processes: [], opportunities: [], gaps: []};
+D0.agent_ok = !!D0.agent_ok;
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const norm = s => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -995,6 +996,25 @@ function commands(){
       cmd: 'brain proposal reject ' + p.id + ' --quote "não"', mut: m => { m.proposals = m.proposals.filter(x => x.id !== p.id); }});
   });
   out.push({label: "Regenerar views (render)", cmd: "brain render"});
+  if (!window.PF_ONLY) {
+    [
+      ["Atualizar tudo (/update)", () => runAgent("update", "", "atualizar tudo", "/update")],
+      ["Processar a inbox (/dump)", () => runAgent("dump", "", "processar a inbox", "/dump")],
+      ["Puxar uma fonte (/connect)", () => {
+        if (!LIVE || !isAgentOk()) runAgent("connect", "", "puxar uma fonte", "/connect <fonte>");
+        else pickSourceAgent();
+      }],
+      ["Brief do dia (/brief)", () => runAgent("brief", "", "brief do dia", "/brief")],
+      ["Cockpit da semana (/week)", () => runAgent("week", "", "cockpit da semana", "/week")],
+      ["Ler emails (/gmail)", () => agentArgPrompt("gmail", "Ler emails (/gmail)", "filtro ou janela", "da marina-demo · assunto X · 3d (vazio = hoje)", false)],
+      ["Ler Slack (/slack)", () => agentArgPrompt("slack", "Ler Slack (/slack)", "canal ou pessoa", "#canal @user 7d", true)],
+      ["Ler doc do Drive (/drive)", () => agentArgPrompt("drive", "Ler doc do Drive (/drive)", "termo ou id", "nome do doc ou id do arquivo", true)],
+      ["Ler a agenda (/calendar)", () => agentArgPrompt("calendar", "Ler a agenda (/calendar)", "janela", "14d (vazio = padrão)", false)],
+      ["Recap (/recap)", () => agentArgPrompt("recap", "Recap (/recap)", "alvo", "GOAL-1 · PROJ-2 · 2025-01-01:2025-03-31", true)],
+      ["Reconciliar o framework (/upgrade)", () => runAgent("upgrade", "", "reconciliar o framework", "/upgrade")],
+      ["Primeira entrevista (/init)", () => runAgent("init", "", "primeira entrevista", "/init")],
+    ].forEach(([label, act]) => out.push({label: "⚡ " + label, act: act}));
+  }
   return out;
 }
 
@@ -1989,10 +2009,115 @@ function resolveForm(){ openForm("person.resolve"); }
 function srcAddForm(pre){ openForm("watch.add", {item: pre || {}}); }
 function srcEditForm(old){ openForm("watch.edit", {key0: old.key, item: old}); }
 function srcRemoveForm(s){ openForm("watch.remove", {key: s.key}); }
-function agentToast(what, how){ toast("(agente) " + what + " — rode " + how + " no chat; o painel não roda o agente"); }
+function isAgentOk(){
+  return !!(window.BRAIN && window.BRAIN.M ? window.BRAIN.M.agent_ok : D0.agent_ok);
+}
+function agentToast(what, how, why){
+  toast("(agente) " + what + " — rode " + how + " no chat" + (why ? " (" + why + ")" : "; o painel não roda o agente"));
+}
+async function runAgent(action, arg, what, how){
+  if (!LIVE) { agentToast(what, how, "ponte serve desligada"); return false; }
+  if (!isAgentOk()) { agentToast(what, how, "runner não configurado"); return false; }
+  conToggle(true);
+  conLine('<span class="dim">⚡</span> ' + esc(how || ("/" + action + (arg ? " " + arg : ""))));
+  let res;
+  try {
+    res = await api("/api/agent", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({action: action, arg: arg || ""}),
+    });
+  } catch (e) {
+    conLine('<span class="late">ponte fora do ar — ./brain serve</span>');
+    return false;
+  }
+  if (!res.ok) {
+    const msg = res.error || "falha ao iniciar ação do agente";
+    conLine('<span class="late">' + esc(msg) + "</span>");
+    toast(msg);
+    return false;
+  }
+  toast("⚡ " + what + " — executando…");
+  let seen = 0, job = null;
+  while (true) {
+    await new Promise(r => setTimeout(r, 800));
+    let jr;
+    try {
+      jr = await api("/api/agent/job/" + encodeURIComponent(res.id));
+    } catch (e) {
+      conLine('<span class="late">perdeu contato com a ponte durante a execução</span>');
+      toast("perdeu contato com a ponte");
+      return false;
+    }
+    if (!jr.ok || !jr.job) {
+      conLine('<span class="late">execução do agente não encontrada</span>');
+      return false;
+    }
+    job = jr.job;
+    const lines = job.lines || [];
+    for (; seen < lines.length; seen++) {
+      const ln = lines[seen];
+      conLine('<span class="' + (ln.startsWith("✓") ? "ok" : "dim") + '">' + esc(ln) + "</span>");
+    }
+    if (job.status !== "running") break;
+  }
+  const ok = job.status === "done" && job.rc === 0;
+  if (ok) {
+    conLine('<span class="ok">✓ ' + esc(what) + " concluído</span>");
+    toast("✓ " + what + " concluído");
+  } else {
+    const errMsg = "✗ " + what + " falhou (código " + job.rc + ")";
+    conLine('<span class="late">' + esc(errMsg) + "</span>");
+    toast(errMsg);
+  }
+  try {
+    const d = await api("/api/data");
+    if (window.BRAIN && window.BRAIN.refresh) window.BRAIN.refresh(d.model);
+  } catch (e) { /* views regeneram no próximo render */ }
+  return ok;
+}
+function pickSourceAgent(){
+  const srcs = (window.BRAIN && window.BRAIN.M && window.BRAIN.M.sources) || [];
+  if (!srcs.length) { toast("Nenhuma fonte conhecida. Cadastre em Fontes (tecla n)."); return; }
+  const ov = document.createElement("div"); ov.className = "pal-back open";
+  ov.innerHTML = '<div class="palette"><div class="pin"><b>Puxar qual fonte? (/connect)</b><span class="hint">esc fecha</span></div>' +
+    '<div class="pal-list">' + srcs.map(s =>
+      '<div class="pal-item" data-src="' + esc(s.key) + '"><span class="ent">' + esc(s.kind || "avulsa") + "</span>" +
+      "<span>" + esc(s.key) + "</span>" + (s.in_watch ? "" : '<span class="cmd">fora do watch</span>') + "</div>"
+    ).join("") + "</div></div>";
+  document.body.appendChild(ov);
+  ov.onclick = e => { if (e.target === ov) ov.remove(); };
+  ov.querySelectorAll("[data-src]").forEach(el => {
+    el.onclick = () => { const k = el.dataset.src; ov.remove(); runAgent("connect", k, "puxar " + k, "/connect " + k); };
+  });
+}
+function agentArgPrompt(action, title, argLabel, argPh, required){
+  if (!LIVE || !isAgentOk()) { runAgent(action, "", title, "/" + action); return; }
+  const ov = document.createElement("div"); ov.className = "pal-back open";
+  ov.innerHTML = '<div class="palette"><div class="pin"><b>' + esc(title) + '</b><span class="hint">esc fecha</span></div>' +
+    '<div class="pal-confirm open" style="display:block;border-top:0;padding:14px 16px">' +
+    '<div class="frow"><label>' + esc(argLabel) + (required ? ' <span class="req">*</span>' : "") + '</label>' +
+    '<input type="text" data-arg placeholder="' + esc(argPh || "") + '"></div>' +
+    '<div class="note-s" data-err style="margin:0 0 6px;color:var(--risk)"></div>' +
+    '<div class="row"><span class="note-s">enter confirma · esc cancela</span>' +
+    '<button class="btn ghost" data-x>cancelar</button><button class="btn primary" data-ok>executar</button></div></div></div>';
+  document.body.appendChild(ov);
+  const inp = ov.querySelector("[data-arg]"), err = ov.querySelector("[data-err]");
+  const submit = () => {
+    const val = (inp.value || "").trim();
+    if (required && !val) { err.textContent = "preencha: " + argLabel; inp.focus(); return; }
+    ov.remove();
+    runAgent(action, val, title, "/" + action + (val ? " " + val : ""));
+  };
+  ov.querySelector("[data-x]").onclick = () => ov.remove();
+  ov.onclick = e => { if (e.target === ov) ov.remove(); };
+  ov.querySelector("[data-ok]").onclick = submit;
+  inp.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); submit(); } });
+  inp.focus();
+}
 function healthFix(fix){
-  if (fix.agent === "dump") agentToast("processar a inbox", "/dump");
-  else if (fix.agent === "connect") agentToast("puxar " + fix.key, "/connect " + fix.key);
+  if (fix.agent === "dump") runAgent("dump", "", "processar a inbox", "/dump");
+  else if (fix.agent === "connect") runAgent("connect", fix.key, "puxar " + fix.key, "/connect " + fix.key);
   else if (fix.sys) toast("agendar o noturno: no terminal, “schedule install --time 05:00” (pelo ./brain)");
   else if (fix.page) location.hash = "#" + fix.page;
 }
@@ -2015,19 +2140,25 @@ function ctxKeys(k){
   if (k === "T" && /^#(ask|outbox|feedback)/.test(h)) { toggleAllParam(); return true; }     // só abertas ↔ todas
   if (h.startsWith("#home")) {
     if (k === "n") { noteForm(); return true; }
-    const AG = {u: ["atualizar tudo", "/update"], d: ["processar a inbox", "/dump"], b: ["brief do dia", "/brief"], c: ["puxar uma fonte", "/connect <fonte>"], i: ["primeira entrevista", "/init"]};
-    if (AG[k]) { agentToast(AG[k][0], AG[k][1]); return true; }
+    const AG = {u: ["update", "atualizar tudo", "/update"], d: ["dump", "processar a inbox", "/dump"],
+      b: ["brief", "brief do dia", "/brief"], w: ["week", "cockpit da semana", "/week"],
+      i: ["init", "primeira entrevista", "/init"]};
+    if (AG[k]) { runAgent(AG[k][0], "", AG[k][1], AG[k][2]); return true; }
+    if (k === "c") {
+      if (!LIVE || !isAgentOk()) { runAgent("connect", "", "puxar uma fonte", "/connect <fonte>"); return true; }
+      pickSourceAgent(); return true;
+    }
     return false; }
   if (h.startsWith("#sources")) {
     if (k === "n") { srcAddForm(); return true; }
     const sid = selId() || "", src = sid.startsWith("src:") ? (M.sources || []).find(x => x.key === sid.slice(4)) : null;
-    if (k === "u") { agentToast("atualizar tudo", "/update"); return true; }
+    if (k === "u") { runAgent("update", "", "atualizar tudo", "/update"); return true; }
     if (!["e", "d", "w", "c"].includes(k)) return false;
     if (!src) { needSel(); return true; }
     if (k === "e") { if (src.in_watch) srcEditForm(src); else toast(src.key + " é pull avulso — w inclui no watch.toml"); return true; }
     if (k === "d") { if (src.in_watch) srcRemoveForm(src); else toast(src.key + " não está no watch.toml"); return true; }
     if (k === "w") { if (!src.in_watch) srcAddForm({key: src.key}); else toast(src.key + " já está no watch.toml"); return true; }
-    agentToast("puxar " + src.key, "/connect " + src.key); return true; }
+    runAgent("connect", src.key, "puxar " + src.key, "/connect " + src.key); return true; }
   if (h.startsWith("#projects")) {
     if (k === "n") { planNew(); return true; }
     if (k === "G") { planGoal(); return true; }
@@ -2455,6 +2586,7 @@ function normalizeBrain(m){
   m.people = m.people.map(p => Object.assign({owes_me: [], i_owe: [], decisions: [], projects: [], artifacts: [], aliases: []}, p));
   m.goals = m.goals || []; m.projects = m.projects || []; m.decisions = m.decisions || [];
   m.artifacts = m.artifacts || []; m.shares = m.shares || []; m.notes = m.notes || [];
+  m.agent_ok = !!m.agent_ok;
   if (m.portfolio) m.portfolio.ice_rubric = m.portfolio.ice_rubric || {success_measures: [], principles: [], axes: {}};   // instância antiga: metodologia some, painel sobe
   // publicações (porta 3) vêm dos shares reais do ledger (Share: solicitada|aprovada|publicada|cancelada)
   if (!m.publishes.length && m.shares.length)

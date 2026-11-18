@@ -10,11 +10,14 @@ O token vive no fragmento da URL (não vai ao servidor) e é guardado no localSt
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import secrets
 import shlex
+import shutil
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from . import __version__, util
@@ -55,6 +58,8 @@ class _State:
         self.token = token
         self.port = port
         self.lock = threading.Lock()                    # comandos serializados: ledger é append-only, não concorrente
+        self.agent_lock = threading.Lock()              # estado das rodadas do agente (1 por vez)
+        self.agent_jobs: dict[str, dict] = {}
 
 
 ICON_ROUTES = {"/brain.svg": "ICON_SVG", "/brain-mark.svg": "ICON_MARK", "/brain-hero.svg": "ICON_HERO"}
@@ -180,6 +185,12 @@ class _Handler(BaseHTTPRequestHandler):
                 from . import onboard
                 j = onboard.job(path.rsplit("/", 1)[1])
                 self._json(200 if j else 404, {"ok": bool(j), "job": j})
+            elif path.startswith("/api/agent/job/"):
+                jid = path.rsplit("/", 1)[1]
+                with self.state.agent_lock:
+                    raw = self.state.agent_jobs.get(jid)
+                    j = {k: (list(v) if k == "lines" else v) for k, v in raw.items() if not k.startswith("_")} if raw else None
+                self._json(200 if j else 404, {"ok": bool(j), "job": j})
             elif path == "/api/data":
                 from . import render
                 with self.state.lock:
@@ -191,31 +202,44 @@ class _Handler(BaseHTTPRequestHandler):
             print(f"[serve] erro interno: {e!r}", flush=True)
             self._deny(500, "erro interno — detalhe no terminal do serve")
 
+    def _read_json_body(self, cap: int = 64 * 1024) -> dict | None:
+        if self.headers.get("Transfer-Encoding"):
+            self._deny(411, "use Content-Length — a ponte não lê chunked")
+            return None
+        try:
+            n = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            self._deny(400, "Content-Length inválido")
+            return None
+        if not 0 <= n <= cap:
+            self._deny(413 if n > cap else 400, "pedido fora do tamanho aceito")
+            return None
+        try:
+            req = json.loads(self.rfile.read(n).decode("utf-8") or "{}")
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            self._deny(400, "JSON inválido")
+            return None
+        if not isinstance(req, dict):
+            self._deny(400, "JSON inválido")
+            return None
+        return req
+
     def do_POST(self):                                  # noqa: N802
         try:
             if not self._guard():
                 return
-            if self.path.split("?", 1)[0].startswith("/api/onboard/"):
-                self._onboard_post(self.path.split("?", 1)[0].removeprefix("/api/onboard/"))
+            path = self.path.split("?", 1)[0]
+            if path.startswith("/api/onboard/"):
+                self._onboard_post(path.removeprefix("/api/onboard/"))
                 return
-            if self.path.split("?", 1)[0] != "/api/cmd":
+            if path == "/api/agent":
+                self._agent_post()
+                return
+            if path != "/api/cmd":
                 self._deny(404, "rota desconhecida")
                 return
-            if self.headers.get("Transfer-Encoding"):
-                self._deny(411, "use Content-Length — a ponte não lê chunked")
-                return
-            try:
-                n = int(self.headers.get("Content-Length") or 0)
-            except ValueError:
-                self._deny(400, "Content-Length inválido")
-                return
-            if not 0 <= n <= 64 * 1024:
-                self._deny(413 if n > 64 * 1024 else 400, "pedido fora do tamanho aceito")
-                return
-            try:
-                req = json.loads(self.rfile.read(n).decode("utf-8") or "{}")
-            except json.JSONDecodeError:
-                self._deny(400, "JSON inválido")
+            req = self._read_json_body()
+            if req is None:
                 return
             raw = str(req.get("cmd") or "").strip()
             if raw.startswith("brain "):
@@ -241,6 +265,98 @@ class _Handler(BaseHTTPRequestHandler):
         except Exception as e:                          # noqa: BLE001
             self._deny(500, f"erro interno: {e}")
             raise
+
+    def _agent_post(self):
+        """Executa uma ação ⚡ do agente (store.SYS_OPS) pelo mesmo caminho da TUI (`tui/bridge`)."""
+        if os.environ.get("BRAIN_NIGHTLY"):
+            self._deny(403, "o noturno nunca executa ações do agente pelo painel")
+            return
+        req = self._read_json_body()
+        if req is None:
+            return
+        raw_action = req.get("action")
+        if not isinstance(raw_action, str) or not raw_action.strip():
+            self._deny(400, "ação do agente ausente")
+            return
+        raw_arg = req.get("arg")
+        if raw_arg is not None and not isinstance(raw_arg, str):
+            self._deny(400, "arg deve ser texto")
+            return
+        arg = (raw_arg or "").strip()
+        if len(arg) > 1000:
+            self._deny(400, "arg grande demais")
+            return
+        from .tui import bridge, store
+        ops: dict[str, tuple[str, dict]] = {}
+        for op in store.SYS_OPS:
+            if op.get("agent"):
+                short = op["agent"].lstrip("/")
+                ops[short] = (short, op)
+                ops[op["agent"]] = (short, op)
+                ops[op["id"]] = (short, op)
+        hit = ops.get(raw_action.strip())
+        if not hit:
+            self._deny(400, f"ação do agente desconhecida: {raw_action.strip()}")
+            return
+        action_name, op = hit
+        arg_spec = op.get("arg")
+        if arg_spec and arg_spec[2] and not arg:
+            self._deny(400, f"argumento obrigatório para {op['agent']}: {arg_spec[0]}")
+            return
+        prompt = f"{op['agent']} {arg}".strip() if arg else op["agent"]
+        with self.state.lock:
+            inst = self._brain().inst
+        with self.state.agent_lock:
+            if any(j["status"] == "running" for j in self.state.agent_jobs.values()):
+                self._deny(409, "Já existe uma ação do agente em execução.")
+                return
+            run_id = bridge.new_run_id()
+            argv = bridge.agent_argv(inst.cfg, prompt, run_id)
+            if not argv or (inst.cfg["runner"].get("command") and not shutil.which(argv[0])):
+                self._deny(503, "Runner não configurado em [runner] no brain.toml.")
+                return
+            for old in [k for k, j in self.state.agent_jobs.items() if time.time() - j["_started"] > 3600]:
+                self.state.agent_jobs.pop(old, None)
+            job_id = secrets.token_urlsafe(12)
+            job = {
+                "id": job_id,
+                "action": action_name,
+                "status": "running",
+                "lines": [],
+                "rc": None,
+                "_started": time.time(),
+            }
+            self.state.agent_jobs[job_id] = job
+
+        def _worker():
+            info = bridge.RunInfo(id=run_id)
+            rc = 1
+
+            def on_line(ln: str) -> None:
+                if not ln:
+                    return
+                with self.state.agent_lock:
+                    job["lines"].append(ln)
+                    if len(job["lines"]) > 2000:
+                        del job["lines"][:-2000]
+
+            try:
+                rc = asyncio.run(bridge.run_agent(inst, argv, on_line, info))
+                try:
+                    bridge.record_run(inst, info, argv, prompt)
+                except Exception as e:  # noqa: BLE001 — falha no log nunca trava o job
+                    on_line(f"aviso ao registrar rodada: {e}")
+            except Exception as e:  # noqa: BLE001
+                on_line(f"erro inesperado: {e}")
+                rc = 1
+            finally:
+                with self.state.agent_lock:
+                    job["rc"] = rc
+                    job["status"] = "done" if rc == 0 else "error"
+
+        threading.Thread(target=_worker, daemon=True, name=f"serve-agent-{action_name}").start()
+        print(f"[serve] ⚡ {prompt} → job={job_id}", flush=True)
+        self._json(200, {"ok": True, "id": job_id, "action": action_name, "status": "running"})
 
     def _onboard_post(self, action: str):
         """Passos do onboarding (brainlib/onboard.py). O corpo NUNCA vai para o log: carrega API keys."""

@@ -296,14 +296,17 @@ consentimento `full` da memória), confirmar o formulário já aprova (`tui` ou 
 `tests/test_forms.py` recusa campo escrito à mão numa ponta só e compara, pelo node, o comando, a validação, as dicas
 e as listas que o Python e o JS dão para os mesmos valores. Exceções de uma
 ponta só (`where="tui"`, com o porquê): `plan.log` (diff do `$EDITOR`), `note.edit`, `memory.ask`, `ask.free` e
-`agent.arg` (o painel não roda o agente nem a memória). Validações que precisam do ledger inteiro (alias de
+`agent.arg` (na TUI usa o formulário completo; no painel vivo os comandos `⚡` passam por `/api/agent` com um prompt rápido de argumento quando necessário; o painel não roda a memória). Validações que precisam do ledger inteiro (alias de
 pessoa, ação parecida, destinatário em `[outbound].allow`) ficam só na TUI (`forms.PY_ONLY`); a CLI valida de
 novo ao gravar.
 
 ### `brain serve`
 Ponte CLI do painel HTML: o mesmo `FRESH/dashboard/index.html` que abre por `file://`, mas executando
 os comandos de verdade — exatamente as linhas que o TUI dispara (`tui/bridge.run_brain`), com os gates
-do CLI valendo igual (`--quote`, aprovações, `--by owner` nos fatos do dono).
+do CLI valendo igual (`--quote`, aprovações, `--by owner` nos fatos do dono). Quando `[runner]` está
+configurado, também expõe `/api/agent` e `/api/agent/job/<id>` para rodar ações `⚡` do painel pelo
+mesmo caminho headless da TUI (`tui/bridge`), transmitindo a saída para o console lateral (um por vez,
+recusando em `BRAIN_NIGHTLY=1`).
 ```bash
 brain serve            # imprime http://127.0.0.1:8787/#t=<token> — abra no navegador
 brain serve --open     # já abre o navegador com o token na URL

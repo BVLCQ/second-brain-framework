@@ -17,6 +17,7 @@ function normalizeBrain(m){
   m.people = m.people.map(p => Object.assign({owes_me: [], i_owe: [], decisions: [], projects: [], artifacts: [], aliases: []}, p));
   m.goals = m.goals || []; m.projects = m.projects || []; m.decisions = m.decisions || [];
   m.artifacts = m.artifacts || []; m.shares = m.shares || []; m.notes = m.notes || [];
+  m.agent_ok = !!m.agent_ok;
   if (m.portfolio) m.portfolio.ice_rubric = m.portfolio.ice_rubric || {success_measures: [], principles: [], axes: {}};   // instância antiga: metodologia some, painel sobe
   // publicações (porta 3) vêm dos shares reais do ledger (Share: solicitada|aprovada|publicada|cancelada)
   if (!m.publishes.length && m.shares.length)

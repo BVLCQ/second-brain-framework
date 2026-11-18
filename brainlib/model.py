@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 from pathlib import Path
+import shutil
 
 from . import portfolio, util
 from .state import Action, State
@@ -328,6 +329,7 @@ class ModelBuilder:
                 "mine_no_effort": sum(1 for a in mine_open if not a["effort_min"]),
             },
             "by_id": {"actions": list(by_id)},
+            "agent_ok": _agent_ok(self.cfg),
         }
 
     def _timeline_for(self, pid, p_actions, p_decisions, deliveries, deliv_done, p_artifacts) -> list[dict]:
@@ -533,3 +535,10 @@ def _harness_list(brain) -> list:
     det = _h.detect()
     return [{"name": n, "label": _h.AGENTS.get(n, "Hermes"), "wired": n in wired,
              "detected": bool(det.get(n))} for n in ("claude-code", "cursor-cli", "codex", "hermes")]
+
+
+def _agent_ok(cfg: dict) -> bool:
+    """Disponibilidade do runner configurado sem disparar processo (só shutil.which)."""
+    from .tui import bridge
+    argv = bridge.agent_argv(cfg, "ok")
+    return bool(argv and shutil.which(argv[0]))

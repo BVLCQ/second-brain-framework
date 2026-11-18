@@ -711,7 +711,9 @@ por uma versão.
 
 - **Início** — o `/brief` visual: goals com barras de progresso (calculado
   **e** declarado), saúde, hoje + 7 dias, "precisa de você", conquistas e
-  decisões recentes. `n` escreve uma nota rápida.
+  decisões recentes. `n` escreve uma nota rápida; `u`/`d`/`b`/`c` rodam ações
+  do agente ao vivo quando a ponte está no ar e o `[runner]` configurado
+  (com saída no console lateral).
 - **TODO** (badge: atrasadas) — kanban (a fazer · fazendo · bloqueada ·
   feita) com **arrastar-e-soltar**: soltar roda o comando (marcar fazendo,
   fechar, reabrir); bloqueadas recusam citando o `blocked_by`. Abaixo, a
@@ -743,11 +745,11 @@ por uma versão.
   descarta pergunta / rejeita proposta; `T` mostra também as respondidas.
 - **Sugestões** (badge: pendentes) — a fila do que vira issue no GitHub; `p` publica, `s` sincroniza, `T` mostra também as criadas.
 - **Fontes** — o `watch.toml` e o último pull de cada fonte: `n` adiciona, `e` edita, `d` remove, `w` inclui um pull
-  avulso; `c`/`u` pedem ao agente (o painel não roda o agente — ele diz o comando do chat). `N` abre a nota rápida em qualquer página.
+  avulso; `c`/`u` executam `/connect`/`/update` pelo `[runner]` quando a ponte está no ar (transmitindo a saída no console lateral; no retrato ou sem runner, dizem o comando do chat). `N` abre a nota rápida em qualquer página.
 
 **Configurações** — páginas: **Memória** (provedores, harnesses; `s` troca
 provedor, `v` verifica os harnesses, `i` conecta o selecionado) e **Saúde**
-(badge: avisos) — o `doctor` visual + `f` corrige o aviso selecionado (leva à página, ou diz o comando do agente) + `o` testa online de novo; desde a face
+(badge: avisos) — o `doctor` visual + `f` corrige o aviso selecionado (leva à página, ou roda/diz o comando do agente) + `o` testa online de novo; desde a face
 Configurações a Saúde mora só aqui, como na TUI (a paleta também leva só
 aqui — o link antigo `#health` redireciona).
 
