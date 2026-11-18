@@ -84,6 +84,8 @@ TYPES: dict[str, dict] = {
     "feedback.pushed": {"entity": "feedback", "req": ["number", "url"]},
     "feedback.synced": {"entity": "feedback", "req": ["state"]},
     "feedback.failed": {"entity": "feedback", "req": ["error"]},
+    "feedback.withdrawn": {"entity": "feedback", "req": ["reason"]},
+    "feedback.retracted": {"entity": "feedback", "req": ["mode", "reason", "number", "url"]},
     "ids.migrated": {"entity": None, "req": ["map", "backup_sha"]},     # `brain migrate ids`: o mapa antigo → novo
     "area.added": {"entity": "area", "new": True, "req": ["name"]},
     "area.updated": {"entity": "area", "req": []},
@@ -371,9 +373,33 @@ def _validate_feedback(t: str, ev: dict, data: dict, state) -> None:
               f"state deve ser open|closed|gone (recebido {data['state']!r})")
         _need(data.get("reason", "") in ("", "completed", "not_planned", "reopened"),
               f"reason inválido: {data.get('reason')!r}")
-        _need(f.status == "criado", f"{eid} está '{f.status}' — sem issue para sincronizar")
+        _need(f.status in ("criado", "retratado") and bool(f.number), f"{eid} está '{f.status}' — sem issue para sincronizar")
     elif t == "feedback.failed":
-        _need(f.status in ("pendente", "falhou"), f"{eid} está '{f.status}'")
+        if data.get("op") == "retract":
+            _need(f.status == "criado", f"{eid} está '{f.status}'")
+        else:
+            _need(f.status in ("pendente", "falhou"), f"{eid} está '{f.status}'")
+    elif t == "feedback.withdrawn":
+        _need(not f.number, f"{eid}: issue #{f.number} já existe — use `brain feedback retract`")
+        _need(f.status in ("pendente", "falhou"), f"{eid} está '{f.status}' — só rascunho pendente/falhou pode ser retirado")
+        _need(isinstance(data["reason"], str) and bool(data["reason"].strip()), "feedback.withdrawn: reason obrigatório")
+        if ev.get("by") == "agent":
+            _need(f.added_by == "agent", f"{eid}: agente só pode retirar rascunho criado por agente")
+    elif t == "feedback.retracted":
+        _need(bool(f.number), f"{eid}: sem issue publicada — use `brain feedback withdraw`")
+        _need(f.status not in ("retirado", "retratado"), f"{eid} já está '{f.status}'")
+        _need(data["mode"] in ("withdraw", "correct"),
+              f"mode inválido: {data['mode']!r} — use withdraw|correct")
+        _need(isinstance(data["reason"], str) and bool(data["reason"].strip()), "feedback.retracted: reason obrigatório")
+        _need(isinstance(data["number"], int) and not isinstance(data["number"], bool) and data["number"] > 0,
+              "number deve ser inteiro positivo")
+        if data["mode"] == "correct":
+            _need(ev.get("by") == "owner", f"{eid}: retract --correct exige o dono (by=owner)")
+        elif ev.get("by") == "agent":
+            _need(f.added_by == "agent" or f.pushed_by == "agent",
+                  f"{eid}: agente só pode retratar issue criada ou publicada por ele")
+            _need(bool((data.get("evidence") or "").strip()),
+                  f"{eid}: retract por agente exige evidence")
 
 
 def _int15(data: dict, field: str, hint: str = "") -> None:

@@ -298,7 +298,8 @@ class ModelBuilder:
             "plan_changes": [{**c, "date": _iso(c["date"])} for c in st.plan_changes],
             "plan_warnings": plan.warnings,
             "feedback": [{"id": f.id, "kind": f.kind, "title": f.title, "body": f.body,
-                          "status": f.status,
+                          "status": f.status, "reason": f.reason, "comment_url": f.comment_url,
+                          "retract_mode": f.retract_mode, "added_by": f.added_by,
                           "number": f.number, "url": f.url, "issue_state": f.issue_state,
                           "issue_reason": f.issue_reason, "error": f.error, "added": _iso(f.added),
                           "pushed": _iso(f.pushed), "synced": _iso(f.synced)}

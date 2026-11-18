@@ -410,25 +410,37 @@ V.feedback = (q) => {
   const all = !!(q && q.get("a") === "1");                      // T: só pendentes (padrão, como o TUI) ↔ todas
   const glyph = {sugestao: "💡", bug: "🐞"};
   const issueChip = f => {
-    if (f.status !== "criado") return "";
+    if (f.status !== "criado" && f.status !== "retratado") return "";
     if (f.issue_state === "open") return " " + chip("info", "issue aberta");
     if (f.issue_state === "gone") return " " + chip("em-risco", "issue apagada");
     if (f.issue_state === "closed") {
       const why = f.issue_reason === "not_planned" ? " · não será feita" : f.issue_reason === "completed" ? " · concluída" : "";
       return " " + chip("em-dia", "issue fechada" + why);
     }
-    return ' <span class="muted small">issue ? — s sincroniza</span>';
+    return f.status === "retratado" ? "" : ' <span class="muted small">issue ? — s sincroniza</span>';
   };
-  const row = f => "<div class=\"msgrow\"><header><b>" + f.id + "</b> " + glyph[f.kind] + " " + esc(f.title) + " " +
-    chip(f.status === "criado" ? "em-dia" : f.status === "falhou" ? "em-risco" : "info", f.status) +
-    (f.status === "criado" && f.url ? ' · <a href="' + esc(f.url) + '" target="_blank" rel="noopener">issue #' + f.number + "</a>" : "") +
+  const statusChip = s => chip(s === "criado" ? "em-dia" : s === "falhou" ? "em-risco" : s === "retratado" ? "atencao" : "info", s);
+  const row = f => "<div class=\"msgrow\" data-sel=\"" + esc(f.id) + "\"><header><b>" + f.id + "</b> " + glyph[f.kind] + " " + esc(f.title) + " " +
+    statusChip(f.status) +
+    (f.number && f.url ? ' · <a href="' + esc(f.url) + '" target="_blank" rel="noopener">issue #' + f.number + "</a>" : "") +
     issueChip(f) +
     (f.added ? ' <span class="muted">· ' + fmtD(f.added) + "</span>" : "") +
-    (f.status !== "criado" ? ' · <button class="btn tiny" data-fb="' + esc(f.id) + '" title="criar a issue no GitHub">p publicar</button>' : "") +
+    (f.status === "pendente" || f.status === "falhou"
+      ? ' · <button class="btn tiny" data-fb="' + esc(f.id) + '" title="criar a issue no GitHub">p publicar</button>' +
+        ' <button class="btn tiny" data-fbwithdraw="' + esc(f.id) + '" title="retirar rascunho antes de publicar">d retirar</button>'
+      : "") +
+    (f.status === "criado"
+      ? ' · <button class="btn tiny" data-fbretract="' + esc(f.id) + '" title="retratar issue publicada (fechar ou corrigir texto)">r retratar</button>'
+      : "") +
     "</header>" + (f.body ? '<div class="msg">' + esc(f.body) + "</div>" : "") +
-    (f.status === "falhou" && f.error ? '<div class="msg muted">' + esc(f.error) + "</div>" : "") + "</div>";
-  const pend = M.feedback.filter(f => f.status !== "criado"), done = M.feedback.filter(f => f.status === "criado");
-  const doneTitle = 'Já no GitHub · ' + done.length + ' <button class="btn tiny" data-fbsync title="relê o estado dos issues no GitHub">s sincronizar</button>';
+    ((f.status === "retirado" || f.status === "retratado") && f.reason
+      ? '<div class="msg muted"><b>Motivo' + (f.retract_mode ? " (" + esc(f.retract_mode) + ")" : "") + ":</b> " + esc(f.reason) +
+        (f.comment_url ? ' · <a href="' + esc(f.comment_url) + '" target="_blank" rel="noopener">comentário</a>' : "") + "</div>"
+      : "") +
+    ((f.status === "falhou" || (f.status === "criado" && f.error)) && f.error ? '<div class="msg muted">' + esc(f.error) + "</div>" : "") + "</div>";
+  const pend = M.feedback.filter(f => f.status === "pendente" || f.status === "falhou");
+  const done = M.feedback.filter(f => f.status !== "pendente" && f.status !== "falhou");
+  const doneTitle = 'Já no GitHub / encerradas · ' + done.length + ' <button class="btn tiny" data-fbsync title="relê o estado dos issues no GitHub">s sincronizar</button>';
   return '<div class="pagehead"><div><h1>Sugestões e bugs</h1><p class="sub">Porta 7 — cada registro vira uma issue pública no repo do framework. O texto não carrega nada seu: nomes, e-mails e caminhos ficam fora.</p></div></div>' +
     panel("Pendente de publicar · " + pend.length, pend.map(row).join("") || empty("nada pendente — n para sugerir ou reportar"), ' style="margin-top:14px"') +
     (all ? panel(doneTitle, done.map(row).join("") || empty("—"), ' style="margin-top:14px"') : "");
@@ -736,7 +748,7 @@ V.ask = (q) => {
 // ── router + faces (mesma lógica da TUI: Execução | Portfólio, cada face lembra onde estava) ──
 const TABS_EXEC = [["home", "Início"], ["sources", "Fontes", () => (M.sources || []).filter(s => s.failures).length || 0], ["todo", "TODO", () => M.counts.mine_overdue], ["projects", "Projetos"], ["decisions", "Decisões"], ["ask", "Perguntas", () => ((M.questions || []).filter(q => q.status === "aberta").length + M.proposals.length) || 0], ["wins", "Conquistas"],
   ["timeline", "Linha do tempo"], ["focus", "Foco", () => M.focus && M.focus.status === "proposto" ? 1 : 0],
-  ["outbox", "Mensagens", () => M.counts.outbox_pending], ["feedback", "Sugestões", () => (M.feedback || []).filter(f => f.status !== "criado").length || 0]];
+  ["outbox", "Mensagens", () => M.counts.outbox_pending], ["feedback", "Sugestões", () => (M.feedback || []).filter(f => f.status !== "criado" && f.status !== "retirado" && f.status !== "retratado").length || 0]];
   // (Saúde saiu daqui com a face Configurações — mesma decisão da TUI: mora só lá, com o badge de avisos)
 const TABS_PF = [["pf/visao", "Visão geral"], ["pf/opps", "Oportunidades", () => PF.opportunities.filter(o => o.status !== "descartada").length],
   ["pf/matrix", "Matriz"], ["pf/procs", "Processos", () => PF.processes.filter(p => p.status === "ativo").length], ["pf/areas", "Áreas", () => PF.areas.length],

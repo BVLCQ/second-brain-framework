@@ -320,15 +320,21 @@ class Feedback:
     kind: str                      # sugestao | bug
     title: str
     body: str = ""
-    status: str = "pendente"       # pendente | criado | falhou
+    status: str = "pendente"       # pendente | criado | falhou | retirado | retratado
     number: int | None = None      # nº do issue no GitHub
     url: str = ""
     issue_state: str = ""          # '' nunca sincronizado | open | closed (última leitura do GitHub)
     issue_reason: str = ""         # completed | not_planned | '' (por que fechou)
-    error: str = ""                # última tentativa de push que não subiu
+    error: str = ""                # última tentativa de push/retract que não subiu
     source: str = ""
     prov: str = ""
     by: str = ""
+    added_by: str = ""
+    pushed_by: str = ""
+    reason: str = ""
+    comment_url: str = ""
+    retract_mode: str = ""
+    evidence: str = ""
     added: date | None = None
     pushed: date | None = None
     synced: date | None = None
@@ -638,7 +644,8 @@ def apply(st: State, ev: dict) -> None:
         if t == "feedback.added":
             st.feedbacks[eid] = Feedback(eid, data["kind"], data["title"], data.get("body", ""),
                                          source=ev.get("source", ""),
-                                         prov=ev.get("prov", ""), by=ev.get("by", ""), added=when,
+                                         prov=ev.get("prov", ""), by=ev.get("by", ""),
+                                         added_by=ev.get("by", ""), added=when,
                                          proposal=data.get("proposal", ""))
             if data.get("proposal") in st.proposals:
                 st.proposals[data["proposal"]].feedback = eid
@@ -650,10 +657,24 @@ def apply(st: State, ev: dict) -> None:
                 st.proposals[f.proposal].feedback = eid
         if t == "feedback.pushed":
             f.status, f.number, f.url, f.pushed = "criado", data["number"], data["url"], when
+            f.pushed_by, f.error = ev.get("by", ""), ""
         elif t == "feedback.synced":
             f.issue_state, f.issue_reason, f.synced = data["state"], data.get("reason", ""), when
         elif t == "feedback.failed":
-            f.status, f.error = "falhou", data["error"]
+            f.error = data["error"]
+            if data.get("op") != "retract":
+                f.status = "falhou"
+        elif t == "feedback.withdrawn":
+            f.status, f.reason, f.error = "retirado", data["reason"], ""
+        elif t == "feedback.retracted":
+            f.status = "retratado"
+            f.retract_mode = data["mode"]
+            f.reason = data["reason"]
+            f.comment_url = data.get("comment_url", "")
+            f.evidence = data.get("evidence", "")
+            f.error = ""
+            if data.get("body"):
+                f.body = data["body"]
         f.history.append(ev)
 
     elif t.startswith(("area.", "process.", "opportunity.", "doc.")):

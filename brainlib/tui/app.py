@@ -85,6 +85,8 @@ CMD_CATALOG = [               # paleta de comandos: nome, linha da CLI, (face, p
     ("Pedir publicação", "brain publish request … --to slack:#canal", (0, 4, 4, "n")),
     ("Sugerir / reportar bug", 'brain feedback add "…" --kind sugestao|bug --body "…"', (0, 6, 1, "n")),
     ("Publicar feedback pendente", "brain feedback push FB-####", (0, 6, 1, "p")),
+    ("Retirar rascunho de feedback", 'brain feedback withdraw FB-#### --reason "…"', (0, 6, 1, "d")),
+    ("Retratar issue de feedback", 'brain feedback retract FB-#### --withdraw|--correct --reason "…"', (0, 6, 1, "r")),
     ("Sincronizar estado dos issues", "brain feedback sync", (0, 6, 1, "s")),
     ("Nova decisão", 'brain decision add "…" --decided-by …', (0, 5, 0, "n")),
     ("Registrar entrega", 'brain delivery "…" --ref …', (0, 5, 1, "n")),
@@ -947,6 +949,9 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
                     add("n", "nova", self.f_feedback_new)
                     if w(it and it.data.status in ("pendente", "falhou")):
                         add("p", "publicar", self.f_feedback_push)
+                        add("d", "retirar", self.f_feedback_withdraw)
+                    if w(it and it.data.status == "criado"):
+                        add("r", "retratar", self.f_feedback_retract)
                     add("s", "sincronizar issues", self.f_feedback_sync)
                     add("T", "só pendentes" if self.show_all else "todas", self.toggle_all)
                 else:
@@ -1055,6 +1060,9 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
                 add("n", "nova", self.f_feedback_new)
                 if w(it and it.data.status in ("pendente", "falhou")):
                     add("p", "publicar", self.f_feedback_push)
+                    add("d", "retirar", self.f_feedback_withdraw)
+                if w(it and it.data.status == "criado"):
+                    add("r", "retratar", self.f_feedback_retract)
                 add("s", "sincronizar issues", self.f_feedback_sync)
                 add("T", "só pendentes" if self.show_all else "todas", self.toggle_all)
             else:

@@ -151,11 +151,14 @@ def row(store, it, width: int) -> Text:
         return two(T(("●", AMB), " ", (d["id"], DIM), " ", d["destination"], " · ", d["report"].split("/")[-1]),
                    T((d["status"], AMB if d["status"] in ("solicitada", "aprovada") else DIM)), width)
     if k == "fb":
-        mark, st = ("◌", AMB) if d.status == "pendente" else (("⚠", RED) if d.status == "falhou" else ("✓", GRN))
+        mark, st = {"pendente": ("◌", AMB), "falhou": ("⚠", RED), "retirado": ("✗", DIM),
+                    "retratado": ("↺", AMB)}.get(d.status, ("✓", GRN))
         tag = "sugestão" if d.kind == "sugestao" else "bug"
-        if d.status == "criado" and d.number:
+        if d.status in ("criado", "retratado") and d.number:
             right = T((f"#{d.number}", CYN))
-            if d.issue_state:
+            if d.status == "retratado":
+                right.append(" retratada", AMB)
+            elif d.issue_state:
                 right.append({"open": " aberta", "gone": " apagada"}.get(d.issue_state, " fechada"), DIM)
         else:
             right = T((d.status, st))
@@ -757,14 +760,18 @@ def d_fb(store, it) -> Doc:
         issue = f"#{f.number}  {f.url}  ·  issue {estado}"
     doc.blank().kv([
         ("issue", Text(issue, CYN) if f.url else Text(issue, DIM)),
+        ("motivo", Text(f.reason)) if f.reason else None,
+        ("modo retratação", Text(f.retract_mode, DIM)) if f.retract_mode else None,
+        ("comentário", Text(f.comment_url, CYN)) if f.comment_url else None,
         ("erro da tentativa", Text(f.error, RED)) if f.error else None,
         ("registrado", Text(util.fmt_date(f.added))),
         ("publicado", Text(util.fmt_date(f.pushed))) if f.pushed else None,
         ("sincronizado", Text(util.fmt_date(f.synced))) if f.synced else None,
         ("fonte", Text(f.source or "—", DIM))])
     doc.sec("Porta 7").p(("O issue é público: nada do dono no texto (a porta recusa nomes, e-mails e caminhos). ", DIM),
-                         ("n", "bold cyan"), (" registra e publica; sem token/rede fica pendente e ", DIM),
-                         ("p", "bold cyan"), (" tenta de novo; ", DIM), ("s", "bold cyan"),
+                         ("n", "bold cyan"), (" registra e publica; ", DIM), ("p", "bold cyan"),
+                         (" tenta de novo; ", DIM), ("d", "bold cyan"), (" retira rascunho; ", DIM),
+                         ("r", "bold cyan"), (" retrata issue; ", DIM), ("s", "bold cyan"),
                          (" relê o estado dos issues no GitHub.", DIM))
     doc.sec("Equivalente na CLI")
     doc.cmd(f"brain feedback push {f.id}" if f.status in ("pendente", "falhou") else f"brain feedback show {f.id}")

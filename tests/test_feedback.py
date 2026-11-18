@@ -577,6 +577,35 @@ class FeedbackClientTests(unittest.TestCase):
         self.assertIn("422", msg)
         self.assertNotIn("segredo-fake", msg)              # o token nunca vaza na mensagem
 
+    def test_add_comment_e_update_issue_injetavel(self):
+        import brainlib.feedback as fb
+        (self.inst.config_dir / ".env").write_text("GITHUB_TOKEN=segredo-fake\n", encoding="utf-8")
+        seen = []
+
+        class _R:
+            def __init__(self, obj):
+                self._raw = json.dumps(obj).encode("utf-8")
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+            def read(self): return self._raw
+
+        def fake_urlopen(req, timeout=None):
+            seen.append((req.get_method(), req.full_url, req.get_header("Authorization"),
+                         json.loads(req.data.decode("utf-8"))))
+            if req.get_method() == "POST":
+                return _R({"html_url": "https://github.com/o/r/issues/7#issuecomment-1"})
+            return _R({"number": 7, "html_url": "https://github.com/o/r/issues/7",
+                       "state": "closed", "state_reason": "not_planned"})
+
+        cm = fb.add_comment(self.inst, "o/r", 7, "Retratado", urlopen=fake_urlopen)
+        up = fb.update_issue(self.inst, "o/r", 7, state="closed", state_reason="not_planned", urlopen=fake_urlopen)
+        self.assertEqual(cm["html_url"], "https://github.com/o/r/issues/7#issuecomment-1")
+        self.assertEqual((up["state"], up["state_reason"]), ("closed", "not_planned"))
+        self.assertEqual(seen[0][0], "POST")
+        self.assertEqual(seen[0][2], "Bearer segredo-fake")
+        self.assertEqual(seen[1][0], "PATCH")
+        self.assertEqual(seen[1][3], {"state": "closed", "state_reason": "not_planned"})
+
 
 class FeedbackIdsTests(unittest.TestCase):
     def test_prefixo_e_normalizacao(self):

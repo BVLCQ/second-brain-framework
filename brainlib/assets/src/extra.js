@@ -345,6 +345,8 @@ function approveMsgForm(m0){                           // porta 2: texto exato +
 }
 function cancelMsgForm(m0){ openForm("outbox.cancel", {id: m0.id, text: m0.text}); }
 function feedbackForm(){ openForm("feedback.new"); }
+function feedbackWithdrawForm(fb){ openForm("feedback.withdraw", {id: fb.id, title: fb.title, item: fb}); }
+function feedbackRetractForm(fb){ openForm("feedback.retract", {id: fb.id, title: fb.title, item: fb}); }
 function pubAction(act, id0){
   const s = (window.BRAIN.M.shares || []).find(y => y.id === id0) || {};
   if (act === "cancel") { runArgv([["publish", "cancel", id0]]); return; }          // como a TUI: cancelar é direto
@@ -379,6 +381,10 @@ function wireP0(){
   document.querySelectorAll("#view [data-pub]").forEach(b => { const parts = b.dataset.pub.split(":"); b.onclick = () => pubAction(parts[0], parts[1]); });
   document.querySelectorAll("#view [data-fb]").forEach(b => { const id0 = b.dataset.fb; b.onclick = () => {
     runCommand("brain feedback push " + id0); }});
+  document.querySelectorAll("#view [data-fbwithdraw]").forEach(b => { const id0 = b.dataset.fbwithdraw; b.onclick = () => {
+    const fb = (window.BRAIN.M.feedback || []).find(x => x.id === id0); if (fb) feedbackWithdrawForm(fb); }; });
+  document.querySelectorAll("#view [data-fbretract]").forEach(b => { const id0 = b.dataset.fbretract; b.onclick = () => {
+    const fb = (window.BRAIN.M.feedback || []).find(x => x.id === id0); if (fb) feedbackRetractForm(fb); }; });
   document.querySelectorAll("#view [data-fbsync]").forEach(b => { b.onclick = () => {
     runCommand("brain feedback sync"); }});
   const head = document.querySelector("#view .pagehead");
@@ -1269,11 +1275,22 @@ function ctxKeys(k){
   if (h.startsWith("#feedback")) {
     if (k === "n") { feedbackForm(); return true; }
     if (k === "s") { runCommand("brain feedback sync"); return true; }
-    if (k === "p") { const fid = selId() || "";
-      const fb = fid.startsWith("FB-") ? M.feedback.find(x => x.id === fid) : null;
+    const fid = selId() || "";
+    const fb = fid.startsWith("FB-") ? M.feedback.find(x => x.id === fid) : null;
+    if (k === "p") {
       if (fb && (fb.status === "pendente" || fb.status === "falhou")) runCommand("brain feedback push " + fb.id);
       else if (!fb) needSel();
       else toast(fb.id + " está " + fb.status + " — publicar vale para pendente ou falhou");
+      return true; }
+    if (k === "d") {
+      if (fb && (fb.status === "pendente" || fb.status === "falhou")) feedbackWithdrawForm(fb);
+      else if (!fb) needSel();
+      else toast(fb.id + " está " + fb.status + " — retirar vale para rascunho pendente ou falhou");
+      return true; }
+    if (k === "r") {
+      if (fb && fb.status === "criado") feedbackRetractForm(fb);
+      else if (!fb) needSel();
+      else toast(fb.id + " está " + fb.status + " — retratar vale para issue publicada");
       return true; }
     return false; }
   if (h.startsWith("#decisions")) {
@@ -1388,7 +1405,7 @@ function helpOverlay(){
     ["Perguntas e propostas", ""], ["a", "responder pergunta / aceitar proposta (gate)"],
     ["d", "descartar pergunta · rejeitar proposta · cancelar publicação"], ["R", "retomar o agente"],
     ["Publicar (porta 3)", ""], ["n", "pedir publicação"], ["A", "aprovar (gate)"],
-    ["Sugestões", ""], ["n", "nova"], ["p", "publicar"], ["s", "sincronizar issues"],
+    ["Sugestões", ""], ["n", "nova"], ["p", "publicar"], ["d", "retirar rascunho"], ["r", "retratar issue"], ["s", "sincronizar issues"],
     ["Portfólio · Oportunidades", ""], ["n", "nova"], ["s", "status"], ["i", "ICE"], ["c", "confirmar ICE sugerido"],
     ["e", "editar"], ["d", "descartar"], ["p", "promover (gate)"], ["O", "one-pager (agente)"], ["L", "ligar documento"], ["v", "evidência"],
     ["Portfólio · Processos", ""], ["n", "novo"], ["e", "editar"], ["a", "nova oportunidade daqui"], ["d", "aposentar"], ["L", "ligar documento"], ["o", "abrir playbook"],
@@ -1509,7 +1526,11 @@ function keyLegend(){
   } else if (h.startsWith("#feedback")) {
     const fid = SEL.i >= 0 ? (selId() || "") : "";
     const fb = fid.startsWith("FB-") ? (M.feedback || []).find(x => x.id === fid) : null;
-    add("n", "sugerir/corrigir"); add("p", "publicar", !(fb && (fb.status === "pendente" || fb.status === "falhou"))); add("s", "sincronizar"); add("T", hashAll() ? "só pendentes" : "todas");
+    add("n", "sugerir/corrigir");
+    add("p", "publicar", !(fb && (fb.status === "pendente" || fb.status === "falhou")));
+    add("d", "retirar", !(fb && (fb.status === "pendente" || fb.status === "falhou")));
+    add("r", "retratar", !(fb && fb.status === "criado"));
+    add("s", "sincronizar"); add("T", hashAll() ? "só pendentes" : "todas");
   } else if (h.startsWith("#decisions")) { add("n", "nova"); add("S", "superar", !id.startsWith("DEC-")); }
   else if (h.startsWith("#pf/matrix")) { add("s", "status", !o); add("i", "ICE", !o); }
   else if (h.startsWith("#pf/opps")) {

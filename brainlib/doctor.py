@@ -118,6 +118,16 @@ def checks(brain, online: bool = False, probe_agent: bool = False) -> list[dict]
                                           "config/.env — `./brain setup --only portas`, depois `brain feedback push FB-####`"))
     elif fb_wait:
         out.append(_c("warn", "feedback", f"{len(fb_wait)} sugestão(ões) ainda não publicadas — `brain feedback list`"))
+    fb_retract_asks = [
+        q for q in st.questions.values()
+        if q.status == "aberta" and q.kind == "permissao"
+        and any(c in st.feedbacks and st.feedbacks[c].status not in ("retirado", "retratado") for c in q.context)
+    ]
+    if fb_retract_asks:
+        fids = ", ".join(sorted({c for q in fb_retract_asks for c in q.context if c in st.feedbacks}))
+        out.append(_c("warn", "feedback",
+                      f"{len(fb_retract_asks)} retratação descoberta e ainda não aplicada ({fids}) — "
+                      "`brain ask list --open` / `brain feedback retract`"))
     open_props = [p for p in st.proposals.values() if p.status == "aberta"]
     if open_props:
         out.append(_c("warn", "propostas", f"{len(open_props)} aguardando sua resposta"))

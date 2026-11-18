@@ -100,3 +100,17 @@ formulário da issue. Em dúvida: reescreva como a padaria, ou descreva o proble
 `.github/ISSUE_TEMPLATE/` traz os formulários **Sugestão**, **Bug** e **Proposta de código**, com os mesmos
 campos do molde, o aviso de privacidade e uma confirmação obrigatória de que não há dado real. Quem não tem
 token pode abrir a issue direto no GitHub por eles.
+
+## Retirar rascunho (`withdraw`) e retratar issue publicada (`retract`)
+
+Quando uma sugestão ou bug não deve seguir (ou saiu com texto errado):
+
+- **Ainda não virou issue (`pendente` / `falhou`)** → `brain feedback withdraw FB-#### --reason "…"`
+  grava `feedback.withdrawn` e muda o status para `retirado` (omitido de `list` por padrão; `list --all` mostra com o motivo).
+  O dono retira qualquer rascunho; o agente só retira rascunhos criados pelo próprio agente (`--by agent`).
+- **Já virou issue no GitHub (`criado`)** → `brain feedback retract FB-####` (muda o status para `retratado`):
+  - `--withdraw --reason "…"`: posta comentário público com o motivo e fecha a issue no GitHub como `not_planned` (`state_reason`).
+    **Regra B**: o dono retrata qualquer issue; o agente só retrata com `--withdraw` itens criados ou publicados pelo agente e **com evidência obrigatória** (`--evidence` / `--source`).
+  - `--correct --reason "…" --body "…" --approval "ok"` (ou `--body-file`): atualiza o corpo da issue no GitHub e posta comentário público com o motivo. Exige **dono** (`--by owner`) e **aprovação literal** (`--approval`).
+- **Travas públicas**: o motivo (`--reason`, que vira comentário público) e o novo corpo (`--body`) passam pelos mesmos validadores (`refs_guard` + `publicguard`) antes de qualquer chamada de rede ou registro noturno.
+- **No noturno (`BRAIN_NIGHTLY=1`)**: a porta não toca o GitHub — `retract` registra uma pergunta `ASK-####` (`kind=permissao`, referenciando `FB-####`) com o modo, motivo e resumo da evidência/corpo, e `brain doctor` avisa sobre retratações pendentes até serem aplicadas de dia.

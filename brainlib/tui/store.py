@@ -535,10 +535,10 @@ class Store:
     def _items(self, face: int, panel: int, tab: int, show_all: bool = False, filt: str = "",
                collapsed: set[str] | None = None, view: int = 0, sort: int = 0) -> list[Item]:
         if panel == 6 and tab == 1:          # aba Feedback do painel do log: fila do que vira issue — comum a TODAS as faces
-            fbs = [f for f in self.brain.state.feedbacks.values() if show_all or f.status != "criado"]
-            order = {"pendente": 0, "falhou": 1, "criado": 2}      # acionável no topo
-            fbs.sort(key=lambda f: (order.get(f.status, 3), f.id))
-            out: list[Item] = [Item(f.id, "fb", f, q=f"{f.id} {f.kind} {f.title} {f.status} {f.url}") for f in fbs]
+            fbs = [f for f in self.brain.state.feedbacks.values() if show_all or f.status in ("pendente", "falhou")]
+            order = {"pendente": 0, "falhou": 1, "criado": 2, "retratado": 3, "retirado": 4}  # acionável no topo
+            fbs.sort(key=lambda f: (order.get(f.status, 5), f.id))
+            out: list[Item] = [Item(f.id, "fb", f, q=f"{f.id} {f.kind} {f.title} {f.status} {f.url} {f.reason}") for f in fbs]
             if filt:
                 fl = util.fold(filt)
                 out = [i for i in out if fl in util.fold(i.q)]

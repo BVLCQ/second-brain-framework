@@ -21,5 +21,19 @@ class FeedbackKeys:
         f = self.cur().data
         self.exec([["feedback", "push", f.id]])
 
+    def f_feedback_withdraw(self) -> None:
+        f = self.cur().data
+        if f.status not in ("pendente", "falhou"):
+            self.notify(f"{f.id} está {f.status} — retirar vale para rascunho pendente ou falhou", severity="warning")
+            return
+        self.open_form("feedback.withdraw", {"id": f.id, "title": f.title, "item": vars(f)})
+
+    def f_feedback_retract(self) -> None:
+        f = self.cur().data
+        if f.status != "criado":
+            self.notify(f"{f.id} está {f.status} — retratar vale para issue já criada", severity="warning")
+            return
+        self.open_form("feedback.retract", {"id": f.id, "title": f.title, "item": vars(f)})
+
     def f_feedback_sync(self) -> None:
         self.exec([["feedback", "sync"]])

@@ -1003,6 +1003,9 @@ brain feedback add "Painel demora a abrir" --kind bug --body "Abre em ~2s" --by 
 |---|---|
 | `add <título> --kind sugestao\|bug` | registra (`FB-####`) **e publica a issue na sequência** |
 | `--no-push` / `push FB-####` | só registra / tenta publicar depois (a fila é o `list`) |
+| `withdraw FB-#### --reason "…"` | retira rascunho `pendente`/`falhou` (`retirado`; agente só retira o que criou) |
+| `retract FB-#### --withdraw --reason "…"` | comenta e fecha issue publicada como `not_planned` (agente: só item próprio + `--evidence`; no noturno vira `ASK`) |
+| `retract FB-#### --correct --reason "…" --body … --approval "ok"` | atualiza o corpo da issue publicada e comenta o motivo (exige dono + aprovação literal) |
 | `sync` | relê o estado dos issues no GitHub (aberta/fechada) e grava as mudanças — também no `/update` |
 | `pushed FB-#### --number N --url U` | registra issue criada por fora (o push morreu depois de criar) |
 | `failed FB-#### --error "…"` | registra falha de tentativa |
@@ -1015,9 +1018,9 @@ do agente só publica com um "ok". O issue é público — a porta recusa títul
 (permissão de criar issues no repo). No noturno nada é publicado. Título repetido do mesmo tipo é
 recusado — complete o existente ou use `--force`.
 
-Superfícies: painel HTML (aba **Sugestões** — `n` registra e publica, `p` retry, `s` sincroniza; pela ponte do
+Superfícies: painel HTML (aba **Sugestões** — `n` registra e publica, `p` retry, `d` retira rascunho, `r` retrata issue, `s` sincroniza; pela ponte do
 `brain serve` executa de verdade), TUI (painel do **log (6) › aba Feedback** — `n` formulário, `p`
-publica o pendente, `T` todas) e chat (`/feedback`). Os formulários do painel e da TUI cobrem os
+publica o pendente, `d` retira rascunho, `r` retrata issue, `T` todas) e chat (`/feedback`). Os formulários do painel e da TUI cobrem os
 campos da CLI: tipo, título, descrição e publicar agora ou depois
 (`--no-push`); título repetido (aviso + criar mesmo assim = `--force`). Sem campo de contexto, de
 propósito: refs do vault (TASK/PROC/OPP) não saem para o issue público. `pushed`/`failed`
@@ -1142,7 +1145,7 @@ lê, julga e mostra; o `brain` valida e grava.
 | `/share` | export para colega | `share` |
 | `/recap` | histórico e impacto datado | `search`, ledger |
 | `/publish` | postar no espaço do time | `publish` |
-| `/feedback` | sugerir/corrigir o próprio cérebro (issue no repo público) | `feedback add/push` |
+| `/feedback` | sugerir/corrigir o próprio cérebro (issue no repo público) | `feedback add/push/withdraw/retract` |
 | `/process <termo\|PROC-####>` | panorama ou cadastro guiado de um processo | `process`, `area`, `doc link` |
 | `/opportunity <termo\|OPP-####>` · `onepager` · `triage` | oportunidades, one-pager e ICE sugerido | `opportunity`, `share opportunity` |
 | `/backup` | zip do vault | `backup` |

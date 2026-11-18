@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import re
 import shlex
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import date
 
 from . import dates, ids, util
@@ -441,6 +441,19 @@ def _forms() -> list[Form]:
             F("force", "criar mesmo assim", choices=(("nao", "não"), ("sim", "sim (--force)")), value="nao",
               show="fb_dup", flag={"sim": ["--force"]})),
             sub="porta 7 — vira issue pública no repo do framework; sem dados pessoais (a porta recusa)", tail=OWNER),
+        Form("feedback.withdraw", "Retirar {id}", ("feedback", "withdraw", "{id}"), (
+            _reason(ph="duplicado, não faz mais sentido…", req=True),),
+            sub="{title} — rascunho ainda não publicado; fica no ledger como retirado.", tail=OWNER),
+        Form("feedback.retract", "Retratar {id}", ("feedback", "retract", "{id}"), (
+            F("mode", "como retratar", choices=(("withdraw", "retirar — fecha a issue como não planejada"),
+                                                ("correct", "corrigir — atualiza o texto da issue (gate)")),
+              value="withdraw", flag={"withdraw": ["--withdraw"], "correct": ["--correct"]}),
+            _reason(ph="motivo que vai para o comentário público da issue", req=True),
+            F("body", "novo corpo", multi=True, req=True, ph="descrição corrigida (sem dados pessoais)",
+              show={"mode": ["correct"]}, init="body", arg="--body"),
+            replace(APPROVAL, show={"mode": ["correct"]})),
+            sub="porta 7 — {title}. Comentário e texto vão para a issue pública no GitHub (sem dados pessoais).",
+            gate=True, tail=OWNER),
 
         # ── portfólio ────────────────────────────────────────────────────────
         Form("process.new", "Novo processo", ("process", "add", "{title}", "--by", "owner"), _proc_fields(),

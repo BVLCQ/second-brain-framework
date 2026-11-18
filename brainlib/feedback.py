@@ -16,7 +16,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from . import config, issues, publicguard, schema, util
+from . import ask, config, issues, publicguard, schema, util
 from .cli import _fact_opts, _out
 from .core import Brain
 
@@ -39,13 +39,14 @@ def issue_title(f) -> str:
     return f"{issues.tag(issue_kind(f))} {issues.strip_tag(f.title)}"
 
 
-def issue_body(f) -> str:
+def issue_body(f, body: str | None = None) -> str:
     """O issue é público: tipo, o corpo no molde (`issues.py`) e um rodapé — nada local sai: nem refs do vault
     (TASK/PROC/OPP/PROP) nem o id do próprio FB, que é numeração da instância e geraria duplicidade."""
     kind = issue_kind(f)
     tipo = "🧩 proposta de código do cérebro" if kind == "framework" else \
         ("💡 sugestão" if f.kind == "sugestao" else "🐞 bug")
-    lines = [f"**Tipo:** {tipo}", "", issues.render_body(kind, f.body, f.title), "", "---",
+    raw_body = f.body if body is None else body
+    lines = [f"**Tipo:** {tipo}", "", issues.render_body(kind, raw_body, f.title), "", "---",
              "Registrado pelo Segundo Cérebro (`brain feedback`)"]
     return "\n".join(lines)
 
@@ -77,33 +78,62 @@ def leak_guard(inst: config.Instance, *texts: str) -> None:
 
 # ── GitHub (stdlib, token em config/.env — o valor nunca aparece em chat/log) ─
 
-def create_issue(inst: config.Instance, repo: str, title: str, body: str, labels: list[str]) -> dict:
-    """POST /repos/<repo>/issues → {number, url}. Falha é dura: quem chama decide o que registrar."""
+def _github_request(inst: config.Instance, method: str, path: str, payload: dict | None = None, *,
+                    urlopen=None, err_prefix: str = "GitHub recusou", err_suffix: str = "") -> dict:
+    """Chamada autenticada à API REST do GitHub (stdlib urllib). Token nunca aparece em mensagens."""
     token = config.load_env(inst).get("GITHUB_TOKEN")
     if not token:
         raise util.BrainError("GITHUB_TOKEN ausente no config/.env — grave um token com permissão de criar "
                               "issues no repo de [feedback] (o valor nunca aparece no chat)", code=4)
-    req = urllib.request.Request(
-        f"{API}/repos/{repo}/issues", method="POST",
-        data=json.dumps({"title": title, "body": body, "labels": labels}).encode("utf-8"),
-        headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json",
-                 "X-GitHub-Api-Version": "2022-11-28", "Content-Type": "application/json",
-                 "User-Agent": "second-brain-feedback"})
+    body_bytes = json.dumps(payload).encode("utf-8") if payload is not None else None
+    headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json",
+               "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "second-brain-feedback"}
+    if body_bytes is not None:
+        headers["Content-Type"] = "application/json"
+    req = urllib.request.Request(f"{API}{path}", method=method, data=body_bytes, headers=headers)
+    open_fn = urlopen or urllib.request.urlopen
     try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT_S) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
+        with open_fn(req, timeout=TIMEOUT_S) as resp:
+            return json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         detail = ""
         try:
             detail = json.loads(e.read().decode("utf-8")).get("message", "")
         except Exception:
             pass
-        raise util.BrainError(f"GitHub recusou o issue ({e.code}{f' {detail}' if detail else ''}) — repo {repo}",
-                              code=4) from e
+        raise util.BrainError(
+            f"{err_prefix} ({e.code}{f' {detail}' if detail else ''}){err_suffix}", code=4) from e
     except (urllib.error.URLError, TimeoutError, OSError) as e:
         raise util.BrainError(f"sem contato com {API} ({e})", code=4) from e
+
+
+def create_issue(inst: config.Instance, repo: str, title: str, body: str, labels: list[str], *,
+                 urlopen=None) -> dict:
+    """POST /repos/<repo>/issues → {number, url}. Falha é dura: quem chama decide o que registrar."""
+    data = _github_request(inst, "POST", f"/repos/{repo}/issues",
+                           {"title": title, "body": body, "labels": labels},
+                           urlopen=urlopen, err_prefix="GitHub recusou o issue", err_suffix=f" — repo {repo}")
     return {"number": data["number"], "url": data["html_url"],
             "labels": [x.get("name", "") for x in data.get("labels", []) if isinstance(x, dict)]}
+
+
+def add_comment(inst: config.Instance, repo: str, number: int, body: str, *, urlopen=None) -> dict:
+    """POST /repos/<repo>/issues/<n>/comments → {html_url}."""
+    data = _github_request(inst, "POST", f"/repos/{repo}/issues/{number}/comments",
+                           {"body": body}, urlopen=urlopen,
+                           err_prefix=f"GitHub recusou comentar o issue #{number}", err_suffix=f" — repo {repo}")
+    return {"html_url": data.get("html_url", "")}
+
+
+def update_issue(inst: config.Instance, repo: str, number: int, *, body: str | None = None,
+                 state: str | None = None, state_reason: str | None = None, urlopen=None) -> dict:
+    """PATCH /repos/<repo>/issues/<n> → {number, url, state, state_reason}."""
+    payload = {k: v for k, v in (("body", body), ("state", state), ("state_reason", state_reason)) if v is not None}
+    data = _github_request(inst, "PATCH", f"/repos/{repo}/issues/{number}",
+                           payload, urlopen=urlopen,
+                           err_prefix=f"GitHub recusou atualizar o issue #{number}", err_suffix=f" — repo {repo}")
+    return {"number": data.get("number", number), "url": data.get("html_url", ""),
+            "state": data.get("state", ""), "state_reason": data.get("state_reason") or ""}
 
 
 def issue_state(inst: config.Instance, repo: str, number: int) -> dict:
@@ -174,14 +204,31 @@ def add(brain: Brain, kind: str, title: str, body: str = "",
                                       **({"proposal": proposal} if proposal else {})}})
 
 
+def withdraw(brain: Brain, fid: str, reason: str, by: str = "owner", prov: str = "", source: str = "") -> dict:
+    """Retira um rascunho (`pendente`/`falhou`) antes de virar issue no GitHub."""
+    f = _need(brain, fid)
+    if f.number:
+        raise util.BrainError(f"{fid}: issue #{f.number} já foi criada — use `brain feedback retract {fid}`", code=4)
+    if f.status not in ("pendente", "falhou"):
+        raise util.BrainError(f"{fid} está '{f.status}' — só rascunho pendente ou que falhou pode ser retirado", code=4)
+    reason = (reason or "").strip()
+    if not reason:
+        raise util.BrainError("motivo obrigatório (--reason)", code=2)
+    if by == "agent" and f.added_by != "agent":
+        raise util.BrainError(f"{fid}: agente só pode retirar rascunho criado por agente", code=4)
+    use_prov = prov or ("declarado" if by == "owner" else "observado")
+    return brain.record_one({"type": "feedback.withdrawn", "id": fid, "by": by, "prov": use_prov,
+                             "source": source or "chat", "data": {"reason": reason}})
+
+
 def push(brain: Brain, fid: str) -> dict:
     """Cria a issue no GitHub e grava `feedback.pushed` (número + URL). Erros de API gravam `feedback.failed`.
 
     Pré-cheques (token, noturno, texto) falham ANTES de qualquer chamada na rede: nada é registrado como
     falha porque nada foi tentado — o item segue pendente."""
-    f = brain.state.feedbacks.get(fid)
-    if f is None:
-        raise util.BrainError(f"{fid} não existe", code=3)
+    f = _need(brain, fid)
+    if f.status in ("retirado", "retratado"):
+        raise util.BrainError(f"{fid} está '{f.status}' — não pode ser publicado", code=4)
     if f.status == "criado":
         raise util.BrainError(f"{fid}: issue já criada — {f.url}", code=4)
     if os.environ.get("BRAIN_NIGHTLY") == "1":
@@ -215,6 +262,112 @@ def push(brain: Brain, fid: str) -> dict:
         raise util.BrainError(f"{fid}: a issue {res['url']} foi criada mas o registro falhou — "
                               f"`brain feedback pushed {fid} --number {res['number']} --url {res['url']}`",
                               code=5)
+
+
+def retract(brain: Brain, fid: str, *, mode: str, reason: str, body: str | None = None,
+            evidence: str = "", approval: str = "", by: str = "owner", prov: str = "",
+            source: str = "", urlopen=None) -> dict:
+    """Retrata uma issue publicada no GitHub: `--withdraw` (comenta + fecha como não planejada) ou `--correct`
+    (atualiza o corpo + comenta; exige dono e aprovação literal). No noturno (`BRAIN_NIGHTLY=1`), vira ASK."""
+    if mode not in ("withdraw", "correct"):
+        raise util.BrainError(f"modo inválido: {mode!r} — use withdraw ou correct", code=2)
+    f = _need(brain, fid)
+    if not f.number:
+        raise util.BrainError(f"{fid}: ainda não tem issue publicada — use `brain feedback withdraw {fid}`", code=4)
+    if f.status in ("retirado", "retratado"):
+        raise util.BrainError(f"{fid} já está '{f.status}'", code=4)
+    reason = (reason or "").strip()
+    if not reason:
+        raise util.BrainError("motivo obrigatório (--reason)", code=2)
+
+    evidence = (evidence or "").strip()
+    approval = (approval or "").strip()
+    if mode == "correct":
+        if by != "owner":
+            raise util.BrainError(f"{fid}: corrigir issue publicada (--correct) exige o dono (--by owner)", code=4)
+        if not approval:
+            raise util.BrainError(f"{fid}: --correct exige aprovação literal do dono (--approval \"ok\")", code=4)
+        if not (body or "").strip():
+            raise util.BrainError(f"{fid}: --correct exige o novo corpo (--body ou --body-file)", code=2)
+    else:
+        if body is not None and body.strip():
+            raise util.BrainError(f"{fid}: --withdraw não altera o corpo da issue — use --correct para corrigir texto",
+                                  code=2)
+        if by == "agent":
+            if f.added_by != "agent" and f.pushed_by != "agent":
+                raise util.BrainError(f"{fid}: agente só pode retratar issue criada ou publicada por agente", code=4)
+            if not evidence:
+                raise util.BrainError(f"{fid}: retratar como agente exige evidência (--evidence ou --source)", code=4)
+
+    comment_body = (f"Retratado pelo Segundo Cérebro: {reason}" if mode == "withdraw"
+                    else f"Texto corrigido pelo Segundo Cérebro: {reason}")
+    public_text_guard(brain.inst, "", comment_body)
+    clean_body = ""
+    rendered_body = ""
+    if mode == "correct":
+        clean_body = body.strip()
+        _check_public(brain, issue_kind(f), f.title, clean_body, agent=False)
+        rendered_body = issue_body(f, clean_body)
+        refs_guard(rendered_body)
+
+    if os.environ.get("BRAIN_NIGHTLY") == "1":
+        parts = [f"Retratar {fid} (#{f.number}, modo={mode}): {reason}"]
+        if evidence:
+            parts.append(f"evidência: {evidence}")
+        if mode == "correct":
+            parts.append(f"novo corpo: {clean_body[:120]}")
+        ask_text = " · ".join(parts)
+        ev, qid, created = ask.add(
+            brain, ask_text,
+            options=["aprovar retratação", "manter issue"],
+            context=[fid], kind="permissao",
+            by="agent", prov="observado",
+            source=source or evidence or "chat",
+        )
+        return ev or {"type": "question.asked", "id": qid,
+                      "data": {"text": ask_text, "context": [fid], "kind": "permissao"}, "created": created}
+
+    if not config.load_env(brain.inst).get("GITHUB_TOKEN"):
+        raise util.BrainError("GITHUB_TOKEN ausente no config/.env — grave um token com permissão de comentar/fechar "
+                              "issues no repo de [feedback] e tente de novo (o valor nunca aparece no chat)", code=4)
+
+    repo = brain.inst.cfg["feedback"]["repo"]
+    net_kw = {"urlopen": urlopen} if urlopen is not None else {}
+    try:
+        if mode == "withdraw":
+            cm = add_comment(brain.inst, repo, f.number, comment_body, **net_kw)
+            update_issue(brain.inst, repo, f.number, state="closed", state_reason="not_planned", **net_kw)
+        else:
+            update_issue(brain.inst, repo, f.number, body=rendered_body, **net_kw)
+            cm = add_comment(brain.inst, repo, f.number, comment_body, **net_kw)
+    except util.BrainError as e:
+        try:
+            brain.record_one({"type": "feedback.failed", "id": fid, "by": "system",
+                              "data": {"error": str(e), "op": "retract"}})
+        except util.BrainError:
+            pass
+        raise util.BrainError(f"{fid}: {e}", code=4) from e
+
+    use_prov = prov or ("declarado" if by == "owner" else "observado")
+    data: dict = {
+        "mode": mode,
+        "reason": reason,
+        "number": f.number,
+        "url": f.url,
+        "comment_url": cm.get("html_url", ""),
+    }
+    if evidence:
+        data["evidence"] = evidence
+    if mode == "correct":
+        data["body"] = clean_body
+    return brain.record_one({
+        "type": "feedback.retracted",
+        "id": fid,
+        "by": by,
+        "prov": use_prov,
+        "source": source or evidence or "chat",
+        "data": data,
+    })
 
 
 def from_proposal(brain: Brain, pid: str) -> tuple[str | None, str]:
@@ -251,6 +404,21 @@ def line(f) -> str:
         bits.append(f"{issue} {f.url}")
     elif f.status == "falhou":
         bits.append(f"última tentativa falhou: {f.error[:80]}")
+    elif f.status == "retirado":
+        if f.reason:
+            bits.append(f"motivo: {f.reason}")
+    elif f.status == "retratado":
+        if f.number:
+            issue = f"#{f.number}"
+            if f.issue_state:
+                issue += " · issue " + {"open": "aberta", "gone": "apagada"}.get(f.issue_state, "fechada")
+            bits.append(f"{issue} {f.url}")
+        if f.retract_mode:
+            bits.append(f"modo: {f.retract_mode}")
+        if f.reason:
+            bits.append(f"motivo: {f.reason}")
+        if f.comment_url:
+            bits.append(f"comentário: {f.comment_url}")
     return " · ".join(bits)
 
 
@@ -266,7 +434,7 @@ def sync(brain: Brain) -> tuple[list[dict], list[str]]:
     events: list[dict] = []
     notes: list[str] = []
     for f in sorted(st.feedbacks.values(), key=lambda f: f.id):
-        if f.status != "criado" or not f.number or f.issue_state == "gone":
+        if f.status not in ("criado", "retratado") or not f.number or f.issue_state == "gone":
             continue
         try:
             got = issue_state(brain.inst, repo, f.number)
@@ -342,6 +510,21 @@ def cli(args, brain: Brain) -> None:
         print(f"✓ issue criada: {ev['data']['url']}")
         if ev.get("label_note"):
             print(f"⚠ {ev['label_note']}")
+    elif c == "withdraw":
+        ev = withdraw(brain, args.id, args.reason, by=args.by,
+                      prov=args.prov or "", source=args.source or "")
+        _out(args, ev, f"✓ {line(brain.state.feedbacks[args.id])}")
+    elif c == "retract":
+        mode = "withdraw" if args.withdraw else "correct"
+        body = _read_body(args)
+        evidence = args.evidence or args.source or ""
+        ev = retract(brain, args.id, mode=mode, reason=args.reason, body=body,
+                     evidence=evidence, approval=args.approval or "",
+                     by=args.by, prov=args.prov or "", source=args.source or "")
+        if ev.get("type") == "question.asked":
+            _out(args, ev, f"✓ noturno: retratação de {args.id} ficou como pergunta {ev['id']} — aprove no dia")
+        else:
+            _out(args, ev, f"✓ {line(brain.state.feedbacks[args.id])}")
     elif c == "pushed":
         _need(brain, args.id)
         brain.record_one({"type": "feedback.pushed", "id": args.id, "by": "system",
@@ -359,10 +542,17 @@ def cli(args, brain: Brain) -> None:
         print(f"✓ {len(events)} mudança(s) de estado registrada(s)" if events else "= nada mudou")
     elif c == "show":
         f = _need(brain, args.id)
+        tail = ""
+        if f.reason:
+            tail += f"\nmotivo: {f.reason}"
+        if f.comment_url:
+            tail += f"\ncomentário: {f.comment_url}"
         _out(args, {"id": f.id, "kind": f.kind, "title": f.title, "body": f.body, "proposal": f.proposal,
                     "status": f.status, "number": f.number, "url": f.url, "added": f.added,
+                    "reason": f.reason, "comment_url": f.comment_url, "retract_mode": f.retract_mode,
+                    "evidence": f.evidence, "added_by": f.added_by, "pushed_by": f.pushed_by,
                     "issue_title": issue_title(f), "issue_body": issue_body(f)},
-             f"{f.id} · {f.status}" + (f" · {f.url}" if f.url else "") + "\n\n"
+             f"{f.id} · {f.status}" + (f" · {f.url}" if f.url else "") + tail + "\n\n"
              f"issue → {issue_title(f)}\n\n{issue_body(f)}")
     else:                                          # list
         rows = [f for f in brain.state.feedbacks.values()
@@ -393,6 +583,21 @@ def add_parsers(sub) -> None:
     x.add_argument("--by", choices=["owner", "agent"], default="owner")
     x = s.add_parser("push", help="cria a issue de um FB pendente/falhou no GitHub e registra número+URL")
     x.add_argument("id")
+    x = s.add_parser("withdraw", help="retira um rascunho pendente/falhou antes de publicar")
+    x.add_argument("id")
+    x.add_argument("--reason", required=True, help="motivo da retirada")
+    _fact_opts(x)
+    x = s.add_parser("retract", help="retrata uma issue publicada no GitHub (--withdraw ou --correct)")
+    x.add_argument("id")
+    g = x.add_mutually_exclusive_group(required=True)
+    g.add_argument("--withdraw", action="store_true", help="comenta e fecha a issue como não planejada")
+    g.add_argument("--correct", action="store_true", help="atualiza o corpo da issue e comenta o motivo (exige dono + --approval)")
+    x.add_argument("--reason", required=True, help="motivo público da retratação")
+    x.add_argument("--body", help="novo corpo da issue (em --correct)")
+    x.add_argument("--body-file", help="arquivo com o novo corpo da issue (em --correct)")
+    x.add_argument("--evidence", help="evidência que justifica a retratação pelo agente")
+    x.add_argument("--approval", default="", help="aprovação literal do dono (obrigatória em --correct)")
+    _fact_opts(x)
     x = s.add_parser("sync", help="relê o estado dos issues no GitHub (aberta/fechada) e grava as mudanças")
     x = s.add_parser("pushed", help="registra issue criada por fora (--number/--url) — se o push morreu depois de criar")
     x.add_argument("id")
