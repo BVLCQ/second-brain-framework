@@ -646,7 +646,7 @@ V.conectores = () => {
           <label class="f"><span>Key (nome único)</span><input type="text" id="src-key" placeholder="ex.: slack-time"></label>
           <label class="f"><span>Janela</span><select id="src-win"><option value="1d">1d</option><option value="7d">7d</option><option value="14d" selected>14d</option><option value="auto">auto</option></select></label>
         </div>
-        <label class="f"><span>Parâmetro (canal · pasta · jql · caminho)</span><input type="text" id="src-param" placeholder="ex.: #meu-time, URL da pasta/doc, JQL ou caminho local"></label>
+        <label class="f" id="src-param-f"><span id="src-param-l">Parâmetro</span><input type="text" id="src-param" placeholder=""></label>
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
           <button class="btn pri sm" type="button" id="src-add">Adicionar</button>
           <button class="btn ghost sm" type="button" id="src-cancel">Fechar</button>
@@ -721,23 +721,45 @@ V.conectores = () => {
 
   const kinds = S.watch_kinds || [];
   $("#src-kind").innerHTML = kinds.map(([k, l]) => `<option value="${esc(k)}">${esc(l)}</option>`).join("");
+
+  // o formulário se molda ao tipo: alguns não têm parâmetro, outros não têm janela
+  const SRC_META = {
+    gmail:       {key: "gmail-hoje",      param: null},
+    gcal:        {key: "gcal-agenda",     param: null},
+    granola:     {key: "granola-reunioes", param: null},
+    slack:       {key: "slack-time",      field: "channel", label: "Canal ou pessoa",  ph: "#meu-time — ou @pessoa para DM", req: true},
+    drive:       {key: "drive-pasta",     field: "folder",  label: "Pasta do Drive",   ph: "cole a URL da pasta — o id é extraído na hora", req: true},
+    "drive-doc": {key: "drive-okr",       field: "doc",     label: "Documento do Drive", ph: "cole a URL do doc, planilha ou slides", req: true, noWindow: true},
+    jira:        {key: "jira-meus",       field: "jql",     label: "JQL",              ph: "assignee = currentUser() — os seus cards", req: true},
+    github:      {key: "github-repo",     field: "path",    label: "Caminho do clone local", ph: "~/projetos/meu-repo", req: true, noWindow: true},
+  };
+  const syncSrcForm = () => {
+    const m = SRC_META[$("#src-kind").value] || {};
+    $("#src-key").placeholder = `ex.: ${m.key || "minha-fonte"}`;
+    const f = $("#src-param-f");
+    if (m.param === null) { f.classList.add("hidden"); $("#src-param").value = ""; }
+    else {
+      f.classList.remove("hidden");
+      $("#src-param-l").textContent = m.label + (m.req ? " *" : "");
+      $("#src-param").placeholder = m.ph || "";
+    }
+    $("#src-win").closest("label").classList.toggle("hidden", !!m.noWindow);
+  };
+  $("#src-kind").onchange = syncSrcForm; syncSrcForm();
   $("#show-add").onclick = () => $("#addform").classList.toggle("hidden");
   $("#src-cancel").onclick = () => $("#addform").classList.add("hidden");
   $("#src-add").onclick = async () => {
     const b = $("#src-add");
     const kind = $("#src-kind").value;
+    const meta = SRC_META[kind] || {};
     const key = $("#src-key").value.trim();
     const win = $("#src-win").value;
     const param = $("#src-param").value.trim();
-    const payload = {key, kind, window: win};
-    if (param) {
-      if (kind === "slack") payload.channel = param;
-      else if (kind === "drive") payload.folder = param;
-      else if (kind === "drive-doc") payload.doc = param;
-      else if (kind === "jira") payload.jql = param;
-      else if (kind === "github") payload.path = param;
-      else payload.note = param;
-    }
+    if (meta.req && !param)
+      return msg($("#srcmsg"), "err", `Preencha o campo "${meta.label}" — ele diz ao Brain o que observar.`);
+    const payload = {key, kind};
+    if (!meta.noWindow) payload.window = win;
+    if (param && meta.field) payload[meta.field] = param;
     busy(b, true, "Adicionando…");
     try {
       await act("source_add", payload);
