@@ -21,9 +21,26 @@ log() { print -r -- "$(date '+%F %T') $*" >> "$LOG"; }
 
 # 1. LM Studio (servidor OpenAI-compatible na 1234; os modelos carregam sob demanda — JIT)
 if ! $CURL -sf -m 5 http://127.0.0.1:1234/v1/models >/dev/null; then
-  log "lmstudio: fora do ar — subindo"
-  "$LMS" daemon up >>"$LOG" 2>&1
-  "$LMS" server start >>"$LOG" 2>&1
+  if [[ -x "$LMS" ]]; then
+    log "lmstudio: fora do ar — subindo"
+    "$LMS" daemon up >>"$LOG" 2>&1
+    "$LMS" server start >>"$LOG" 2>&1
+    lms_up=0
+    for _ in {1..6}; do
+      if $CURL -sf -m 5 http://127.0.0.1:1234/v1/models >/dev/null; then
+        lms_up=1
+        break
+      fi
+      sleep 5
+    done
+    if (( lms_up )); then
+      log "lmstudio: servidor no ar em :1234"
+    else
+      log "lmstudio: timeout aguardando :1234 responder (30s)"
+    fi
+  else
+    log "lmstudio: fora do ar e $LMS ausente — pulando"
+  fi
 fi
 
 # 2. OrbStack (a VM; o container sobe junto pelo restart: unless-stopped)
@@ -37,5 +54,17 @@ for _ in {1..18}; do
   $CURL -s -m 5 http://127.0.0.1:8888/health | grep -q connected && exit 0
   sleep 10
 done
-log "hindsight: sem health — docker compose up -d"
-$DOCKER compose -f "$HERE/compose.yaml" up -d >>"$LOG" 2>&1
+state_raw="$($DOCKER inspect -f '{{.State.Status}}|{{.State.Restarting}}' hindsight 2>/dev/null || true)"
+c_status="${state_raw%%|*}"
+c_restarting="${state_raw#*|}"
+[[ -z "$c_status" ]] && c_status="ausente"
+[[ -z "$c_restarting" || "$c_restarting" == "$state_raw" ]] && c_restarting="false"
+compose_out="$($DOCKER compose -f "$HERE/compose.yaml" up -d 2>&1)"
+[[ -n "$compose_out" ]] && print -r -- "$compose_out" >> "$LOG"
+if [[ "$compose_out" == *(Created|Started|Recreated)* ]]; then
+  log "hindsight: sem health (estado: $c_status) — container subido/recriado via docker compose up -d"
+elif [[ "$compose_out" == *Running* ]]; then
+  log "hindsight: sem health (estado: $c_status, restarting=$c_restarting) — compose up -d não alterou (Container hindsight Running)"
+else
+  log "hindsight: sem health (estado: $c_status, restarting=$c_restarting) — docker compose up -d terminou sem iniciar container"
+fi

@@ -1,16 +1,83 @@
 """Saúde da instância — o que está quebrado aparece, em vez de apodrecer em silêncio."""
 from __future__ import annotations
 
+import inspect
 import json
+import re
+import shutil
+import subprocess
+import urllib.request
 
 from . import config, people, upstream, util
+
+ORBSTACK_DOCKER = "/Applications/OrbStack.app/Contents/MacOS/xbin/docker"
+LMSTUDIO_MODELS_URL = "http://127.0.0.1:1234/v1/models"
+BOOT_GRACE_S = 180
+_STD_WHICH = shutil.which
+_STD_RUN = subprocess.run
 
 
 def _c(level: str, title: str, detail: str) -> dict:
     return {"level": level, "title": title, "detail": detail}
 
 
-def checks(brain, online: bool = False, probe_agent: bool = False) -> list[dict]:
+def _lms_reachable(http_get=None) -> bool:
+    try:
+        if http_get is not None:
+            r = http_get(LMSTUDIO_MODELS_URL)
+            if r is False or r is None:
+                return False
+            return int(getattr(r, "status", getattr(r, "code", 200))) < 400
+        with urllib.request.urlopen(LMSTUDIO_MODELS_URL, timeout=1) as r:
+            return int(getattr(r, "status", 200)) < 400
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _hindsight_transient(cfg: dict | None = None, which=shutil.which, run=subprocess.run,
+                         http_get=None, online: bool = True, exists=None) -> str | None:
+    if which is _STD_WHICH:
+        which = shutil.which
+    if run is _STD_RUN:
+        run = subprocess.run
+    docker_bin = which("docker")
+    if not docker_bin:
+        docker_bin = (ORBSTACK_DOCKER if exists(ORBSTACK_DOCKER) else None) if exists is not None else which(ORBSTACK_DOCKER)
+    if not docker_bin:
+        return None
+    try:
+        res = run([docker_bin, "inspect", "--format",
+                   "{{.State.Status}}|{{.State.Restarting}}|{{.State.ExitCode}}|{{.State.StartedAt}}",
+                   "hindsight"], capture_output=True, text=True, timeout=2)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if getattr(res, "returncode", 1) != 0:
+        return None
+    parts = (getattr(res, "stdout", "") or "").strip().split("|", 3)
+    if len(parts) < 4:
+        return None
+    c_status, restarting, _exit_code, started_at = (
+        parts[0].strip().lower(), parts[1].strip().lower(), parts[2].strip(), parts[3].strip()
+    )
+    transient = restarting == "true" or c_status == "restarting"
+    if not transient and c_status == "running" and started_at and not started_at.startswith("0001-"):
+        try:
+            norm = re.sub(r"\.(\d{6})\d+", r".\1", started_at)
+            age_s = (util.now() - util.parse_dt(norm)).total_seconds()
+            transient = 0 <= age_s < BOOT_GRACE_S
+        except (ValueError, TypeError):
+            transient = False
+    if not transient:
+        return None
+    mem_cfg = (cfg.get("memory") if isinstance(cfg, dict) and isinstance(cfg.get("memory"), dict) else cfg) or {}
+    local_emb = mem_cfg.get("embeddings_provider", "local") == "local" and not mem_cfg.get("cloud_embeddings", False)
+    if (local_emb or http_get is not None) and not _lms_reachable(http_get):
+        return ("Hindsight reiniciando no boot (aguardando embeddings no LM Studio) — "
+                "estado transitório; rode ./brain doctor em ~2 min")
+    return "Hindsight inicializando no boot — estado transitório; rode ./brain doctor em ~1 min"
+
+
+def checks(brain, online: bool = False, probe_agent: bool = False, docker_probe=None) -> list[dict]:
     inst, out = brain.inst, []
     cfg = inst.cfg
     if not (inst.config_dir / "brain.toml").exists():
@@ -150,6 +217,22 @@ def checks(brain, online: bool = False, probe_agent: bool = False) -> list[dict]
             except Exception:                              # noqa: BLE001 — fresnness é informação
                 pass
         status = memory.status(brain, online=online)
+        if status["level"] != "ok":
+            if docker_probe is None:
+                transient = _hindsight_transient(cfg, online=online)
+            elif callable(docker_probe):
+                try:
+                    params = inspect.signature(docker_probe).parameters.values()
+                    takes_arg = any(p.kind in (inspect.Parameter.POSITIONAL_ONLY,
+                                               inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                                               inspect.Parameter.VAR_POSITIONAL) for p in params)
+                except (ValueError, TypeError):
+                    takes_arg = True
+                transient = docker_probe(cfg) if takes_arg else docker_probe()
+            else:
+                transient = None
+            if transient:
+                status = {**status, "level": "warn", "detail": transient}
         out.append(_c(status["level"], "memória", status["detail"]))
         from . import providers as _prov
         for slot, s in _prov.stack(brain).items():
