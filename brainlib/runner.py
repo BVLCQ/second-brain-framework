@@ -45,24 +45,91 @@ NIGHT_PROMPT = ("{base} — MODO NOTURNO: o dono não está presente. Permitido:
                 "commands/opportunity/SKILL.md. Na dúvida, não faça — registre uma proposta.")
 
 
-def agent_command(cfg: dict) -> list[str] | None:
+def preset_argv(name: str, cfg: dict, prompt: str) -> list[str] | None:
+    """argv do preset `name` com `prompt`, ou None sem binário no PATH. claude ganha --model e as regras MCP."""
+    preset = PRESETS.get(name)
+    if not preset or not shutil.which(preset[0]):
+        return None
+    argv = [p.replace("{prompt}", prompt) for p in preset]
+    if name == "claude":
+        r = cfg["runner"]
+        if r.get("model"):   # antes do --allowedTools (variádico): flag depois dele seria engolida
+            argv = [argv[0], "--model", str(r["model"])] + argv[1:]
+        argv += read_allow(cfg) + door_allow(cfg)
+    return argv
+
+
+def agent_candidates(cfg: dict) -> list[tuple[str, list[str]]]:
+    """(nome, argv) na ordem de tentativa. `command` próprio: só ele. auto: a AUTO_ORDER com binário.
+    Escolhido: ele primeiro; com [runner].fallback, depois o resto da AUTO_ORDER com binário."""
     r = cfg["runner"]
     prompt = NIGHT_PROMPT.format(base=r["prompt"])
     if r.get("command"):
-        return [part.replace("{prompt}", prompt) for part in shlex.split(r["command"])]
-    names = AUTO_ORDER if r["agent"] == "auto" else [r["agent"]]
-    for name in names:
-        if name == "none":
-            return None
-        preset = PRESETS.get(name)
-        if preset and shutil.which(preset[0]):
-            argv = [p.replace("{prompt}", prompt) for p in preset]
-            if name == "claude":
-                if r.get("model"):   # antes do --allowedTools (variadico): flag depois dele seria engolida
-                    argv = [argv[0], "--model", str(r["model"])] + argv[1:]
-                argv += read_allow(cfg) + door_allow(cfg)
-            return argv
-    return None
+        return [("command", [part.replace("{prompt}", prompt) for part in shlex.split(r["command"])])]
+    if r["agent"] == "none":
+        return []
+    names = list(AUTO_ORDER) if r["agent"] == "auto" else [r["agent"]] + (
+        [n for n in AUTO_ORDER if n != r["agent"]] if r.get("fallback", True) else [])
+    return [(n, a) for n in names if (a := preset_argv(n, cfg, prompt))]
+
+
+def agent_command(cfg: dict) -> list[str] | None:
+    c = agent_candidates(cfg)
+    return c[0][1] if c else None
+
+
+AUTH_RE = re.compile(r"authenticat|not logged in|log ?in required|please log ?in|sign ?in|unauthori[sz]ed|\b401\b|api[ _-]?key|credential", re.I)
+PROBE_PROMPT = "Responda apenas: ok"
+LOGIN_HINT = {"claude": "abra `claude` num terminal e rode /login",
+              "cursor": "cursor-agent login",
+              "codex": "codex login",
+              "agy": "abra `agy` num terminal e faça o login",
+              "gemini": "abra `gemini` num terminal e escolha o login (ou defina GEMINI_API_KEY)"}
+
+
+def failure_reason(text: str) -> str:
+    """A linha que explica a falha: a primeira com cara de autenticação, senão a última não vazia (≤160)."""
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    hit = next((ln for ln in lines if AUTH_RE.search(ln)), None)
+    return (hit or (lines[-1] if lines else ""))[:160]
+
+
+def probe(name: str, cfg: dict, cwd: Path | None = None, timeout: int = 60, run=subprocess.run) -> dict:
+    """Sonda barata: o preset de verdade com um prompt mínimo. → {'name','ok','auth','reason'}"""
+    argv = preset_argv(name, cfg, PROBE_PROMPT)
+    if argv is None:
+        return {"name": name, "ok": False, "auth": False, "reason": "binário não encontrado no PATH"}
+    try:
+        p = run(argv, cwd=cwd, env={**os.environ, "BRAIN_NIGHTLY": "1"}, capture_output=True, text=True,
+                stdin=subprocess.DEVNULL, timeout=timeout, check=False)
+    except subprocess.TimeoutExpired:
+        return {"name": name, "ok": False, "auth": False, "reason": f"sem resposta em {timeout}s"}
+    out = f"{p.stdout or ''}\n{p.stderr or ''}"
+    auth = bool(AUTH_RE.search(out))
+    ok = p.returncode == 0 and not auth
+    return {"name": name, "ok": ok, "auth": auth and not ok,
+            "reason": "" if ok else (failure_reason(out) or f"código {p.returncode}")}
+
+
+def mcp_gap(brain) -> str | None:
+    """Aviso quando o runner ativo não é o claude e há fontes/regras MCP de leitura (issue #7)."""
+    cfg = brain.inst.cfg
+    if cfg["runner"].get("command"):
+        return None
+    cands = agent_candidates(cfg)
+    if not cands or cands[0][0] == "claude":
+        return None
+    from . import watch
+    try:
+        n = len(watch.list_sources(brain.inst))
+    except Exception:  # noqa: BLE001 — aviso é informativo
+        n = 0
+    if not n and not read_allow(cfg):
+        return None
+    a = cands[0][0]
+    return (f"o runner ativo é {a}: as regras MCP de leitura ([runner].allow) só valem para o claude — as {n} "
+            f"fontes do watch.toml só são lidas no noturno se o {a} tiver os mesmos conectores configurados nele "
+            f"(confira vault/logs/nightly-agent.log) ou com `runner = claude`")
 
 
 def read_allow(cfg: dict) -> list[str]:
@@ -81,6 +148,27 @@ def _log(brain, line: str) -> None:
     brain.inst.logs.mkdir(parents=True, exist_ok=True)
     with open(brain.inst.logs / "nightly.log", "a", encoding="utf-8") as fh:
         fh.write(line.rstrip() + "\n")
+
+
+def _footprint(brain) -> tuple:
+    led = brain.ledger_path
+    inbox = brain.inst.inbox
+    return (led.stat().st_size if led.exists() else 0,
+            tuple(sorted(p.name for p in inbox.glob("*"))) if inbox.exists() else ())
+
+
+def _attempt(brain, cmd: list[str], env: dict, timeout: int) -> tuple[int, str]:
+    log = brain.inst.logs / "nightly-agent.log"
+    start = log.stat().st_size if log.exists() else 0
+    with open(log, "a", encoding="utf-8") as fh:
+        fh.write(f"──── {util.iso_now()} · {cmd[0]} ────\n")
+        fh.flush()
+        proc = subprocess.run(cmd, cwd=brain.inst.root, env=env, stdout=fh, stderr=subprocess.STDOUT,
+                              stdin=subprocess.DEVNULL, timeout=timeout, check=False)
+    with open(log, "rb") as fh:
+        fh.seek(start)
+        tail = fh.read().decode("utf-8", "replace").split("\n", 1)[-1]
+    return proc.returncode, failure_reason(tail[-4000:])
 
 
 def nightly(brain, skip_agent: bool = False) -> dict:
@@ -104,22 +192,29 @@ def nightly(brain, skip_agent: bool = False) -> dict:
     perms.try_sync(brain.inst)    # o brain.toml pode ter mudado desde a última vez: o chat do dono acompanha
     step("render", lambda: render.summary(render.render_all(brain)).splitlines()[0])
     if not skip_agent:
-        cmd = agent_command(brain.inst.cfg)
+        ran: dict = {}
 
         def run_agent():
-            if not cmd:
+            cands = agent_candidates(brain.inst.cfg)
+            if not cands:
                 return "nenhum agente headless encontrado — inbox espera o primeiro chat do dia"
             env = {**os.environ, "BRAIN_NIGHTLY": "1"}
             timeout = brain.inst.cfg["runner"]["timeout_min"] * 60
-            with open(brain.inst.logs / "nightly-agent.log", "a", encoding="utf-8") as fh:
-                fh.write(f"──── {util.iso_now()} · {cmd[0]} ────\n")
-                fh.flush()
-                proc = subprocess.run(cmd, cwd=brain.inst.root, env=env, stdout=fh, stderr=subprocess.STDOUT,
-                                      timeout=timeout, check=False)
-            if proc.returncode:
-                raise RuntimeError(f"{cmd[0]} saiu com código {proc.returncode} (vault/logs/nightly-agent.log)")
-            return f"{cmd[0]} ok"
+            failed: list[str] = []
+            for name, cmd in cands:
+                before = _footprint(brain)
+                rc, why = _attempt(brain, cmd, env, timeout)     # TimeoutExpired sobe: rodou de verdade, não há fallback
+                if rc == 0:
+                    ran["name"] = name
+                    return f"{name} ok" + (f" (fallback: {'; '.join(failed)})" if failed else "")
+                if _footprint(brain) != before:
+                    raise RuntimeError(f"{name} saiu com código {rc} depois de começar — {why} (vault/logs/nightly-agent.log)")
+                failed.append(f"{name} — {why or f'código {rc}'}")
+            raise RuntimeError("nenhum agente conseguiu rodar: " + "; ".join(failed) + " (vault/logs/nightly-agent.log)")
         step("agente", run_agent)
+        gap = mcp_gap(brain)
+        if ran.get("name") and ran["name"] != "claude" and gap:
+            steps["fontes MCP"] = f"{ran['name']} não recebe [runner].allow — a leitura das fontes depende dos conectores do próprio {ran['name']}"
         brain.reload()
     if brain.state.focus_plans:
         from . import focus

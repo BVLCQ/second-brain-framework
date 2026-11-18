@@ -330,6 +330,14 @@ funciona, só o foco sai como arquivo `.ics` e o backup como pasta local):
 telas está em `guides/google-oauth.md`. O token fica no `config/.env`, que
 nunca sai da máquina e nunca aparece no chat.
 
+### Runner que não é o claude
+
+As regras MCP de leitura listadas em `[runner].allow` (e sincronizadas em `.claude/settings.local.json`) só são passadas como flag ao preset `claude` (`--allowedTools`). Quando o runner ativo do noturno é outro agente (`cursor`, `codex`, `agy`, `gemini`), ele só consegue puxar as fontes do `config/watch.toml` se tiver os mesmos conectores MCP configurados e autorizados na própria configuração dele:
+
+- **`./brain doctor`** emite um aviso (`⚠ runner`) quando o runner ativo não é o `claude` e existem fontes no `watch.toml` ou regras em `[runner].allow` (e, com `--online`, roda uma sonda rápida de login no runner ativo).
+- **Noturno:** quando o agente que rodou não é o `claude` e há fontes/regras MCP, o resumo do noturno registra o passo `fontes MCP` lembrando que a leitura depende dos conectores do próprio agente.
+- **Fallback automático (`[runner].fallback = true`, padrão):** se o agente escolhido falhar antes de produzir qualquer efeito no ledger ou na `RAW/inbox/` (por exemplo, sessão expirada ou sem login), o noturno tenta automaticamente o próximo agente disponível da ordem automática (`cursor → claude → codex → agy → gemini`) e o `brain doctor` avisa que houve fallback para você refazer o login ou trocar o runner. Defina `fallback = false` em `[runner]` para desativar e tentar apenas o agente escolhido.
+
 ---
 
 ## 5. Um dia normal com a ferramenta

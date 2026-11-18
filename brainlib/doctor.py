@@ -10,7 +10,7 @@ def _c(level: str, title: str, detail: str) -> dict:
     return {"level": level, "title": title, "detail": detail}
 
 
-def checks(brain, online: bool = False) -> list[dict]:
+def checks(brain, online: bool = False, probe_agent: bool = False) -> list[dict]:
     inst, out = brain.inst, []
     cfg = inst.cfg
     if not (inst.config_dir / "brain.toml").exists():
@@ -55,13 +55,34 @@ def checks(brain, online: bool = False) -> list[dict]:
     night = st.runs.get("nightly")
     if night:
         age = (util.now() - util.parse_dt(night["ts"])).total_seconds() / 3600
-        lvl = "ok" if night["ok"] and age < 30 else "warn"
-        out.append(_c(lvl, "noturno", f"última execução há {age:.0f}h" + ("" if night["ok"] else " — com falhas")))
+        steps = night.get("steps") or {}
+        failed = [f"{k}: {str(v).removeprefix('falhou: ')}" for k, v in steps.items() if str(v).startswith("falhou")]
+        fell_back = "(fallback" in str(steps.get("agente", ""))
+        lvl = "ok" if night["ok"] and age < 30 and not fell_back else "warn"
+        detail = f"última execução há {age:.0f}h"
+        if failed:
+            detail += " — com falhas: " + "; ".join(failed)[:300]
+        elif not night["ok"]:
+            detail += " — com falhas"
+        if fell_back:
+            detail += f" — agente: {steps['agente']} (faça o login do escolhido ou troque o runner)"
+        out.append(_c(lvl, "noturno", detail))
     else:
         from . import setup as _setup
         hint = ("agendado — primeira execução ainda não aconteceu" if _setup.nightly_installed()
                 else "nunca rodou — `brain setup --only noturno` (ou `./brain schedule install`)")
         out.append(_c("warn", "noturno", hint))
+    from . import runner
+    gap = runner.mcp_gap(brain)
+    if gap:
+        out.append(_c("warn", "runner", gap))
+    if probe_agent:
+        c = runner.agent_candidates(cfg)
+        if c:
+            pr = runner.probe(c[0][0], cfg, cwd=inst.root)
+            name, reason, auth = pr["name"], pr["reason"], pr["auth"]
+            out.append(_c("ok", "runner", f"{name} respondeu à sonda") if pr["ok"]
+                       else _c("error", "runner", f"{name}: {reason}" + (f" — {runner.LOGIN_HINT[name]}" if auth else "")))
     for c in st.connectors.values():
         if c.consecutive_failures >= 2:
             out.append(_c("error", f"fonte {c.key}", f"{c.consecutive_failures} falhas seguidas — último erro: "
@@ -209,7 +230,7 @@ def checks(brain, online: bool = False) -> list[dict]:
 
 
 def cli(args, brain) -> None:
-    res = checks(brain, online=args.online)
+    res = checks(brain, online=args.online, probe_agent=args.online)
     if args.json:
         print(json.dumps(res, ensure_ascii=False, indent=2))
         return
@@ -229,7 +250,7 @@ def fix_for(c: dict) -> dict | None:
     if t == "inbox":
         return {"label": "processar com o agente", "agent": "dump"}
     if t == "noturno":
-        return {"label": "agendar o noturno", "sys": "sys:schedule"}
+        return {"label": "agendar o noturno", "sys": "sys:schedule"} if "nunca rodou" in c["detail"] else None
     if t == "ações sem prazo":
         return {"label": "ir às ações e dar prazo", "go": (2, 0), "page": "todo"}
     if t.startswith("fonte "):

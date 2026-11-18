@@ -898,8 +898,29 @@ def _st_runner(brain) -> str:
 
 
 def _run_runner(brain, ui) -> None:
-    agent = ui.choice("Runner do agente (⚡ da TUI e noturno)", ["auto", "claude", "cursor", "codex", "agy", "none"],
-                      brain.inst.cfg["runner"]["agent"])
+    from . import runner
+    cur = brain.inst.cfg["runner"]["agent"]
+    agent = ui.choice("Runner do agente (⚡ da TUI e noturno)", ["auto", *runner.AUTO_ORDER, "none"], cur)
+    if agent in runner.PRESETS:
+        binary = runner.PRESETS[agent][0]
+        if not shutil.which(binary):
+            ui.say(f"⚠ o comando `{binary}` não está no PATH desta máquina")
+            if not (ui.interactive and ui.confirm("Gravar mesmo assim?", False)):
+                ui.say(f"runner mantido: {cur}")
+                return
+        elif ui.interactive:
+            ui.say(f"conferindo se o {agent} está logado (sonda rápida, até 60 s)…")
+            pr = runner.probe(agent, brain.inst.cfg, cwd=brain.inst.root)
+            if pr["ok"]:
+                ui.say(f"✓ {agent} respondeu")
+            else:
+                ui.say(f"⚠ {agent} não respondeu: {pr['reason']}"
+                       + (f" — faça o login: {runner.LOGIN_HINT[agent]}" if pr["auth"] else ""))
+                if not ui.confirm("Gravar mesmo assim? (o noturno tenta o próximo agente se este falhar)", False):
+                    ui.say(f"runner mantido: {cur}")
+                    return
+        else:
+            ui.say("sonda de login pulada (modo não interativo) — confira com `brain doctor --online`")
     config.set_keys(brain.inst, "runner", {"agent": agent})
     brain.inst = config.load(brain.inst.root)
     ui.say(f"✓ runner: {agent}")
