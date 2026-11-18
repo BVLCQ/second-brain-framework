@@ -270,6 +270,58 @@ def uninstall(dest: Path | None = None, name: str = DEFAULT_NAME, *, platform: s
     return target
 
 
+# ── atalho de um clique: Dock (macOS) · área de trabalho (Linux/WSLg) ─────────
+_DOCK_TILE = ('<dict><key>tile-data</key><dict><key>file-data</key><dict>'
+              '<key>_CFURLString</key><string>{app}</string><key>_CFURLStringType</key><integer>0</integer>'
+              '</dict></dict></dict><key>tile-type</key><string>file-tile</string></dict>')
+
+
+def _dock_read() -> str:
+    r = subprocess.run(["/usr/bin/defaults", "read", "com.apple.dock", "persistent-apps"],
+                       capture_output=True, text=True, timeout=5)
+    return r.stdout if r.returncode == 0 else ""
+
+
+def pin_status(name: str = DEFAULT_NAME, *, platform: str | None = None) -> bool:
+    """O atalho de um clique já existe? (Dock no macOS · .desktop na área de trabalho no Linux.)"""
+    try:
+        platform = platform or _platform()
+    except util.BrainError:
+        return False
+    if platform == "darwin":
+        return f"{name}.app" in _dock_read()
+    return (Path.home() / "Desktop" / f"{_safe_name(name).lower().replace(' ', '-')}.desktop").exists()
+
+
+def pin_shortcut(name: str = DEFAULT_NAME, *, platform: str | None = None) -> str:
+    """Prega o Brain onde o dono encontra com um clique. Idempotente; devolve a linha pro log do job."""
+    platform = platform or _platform()
+    name = _safe_name(name)
+    ours = _find_ours(name, platform)
+    if platform == "darwin":
+        if not ours:
+            raise util.BrainError("instale o app primeiro (`brain app install`) — sem o Brain.app não há o que pregar no Dock", code=4)
+        target = ours[0]
+        if f"{name}.app" in _dock_read():
+            return f"✓ {name} já está no Dock"
+        subprocess.run(["/usr/bin/defaults", "write", "com.apple.dock", "persistent-apps", "-array-add",
+                        _DOCK_TILE.format(app=str(target))], check=True, timeout=10)
+        subprocess.run(["/usr/bin/killall", "Dock"], check=False, timeout=10)
+        return f"✓ {name} pregado no Dock — a um clique, como qualquer app"
+    # Linux/WSLg: o menu de aplicativos já ganha o .desktop no install; o extra é a área de trabalho
+    if not ours:
+        raise util.BrainError("instale o launcher primeiro (`brain app install`) — depois eu copio pra área de trabalho", code=4)
+    src = ours[0]
+    desktop = Path.home() / "Desktop"
+    if not desktop.is_dir():
+        return "– sem pasta Desktop: o Brain já está no menu de aplicativos (tecla Super)"
+    dst = desktop / f"{name.lower().replace(' ', '-')}.desktop"
+    if src and src != dst:
+        shutil.copy2(src, dst)
+    dst.chmod(0o755)
+    return f"✓ atalho do {name} na área de trabalho"
+
+
 def is_installed(root: Path, dest: Path | None = None, name: str = DEFAULT_NAME) -> bool:
     """O launcher existe e aponta para ESTA instância?"""
     try:

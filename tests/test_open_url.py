@@ -72,9 +72,14 @@ class FocusOpenTabTest(unittest.TestCase):
             self.assertFalse(util.focus_open_tab(LIVE))
 
     def test_unknown_default_browser_or_foreign_url_is_left_alone(self):
+        # padrão desconhecido: varre os navegadores controláveis que existirem (a aba do Brain pode
+        # morar num navegador que não é o padrão — ruling "manage the user's browser"), mas nunca
+        # ABRE nada: sem navegador rodando, é False na primeira consulta e sem osascript.
+        calls: list = []
         with mock.patch.object(util, "_default_browser", return_value=None), \
-                mock.patch("subprocess.run", side_effect=AssertionError("não deveria consultar nada")):
+                mock.patch("subprocess.run", _run(running=False, calls=calls)):
             self.assertFalse(util.focus_open_tab(LIVE))
+            self.assertFalse(any(c[0].endswith("osascript") for c in calls))
         with mock.patch("subprocess.run", side_effect=AssertionError("não deveria consultar nada")):
             self.assertFalse(util.focus_open_tab("https://example.com/"))
 

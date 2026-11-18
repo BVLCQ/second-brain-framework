@@ -1067,6 +1067,12 @@ V.maquina = () => {
         </div>
       </div>
       <div class="rowline">
+        <div class="info"><b>${mq.platform === "darwin" ? "Ícone no Dock" : "Atalho na área de trabalho"}</b><p>O Brain a um clique, como qualquer app — e a aba do painel se reaproveita em vez de abrir nova toda hora.</p></div>
+        <div class="right">${pill(mq.icon)}
+          <label class="toggle" title="Pregar o atalho do Brain"><input type="checkbox" id="mq-icon" checked><span></span></label>
+        </div>
+      </div>
+      <div class="rowline">
         <div class="info"><b>TUI</b><p>Cockpit de terminal (opcional, ~40 MB): Execução · Portfólio · Configurações.</p></div>
         <div class="right">${pill(mq.tui)}
           <label class="toggle" title="Instalar TUI"><input type="checkbox" id="mq-tui" checked><span></span></label>
@@ -1096,6 +1102,7 @@ V.maquina = () => {
     const payload = {
       noturno: $("#mq-agendar").checked ? $("#mq-time").value : "",
       comando: $("#mq-comando").checked,
+      icon: $("#mq-icon").checked,
       tui: $("#mq-tui").checked,
       framework: $("#mq-framework").checked,
     };

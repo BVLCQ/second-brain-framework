@@ -251,5 +251,48 @@ class CliAndSetupTests(unittest.TestCase):
                 launcher.default_dest, launcher.install = orig_default, orig_install
 
 
+class PinShortcutTests(unittest.TestCase):
+    """Atalho de um clique: Dock no macOS, .desktop na área de trabalho no Linux. Idempotente e honesto."""
+
+    def test_macos_pins_installed_app_once(self):
+        tmp = Path(tempfile.TemporaryDirectory().name)                      # não usamos cleanup: só stubs de subprocess
+        with mock.patch.object(launcher, "_find_ours", return_value=[Path("/Applications/Brain.app")]), \
+             mock.patch.object(launcher, "_platform", return_value="darwin"), \
+             mock.patch.object(launcher, "_dock_read", side_effect=["", '"/Applications/Brain.app"']), \
+             mock.patch("subprocess.run") as run:
+            self.assertIn("pregado no Dock", launcher.pin_shortcut())
+            self.assertIn("já está no Dock", launcher.pin_shortcut())       # idempotente: segunda vez não escreve
+            self.assertEqual(run.call_count, 2)                             # write + killall, uma vez só
+
+    def test_macos_without_app_refuses(self):
+        with mock.patch.object(launcher, "_find_ours", return_value=[]), \
+             mock.patch.object(launcher, "_platform", return_value="darwin"):
+            with self.assertRaises(util.BrainError):
+                launcher.pin_shortcut()
+
+    def test_linux_copies_desktop_entry(self):
+        with tempfile.TemporaryDirectory() as td:
+            home = Path(td)
+            (home / "Desktop").mkdir()
+            src = home / ".local/share/applications/brain.desktop"
+            src.parent.mkdir(parents=True)
+            src.write_text("[Desktop Entry]\nName=Brain\n", encoding="utf-8")
+            with mock.patch.object(launcher, "_find_ours", return_value=[src]), \
+                 mock.patch.object(launcher, "_platform", return_value="linux"), \
+                 mock.patch.object(Path, "home", return_value=home):
+                self.assertIn("área de trabalho", launcher.pin_shortcut())
+            dst = home / "Desktop" / "brain.desktop"
+            self.assertTrue(dst.exists())
+            self.assertEqual(dst.stat().st_mode & 0o111, 0o111)             # executável
+
+    def test_pin_status_reads_dock(self):
+        with mock.patch.object(launcher, "_platform", return_value="darwin"), \
+             mock.patch.object(launcher, "_dock_read", return_value='"/Applications/Brain.app"'):
+            self.assertTrue(launcher.pin_status())
+        with mock.patch.object(launcher, "_platform", return_value="darwin"), \
+             mock.patch.object(launcher, "_dock_read", return_value=""):
+            self.assertFalse(launcher.pin_status())
+
+
 if __name__ == "__main__":
     unittest.main()

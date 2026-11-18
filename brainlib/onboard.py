@@ -741,9 +741,16 @@ def apply_foco_google(brain, data: dict) -> dict:
 
 def maquina_state(brain) -> dict:
     """Estado dos passos de máquina (plano F2) — derivado, mesma régua do `brain setup`."""
+    from . import launcher
+    try:
+        plat = launcher._platform()
+    except util.BrainError:
+        plat = ""
     return {
         "comando": setup._st_comando(brain),
         "noturno": setup._st_noturno(brain),
+        "icon": "done" if launcher.pin_status() else "pending",
+        "platform": plat,
         "tui": setup._st_tui(brain),
         "foco": setup._st_foco(brain),
         "framework": setup._st_framework(brain),
@@ -762,6 +769,7 @@ def apply_maquina(brain, data: dict) -> dict:
     # foco/agenda: NÃO é daqui — quem decide é a conexão Google em "Chaves e portas" (ruling:
     # Google Calendar é o caminho do wizard; .ics fica como default silencioso do framework).
     wants = {"comando": bool(data.get("comando", True)), "tui": bool(data.get("tui", True)),
+             "icon": bool(data.get("icon", True)),
              "framework": bool(data.get("framework", True))}
     inst0 = brain.inst
 
@@ -786,6 +794,12 @@ def apply_maquina(brain, data: dict) -> dict:
             done.append("tui")
         else:
             j.say("– TUI: fica para depois (`brain tui --setup` quando quiser)")
+        if wants["icon"]:
+            from . import launcher
+            try:
+                j.say(launcher.pin_shortcut())
+            except util.BrainError as e:
+                j.say(f"– ícone: {e}")
         if wants["framework"]:
             setup._run_framework(b, ui)
             done.append("framework")

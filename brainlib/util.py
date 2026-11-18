@@ -328,23 +328,28 @@ def _tab_prefix(url: str) -> str | None:
 
 
 def focus_open_tab(url: str) -> bool:
-    """macOS: já existe uma aba do Brain no navegador padrão? Então a traz para a frente (e, se a ponte mudou de token,
-    aponta ela para a URL nova) em vez de abrir outra. False = não achou / sem permissão / sem navegador compatível —
-    quem chama abre normalmente. Nunca abre o navegador: só consulta se ele já está rodando."""
+    """macOS: já existe uma aba do Brain em ALGUM navegador aberto? Então a traz para a frente (e, se a ponte
+    mudou de token, aponta ela para a URL nova) em vez de abrir outra. Varre o padrão primeiro e depois os
+    demais controláveis que estiverem rodando — o dono nem sempre guarda o painel no navegador padrão.
+    False = não achou em nenhum / sem permissão — quem chama abre normalmente. Nunca abre navegador: só
+    consulta os que já estão rodando."""
     import subprocess
     prefix = _tab_prefix(url)
-    br = _default_browser() if sys.platform == "darwin" else None
-    if not prefix or not br:
+    if not prefix or sys.platform != "darwin":
         return False
-    app, family = br
-    try:
-        if subprocess.run(["/usr/bin/pgrep", "-x", app], capture_output=True, timeout=3).returncode != 0:
-            return False                                   # fechado: osascript o abriria à toa
-        r = subprocess.run(["/usr/bin/osascript", "-e", _FIND_TAB[family].format(app=app), prefix, url],
-                           capture_output=True, text=True, timeout=10)
-    except (OSError, subprocess.SubprocessError):
-        return False                                       # permissão negada, osascript ausente, travou…
-    return r.returncode == 0 and r.stdout.strip() == "ok"
+    default = _default_browser()
+    cands = ([default] if default else []) + [v for v in _SCRIPTABLE.values() if v != default]
+    for app, family in cands:
+        try:
+            if subprocess.run(["/usr/bin/pgrep", "-x", app], capture_output=True, timeout=3).returncode != 0:
+                continue                                          # fechado: osascript o abriria à toa
+            r = subprocess.run(["/usr/bin/osascript", "-e", _FIND_TAB[family].format(app=app), prefix, url],
+                               capture_output=True, text=True, timeout=10)
+        except (OSError, subprocess.SubprocessError):
+            continue                                              # permissão negada, osascript ausente, travou…
+        if r.returncode == 0 and r.stdout.strip() == "ok":
+            return True
+    return False
 
 
 class _MacOpen(webbrowser.BackgroundBrowser):
