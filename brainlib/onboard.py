@@ -289,7 +289,9 @@ def state(brain) -> dict:
         "memory": {"mode": {"embed": "lite"}.get(mem_mode, mem_mode),
                    "docker": pre["docker"], "lmstudio": pre["lmstudio"],
                    "llm_key": bool(env.get("HINDSIGHT_API_LLM_API_KEY")),
-                   "llm_provider": cfg["memory"].get("llm_provider", "")},
+                   "llm_provider": cfg["memory"].get("llm_provider", ""),
+                   "emb_provider": cfg["memory"].get("embeddings_provider", ""),
+                   "emb_key": bool(env.get("HINDSIGHT_API_EMBEDDINGS_OPENAI_API_KEY"))},
         "keys": {k: {"label": v, "set": bool(env.get(k))} for k, v in KEY_NAMES.items()},
         "planning": {"goals": plan_goals, "proposal": progress(inst).get("proposal")},
         "inbox": sum(1 for p in inst.inbox.iterdir() if p.is_file() and p.name != ".keep.md")
@@ -469,11 +471,15 @@ def save_keys(brain, data: dict) -> dict:
 
 
 class _WebUI:
-    """Responde às perguntas do passo `memoria` do wizard com o que o dono escolheu no navegador."""
+    """Responde às perguntas do passo `memoria` do wizard com o que o dono escolheu no navegador.
+    A chave chega POR VARIÁVEL DE AMBIENTE — o prompt do wizard carrega o nome (ex.: `API key
+    (HINDSIGHT_API_EMBEDDINGS_OPENAI_API_KEY)`), e provedores diferentes pedem chaves diferentes."""
+
     interactive = False
 
-    def __init__(self, job_: _Job, choices: dict[str, str], key: str, consent: bool):
-        self.job, self.choices, self.key, self.consent = job_, choices, key, consent
+    def __init__(self, job_: _Job, choices: dict[str, str], keys: dict[str, str], model: str, consent: bool):
+        self.job, self.choices, self.keys = job_, choices, keys
+        self.model, self.consent = model, consent
 
     def say(self, msg: str) -> None:
         self.job.say(msg)
@@ -481,6 +487,8 @@ class _WebUI:
     def ask(self, prompt: str, default: str = "") -> str:
         if prompt.startswith("Modo full"):
             return "ok" if self.consent else ""
+        if prompt.startswith("Modelo default") and self.model:
+            return self.model                      # openai não tem default por operação: o dono digita
         return default
 
     def choice(self, prompt: str, options: list[str], default: str) -> str:
@@ -493,9 +501,17 @@ class _WebUI:
         return default
 
     def secret(self, prompt: str) -> str:
-        if not self.key:
-            raise util.BrainError("falta a API key — cole a chave ou escolha \"fazer depois\"", code=4)
-        return self.key
+        for env, key in self.keys.items():
+            if env in prompt and key:
+                return key
+        raise util.BrainError("falta a API key — cole a chave ou escolha \"fazer depois\"", code=4)
+
+
+def _key_ok(v) -> str:
+    k = str(v or "").strip()
+    if k and (len(k) > 400 or any(ch.isspace() for ch in k)):
+        raise util.BrainError("API key inválida", code=4)
+    return k
 
 
 def apply_memory(brain, data: dict) -> dict:
@@ -512,24 +528,37 @@ def apply_memory(brain, data: dict) -> dict:
     provider = str(data.get("provider") or "anthropic")
     if provider not in ("anthropic", "openai"):
         raise util.BrainError("provedor de LLM inválido", code=4)
-    key = str(data.get("key") or "").strip()
-    if key and (len(key) > 400 or any(ch.isspace() for ch in key)):
-        raise util.BrainError("API key inválida", code=4)
+    emb = str(data.get("embeddings") or ("local" if mode == "embed" else "fireworks"))
+    if mode == "full" and emb not in ("fireworks", "openai"):
+        raise util.BrainError("no modo full os embeddings são de nuvem — fireworks ou openai", code=4)
+    if mode == "embed" and emb not in ("local", "fireworks", "openai"):
+        raise util.BrainError("provedor de embeddings inválido (embed: local ou nuvem)", code=4)
+    model = str(data.get("model") or "").strip()
+    if mode == "full" and provider == "openai" and not model:
+        raise util.BrainError("provedor openai precisa do nome do modelo (ex.: gpt-…)", code=4)
+    key = _key_ok(data.get("key"))                      # full: chave do LLM · embed: chave dos embeddings
+    emb_key = _key_ok(data.get("emb_key"))              # full: chave do provedor de embeddings, se outra conta
     if mode == "none":
         memory._apply_mode(brain, "none")
         _mark(brain.inst, "memoria")
         return {"mode": "none"}
     inst0 = brain.inst
+    if mode == "embed":
+        keys = {"HINDSIGHT_API_EMBEDDINGS_OPENAI_API_KEY": key} if (key and emb != "local") else {}
+    else:
+        keys = {}
+        if key:
+            keys["HINDSIGHT_API_LLM_API_KEY"] = key
+        if emb_key:
+            keys["HINDSIGHT_API_EMBEDDINGS_OPENAI_API_KEY"] = emb_key
+        elif key and provider == "openai" and emb == "openai":
+            keys["HINDSIGHT_API_EMBEDDINGS_OPENAI_API_KEY"] = key   # mesma conta OpenAI: uma chave serve
 
     def run(j: _Job) -> dict:
         from .core import Brain
         b = Brain(config.reload(inst0))
-        emb = "local"
-        if mode == "full" and provider == "openai" and not setup.lmstudio_up():
-            emb = "openai"
-        ui = _WebUI(j, {"LLM": provider, "embeddings": emb, "reranker": "off"}, key, bool(data.get("consent")))
-        if emb == "openai" and key:
-            setup.set_env(b.inst, {"HINDSIGHT_API_EMBEDDINGS_OPENAI_API_KEY": key})
+        ui = _WebUI(j, {"LLM": provider, "embeddings": emb, "reranker": "off"}, keys, model,
+                    bool(data.get("consent")))
         setup._run_memoria(b, ui, mode_hint=mode)
         final = memory.mode(config.reload(inst0).cfg["memory"])
         if final == "none":

@@ -1,3 +1,21 @@
+## 2.19.0 — full é só-nuvem; o painel liga a memória sem LM Studio
+
+- **Modos com cardápio próprio (decisão do dono).** `embed` aceita embeddings locais (bge-m3 no LM Studio,
+  default) ou de nuvem; **`full` é só-nuvem**: o wizard não oferece `local` para embeddings (default Fireworks
+  `qwen3-embedding-8b` @1536), o CLI recusa a troca para `local` no full e o doctor avisa instâncias legadas.
+  Motivo: full com embeddings locais morria na checagem de boot do Hindsight em qualquer Mac sem LM Studio —
+  o caminho recomendado era o quebrado.
+- **Painel.** O passo Memória escolhe o provedor de embeddings por modo (embed: local/Fireworks/OpenAI; full:
+  Fireworks/OpenAI), pede a chave de CADA conta (LLM e embeddings — OpenAI nos dois usa a mesma) e o LLM OpenAI
+  pede o nome do modelo (não há default por operação; Anthropic segue o cenário B Haiku/Sonnet). Antes: full no
+  painel sem LM Studio falhava no boot (Anthropic) ou morria no meio do wizard (OpenAI).
+- **Verificação depois de ligar o full.** O wizard chama `health/llm` no banco ao terminar: chave ou provedor
+  errado aparece na hora ("⚠ verificação do LLM falhou"), não no primeiro retain.
+- **Recreate certo.** Os avisos de recriar o container (saída do `providers set` e a ficha do formulário) agora
+  incluem o override do full (`-f services/compose.full.yaml`): recriar com o compose base religava
+  `SKIP_LLM_VERIFICATION=true`, e um LLM morto virava falha silenciosa de extração.
+- TUI e painel compartilham a ficha de provedores (`forms.py`) — a regra vale igual nas três superfícies.
+
 ## 2.18.0 — formulários iguais na TUI e no painel; o ícone reaproveita a aba
 
 - **Uma especificação, duas pontas.** Os formulários da TUI e do painel HTML eram escritos duas vezes, à mão, e

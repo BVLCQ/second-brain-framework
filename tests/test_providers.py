@@ -89,6 +89,18 @@ class ProvidersTests(unittest.TestCase):
             # troca de provider com banco já sincronizado → hint
             self.assertTrue(providers.set_slot(b, "embeddings", "fireworks", key="k")["rebuild_needed"])
 
+    def test_full_mode_is_cloud_only_for_embeddings(self):
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            b = _brain(tmp)
+            config.set_keys(b.inst, "memory", {"extract": True, "cloud_llm": True})
+            b.inst = config.load(b.inst.root)
+            with self.assertRaises(util.BrainError):
+                providers.set_slot(b, "embeddings", "local")     # full é só-nuvem (regra do dono)
+            config.set_keys(b.inst, "memory", {"extract": False, "cloud_llm": False})
+            b.inst = config.load(b.inst.root)
+            providers.set_slot(b, "embeddings", "local")         # no embed o local segue válido
+
     def test_invalid_inputs(self):
         with tempfile.TemporaryDirectory() as td:
             b = _brain(Path(td))

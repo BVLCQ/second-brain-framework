@@ -167,6 +167,18 @@ class StepTests(unittest.TestCase):
         with self.assertRaises(util.BrainError):
             onboard.apply_memory(self.b, {"mode": "turbo"})
 
+    def test_memory_full_is_cloud_only_and_openai_needs_model(self):
+        # full é só-nuvem: embeddings locais recusados antes do job
+        with self.assertRaises(util.BrainError):
+            onboard.apply_memory(self.b, {"mode": "full", "consent": True, "key": "sk-x",
+                                          "provider": "anthropic", "embeddings": "local"})
+        # openai não tem modelos por operação: o nome do modelo é exigido (G4)
+        with self.assertRaises(util.BrainError):
+            onboard.apply_memory(self.b, {"mode": "full", "consent": True, "key": "sk-x", "provider": "openai"})
+        # embed aceita local ou nuvem — nada além disso
+        with self.assertRaises(util.BrainError):
+            onboard.apply_memory(self.b, {"mode": "embed", "embeddings": "turbo"})
+
     def test_upload_lands_in_the_inbox_with_a_safe_name(self):
         r = onboard.save_upload(self.b, "../../../etc/Planejamento 2027 (v2).PDF", b"%PDF-1.4 teste")
         self.assertEqual(r["name"], "planejamento-2027-v2.pdf")
@@ -255,7 +267,7 @@ class MoreStepTests(unittest.TestCase):
                 mock.patch.object(setup, "lmstudio_up", return_value=True), \
                 mock.patch.object(memory, "setup", side_effect=lambda b: calls.setdefault("setup", True) and ["brain"]):
             r = onboard.apply_memory(self.b, {"mode": "full", "provider": "anthropic", "key": "sk-ant-FAKE",
-                                              "consent": True})
+                                              "emb_key": "fw-FAKE", "consent": True})
             for _ in range(200):
                 j = onboard.job(r["job"])
                 if j["status"] != "running":
@@ -267,7 +279,9 @@ class MoreStepTests(unittest.TestCase):
         self.assertTrue(calls.get("setup"))
         env = config.load_env(config.reload(self.b.inst))
         self.assertEqual(env.get("HINDSIGHT_API_LLM_API_KEY"), "sk-ant-FAKE")
+        self.assertEqual(env.get("HINDSIGHT_API_EMBEDDINGS_OPENAI_API_KEY"), "fw-FAKE")   # fireworks, chave própria
         self.assertNotIn("sk-ant-FAKE", json.dumps(j))
+        self.assertNotIn("fw-FAKE", json.dumps(j))
 
 
 class OpenTests(unittest.TestCase):

@@ -22,6 +22,7 @@ sem chave `HINDSIGHT_API_*_API_KEY` no `.env`.
 
 ### O que muda no `full`
 
+- **Embeddings e reranker de provedor de nuvem** (só-nuvem): o boot não depende do LM Studio.
 - Todo documento viaja com um bloco **CONTEXTO** (caminho, data do mundo, pessoas com id e
   grafias, projetos) derivado do ledger — a extração usa só esses nomes/IDs, nunca inventa.
 - **Data do mundo** em todo RAW (ordem: artefato do `/dump` → carimbo no nome → cabeçalho
@@ -188,11 +189,16 @@ Três slots independentes, escolhidos no wizard e re-editáveis a qualquer momen
 | Slot | Default | Nuvem recomendada | Onde muda |
 |---|---|---|---|
 | **LLM** (só `full`) | — | Anthropic (Haiku extração/consolidação · Sonnet mental models — cenário B) · Fireworks · Z.ai · custom | wizard · `brain memory providers set llm …` · TUI Configurações · painel |
-| **Embeddings** | local — LM Studio bge-m3 (zero egress) | Fireworks `qwen3-embedding-8b` @1536 · OpenAI · Cohere · custom | idem |
+| **Embeddings** | embed: local — LM Studio bge-m3 (zero egress) · **full: Fireworks `qwen3-embedding-8b` @1536 (só-nuvem)** | Fireworks `qwen3-embedding-8b` @1536 · OpenAI · Cohere · custom | idem |
 | **Reranker** | off — fusão RRF (veredito 2026-11-07: local reprovado no gate de 400 ms) | Fireworks `qwen3-reranker-8b` (top-50) · Cohere · ZeroEntropy · OpenRouter · custom | idem |
 
 Regras do desenho:
 
+- **O modo define o cardápio (decisão 2026-11-17).** `embed`: embeddings local (default) ou de nuvem.
+  **`full` é só-nuvem** — o wizard não oferece `local`, o CLI recusa (`providers set embeddings --provider
+  local`) e o doctor avisa instâncias legadas; o painel pede a chave de cada conta (LLM e embeddings —
+  OpenAI nos dois usa a mesma) e, no LLM OpenAI, o nome do modelo. Ligou o full? O wizard verifica o LLM
+  no servidor (`health/llm`) e conta se falhou.
 - **A escolha mora no `[memory]`** (`llm_provider`, `embeddings_provider`, `reranker_provider`…);
   **a chave mora no `config/.env`** (0600) e nunca volta em output, view ou painel.
 - **Egress é dito na tela**: qualquer provedor de nuvem manda texto do vault para fora

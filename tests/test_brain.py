@@ -1220,6 +1220,9 @@ class FakeHindsight(memory.Hindsight):
     def health(self):
         return {"status": "healthy"}
 
+    def health_llm(self, bank):
+        return {"ok": True}
+
     def put_bank(self, bank, body):
         self.bank_bodies[bank] = body
         return {"success": True}

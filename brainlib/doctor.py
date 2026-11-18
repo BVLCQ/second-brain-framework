@@ -148,6 +148,11 @@ def checks(brain, online: bool = False) -> list[dict]:
                 out.append(_c("ok", "harnesses",
                               f"{len(harnesses)} conectado(s) · banco '{(v or {}).get('bank', '?')}' responde ao recall"))
         if status.get("mode") == "full":
+            # full é só-nuvem (regra do dono): instância legada com embeddings locais ganha aviso, não erro
+            from . import providers as _prov
+            if _prov.stack(brain)["embeddings"]["provider"] == "local":
+                out.append(_c("warn", "memória", "full com embeddings locais (LM Studio) — o full é só-nuvem: "
+                                              "`brain memory providers set embeddings --provider fireworks --key …`"))
             # régua do full: chave presente; gasto do mês como INFORMAÇÃO (sem teto — decisão do dono)
             if not any(k.startswith("HINDSIGHT_API") and k.endswith("API_KEY") and v for k, v in env.items()):
                 out.append(_c("error", "memória", "modo full sem chave de LLM no config/.env — "

@@ -548,11 +548,17 @@ def _providers_step(brain, ui, slots: list[str]) -> bool:
     labels = {"llm": "LLM (extração · consolidação · mental models)",
               "embeddings": "embeddings", "reranker": "reranker"}
     changed = False
+    going_full = "llm" in slots                 # full é só-nuvem: embeddings locais não entram no menu
     for slot in slots:
         cur = st[slot]["provider"]
         reg = prov.PROVIDERS[slot]
         opts = list(reg)
+        if slot == "embeddings" and going_full:
+            opts = [o for o in opts if o != "local"]
+            if cur == "local":
+                ui.say("  ☁ modo full é só-nuvem: embeddings locais (bge-m3 no LM Studio) ficam para o embed")
         default = cur if cur in opts else ("off" if slot == "reranker" else
+                                           "fireworks" if (slot == "embeddings" and going_full) else
                                            "local" if slot == "embeddings" else "anthropic")
         p = ui.choice(f"Provedor de {labels[slot]}", opts, default)
         info = reg[p]
@@ -641,7 +647,12 @@ def _run_memoria(brain, ui, mode_hint: str | None = None) -> None:
     else:
         memory._apply_mode(brain, "full")
         memory.setup(brain)
-        ui.say(f"✓ memória full pronta (banco único {mem['bank']}) — valide o custo com `brain memory cost`")
+        ui.say(f"✓ memória full pronta (banco único {mem['bank']})")
+        try:
+            memory.client(brain).health_llm(mem["bank"])
+            ui.say("✓ LLM verificado no servidor (health/llm) — valide o custo com `brain memory cost`")
+        except util.BrainError as e:
+            ui.say(f"⚠ verificação do LLM falhou: {e} — confira chave/provedor (docker logs hindsight)")
     _harness_step(brain, ui)
 
 

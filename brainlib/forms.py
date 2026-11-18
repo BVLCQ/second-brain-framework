@@ -521,8 +521,10 @@ def _forms() -> list[Form]:
             F("candidates", "top-N candidatos", ph="vazio = default do provedor",
               show={"slot": ["reranker"], "provider!": ["off"]}, arg="--candidates")),
             sub="A escolha vai ao config/.env (chave nunca volta em output) e ao [memory]. Trocou embeddings? vetores "
-                "antigos ficam incompatíveis — brain memory rebuild. Depois recrie o container: docker compose -f "
-                "services/compose.yaml --env-file config/.env up -d"),
+                "antigos ficam incompatíveis — brain memory rebuild. Depois recrie o container (modo full inclui o "
+                "override): docker compose -f services/compose.yaml -f services/compose.full.yaml "
+                "--env-file config/.env up -d — no embed, sem o segundo -f. Full é só-nuvem: embeddings locais "
+                "ficam para o modo embed."),
     ]
     del watch
     return out

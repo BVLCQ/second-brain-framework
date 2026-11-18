@@ -144,6 +144,11 @@ def set_slot(brain, slot: str, provider: str, *, model: str = "", models: dict |
         raise util.BrainError(f"provedor inválido para {slot}: {provider!r} — "
                               f"{', '.join(PROVIDERS[slot])}", code=4)
     p = PROVIDERS[slot][provider]
+    if slot == "embeddings" and provider == "local":
+        from .memory import mode as _mem_mode                   # lazy: evita ciclo em tempo de import
+        if _mem_mode(brain.inst.cfg["memory"]) == "full":
+            raise util.BrainError("no modo full os embeddings são de nuvem — fireworks (qwen3-embedding-8b) "
+                                  "ou openai; o bge-m3 local é do modo embed (guides/memory.md)", code=4)
     if slot == "llm" and provider != "lmstudio" and not (models or model):
         rec = PROVIDERS["llm"]["anthropic"]["models"] if provider == "anthropic" else {}
         if not rec:
@@ -229,8 +234,10 @@ def cli(args, brain) -> None:
         if res["cfg"]:
             print(f"  [memory]: {', '.join(res['cfg'])}")
         if res["cloud"]:
-            print("  ⚠ egress: texto do vault vai para a API do provedor — recreate do container "
-                  "aplica (docker compose -f services/compose.yaml --env-file config/.env up -d)")
+            from .memory import mode as _mem_mode
+            _full = " -f services/compose.full.yaml" if _mem_mode(brain.inst.cfg["memory"]) == "full" else ""
+            print("  ⚠ egress: texto do vault vai para a API do provedor — recreate do container aplica "
+                  f"(docker compose -f services/compose.yaml{_full} --env-file config/.env up -d)")
         if res["rebuild_needed"]:
             print("  ⚠ embeddings mudaram: vetores antios são incompatíveis — `brain memory rebuild` "
                   "re-deriva tudo do vault")
