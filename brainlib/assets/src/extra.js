@@ -207,7 +207,7 @@ function navEntries(){
     ["home", "Início"], ["sources", "Fontes"], ["todo", "TODO"], ["projects", "Projetos"], ["decisions", "Decisões"], ["wins", "Conquistas"],
     ["timeline", "Linha do tempo"], ["focus", "Foco"], ["outbox", "Mensagens"], ["feedback", "Sugestões"],
     ["cfg/inicio", "Configurações · Visão geral"], ["cfg/perfil", "Configurações · Perfil"], ["cfg/rotina", "Configurações · Rotina"],
-    ["cfg/conectores", "Configurações · Conectores"], ["cfg/memoria", "Configurações · Memória"], ["cfg/integracoes", "Configurações · Integrações"],
+    ["cfg/conectores", "Configurações · Conectores"], ["cfg/agente", "Configurações · Seu agente"], ["cfg/memoria", "Configurações · Memória"], ["cfg/integracoes", "Configurações · Integrações"],
     ["cfg/saude", "Configurações · Saúde"],
     ["pf/visao", "Portfólio · Visão"], ["pf/opps", "Portfólio · Oportunidades"], ["pf/matrix", "Portfólio · Matriz"],
     ["pf/procs", "Portfólio · Processos"], ["pf/areas", "Portfólio · Áreas"], ["pf/docs", "Portfólio · Documentos"],
@@ -511,7 +511,7 @@ let dragId = null, lastMoved = null;
 // ── face Configurações: os passos da configuração guiada, revisitáveis ───────────────────────────
 // Mesmos endpoints do /onboarding (/api/onboard/*): uma regra, duas portas de entrada. "feito" vem do
 // estado real (state.setup), não da lista de passos vistos — pular não conta como feito.
-const SETUP_STEPS = [["perfil", "Perfil"], ["rotina", "Rotina"], ["conectores", "Conectores"], ["memoria", "Memória"], ["integracoes", "Integrações"]];
+const SETUP_STEPS = [["perfil", "Perfil"], ["rotina", "Rotina"], ["agente", "Seu agente"], ["conectores", "Conectores"], ["memoria", "Memória"], ["integracoes", "Integrações"]];
 const MEM_LABEL = {none: "nenhuma", lite: "embed", embed: "embed", full: "full"};   // a API ainda diz "lite"; a tela diz o nome da CLI
 let SS = null, profileDraftCfg = null;
 async function obApi(path, body){
@@ -563,6 +563,7 @@ SETUP.inicio = box => {
   const detail = {
     perfil: [SS.owner.name, SS.owner.nickname].filter(Boolean).join(" · ") || "nome, apelido, sobre você",
     rotina: SS.routine.start && SS.routine.end ? SS.routine.start + "–" + SS.routine.end + " · " + SS.routine.timezone : "fuso e expediente",
+    agente: ((SS.agents || []).filter(a => a.detected && (a.mcp || a.selected)).map(a => a.label).join(", ")) || "Claude Code · Hermes · Cursor · Codex",
     conectores: conns.length ? conns.join(", ") : "Slack, Gmail, Agenda…",
     memoria: st.memoria ? MEM_LABEL[SS.memory.mode] || SS.memory.mode : "nenhuma · embed · full",
     integracoes: SS.keys.GITHUB_TOKEN && SS.keys.GITHUB_TOKEN.set ? "GitHub configurado" : "token do GitHub",
@@ -763,18 +764,71 @@ SETUP.memoria = box => {
   };
   draw();
 };
+SETUP.agente = box => {
+  const detected = (SS.agents || []).filter(a => a.detected);
+  let picked = (detected.find(a => a.selected) || detected.find(a => a.mcp) || detected[0] || {}).key || null;
+  const draw = () => {
+    box.innerHTML = sec("Agentes de IA detectados",
+      '<p class="small">O cérebro funciona com um agente para ler suas fontes e ajudar nas rotinas. Conectar cria o canal de leitura (MCP somente-leitura) — o agente consulta, nunca escreve.</p>' +
+      (detected.length
+        ? '<div class="stopts">' + detected.map(a =>
+            '<button class="stopt' + (a.key === picked ? " sel" : "") + '" data-ag="' + esc(a.key) + '"><b>' + esc(a.label) +
+            (a.mcp ? ' <span class="chip h-em-dia">conectado</span>' : "") + (a.selected ? ' <span class="chip h-info">ativo</span>' : "") +
+            '</b><span>' + (a.runner ? "instalado · runner: " + esc(a.runner) : "instalado · chat e canais") + "</span></button>").join("") + "</div>" +
+          '<pre class="stlog" id="ag-log" hidden></pre>' +
+          '<div class="stactions"><span class="stmsg" id="ag-m"></span><button class="btn primary" id="ag-go">Conectar o canal de leitura</button></div>'
+        : '<p class="late">Nenhum agente encontrado nesta máquina. Instale um (Hermes, Claude Code, Cursor ou Codex) e volte aqui.</p>'),
+      stStatus(detected.some(a => a.mcp)).replace("feito", "conectado"));
+    const q = s => box.querySelector(s);
+    box.querySelectorAll("[data-ag]").forEach(b => b.onclick = () => { picked = b.dataset.ag; draw(); });
+    const goBtn = q("#ag-go");
+    if (goBtn) goBtn.onclick = e => stBusy(e.currentTarget, "conectando…", async () => {
+      if (!picked) return stMsg(q("#ag-m"), "late", "escolha um agente acima");
+      try {
+        const r = await obAct("agent_connect", {agent: picked});
+        if (r.job) { const log = q("#ag-log"); log.hidden = false;
+          const j = await obJob(r.job, jj => { log.textContent = (jj.log || []).join("\n"); log.scrollTop = 1e9; });
+          if (j.status === "error") return stMsg(q("#ag-m"), "late", (j.result && j.result.error) || "não consegui conectar"); }
+        await obState(); toast("canal de leitura conectado"); SETUP.agente(box);
+      } catch (err) { stMsg(q("#ag-m"), "late", err.message); }
+    });
+  };
+  draw();
+};
 SETUP.integracoes = box => {
   const gh = SS.keys.GITHUB_TOKEN || {};
-  box.innerHTML = sec("Sugestões e bugs do Brain", '<p>Com um token do GitHub, as sugestões que você manda pelo Brain viram issues públicas no repo do framework. <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">Criar token →</a></p>' +
-      fld("Token do GitHub", '<input type="password" id="s-gh" autocomplete="off" placeholder="' + (gh.set ? "vazio mantém o atual" : "github_pat_…") + '">') +
+  const gk = SS.keys || {};
+  const gset = k => gk[k] && gk[k].set;
+  box.innerHTML = sec("Sugestões e bugs do Brain", '<p>Com um token do GitHub, as sugestões que você manda pelo Brain viram issues públicas no repo do framework. <a href="https://github.com/settings/tokens/new?scopes=public_repo&description=Brain%20%E2%80%94%20sugest%C3%B5es%20e%20bugs" target="_blank" rel="noopener">Criar token →</a> (escopo <code>public_repo</code> já marcado, sem validade)</p>' +
+      fld("Token do GitHub", '<input type="password" id="s-gh" autocomplete="off" placeholder="' + (gh.set ? "vazio mantém o atual" : "ghp_…") + '">') +
       '<div class="stactions"><span class="stmsg" id="s-m"></span><button class="btn primary" id="s-save">Salvar</button></div>', stStatus(gh.set).replace("feito", "configurado")) +
-    sec("Blocos de foco no Google Calendar", '<p>Por padrão o Brain gera um arquivo de calendário (.ics) que você importa com um clique. A escrita direta na agenda pede uma autorização separada do Google: peça ao Brain no chat, "configurar foco no Google".</p>');
+    sec("Google — foco na agenda e backup no Drive" + (gset("GOOGLE_REFRESH_TOKEN") ? ' <span class="chip h-em-dia">conectado</span>' : ""),
+      '<p class="small">Blocos de foco aprovados entram direto no Google Calendar, e o backup semanal sobe pro Drive. Escopo mínimo: só eventos que o Brain cria + os próprios zips de backup.</p>' +
+      '<div class="stgrid">' +
+      fld("Client ID" + (gset("GOOGLE_CLIENT_ID") ? ' <span class="chip h-em-dia">já salvo</span>' : ""),
+          '<input type="text" id="s-gcid" autocomplete="off" placeholder="' + (gset("GOOGLE_CLIENT_ID") ? "vazio mantém o atual" : "…apps.googleusercontent.com") + '">') +
+      fld("Client Secret" + (gset("GOOGLE_CLIENT_SECRET") ? ' <span class="chip h-em-dia">já salvo</span>' : ""),
+          '<input type="password" id="s-gsec" autocomplete="off" placeholder="' + (gset("GOOGLE_CLIENT_SECRET") ? "vazio mantém o atual" : "GOCSPX-…") + '">') +
+      "</div>" +
+      '<p class="small">Crie em <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">Google Cloud Console</a> → Credenciais → ID do cliente OAuth (app Desktop).</p>' +
+      '<pre class="stlog" id="s-glog" hidden></pre>' +
+      '<div class="stactions"><button class="btn primary" id="s-gcon">Conectar Google</button><span class="stmsg" id="s-gm"></span></div>');
   const q = s => box.querySelector(s);
   q("#s-save").onclick = e => stBusy(e.currentTarget, "salvando…", async () => {
     const v = q("#s-gh").value.trim();
     if (!v) return stMsg(q("#s-m"), "late", "cole o token");
     try { await obAct("keys", {GITHUB_TOKEN: v}); q("#s-gh").value = ""; await obState(); redo("integracoes"); toast("token salvo no config/.env"); }
     catch (err) { stMsg(q("#s-m"), "late", err.message); }
+  });
+  q("#s-gcon").onclick = e => stBusy(e.currentTarget, "conectando…", async () => {
+    try {
+      const r = await obAct("foco_google", {client_id: q("#s-gcid").value, client_secret: q("#s-gsec").value});
+      if (r.job) { const log = q("#s-glog"); log.hidden = false;
+        const j = await obJob(r.job, jj => { log.textContent = (jj.log || []).join("\n"); log.scrollTop = 1e9; });
+        if (j.status === "error") return stMsg(q("#s-gm"), "late", (j.result && j.result.error) || "não consegui conectar o Google"); }
+      q("#s-gsec").value = "";
+      await obState(); redo("integracoes"); toast("Google conectado — foco na agenda e backup ativos");
+    } catch (err) { stMsg(q("#s-gm"), "late", err.message); }
   });
 };
 

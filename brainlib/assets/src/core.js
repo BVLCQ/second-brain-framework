@@ -456,6 +456,7 @@ const setupView = (step, title, lead) => () => '<div class="pagehead"><div>' + (
 V["cfg/inicio"] = setupView("inicio", "Seu Brain", "Volte a qualquer passo quando quiser. Passo pulado fica como \"depois\" e não vira pendência.");
 V["cfg/perfil"] = setupView("perfil", "Perfil", "Quem você é e o contexto que o Brain usa para entender o que importa para você.");
 V["cfg/rotina"] = setupView("rotina", "Rotina", "Fuso e expediente: o Brain calcula prazos e blocos de foco a partir daqui.");
+V["cfg/agente"] = setupView("agente", "Seu agente", "O agente de IA que lê suas fontes e ajuda nas rotinas. Conectar cria o canal de leitura (MCP somente-leitura).");
 V["cfg/conectores"] = setupView("conectores", "Conectores", "O que o Brain pode ler, sempre só leitura. Nada é enviado sem você aprovar o texto exato.");
 V["cfg/integracoes"] = setupView("integracoes", "Integrações", "Opcionais. As chaves ficam só no seu computador e nunca aparecem de novo na tela.");
 V["cfg/memoria"] = () => {
@@ -748,7 +749,7 @@ const TABS_PF = [["pf/visao", "Visão geral"], ["pf/opps", "Oportunidades", () =
   ["pf/matrix", "Matriz"], ["pf/procs", "Processos", () => PF.processes.filter(p => p.status === "ativo").length], ["pf/areas", "Áreas", () => PF.areas.length],
   ["pf/docs", "Documentos", () => PF.processes.concat(PF.opportunities).reduce((n, x) => n + x.docs.length, 0)],
   ["people", "Pessoas"]];
-const TABS_CFG = [["cfg/inicio", "Visão geral"], ["cfg/perfil", "Perfil"], ["cfg/rotina", "Rotina"], ["cfg/conectores", "Conectores"],
+const TABS_CFG = [["cfg/inicio", "Visão geral"], ["cfg/perfil", "Perfil"], ["cfg/rotina", "Rotina"], ["cfg/agente", "Seu agente"], ["cfg/conectores", "Conectores"],
   ["cfg/memoria", "Memória"], ["cfg/integracoes", "Integrações"],
   ["cfg/saude", "Saúde", () => (M.health || []).filter(c => c.level !== "ok").length]];   // o único contador da face: passo pulado não vira pendência
 const FACES = [["execucao", "Execução", TABS_EXEC], ["portfolio", "Portfólio", TABS_PF], ["configuracoes", "Configurações", TABS_CFG]];
