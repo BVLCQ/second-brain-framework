@@ -273,13 +273,34 @@ def uninstall(dest: Path | None = None, name: str = DEFAULT_NAME, *, platform: s
 # ── atalho de um clique: Dock (macOS) · área de trabalho (Linux/WSLg) ─────────
 _DOCK_TILE = ('<dict><key>tile-data</key><dict><key>file-data</key><dict>'
               '<key>_CFURLString</key><string>{app}</string><key>_CFURLStringType</key><integer>0</integer>'
-              '</dict></dict></dict><key>tile-type</key><string>file-tile</string></dict>')
+              '</dict></dict><key>tile-type</key><string>file-tile</string></dict>')
 
 
-def _dock_read() -> str:
-    r = subprocess.run(["/usr/bin/defaults", "read", "com.apple.dock", "persistent-apps"],
-                       capture_output=True, text=True, timeout=5)
-    return r.stdout if r.returncode == 0 else ""
+def _dock_tiles() -> list:
+    """Tiles do Dock como objetos (plutil → xml → plistlib). Ilegível/corrompido = lista vazia.
+    Um tile nosso SEM tile-type (fragmento malformado de versão antiga) NÃO conta como pregado:
+    o pin reescreve por cima e cura a instância ferida."""
+    try:
+        xml = subprocess.run(["/usr/bin/plutil", "-convert", "xml1", "-o", "-",
+                              str(Path.home() / "Library/Preferences/com.apple.dock.plist")],
+                             capture_output=True, timeout=5).stdout
+        return plistlib.loads(xml).get("persistent-apps") or []
+    except Exception:  # noqa: BLE001 — Dock ausente (Linux/CI), plutil fora, plist corrompida
+        return []
+
+
+def _docked(name: str) -> bool:
+    """O app está no Dock como tile BEM-FORMADO (file-tile apontando pro nosso .app)?
+    Aceita as duas grafias: caminho puro (a que escrevemos) e file:// URL normalizada
+    pelo próprio Dock depois de um reload."""
+    want = f"{name}.app"
+    for tile in _dock_tiles():
+        data = tile.get("tile-data") or {}
+        url = str((data.get("file-data") or {}).get("_CFURLString") or "")
+        url = url.removeprefix("file://").rstrip("/")
+        if url.endswith(f"/{want}") and tile.get("tile-type") == "file-tile":
+            return True
+    return False
 
 
 def pin_status(name: str = DEFAULT_NAME, *, platform: str | None = None) -> bool:
@@ -289,7 +310,7 @@ def pin_status(name: str = DEFAULT_NAME, *, platform: str | None = None) -> bool
     except util.BrainError:
         return False
     if platform == "darwin":
-        return f"{name}.app" in _dock_read()
+        return _docked(_safe_name(name))
     return (Path.home() / "Desktop" / f"{_safe_name(name).lower().replace(' ', '-')}.desktop").exists()
 
 
@@ -301,11 +322,10 @@ def pin_shortcut(name: str = DEFAULT_NAME, *, platform: str | None = None) -> st
     if platform == "darwin":
         if not ours:
             raise util.BrainError("instale o app primeiro (`brain app install`) — sem o Brain.app não há o que pregar no Dock", code=4)
-        target = ours[0]
-        if f"{name}.app" in _dock_read():
+        if _docked(name):
             return f"✓ {name} já está no Dock"
         subprocess.run(["/usr/bin/defaults", "write", "com.apple.dock", "persistent-apps", "-array-add",
-                        _DOCK_TILE.format(app=str(target))], check=True, timeout=10)
+                        _DOCK_TILE.format(app=str(ours[0]))], check=True, timeout=10)
         subprocess.run(["/usr/bin/killall", "Dock"], check=False, timeout=10)
         return f"✓ {name} pregado no Dock — a um clique, como qualquer app"
     # Linux/WSLg: o menu de aplicativos já ganha o .desktop no install; o extra é a área de trabalho
@@ -316,7 +336,7 @@ def pin_shortcut(name: str = DEFAULT_NAME, *, platform: str | None = None) -> st
     if not desktop.is_dir():
         return "– sem pasta Desktop: o Brain já está no menu de aplicativos (tecla Super)"
     dst = desktop / f"{name.lower().replace(' ', '-')}.desktop"
-    if src and src != dst:
+    if src != dst:
         shutil.copy2(src, dst)
     dst.chmod(0o755)
     return f"✓ atalho do {name} na área de trabalho"

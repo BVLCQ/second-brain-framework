@@ -240,9 +240,9 @@ def relpath(path: Path, root: Path) -> str:
 
 
 # ── abrir o painel: reaproveita a aba do Brain que já está aberta (macOS) ──────────────────────────────────
-# bundle id (minúsculo) do navegador padrão → (nome do app, família do AppleScript). Só o navegador PADRÃO é consultado:
-# o macOS pede uma permissão de automação por app, e perguntar a todos os navegadores abertos seria invasivo.
-_SCRIPTABLE = {
+# bundle id (minúsculo) do navegador padrão → (nome do app, família do AppleScript).
+_SCRIPTABLE = {   # navegadores que o AppleScript controla; a aba do Brain é procurada em TODOS os
+    # que estiverem rodando (padrão primeiro) — o dono nem sempre guarda o painel no navegador padrão
     "com.apple.safari": ("Safari", "safari"),
     "com.google.chrome": ("Google Chrome", "chromium"),
     "com.brave.browser": ("Brave Browser", "chromium"),

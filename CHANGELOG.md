@@ -1,5 +1,11 @@
 ## 2.26.0 — o lote das issues #26–#31
 
+- **Atalho de um clique + aba reaproveitada:** o passo "A máquina" do wizard ganhou a linha
+  "Ícone no Dock" (macOS; `pin_shortcut` idempotente, tile `file-tile` bem-formado — um tile
+  antigo sem `tile-type` é detectado e regravado) / "Atalho na área de trabalho" (Linux/WSLg,
+  cópia executável do `.desktop`). E abrir o painel não espalha abas: a varredura de reuso
+  agora procura a aba do Brain em TODOS os navegadores abertos (o padrão primeiro), não só
+  no navegador padrão — nunca lança um navegador fechado.
 - **Doctor/boot do Hindsight (#27):** `brain doctor` reconhece o estado transitório do container
   nos primeiros 3 minutos pós-boot (ou em restart-loop aguardando o LM Studio) e avisa em vez de
   errar "banco ausente"; o watchdog só aciona o `lms` se ele existir, espera até 30s pelo `:1234`

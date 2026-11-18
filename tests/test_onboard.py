@@ -512,7 +512,7 @@ class MaquinaTests(unittest.TestCase):
 
     def test_maquina_marks_the_step_and_leaves_focus_alone(self):
         r = onboard.apply_maquina(self.b, {"comando": False, "tui": False, "framework": False,
-                                           "noturno": "", "foco": "google"})   # foco: ignorado — agenda é do Google (Chaves)
+                                           "noturno": "", "foco": "google", "icon": False})   # icon: nunca mexe no Dock da máquina real
         j = _wait_job(r["job"])
         self.assertEqual(j["status"], "done", j["log"])
         cfg = config.load(self.b.inst.root).cfg
@@ -521,12 +521,34 @@ class MaquinaTests(unittest.TestCase):
 
     def test_maquina_installs_the_command_under_isolated_home(self):
         r = onboard.apply_maquina(self.b, {"comando": True, "tui": False, "framework": False,
-                                           "noturno": "", "foco": "ics"})
+                                           "noturno": "", "foco": "ics", "icon": False})   # icon: nunca mexe no Dock da máquina real
         j = _wait_job(r["job"])
         self.assertEqual(j["status"], "done", j["log"])
         self.assertIn("comando", j["result"]["done"])
         link = self.tmp / "bin" / "brain"
         self.assertTrue(link.is_symlink(), j["log"])
+
+    def test_maquina_icon_branch_is_mocked_and_reports(self):
+        from unittest import mock
+        from brainlib import launcher
+        with mock.patch.object(launcher, "pin_shortcut", return_value="✓ Brain pregado no Dock") as pin:
+            r = onboard.apply_maquina(self.b, {"comando": False, "tui": False, "framework": False,
+                                               "noturno": "", "icon": True})
+            j = _wait_job(r["job"])
+        pin.assert_called_once()
+        self.assertEqual(j["status"], "done", j["log"])
+        self.assertIn("icon", j["result"]["done"])
+        self.assertTrue(any("pregado no Dock" in ln for ln in j["log"]))
+
+    def test_maquina_icon_failure_never_kills_the_job(self):
+        from unittest import mock
+        from brainlib import launcher
+        with mock.patch.object(launcher, "pin_shortcut", side_effect=OSError("desktop read-only")):
+            r = onboard.apply_maquina(self.b, {"comando": False, "tui": False, "framework": False,
+                                               "noturno": "", "icon": True})
+            j = _wait_job(r["job"])
+        self.assertEqual(j["status"], "done", j["log"])             # cosmético: o job segue
+        self.assertTrue(any("ícone" in ln for ln in j["log"]))
 
     def test_maquina_validates_before_starting_anything(self):
         before = set(onboard._JOBS)

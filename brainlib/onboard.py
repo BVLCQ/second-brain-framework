@@ -798,8 +798,9 @@ def apply_maquina(brain, data: dict) -> dict:
             from . import launcher
             try:
                 j.say(launcher.pin_shortcut())
-            except util.BrainError as e:
-                j.say(f"– ícone: {e}")
+                done.append("icon")
+            except (util.BrainError, OSError, subprocess.SubprocessError) as e:
+                j.say(f"– ícone: {e}")                  # cosmético: nunca derruba os passos seguintes
         if wants["framework"]:
             setup._run_framework(b, ui)
             done.append("framework")

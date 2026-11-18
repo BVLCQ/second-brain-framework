@@ -254,15 +254,50 @@ class CliAndSetupTests(unittest.TestCase):
 class PinShortcutTests(unittest.TestCase):
     """Atalho de um clique: Dock no macOS, .desktop na área de trabalho no Linux. Idempotente e honesto."""
 
+    def test_dock_tile_fragment_is_a_well_formed_plist(self):
+        """O fragmento tem que PARSEAR — tile-type dentro do tile. Um fragmento malformado já escapou
+        da suíte uma vez (defaults grava amputado e o pill mentia 'pronto'); nunca de novo."""
+        frag = launcher._DOCK_TILE.format(app="/Applications/Brain.app")
+        tile = plistlib.loads(f"<plist><array>{frag}</array></plist>".encode())[0]
+        self.assertEqual(tile["tile-type"], "file-tile")
+        self.assertEqual(tile["tile-data"]["file-data"]["_CFURLString"], "/Applications/Brain.app")
+
     def test_macos_pins_installed_app_once(self):
-        tmp = Path(tempfile.TemporaryDirectory().name)                      # não usamos cleanup: só stubs de subprocess
+        tiles: list[dict] = []
+
+        def fake_tiles():
+            return list(tiles)
+
+        def fake_write(argv, **kw):
+            if not argv[0].endswith("defaults"):                      # killall Dock: só sucesso
+                return subprocess.CompletedProcess(argv, 0, "", "")
+            tiles.append(plistlib.loads(f"<plist><array>{argv[-1]}</array></plist>".encode())[0])
+
         with mock.patch.object(launcher, "_find_ours", return_value=[Path("/Applications/Brain.app")]), \
              mock.patch.object(launcher, "_platform", return_value="darwin"), \
-             mock.patch.object(launcher, "_dock_read", side_effect=["", '"/Applications/Brain.app"']), \
-             mock.patch("subprocess.run") as run:
+             mock.patch.object(launcher, "_dock_tiles", side_effect=fake_tiles), \
+             mock.patch("subprocess.run", side_effect=fake_write) as run:
             self.assertIn("pregado no Dock", launcher.pin_shortcut())
             self.assertIn("já está no Dock", launcher.pin_shortcut())       # idempotente: segunda vez não escreve
             self.assertEqual(run.call_count, 2)                             # write + killall, uma vez só
+
+    def test_macos_typeless_tile_from_old_bug_does_not_count_and_is_healed(self):
+        """Tile nosso sem tile-type (fragmento bugado do a272072) NÃO é 'já está' — o pin reescreve."""
+        wounded = {"tile-data": {"file-data": {"_CFURLString": "/Applications/Brain.app",
+                                               "_CFURLStringType": 0}}}     # sem tile-type
+        written: list[dict] = []
+
+        def fake_write(argv, **kw):
+            if not argv[0].endswith("defaults"):                      # killall Dock: só sucesso
+                return subprocess.CompletedProcess(argv, 0, "", "")
+            written.append(plistlib.loads(f"<plist><array>{argv[-1]}</array></plist>".encode())[0])
+
+        with mock.patch.object(launcher, "_find_ours", return_value=[Path("/Applications/Brain.app")]), \
+             mock.patch.object(launcher, "_platform", return_value="darwin"), \
+             mock.patch.object(launcher, "_dock_tiles", return_value=[wounded]), \
+             mock.patch("subprocess.run", side_effect=fake_write):
+            self.assertIn("pregado no Dock", launcher.pin_shortcut())      # cura, não "já está"
+            self.assertEqual(written[0]["tile-type"], "file-tile")
 
     def test_macos_without_app_refuses(self):
         with mock.patch.object(launcher, "_find_ours", return_value=[]), \
@@ -285,13 +320,20 @@ class PinShortcutTests(unittest.TestCase):
             self.assertTrue(dst.exists())
             self.assertEqual(dst.stat().st_mode & 0o111, 0o111)             # executável
 
-    def test_pin_status_reads_dock(self):
-        with mock.patch.object(launcher, "_platform", return_value="darwin"), \
-             mock.patch.object(launcher, "_dock_read", return_value='"/Applications/Brain.app"'):
-            self.assertTrue(launcher.pin_status())
-        with mock.patch.object(launcher, "_platform", return_value="darwin"), \
-             mock.patch.object(launcher, "_dock_read", return_value=""):
-            self.assertFalse(launcher.pin_status())
+    def test_pin_status_requires_a_well_formed_tile(self):
+        good = {"tile-type": "file-tile", "tile-data": {"file-data": {"_CFURLString": "/Applications/Brain.app"}}}
+        # forma que o próprio Dock normaliza depois de um reload (vista na máquina real):
+        docked = {"tile-type": "file-tile",
+                  "tile-data": {"file-data": {"_CFURLString": "file:///Applications/Brain.app/", "_CFURLStringType": 15}}}
+        wounded = {"tile-data": {"file-data": {"_CFURLString": "/Applications/Brain.app"}}}
+        with mock.patch.object(launcher, "_platform", return_value="darwin"):
+            for tiles in ([good], [docked]):
+                with mock.patch.object(launcher, "_dock_tiles", return_value=tiles):
+                    self.assertTrue(launcher.pin_status())
+            with mock.patch.object(launcher, "_dock_tiles", return_value=[wounded]):
+                self.assertFalse(launcher.pin_status())
+            with mock.patch.object(launcher, "_dock_tiles", return_value=[]):
+                self.assertFalse(launcher.pin_status())
 
 
 if __name__ == "__main__":

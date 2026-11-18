@@ -71,6 +71,34 @@ class FocusOpenTabTest(unittest.TestCase):
         with mock.patch("subprocess.run", side_effect=subprocess.TimeoutExpired("osascript", 10)):
             self.assertFalse(util.focus_open_tab(LIVE))
 
+    def test_tab_in_non_default_browser_is_found(self):
+        """A razão da varredura: a aba do Brain mora num navegador que NÃO é o padrão.
+        Padrão (Safari) sem a aba → a varredura continua e acha no Chrome."""
+        calls: list = []
+
+        def fake(argv, **kw):
+            calls.append(argv)
+            if argv[0].endswith("pgrep"):
+                running = argv[2] in ("Safari", "Google Chrome")           # os dois abertos
+                return subprocess.CompletedProcess(argv, 0 if running else 1, "", "")
+            # osascript: só o Chrome tem a aba do Brain
+            found = "Chrome" in argv[2]
+            return subprocess.CompletedProcess(argv, 0, "ok" if found else "", "")
+
+        with mock.patch.object(util, "_default_browser", return_value=("Safari", "safari")), \
+                mock.patch("subprocess.run", fake):
+            self.assertTrue(util.focus_open_tab(LIVE))
+        chromes = [c for c in calls if c[0].endswith("osascript") and "Chrome" in c[2]]
+        self.assertTrue(chromes, "a varredura precisa ter chegado no Chrome")
+
+    def test_default_browser_is_swept_first(self):
+        calls: list = []
+        with mock.patch.object(util, "_default_browser", return_value=("Google Chrome", "chromium")), \
+                mock.patch("subprocess.run", _run(calls=calls)):
+            self.assertTrue(util.focus_open_tab(LIVE))
+        first_osa = next(c for c in calls if c[0].endswith("osascript"))
+        self.assertIn("Google Chrome", first_osa[2])                      # o padrão vem antes dos demais
+
     def test_unknown_default_browser_or_foreign_url_is_left_alone(self):
         # padrão desconhecido: varre os navegadores controláveis que existirem (a aba do Brain pode
         # morar num navegador que não é o padrão — ruling "manage the user's browser"), mas nunca
