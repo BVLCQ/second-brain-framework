@@ -1,3 +1,29 @@
+## 2.22.0 — os canais do cérebro nos agentes e multi-instância de verdade
+
+- **O cérebro alcança os agentes de código (#5, #20).** `brain memory harness install` registra, além do
+  instalador oficial do Hindsight, os dois canais de LEITURA do cérebro: o hook de submissão de prompt no
+  Claude Code (`.claude/settings.local.json`, via `perms.sync` — roteador, teto de 5 itens, abstenção) e o
+  servidor MCP somente-leitura (`brain mcp`) no Claude Code, no Hermes (`hermes mcp add brain --command …
+  --env BRAIN_HOME=… --args mcp`), no Cursor (`~/.cursor/mcp.json`) e no Codex (`~/.codex/config.toml`,
+  bloco demarcado e validado). Toda sessão, em qualquer diretório, ganha consulta sob demanda — e nada do
+  banco dos agentes vira fato do vault (a suíte segue cobrindo a separação). `--no-recall`/`--no-mcp`
+  desligam um dos canais; `brain memory harness remove <agente>` (tecla `x` na TUI, botão no painel)
+  desfaz o registro do hook/MCP e devolve `recall_hook` para "auto".
+- **Hermes honesto (#19).** `wire_hermes` só registra o harness quando `memory.provider` fica de fato em
+  `hindsight` (checando a CLI e o `~/.hermes/config.yaml`); a verificação e o doctor passam a conferir os
+  canais de cada harness — hook, MCP, provider e, com `--online`, o plugin do Hermes — avisando o comando
+  exato que corrige o que faltar. Sem CLI do Hermes no PATH, o resultado diz o que rodar em vez de
+  declarar conectado.
+- **Cada instância com o seu noturno (#9).** O agendamento no macOS usa rótulo `launchd` próprio por
+  instância (`com.segundo-cerebro.nightly.<slug>-<hash8>`) e migra o plist legado apenas quando ele
+  apontava para a própria instância; no cron, instalar/remover preserva as linhas das outras. O comando
+  `brain` e o app Brain não trocam de instância em silêncio: setup e `brain app install` avisam quando já
+  apontam para outra instância existente e só trocam com confirmação em terminal interativo (link
+  quebrado se repara direto). O doctor de cada instância relata o estado do SEU noturno — inclusive
+  quando o agendamento da máquina roda outra instância.
+- **Varredura do upstream:** `/Users/marina-demo/…` passa a ser tratado como nome fictício declarado no
+  cheque de caminhos de máquina (mesmo critério já usado para os termos do ledger).
+
 ## 2.21.0 — o lote das issues #5–#18: noturno honesto, hook de recall e TUI sem armadilhas
 
 - **Noturno que não mente mais (#6, #7).** O agente headless é sondado no setup (interativo) e no
