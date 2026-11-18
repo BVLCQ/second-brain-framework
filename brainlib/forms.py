@@ -339,7 +339,7 @@ def _forms() -> list[Form]:
             F("reason", "motivo", req=True, ph="já resolvi / não importa"),), sub="{text}", tail=OWNER),
         Form("agent.arg", "{name}", (), (
             F("arg", "{arg_label}", ph="{arg_ph}", req="@arg_req"),), sub="{desc}",
-            where="tui", why="argumento de um comando ⚡ do agente (/gmail, /slack…); o painel não roda o agente"),
+            where="tui", why="argumento de um comando ⚡ do agente (/gmail, /slack…); o painel dispara as ações ⚡ direto pela ponte, sem formulário intermediário"),
         Form("ask.free", "Resposta livre ao agente", ("note", "add", "--text", "{text}"), (
             F("text", "resposta", req=True, multi=True, ph="o que o agente deve saber ou fazer"),), sub="{sub}",
             where="tui", why="retoma a sessão do agente (claude --resume); o painel não roda o agente"),
