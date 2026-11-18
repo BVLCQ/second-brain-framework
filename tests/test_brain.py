@@ -1489,6 +1489,12 @@ class ScanDemoTokenTests(unittest.TestCase):
         self.assertFalse(upstream._scan_line("falei com a Marina-demo ontem, id marina-demo", res, ""))
         self.assertFalse(upstream._scan_line("marina-demo@example.com", res, ""))
 
+    def test_demo_home_path_is_not_a_machine_path(self):
+        """`/Users/marina-demo/...` é dado fictício declarado — não vira 'caminho da máquina'."""
+        res = []
+        hits = upstream._scan_line("rode: python3 /Users/marina-demo/Apps/second-brain-framework/brain mcp", res, "")
+        self.assertFalse(any(kind == "caminho da máquina" for kind, _ in hits))
+
 
 class UpstreamTests(unittest.TestCase):
     """update/upstream contra repos git locais: um remoto bare, um mantenedor (A) e uma instância (B)."""

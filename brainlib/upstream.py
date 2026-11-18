@@ -406,6 +406,8 @@ def _scan_line(text: str, term_res: list[tuple[str, re.Pattern]], home: str) -> 
             hits.append((f"dado pessoal ({kind})", rx.pattern))
     for m in _HOME_RE.finditer(text):
         who = m.group(2).lower()
+        if _DEMO_TOKEN_RE.fullmatch(who):
+            continue        # /Users/marina-demo: nome fictício declarado — mesmo critério dos termos do ledger
         # /home/<x> aparece em containers (/home/postgres…): só conta se for o usuário desta máquina
         if who not in HOME_PLACEHOLDERS and (m.group(1) == "/Users" or who == _user()):
             hits.append(("caminho da máquina", m.group(0)))
