@@ -691,8 +691,8 @@ arquivo** que funciona em qualquer navegador, com dois modos:
   máquina.
 - **Ponte CLI (`./brain serve`)** — servidor local em 127.0.0.1 com token
   (impresso no terminal). O painel passa a **executar** os comandos de
-  verdade, pelo mesmo caminho do TUI, com os mesmos gates (`--quote`,
-  aprovação literal, `--by owner`). A allowlist é fechada; `update`,
+  verdade, pelo mesmo caminho do TUI, com os mesmos gates (confirmar no formulário
+  aprova com `--approval`/`--quote painel`, `--by owner`). A allowlist é fechada; `update`,
   `migrate`, `backup` e cia. seguem no terminal.
 
 O painel tem três **faces** (como o TUI): **Execução**, **Portfólio** e **Configurações** —
@@ -722,8 +722,8 @@ por uma versão.
 - **Projetos** — ficha por projeto: entregáveis com peso, próximos marcos,
   saúde com motivo, decisões e ações ligadas. O círculo do entregável
   marca feito (`space`) ou muda estado (`s`) — é a colheita do checkbox.
-  `n estrutura` cria goal/projeto/entregável (os dois primeiros com gate
-  de aprovação literal); `e` edita com o mesmo gate; o botão ⛏ no goal
+  `n estrutura` cria goal/projeto/entregável (os dois primeiros com gate —
+  confirmar aprova); `e` edita com o mesmo gate; o botão ⛏ no goal
   declara progresso.
 - **Decisões** — quem decidiu, quando, com base em quê, cadeia de
   supersedes. `n` nova, `S` supera a selecionada.
@@ -732,12 +732,12 @@ por uma versão.
 - **Linha do tempo** — o que aconteceu e o que vem.
 - **Foco** (badge: plano proposto) — o plano da semana **com o seu
   calendário real**: eventos ocupados em cinza, blocos propostos em azul,
-  conflitos em vermelho. `A` aprova (gate — resposta literal), `a` aplica
+  conflitos em vermelho. `A` aprova (gate — confirmar aprova), `a` aplica
   (gate — ics ou google), `s` sincroniza (dry-run ou aplicar), `p` planeja
   com o horizonte em dias; clicar num bloco proposto reserva o plano.
 - **Mensagens** (badge: rascunhos) — o outbox: rascunhos, enviadas,
   falhas. `n` rascunha, `A` aprova o texto exato (gate — o diálogo mostra a
-  mensagem e espera seu `enviar N`), `d` cancela (rascunho ou aprovada); `T` mostra também as enviadas.
+  mensagem e confirmar aprova), `d` cancela (rascunho ou aprovada); `T` mostra também as enviadas.
 - **Perguntas** — a caixa de aprovação: ASKs, propostas (aceitar/rejeitar
   com quote) e a seção **Publicar** (porta 3). `n` pede publicação,
   `A` aprova (gate) e `d` cancela a publicação selecionada; `a` responde pergunta / aceita proposta e `d`
@@ -872,7 +872,7 @@ O arquivo é Markdown **estrito**. Fora deste formato a linha é ignorada ou vir
 ## 10. Limites e segurança — o que ele NUNCA faz
 
 - **Nunca** escreve no mundo exterior fora das 4 portas — e cada uso de
-  porta exige aprovação literal sua.
+  porta exige a sua aprovação explícita.
 - **Nunca** edita, renomeia ou apaga um original em `RAW/` (o arquivo morto
   é imutável).
 - **Nunca** edita o livro-razão na mão (toda escrita é validada pelo CLI) —
@@ -923,7 +923,7 @@ edita `events.jsonl` à mão — com backup, uma linha.
   gravada na inbox antes de ser usada.
 - **Proveniência** — de onde veio o fato: `[declarado]` `[doc]`
   `[observado]` `[sem-fonte]`.
-- **Gate** — ponto onde o agente para e espera sua aprovação literal.
+- **Gate** — ponto onde o sistema para e espera a sua aprovação (no chat/CLI, literal; na TUI/painel, confirmar no formulário).
 - **Portas** — as 4 únicas escritas no mundo: foco (Calendar), mensagem
   (Slack), publicação (canvas/Drive), backup (Drive).
 - **mine / waiting / watching** — as três listas: eu devo, me devem, é contexto. `mine` é sempre do dono do Brain:
@@ -1001,8 +1001,8 @@ Regras: facilidade 5 é bom (fácil). Não confunda com esforço..
 **Promover** (`p` no TUI · `./brain opportunity promote OPP-#### --level goal|project|deliverable`): cria o nó do
 PLANNING no nível escolhido — **goal** novo (`--level goal`), **projeto** num goal existente (`--goal GOAL-#`) ou
 **entregável** num projeto existente (`--project PROJ-#`; cinco oportunidades do mesmo processo viram cinco
-entregáveis do mesmo projeto). Mudança estrutural, então mostra o diff do `goals.md` e só segue com o seu "ok"
-literal. A oportunidade vira `em-andamento` e fica ligada ao nó criado (o progresso aparece na ficha).
+entregáveis do mesmo projeto). Mudança estrutural, então mostra o diff do `goals.md` e só segue após a sua
+aprovação (no chat/CLI, "ok" literal; na TUI/painel, confirmar no formulário). A oportunidade vira `em-andamento` e fica ligada ao nó criado (o progresso aparece na ficha).
 
 **Playbooks** moram no Drive: `./brain doc link PROC-0001 --kind playbook --ref <url> --watch` cria uma fonte
 `drive-doc` no `watch.toml`; o `/update` só relê o doc quando o `modifiedTime` muda.

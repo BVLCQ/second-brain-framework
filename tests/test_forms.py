@@ -102,14 +102,36 @@ class SingleSourceTest(unittest.TestCase):
                 self.assertIsNotNone(hit, f"{kind} {n!r}: falta no forms.js (ou justifique em forms.PY_ONLY)")
 
     def test_gates_never_prefill_approval(self):
-        """Silêncio não é aprovação: campo de aprovação literal nunca vem preenchido (e é obrigatório)."""
+        """Gates no painel/TUI: `quote` fica vazio e `auto="surface"` injeta "painel"/"tui" sem input; `memory.mode` mantém input."""
+        exported = forms.export()
+        gate_auto_forms = []
         for fm in forms.FORMS.values():
             for f in fm.fields:
                 if f.id == "quote" or f.arg in ("--approval", "--quote"):
                     self.assertTrue(f.req, f"{fm.id}.{f.id}: aprovação obrigatória")
                     self.assertFalse(f.value or f.init, f"{fm.id}.{f.id}: aprovação não vem preenchida")
+                    if fm.id == "memory.mode":
+                        self.assertIsNone(f.auto, "memory.mode (egress full) mantém aprovação digitada")
+                    else:
+                        self.assertEqual(f.auto, "surface", f"{fm.id}.{f.id}: deve usar auto='surface'")
+                        gate_auto_forms.append(fm.id)
+                        if fm.where != "tui":
+                            exp_f = next(x for x in exported[fm.id]["fields"] if x["id"] == f.id)
+                            self.assertEqual(exp_f.get("auto"), "surface")
+        self.assertGreaterEqual(len(gate_auto_forms), 10)
         js = _js_src()
+        self.assertIn('f.auto !== "surface"', (JS / "extra.js").read_text(encoding="utf-8"))
+        self.assertIn('f.auto != "surface"', (ROOT / "brainlib" / "tui" / "app.py").read_text(encoding="utf-8"))
         self.assertNotRegex(js, r"--approval \"ok\"|--approval ok\b", "o painel não aprova por você")
+        # sem superfície (CLI / raw vazio), missing continua exigindo aprovação; com "tui"/"painel", preenche
+        for fid in ("goal.new", "project.new", "goal.edit", "project.edit", "proposal.accept", "proposal.reject",
+                    "outbox.approve", "focus.approve", "publish.approve", "opportunity.promote"):
+            self.assertTrue(forms.missing(fid, {}, {"id": "X", "title": "T", "item": {"title": "T"}}, {}), fid)
+            for surf in ("tui", "painel"):
+                cmd = forms.build(fid, {"title": "T", "how": "ok", "effort": "1h"},
+                                  {"id": "X", "goal": "GOAL-1", "project": "PROJ-1", "kind": "fechar-acao",
+                                   "item": {"title": "T"}}, {}, surface=surf)[0]
+                self.assertIn(surf, cmd, f"{fid} ({surf}): {cmd}")
 
     def test_dynamic_sources_never_empty(self):
         """Cardápio dinâmico com depends fora da tabela (ex.: modo none) cai no default — o Select
@@ -241,10 +263,11 @@ def _py_eval(m: dict, cases: list[dict]) -> list[dict]:
     res = []
     for c in cases:
         fm = forms.FORMS[c["form"]]
-        v = forms.values(fm, c["raw"], c["ctx"], m)
+        surf = c.get("surface", "painel")
+        v = forms.values(fm, c["raw"], c["ctx"], m, surface=surf)
         res.append({
-            "argv": forms.build(c["form"], c["raw"], c["ctx"], m),
-            "missing": forms.missing(c["form"], c["raw"], c["ctx"], m),
+            "argv": forms.build(c["form"], c["raw"], c["ctx"], m, surface=surf),
+            "missing": forms.missing(c["form"], c["raw"], c["ctx"], m, surface=surf),
             "hidden": sorted(forms.hidden(fm, {k: c["raw"].get(k, "") for k in v}, c["ctx"], m)),
             "hints": {f.id: forms.hint(f.hint, v[f.id], v, c["ctx"], m) for f in fm.fields
                       if f.hint and f"hint:{f.hint}" not in forms.PY_ONLY},
@@ -253,7 +276,8 @@ def _py_eval(m: dict, cases: list[dict]) -> list[dict]:
             "options": {f.id: [list(o) for o in forms.options(f, m, v, c["ctx"])] for f in fm.fields},
             "labels": [forms.label(f, m) for f in fm.fields],
             "title": forms.title(c["form"], c["ctx"]), "sub": forms.sub(c["form"], c["ctx"]),
-            "initial": forms.initial(fm, c["ctx"], m), "display": forms.display(forms.build(c["form"], c["raw"], c["ctx"], m)),
+            "initial": forms.initial(fm, c["ctx"], m),
+            "display": forms.display(forms.build(c["form"], c["raw"], c["ctx"], m, surface=surf)),
         })
     return res
 
@@ -264,7 +288,7 @@ const fs = require("fs");
 const {m, cases} = JSON.parse(fs.readFileSync(process.argv[3], "utf8"));
 const PY_ONLY = m.__py_only;
 const out = cases.map(c => {
-  const fm = m.forms[c.form], v = F.values(fm, c.raw, c.ctx, m), raw = {};
+  const fm = m.forms[c.form], v = F.values(fm, c.raw, c.ctx, m, c.surface), raw = {};
   Object.keys(v).forEach(k => { raw[k] = c.raw[k] === undefined || c.raw[k] === null ? "" : String(c.raw[k]); });
   const hints = {}, checks = {}, options = {};
   fm.fields.forEach(f => {
@@ -272,8 +296,8 @@ const out = cases.map(c => {
     if (f.check && !PY_ONLY.includes("check:" + f.check.split(":")[0])) checks[f.id] = F.check(f.check, v[f.id], v, c.ctx, m);
     options[f.id] = F.options(f, m, v, c.ctx);
   });
-  const argv = F.formArgv(fm, c.raw, c.ctx, m);
-  return {argv, missing: F.missing(fm, c.raw, c.ctx, m), hidden: [...F.hidden(fm, raw, c.ctx, m)].sort(), hints, checks, options,
+  const argv = F.formArgv(fm, c.raw, c.ctx, m, c.surface);
+  return {argv, missing: F.missing(fm, c.raw, c.ctx, m, c.surface), hidden: [...F.hidden(fm, raw, c.ctx, m)].sort(), hints, checks, options,
           labels: fm.fields.map(f => F.label(f, m)), title: F.fmt(fm.title, c.ctx), sub: F.fmt(fm.sub, c.ctx),
           initial: F.initial(fm, c.ctx, m), display: F.display(argv)};
 });

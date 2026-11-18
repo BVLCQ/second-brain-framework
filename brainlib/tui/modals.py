@@ -64,7 +64,7 @@ class FormSpec:
     fields: list[Field]
     build: Callable[[dict], list[list[str]]]         # valores → comandos `brain` (listas de argumentos)
     sub: str = ""
-    gate: bool = False                               # pede aprovação digitada (borda âmbar)
+    gate: bool = False                               # confirmar aprova (borda âmbar)
     extra: Text | None = None                        # conteúdo fixo acima dos campos (ex.: diff, texto exato)
     on_cancel: Callable[[], None] | None = None
     on_fail: Callable[[], None] | None = None        # algum comando falhou (o que o formulário preparou fica desfeito)
@@ -108,7 +108,7 @@ class FormModal(ModalScreen):
     def compose(self) -> ComposeResult:
         s = self.spec
         with VerticalScroll(id="dialog", classes="gate" if s.gate else ""):
-            yield Static(Text.assemble(("◆ aprovação · ", "yellow") if s.gate else "", (s.title, "bold")), id="mt")
+            yield Static(Text.assemble(("◆ gate · ", "yellow") if s.gate else "", (s.title, "bold")), id="mt")
             if s.sub:
                 yield Static(Text(s.sub, "dim"), id="ms")
             if s.extra is not None:

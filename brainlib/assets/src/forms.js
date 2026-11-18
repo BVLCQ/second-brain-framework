@@ -201,8 +201,11 @@ const BRAIN_FORMS = (function(){
       const got = str(k[0] === "@" ? ctx[k.slice(1)] : (v[k] || "")); return vals.includes(got) !== neg; });
   }
   function hidden(fm, raw, ctx, M){ return new Set(fm.fields.filter(f => !cond(f.show, raw, ctx || {}, M)).map(f => f.id)); }
-  function values(fm, raw, ctx, M){
-    const r = {}; fm.fields.forEach(f => { r[f.id] = str(raw[f.id]).trim(); });
+  function values(fm, raw, ctx, M, surface = "painel"){
+    const r = {}; fm.fields.forEach(f => {
+      const s = str(raw[f.id]).trim();
+      r[f.id] = (f.auto === "surface" && surface && !s) ? surface : s;
+    });
     const h = hidden(fm, r, ctx, M); const o = {}; Object.keys(r).forEach(k => { o[k] = h.has(k) ? "" : r[k]; }); return o;
   }
 
@@ -307,9 +310,9 @@ const BRAIN_FORMS = (function(){
     return f.arg ? [f.arg, val] : [];
   }
   const emits = f => !!(f.arg || f.set || f.flag);
-  function formArgv(fm, raw, ctx, M){
+  function formArgv(fm, raw, ctx, M, surface = "painel"){
     ctx = ctx || {};
-    const v = values(fm, raw, ctx, M), byId = {}; fm.fields.forEach(f => { byId[f.id] = f; });
+    const v = values(fm, raw, ctx, M, surface), byId = {}; fm.fields.forEach(f => { byId[f.id] = f; });
     const placed = new Set(fm.cmd.filter(t => t[0] === "{").map(t => t.replace(/[{}?*@]/g, "")));
     let main = []; fm.cmd.forEach(t => { main = main.concat(tok(t, fm, v, ctx, M)); });
     const base = fm.edit ? baseline(fm, ctx, M) : {};
@@ -332,9 +335,9 @@ const BRAIN_FORMS = (function(){
     (fm.more || []).forEach(([p, tpl]) => { if (PRED[p](v, ctx, M)) { let c = []; tpl.forEach(t => { c = c.concat(tok(t, fm, v, ctx, M)); }); cmds.push(c); } });
     return cmds;
   }
-  function missing(fm, raw, ctx, M){
+  function missing(fm, raw, ctx, M, surface = "painel"){
     ctx = ctx || {};
-    const v = values(fm, raw, ctx, M), r = {}; Object.keys(v).forEach(k => { r[k] = str(raw[k]); });
+    const v = values(fm, raw, ctx, M, surface), r = {}; Object.keys(v).forEach(k => { r[k] = str(raw[k]); });
     const h = hidden(fm, r, ctx, M);
     for (const f of fm.fields) { if (h.has(f.id)) continue;
       if (f.req && !v[f.id]) return 'Preencha "' + label(f, M) + '".';

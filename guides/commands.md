@@ -262,7 +262,8 @@ key deixa o histórico de pulls na key antiga.
 Cockpit de terminal (Textual): cinco painéis numerados (status, ações, plano, aprovações, registro), o
 detalhe do item, o log de comandos (o painel `6`, que expande quando selecionado) e uma barra com as teclas do contexto, como no lazygit. A leitura é
 em processo; **toda escrita é `./brain …` como subprocesso**, e a linha exata aparece no formulário (antes
-de confirmar) e no log (depois). Gates e portas pedem a sua resposta digitada, e as ações do agente (⚡)
+de confirmar) e no log (depois). Em gates e portas, confirmar no formulário já aprova (`tui` — o único
+gate com "ok" digitado é o modo `full` da memória), e as ações do agente (⚡)
 rodam o agente de `[runner]` em modo headless. O TUI se recusa a abrir com `BRAIN_NIGHTLY=1` (código 4).
 
 É um extra **opcional**: o núcleo do brain continua só com a stdlib.
@@ -290,9 +291,10 @@ aparece), a validação, a dica ao lado do campo, o valor com que abre ao editar
 `brain …`. A TUI desenha os campos com o Textual; o painel recebe a mesma especificação no view model (`M.forms`) e
 o `assets/src/forms.js` monta o comando com a mesma regra. Por isso os dois mostram os mesmos campos na mesma ordem,
 escondem e mostram os mesmos campos quando o tipo muda (ex.: Fontes: `drive-doc` pede só o doc; `jira` monta a JQL
-pelo escopo), aceitam as mesmas datas naturais (`sex`, `+3d`) e montam a mesma linha. Nenhum dos dois pré-preenche
-aprovação: silêncio não é "ok". `tests/test_forms.py` recusa campo escrito à mão numa ponta só e compara, pelo
-node, o comando, a validação, as dicas e as listas que o Python e o JS dão para os mesmos valores. Exceções de uma
+pelo escopo), aceitam as mesmas datas naturais (`sex`, `+3d`) e montam a mesma linha. Nos gates (exceto o
+consentimento `full` da memória), confirmar o formulário já aprova (`tui` ou `painel`), sem campo digitado.
+`tests/test_forms.py` recusa campo escrito à mão numa ponta só e compara, pelo node, o comando, a validação, as dicas
+e as listas que o Python e o JS dão para os mesmos valores. Exceções de uma
 ponta só (`where="tui"`, com o porquê): `plan.log` (diff do `$EDITOR`), `note.edit`, `memory.ask`, `ask.free` e
 `agent.arg` (o painel não roda o agente nem a memória). Validações que precisam do ledger inteiro (alias de
 pessoa, ação parecida, destinatário em `[outbound].allow`) ficam só na TUI (`forms.PY_ONLY`); a CLI valida de
@@ -752,7 +754,7 @@ Goal e projeto exigem `--approval "ok"` e gravam `plan.changed` (com o antes →
 brain plan edit PROJ-1 --title "Padronização de métricas" --approval "ok"
 brain plan edit PROJ-1.3 --due 2026-12-15 --weight 2
 ```
-No TUI, no painel 3, `e` abre o formulário do item selecionado (goal e projeto pedem a aprovação digitada).
+No TUI, no painel 3, `e` abre o formulário do item selecionado (goal e projeto são gate: confirmar aprova a mudança).
 
 ### `brain progress NÓ PCT`
 Seu percentual "de feeling" para um goal/projeto. Aparece **ao lado** do calculado, nunca o substitui.

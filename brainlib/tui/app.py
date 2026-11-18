@@ -1222,7 +1222,7 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
         checks, hints = self._py_rules(ctx)
 
         def build(v: dict) -> list[list[str]]:
-            cmds = forms.build(form_id, v, ctx, m)
+            cmds = forms.build(form_id, v, ctx, m, surface="tui")
             return wrap(cmds, v) if wrap else cmds
 
         if not fm.fields:                                # só confirmação (ex.: remover fonte, desligar documento)
@@ -1242,7 +1242,7 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
                         res=(lambda x, v, f=f: forms.hint(f.hint, x, v, ctx, m, hints)) if f.hint else None,
                         show=(lambda v, f=f: forms._cond(f.show, v, ctx, m)) if f.show is not None else None,
                         fill=(f.fill[0], forms.FILL[f.fill[1]]) if f.fill else None)
-                  for f in fm.fields]
+                  for f in fm.fields if f.auto != "surface"]
         self.form(FormSpec(forms.title(form_id, ctx), fields, build, sub=forms.sub(form_id, ctx), gate=fm.gate, extra=extra,
                            on_cancel=on_cancel, on_fail=on_fail, after=after, render=render, show=show, intercept=intercept,
                            help=help, help_title=help_title))
@@ -1302,7 +1302,7 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
                        after=lambda: self.jump(nid))
 
     def f_edit_node(self) -> None:
-        """Painel 3, `e`: edita o item selecionado. Goal e projeto são gate (aprovação digitada); entregável não."""
+        """Painel 3, `e`: edita o item selecionado. Goal e projeto são gate (confirmar aprova); entregável não."""
         it = self.cur()
         if it is None:
             return
@@ -1464,7 +1464,7 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
             Path(name).unlink(missing_ok=True)
 
     def edit_plan(self) -> None:
-        """Gate estrutural: edita goals.md, mostra o diff e só mantém com a sua aprovação digitada."""
+        """Gate estrutural: edita goals.md, mostra o diff e só mantém ao confirmar."""
         path = self.inst.planning_file
         before = path.read_text(encoding="utf-8") if path.exists() else ""
         editor = _editor_argv()
@@ -1934,7 +1934,7 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
                      ("ctrl+t", "tema claro / escuro"), ("q", "sair")):
             body.append(f"  {k:<9}", "bold cyan")
             body.append(d + "\n")
-        body.append("\n⚡ roda o agente  ·  ◆ pede aprovação digitada\n", "dim")
+        body.append("\n⚡ roda o agente  ·  ◆ gate — confirmar aprova\n", "dim")
         face = f"{FACES[self.face][0]} · " if self.face else ""
         self.push_screen(TextModal(f"Atalhos · {face}{name} › {tab_label}", body))
 

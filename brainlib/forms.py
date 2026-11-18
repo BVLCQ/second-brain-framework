@@ -57,6 +57,7 @@ class F:
     xf: str | None = None                # transforma o valor antes da CLI (XF)
     clear: tuple | None = None           # edição: esvaziou → estes tokens (sem isso, esvaziar não manda nada)
     always: bool = False                 # edição: vai mesmo sem mudar (nota, alias novo)
+    auto: str | None = None              # "surface": preenchido pela superfície ("tui"/"painel") ao confirmar; sem input
 
 
 @dataclass(frozen=True)
@@ -78,8 +79,10 @@ class Form:
 
 # ── peças repetidas ─────────────────────────────────────────────────────────
 OWNER = ("--by", "owner")
-QUOTE = F("quote", "sua aprovação", req=True, ph="digite a resposta literal, ex.: ok", arg="--quote")
-APPROVAL = F("quote", "sua aprovação", req=True, ph="digite a resposta literal, ex.: ok", arg="--approval")
+QUOTE = F("quote", "sua aprovação", req=True, ph="digite a resposta literal, ex.: ok", arg="--quote",
+          always=True, auto="surface")
+APPROVAL = F("quote", "sua aprovação", req=True, ph="digite a resposta literal, ex.: ok", arg="--approval",
+             always=True, auto="surface")
 
 
 def _reason(ph: str = "", req: bool = True) -> F:
@@ -196,7 +199,7 @@ def _forms() -> list[Form]:
             F("title", "título", req=True, ph="Padronização de métricas"),
             F("owner", "dono", ph="id ou alias da pessoa (opcional)", suggest="@people", arg="--owner"),
             _reason("opcional: por que agora", req=False), APPROVAL),
-            sub="{goal} · {goal_title}. Criar projeto é mudança estrutural: pede a sua aprovação digitada.", gate=True),
+            sub="{goal} · {goal_title}. Criar projeto é mudança estrutural: confirmar aprova a alteração.", gate=True),
         Form("deliverable.new", "Novo entregável {nid} em {project}", ("plan", "add-deliverable", "{project}", "{title}"), (
             F("title", "título", req=True, ph="Manual de rotinas v1", check="no_dot"),
             due(),
@@ -210,14 +213,14 @@ def _forms() -> list[Form]:
               init="horizon", arg="--horizon", clear=("--horizon", "")),
             F("why", "por quê", ph="vazio remove", init="why", arg="--why", clear=("--why", "")),
             _reason("opcional: por que mudar", req=False), APPROVAL),
-            sub="Editar goal é mudança estrutural: pede a sua aprovação digitada.", gate=True, edit=True),
+            sub="Editar goal é mudança estrutural: confirmar aprova a alteração.", gate=True, edit=True),
         Form("project.edit", "Editar {id}", ("plan", "edit", "{id}"), (
             F("title", "título", req=True, init="title", arg="--title"),
             F("status", "status", choices="@node_status", init="status", arg="--status"),
             F("owner", "dono", ph="id ou alias da pessoa · vazio remove", suggest="@people", init="owner",
               arg="--owner", clear=("--owner", "")),
             _reason("opcional: por que mudar", req=False), APPROVAL),
-            sub="Editar projeto é mudança estrutural: pede a sua aprovação digitada.", gate=True, edit=True),
+            sub="Editar projeto é mudança estrutural: confirmar aprova a alteração.", gate=True, edit=True),
         Form("deliverable.edit", "Editar {id}", ("plan", "edit", "{id}"), (
             F("title", "título", req=True, check="no_dot", init="title", arg="--title"),
             due(ph="vazio remove · " + dates.HELP, init="due", clear=("--due", "")),
@@ -319,7 +322,7 @@ def _forms() -> list[Form]:
 
         # ── propostas e perguntas ────────────────────────────────────────────
         Form("proposal.accept", "Aceitar {id}", ("proposal", "accept", "{id}", "--quote", "{quote}"), (
-            F("quote", "sua resposta", req=True, ph="ok, pode fechar"),
+            F("quote", "sua resposta", req=True, ph="ok, pode fechar", auto="surface"),
             F("how", "como foi", req=True, init="@summary", show={"@kind": ["fechar-acao"]}),
             F("effort", "novo esforço", req=True, ph="90m · 2h · 1h30", check="duration", show={"@kind": ["reestimar"]})),
             sub="{summary}", gate=True,
@@ -329,7 +332,7 @@ def _forms() -> list[Form]:
                   ("prop_drop", ("action", "drop", "{@target}", "--reason", "duplicada de {@into}",
                                  "--duplicate-of", "{@into}", "--by", "owner")))),
         Form("proposal.reject", "Rejeitar {id}", ("proposal", "reject", "{id}", "--quote", "{quote}"), (
-            F("quote", "sua resposta", req=True, ph="não, ainda falta o México"),), sub="{summary}"),
+            F("quote", "sua resposta", req=True, ph="não, ainda falta o México", auto="surface"),), sub="{summary}"),
         Form("ask.answer", "Responder {id}", ("ask", "answer", "{id}", "{answer}", "--by", "owner"), (
             F("answer", "resposta", req=True, ph="texto livre", suggest="@ask_options"),), sub="{text}"),
         Form("ask.drop", "Descartar {id}", ("ask", "drop", "{id}", "--reason", "{reason}"), (
@@ -352,7 +355,7 @@ def _forms() -> list[Form]:
             sub="Nada sai sem a sua aprovação do texto exato (porta 2). O agente envia depois, como você; o texto "
                 "aprovado fica travado por hash."),
         Form("outbox.approve", "Aprovar {id} → {to_name}", ("outbox", "approve", "{id}", "--quote", "{quote}"), (
-            F("quote", "sua aprovação", req=True, ph="enviar {n}"),),
+            F("quote", "sua aprovação", req=True, ph="enviar {n}", auto="surface"),),
             sub="Você aprova este texto exato. Se mudar uma palavra, a aprovação cai.", gate=True),
         Form("outbox.cancel", "Cancelar {id}", ("outbox", "cancel", "{id}"), (_reason(req=False),), sub="{text}"),
 
@@ -361,7 +364,7 @@ def _forms() -> list[Form]:
             F("days", "horizonte (dias)", req=True, init="@days", check="int:1:30"),),
             sub="Blocos EDF nas suas ações mine com prazo. Nada vai ao calendário ainda."),
         Form("focus.approve", "Aprovar plano {id}", ("focus", "approve", "{id}", "--quote", "{quote}"), (
-            F("quote", "sua aprovação", req=True, ph="ok"),),
+            F("quote", "sua aprovação", req=True, ph="ok", auto="surface"),),
             sub="Um ok libera o lote inteiro. Só depois dele o aplicar vira possível.", gate=True),
         Form("focus.apply", "Aplicar {id}", ("focus", "apply", "{id}", "--mode", "{mode}"), (
             F("mode", "modo", choices=(("ics", "ics — arquivo local"), ("google", "google — Calendar")), init="@mode"),),
@@ -378,7 +381,7 @@ def _forms() -> list[Form]:
             F("to", "destino", req=True, choices="@destinations")),
             sub="Uma aprovação por publicação. O conteúdo fica travado por hash."),
         Form("publish.approve", "Aprovar {id}", ("publish", "approve", "{id}", "--quote", "{quote}"), (
-            F("quote", "sua aprovação", req=True, ph="ok, publica"),),
+            F("quote", "sua aprovação", req=True, ph="ok, publica", auto="surface"),),
             sub="Publicar {report} em {destination}", gate=True),
 
         # ── registro: decisões, entregas, pessoas ────────────────────────────
@@ -804,11 +807,16 @@ def hidden(form: Form, raw: dict, ctx: dict | None = None, m: dict | None = None
     return {f.id for f in form.fields if not _cond(f.show, raw, ctx or {}, m or {})}
 
 
-def values(form: Form, raw: dict, ctx: dict | None = None, m: dict | None = None) -> dict[str, str]:
+def values(form: Form, raw: dict, ctx: dict | None = None, m: dict | None = None, surface: str = "") -> dict[str, str]:
     """Valores que valem: aparados, e escondido = vazio (não conta, nem para obrigatório)."""
-    raw = {f.id: ("" if raw.get(f.id) is None else str(raw.get(f.id))).strip() for f in form.fields}
-    hid = hidden(form, raw, ctx, m)
-    return {k: ("" if k in hid else x) for k, x in raw.items()}
+    clean = {}
+    for f in form.fields:
+        s = ("" if raw.get(f.id) is None else str(raw.get(f.id))).strip()
+        if f.auto == "surface" and surface and not s:
+            s = surface
+        clean[f.id] = s
+    hid = hidden(form, clean, ctx, m)
+    return {k: ("" if k in hid else x) for k, x in clean.items()}
 
 
 def _today(m: dict) -> date:
@@ -1192,10 +1200,10 @@ def _emits(f: F) -> bool:
     return bool(f.arg or f.set or f.flag is not None)
 
 
-def build(form_id: str, raw: dict, ctx: dict | None = None, m: dict | None = None) -> list[list[str]]:
+def build(form_id: str, raw: dict, ctx: dict | None = None, m: dict | None = None, surface: str = "") -> list[list[str]]:
     """Valores do formulário → comandos `brain` (listas de argumentos). A MESMA regra do `formArgv` do forms.js."""
     form, ctx, m = FORMS[form_id], ctx or {}, m or {}
-    v = values(form, raw, ctx, m)
+    v = values(form, raw, ctx, m, surface=surface)
     fields = {f.id: f for f in form.fields}
     placed = {re.sub(r"[{}?*@]", "", t) for t in form.cmd if t.startswith("{")}
     main: list[str] = []
@@ -1234,10 +1242,11 @@ def build(form_id: str, raw: dict, ctx: dict | None = None, m: dict | None = Non
     return cmds
 
 
-def missing(form_id: str, raw: dict, ctx: dict | None = None, m: dict | None = None, extra: dict | None = None) -> str:
+def missing(form_id: str, raw: dict, ctx: dict | None = None, m: dict | None = None, extra: dict | None = None,
+            surface: str = "") -> str:
     """Primeiro problema que impede confirmar ("" = pode): obrigatório vazio ou validação que falhou."""
     form, ctx, m = FORMS[form_id], ctx or {}, m or {}
-    v = values(form, raw, ctx, m)
+    v = values(form, raw, ctx, m, surface=surface)
     hid = hidden(form, {k: (raw.get(k) or "") for k in v}, ctx, m)
     for f in form.fields:
         if f.id in hid:

@@ -972,7 +972,7 @@ function openForm(id, ctx, opts){
   const opt = (f, v) => F.options(f, M, v, ctx);
   const optHTML = (f, v, cur) => { const ops = opt(f, v), val = ops.some(o => o[0] === cur) ? cur : (ops[0] ? ops[0][0] : "");
     return ops.map(o => '<option value="' + esc(o[0]) + '"' + (o[0] === val ? " selected" : "") + ">" + esc(o[1]) + "</option>").join(""); };
-  const rows = fm.fields.map(f => {
+  const rows = fm.fields.filter(f => f.auto !== "surface").map(f => {
     const lab = esc(F.label(f, M)) + (f.req ? ' <span class="req">*</span>' : ""), ph = F.fmt(f.ph || "", ctx), val = init[f.id] || "";
     const ctl = f.choices !== undefined ? '<select data-k="' + f.id + '">' + optHTML(f, init, val) + "</select>"
       : f.multi ? '<textarea data-k="' + f.id + '" rows="5"' + (ph ? ' placeholder="' + esc(ph) + '"' : "") + ">" + esc(val) + "</textarea>"
@@ -983,7 +983,7 @@ function openForm(id, ctx, opts){
       '<div class="note-s fhint" data-hint="' + f.id + '" style="margin:-4px 0 8px 130px"></div></div>'; }).join("");
   const title = F.fmt(fm.title, ctx), sub = F.fmt(fm.sub || "", ctx);
   const ov = document.createElement("div"); ov.className = "pal-back open";
-  ov.innerHTML = '<div class="palette"><div class="pin"><b>' + esc(title) + "</b>" + (fm.gate ? ' <span class="gatebadge">gate — precisa do seu ok literal</span>' : "") + "</div>" +
+  ov.innerHTML = '<div class="palette"><div class="pin"><b>' + esc(title) + "</b>" + (fm.gate ? ' <span class="gatebadge">gate — confirmar aprova</span>' : "") + "</div>" +
     '<div class="pal-confirm open" style="display:block;border-top:0;padding:14px 16px;max-height:70vh;overflow:auto">' +
     (sub ? '<p class="note-s" style="margin:0 0 10px">' + esc(sub) + "</p>" : "") + (opts.extra || "") + rows +
     '<div class="cline" data-preview style="min-height:34px;white-space:pre"></div>' +
@@ -998,8 +998,8 @@ function openForm(id, ctx, opts){
   const vals = () => { const v = {}; fm.fields.forEach(f => { const e = el(f.id); v[f.id] = e ? e.value : ""; }); return v; };
   const paint = () => {
     const v = vals(), hid = F.hidden(fm, v, ctx, M), w = F.values(fm, v, ctx, M);
-    fm.fields.forEach(f => { const row = ov.querySelector('[data-row="' + f.id + '"]'); row.hidden = hid.has(f.id);
-      const h = ov.querySelector('[data-hint="' + f.id + '"]'); h.textContent = f.hint && w[f.id] ? F.hint(f.hint, w[f.id], w, ctx, M) : ""; });
+    fm.fields.filter(f => f.auto !== "surface").forEach(f => { const row = ov.querySelector('[data-row="' + f.id + '"]'); if (row) row.hidden = hid.has(f.id);
+      const h = ov.querySelector('[data-hint="' + f.id + '"]'); if (h) h.textContent = f.hint && w[f.id] ? F.hint(f.hint, w[f.id], w, ctx, M) : ""; });
     ov.querySelector("[data-preview]").textContent = "$ " + F.display(F.formArgv(fm, v, ctx, M)).replace(/\n/g, "\n$ ");
     ov.querySelector("[data-err]").textContent = "";
   };
@@ -1534,7 +1534,7 @@ function renderKeyBar(){
   let bar = document.getElementById("kbar");
   if (!bar) { bar = document.createElement("div"); bar.id = "kbar"; bar.className = "kbd-bar"; document.body.appendChild(bar); }
   const ctx = keyLegend().map(x => '<button class="kkey' + (x.dim ? " dim" : "") + (x.gate ? " gate" : "") +
-    '" data-k="' + esc(x.k) + '" title="' + (x.gate ? "gate — precisa do seu ok literal · " : "") + "tecla " + esc(x.k) + '">' +
+    '" data-k="' + esc(x.k) + '" title="' + (x.gate ? "gate — confirmar aprova · " : "") + "tecla " + esc(x.k) + '">' +
     "<kbd>" + esc(x.k) + "</kbd>" + esc(x.label) + "</button>").join("");
   bar.innerHTML = '<div class="kctx">' + (ctx || '<span class="knone">sem teclas de contexto nesta página — j/k navega, enter abre</span>') + "</div>" +
     '<div class="kglobal">' + (lfLevels().length ? '<button class="kkey lfon" data-g="esc" title="tira o último filtro da lista"><kbd>esc</kbd>tira filtro (' + lfLevels().length + ')</button>' : "") +
