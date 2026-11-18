@@ -25,6 +25,12 @@ if [ ! -f "./brain" ] || [ ! -d "./brainlib" ]; then
     cd "$DEST"
 fi
 
+# mise recusa o mise.toml de um clone novo ("not trusted") antes de qualquer Python rodar — confia no do próprio repo.
+if command -v mise >/dev/null 2>&1 && [ -f "$PWD/mise.toml" ]; then
+    mise trust "$PWD/mise.toml" >/dev/null 2>&1 || \
+        echo "⚠ não consegui confiar no mise.toml — rode:  mise trust \"$PWD\"  e depois  sh install.sh"
+fi
+
 if command -v python3 >/dev/null 2>&1 && python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)'; then
     :
 elif command -v mise >/dev/null 2>&1; then
@@ -39,7 +45,11 @@ fi
 
 # Do clone ao app: semeia a instância (nunca sobrescreve), cria o app Brain e abre a configuração guiada
 # no navegador. O wizard de terminal continua existindo para quem prefere (ou para IAs): ./brain setup
-./brain init >/dev/null
+if ! ./brain init >/dev/null; then
+    echo "✗ ./brain init falhou (veja o erro acima)."
+    command -v mise >/dev/null 2>&1 && echo "  com mise:  mise trust \"$PWD\" && mise install  — depois:  sh install.sh"
+    exit 1
+fi
 case "$(uname -s)" in
     Darwin|Linux) ./brain app install || echo "⚠ não consegui criar o app — abra com: ./brain open" ;;
 esac

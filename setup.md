@@ -50,7 +50,7 @@ Verificação: `mise --version && uv --version` — ambos imprimem versões.
 ```bash
 git clone <URL-do-repo> ~/brain   # ou a pasta escolhida
 cd ~/brain
-mise trust                        # autoriza o mise.toml do repo
+mise trust                        # autoriza o mise.toml do repo (o `install.sh` já faz isso sozinho)
 mise install                      # baixa o Python 3.12 do mise.toml
 ./brain doctor                    # deve responder sem erro de versão
 python -m unittest tests.test_brain | tail -3   # esperado: OK
