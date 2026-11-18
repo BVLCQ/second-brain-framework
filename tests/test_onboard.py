@@ -723,5 +723,21 @@ class FinishAskTests(unittest.TestCase):
                 os.environ["BRAIN_NIGHTLY"] = old
 
 
+    def test_connectors_hint_follows_the_chosen_agent(self):
+        """A dica sem Claude nomeia o agente ESCOLHIDO no passo anterior, não o primeiro binário do PATH."""
+        from unittest import mock
+        (self.tmp / ".hermes").mkdir()                      # hermes detectado pelo diretório (HOME isolado)
+        with mock.patch("shutil.which", return_value=None), \
+                mock.patch.dict(os.environ, {"HOME": str(self.tmp)}):
+            st = onboard.state(self.b)
+            self.assertIn("Hermes", st["connectors_hint"])   # sem seleção: primeiro detectado
+            config.set_keys(self.b.inst, "runner", {"agent": "claude"})
+            self.b.inst = config.reload(self.b.inst)
+            st = onboard.state(self.b)
+            # claude selecionado mas SEM binário: sem scan, e a dica segue a ESCOLHA (label do passo anterior)
+            self.assertIn("Claude Code", st["connectors_hint"])
+            self.assertNotIn("Hermes", st["connectors_hint"])
+
+
 if __name__ == "__main__":
     unittest.main()

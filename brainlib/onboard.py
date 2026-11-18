@@ -228,8 +228,10 @@ def _agent_name(argv) -> str | None:
     return next((n for n, p in runner.PRESETS.items() if p[0] == argv[0]), Path(argv[0]).name)
 
 
-def _no_claude_hint() -> str:
-    ag = "Hermes" if shutil.which("hermes") else "o seu agente"
+def _no_claude_hint(label: str | None = None) -> str:
+    """Sem Claude Code não há o que escanear: a dica aponta pro agente ESCOLHIDO no passo
+    "Seu agente" (label), não pro primeiro binário achado no PATH."""
+    ag = label or ("Hermes" if shutil.which("hermes") else "o seu agente")
     return (f"Os conectores ligam no {ag} — conecte Slack/Gmail/Calendar lá e use o botão "
             "\"+ Adicionar fonte\" abaixo para dizer o que o Brain deve observar.")
 
@@ -344,7 +346,7 @@ def state(brain) -> dict:
         "connectors": connector_status(_MCP_CACHE["servers"], cfg, {s["key"] for s in sources if s.get("key")}),
         "connectors_scanned": _MCP_CACHE["servers"] is not None,
         "connectors_source": "claude" if shutil.which("claude") else "none",
-        "connectors_hint": "" if shutil.which("claude") else _no_claude_hint(),
+        "connectors_hint": "" if shutil.which("claude") else _no_claude_hint(_chosen_agent_label(brain)),
         "sources": sources,
         "watch_kinds": [list(k) for k in _watch.KINDS],
         "permissions": {"ok": perm.get("local") == "ok", "static": perm.get("static")},
@@ -614,6 +616,16 @@ _RUNNER_OF = {"claude-code": "claude", "cursor-cli": "cursor", "codex": "codex"}
 def _agent_label(key: str) -> str:
     from . import harness
     return harness.AGENTS.get(key, "Hermes")
+
+
+def _chosen_agent_label(brain) -> str | None:
+    """O agente que manda nesta instância: o selecionado no passo "Seu agente" ([runner].agent);
+    sem seleção, o primeiro detectado; sem nenhum, None (a dica genérica)."""
+    ags = agents_state(brain)
+    sel = next((a["label"] for a in ags if a["selected"]), None)
+    if sel:
+        return sel
+    return next((a["label"] for a in ags if a["detected"]), None)
 
 
 def agents_state(brain) -> list[dict]:
