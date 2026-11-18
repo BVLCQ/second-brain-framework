@@ -197,9 +197,13 @@ class RunTests(unittest.TestCase):
             b = _brain(Path(td))
             with self.assertRaises(util.BrainError):      # full sem aceite
                 setup.validate_memory_setup({"mode": "full", "provider": "anthropic", "key": "k"})
-            with self.assertRaises(util.BrainError):      # reranker fora do cardápio do fluxo
+            with self.assertRaises(util.BrainError):      # reranker fora do registro
                 setup.validate_memory_setup({"mode": "full", "consent": True, "key": "k",
-                                             "reranker": "zeroentropy"})
+                                             "reranker": "nope"})
+            ze = setup.validate_memory_setup({"mode": "full", "consent": True, "key": "k",
+                                              "reranker": "zeroentropy", "reranker_key": "ze-1"})
+            self.assertEqual(ze["rer"], "zeroentropy")
+            self.assertEqual(ze["rer_key"], "ze-1")
             self.assertTrue(setup.validate_memory_setup(
                 {"mode": "full", "approval": "OK", "key": "k"})["consent"])   # literal, qualquer caixa
             with mock.patch.object(setup, "docker_available", return_value=True), \
@@ -288,6 +292,87 @@ class DoctorRulerTests(unittest.TestCase):
             got2 = {c["title"]: c for c in checks2}
             self.assertEqual(got2["comando"]["level"], "warn")
             self.assertEqual(got2["tui"]["level"], "warn")
+
+
+class ProviderRegistryTests(unittest.TestCase):
+    """Registro completo de provedores na porta roteada (plano onboarding-unification F5)."""
+
+    def test_nested_zai_with_model_validates(self):
+        v = setup.validate_memory_setup({
+            "mode": "full", "consent": True,
+            "llm": {"provider": "zai", "model": "glm-5", "key": "zk-1"},
+            "embeddings": {"provider": "fireworks", "key": "fw-1"},
+            "reranker": {"provider": "zeroentropy", "key": "ze-1"},
+        })
+        self.assertEqual(v["provider"], "zai")
+        self.assertEqual(v["model"], "glm-5")
+        self.assertEqual(v["slots"]["llm"]["provider"], "zai")
+        self.assertEqual(v["slots"]["llm"]["model"], "glm-5")
+        self.assertEqual(v["slots"]["llm"]["key"], "zk-1")
+        self.assertTrue(v["slots"]["llm"]["base_url"].startswith("https://api.z.ai/"))
+        self.assertEqual(v["slots"]["reranker"], {"provider": "zeroentropy", "key": "ze-1"})
+
+    def test_zai_without_model_refuses(self):
+        with self.assertRaises(util.BrainError) as ctx:
+            setup.validate_memory_setup({
+                "mode": "full", "consent": True,
+                "llm": {"provider": "zai", "key": "zk-1"},
+                "embeddings": {"provider": "fireworks", "key": "fw-1"},
+            })
+        self.assertIn("zai", str(ctx.exception))
+
+    def test_custom_without_base_url_refuses(self):
+        with self.assertRaises(util.BrainError):
+            setup.validate_memory_setup({
+                "mode": "full", "consent": True,
+                "llm": {"provider": "custom", "model": "meu-llm", "key": "ck-1"},
+                "embeddings": {"provider": "fireworks", "key": "fw-1"},
+            })
+        with self.assertRaises(util.BrainError):
+            setup.validate_memory_setup({
+                "mode": "embed",
+                "embeddings": {"provider": "custom", "model": "meu-emb", "key": "ck-1"},
+            })
+
+    def test_full_with_local_embeddings_refuses(self):
+        with self.assertRaises(util.BrainError):
+            setup.validate_memory_setup({
+                "mode": "full", "consent": True,
+                "llm": {"provider": "anthropic", "key": "sk-1"},
+                "embeddings": {"provider": "local"},
+            })
+
+    def test_legacy_return_coherent_for_flat_payload(self):
+        v_emb = setup.validate_memory_setup({"mode": "lite", "embeddings": "fireworks", "key": "fw-1"})
+        self.assertEqual(v_emb["mode"], "embed")
+        self.assertEqual(v_emb["emb"], "fireworks")
+        self.assertEqual(v_emb["key"], "fw-1")
+        self.assertEqual(v_emb["emb_key"], "fw-1")
+        self.assertNotIn("llm", v_emb["slots"])
+        self.assertEqual(v_emb["slots"]["embeddings"]["key"], "fw-1")
+
+        v_full = setup.validate_memory_setup({
+            "mode": "full", "provider": "openai", "model": "gpt-5-mini",
+            "key": "sk-oa", "embeddings": "cohere", "emb_key": "ck-1",
+            "reranker": "openrouter", "reranker_key": "or-1", "consent": True,
+        })
+        self.assertEqual((v_full["provider"], v_full["emb"], v_full["rer"]), ("openai", "cohere", "openrouter"))
+        self.assertEqual((v_full["key"], v_full["emb_key"], v_full["rer_key"]), ("sk-oa", "ck-1", "or-1"))
+        self.assertEqual(v_full["slots"]["llm"]["model"], "gpt-5-mini")
+
+    def test_configure_memory_fail_fast_without_key_and_without_env(self):
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            with mock.patch.object(setup, "_run_memoria") as run_mem:
+                with self.assertRaises(util.BrainError) as ctx:
+                    setup.configure_memory(b, {
+                        "mode": "full", "consent": True,
+                        "llm": {"provider": "anthropic", "key": ""},
+                        "embeddings": {"provider": "fireworks", "key": "fw-1"},
+                    })
+                self.assertIn("HINDSIGHT_API_LLM_API_KEY", str(ctx.exception))
+                run_mem.assert_not_called()
 
 
 if __name__ == "__main__":

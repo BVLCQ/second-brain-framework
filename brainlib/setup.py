@@ -707,9 +707,10 @@ class ScriptedMemoriaUI:
 
     interactive = False
 
-    def __init__(self, out, choices: dict[str, str], keys: dict[str, str], model: str, consent: bool):
+    def __init__(self, out, choices: dict[str, str], keys: dict[str, str], model: str, consent: bool,
+                 base_url: str = ""):
         self.out, self.choices, self.keys = out, choices, keys
-        self.model, self.consent = model, consent
+        self.model, self.consent, self.base_url = model, consent, base_url
 
     def say(self, msg: str) -> None:
         self.out.say(msg)
@@ -717,8 +718,10 @@ class ScriptedMemoriaUI:
     def ask(self, prompt: str, default: str = "") -> str:
         if prompt.startswith("Modo full"):
             return "ok" if self.consent else ""
-        if prompt.startswith("Modelo default") and self.model:
-            return self.model                      # openai não tem default por operação: o dono digita
+        if (prompt.startswith("Modelo default") or prompt == "Modelo") and self.model:
+            return self.model                      # openai/zai/custom: modelo explícito do dono
+        if prompt.startswith("Base URL") and self.base_url:
+            return self.base_url
         return default
 
     def choice(self, prompt: str, options: list[str], default: str) -> str:
@@ -746,40 +749,83 @@ def _key_ok(v) -> str:
 
 def validate_memory_setup(data: dict) -> dict:
     """Valida o payload do passo Memória — UMA fonte para painel (job), TUI (form memory.mode) e CLI.
-    Devolve mode/provider/emb/rer/model/consent + as três chaves já formatadas."""
+    Aceita formato aninhado (slots do navegador) e formato plano legado; devolve ambos no contrato."""
+    from . import providers as prov
     mode = {"lite": "embed"}.get(str(data.get("mode")), str(data.get("mode")))
     if mode not in ("none", "embed", "full"):
         raise util.BrainError("modo de memória inválido", code=4)
-    provider = str(data.get("provider") or "anthropic")
-    if provider not in ("anthropic", "openai"):
+
+    llm_in = data.get("llm") if isinstance(data.get("llm"), dict) else {}
+    raw_emb = data.get("embeddings")
+    emb_in = raw_emb if isinstance(raw_emb, dict) else {}
+    raw_rer = data.get("reranker")
+    rer_in = raw_rer if isinstance(raw_rer, dict) else {}
+
+    provider = str(llm_in.get("provider") or data.get("provider") or "anthropic").strip()
+    if provider not in prov.PROVIDERS["llm"]:
         raise util.BrainError("provedor de LLM inválido", code=4)
-    emb = str(data.get("embeddings") or ("local" if mode == "embed" else "fireworks"))
-    if mode == "full" and emb not in ("fireworks", "openai"):
+    llm_reg = prov.PROVIDERS["llm"][provider]
+    model = str(llm_in.get("model") or data.get("model") or llm_reg.get("model", "")).strip()
+    llm_base_url = str(llm_in.get("base_url") or data.get("base_url") or llm_reg.get("base_url", "")).strip()
+    if mode == "full":
+        if provider in ("openai", "zai", "custom") and not model:
+            raise util.BrainError(f"provedor {provider} precisa do nome do modelo", code=4)
+        if provider == "custom" and not llm_base_url:
+            raise util.BrainError("provedor custom precisa de base_url", code=4)
+
+    emb_default = "local" if mode == "embed" else "fireworks"
+    emb_flat = "" if isinstance(raw_emb, dict) else str(raw_emb or data.get("emb") or "")
+    emb = str(emb_in.get("provider") or emb_flat or emb_default).strip()
+    if mode == "full" and emb == "local":
         raise util.BrainError("no modo full os embeddings são de nuvem — fireworks ou openai", code=4)
-    if mode == "embed" and emb not in ("local", "fireworks", "openai"):
+    if emb not in prov.PROVIDERS["embeddings"]:
         raise util.BrainError("provedor de embeddings inválido (embed: local ou nuvem)", code=4)
-    rer = str(data.get("reranker") or "off")
-    if rer not in ("off", "fireworks", "cohere"):
-        raise util.BrainError("reranker inválido — off, fireworks ou cohere "
-                              "(outros: brain memory providers set reranker)", code=4)
-    model = str(data.get("model") or "").strip()
-    if mode == "full" and provider == "openai" and not model:
-        raise util.BrainError("provedor openai precisa do nome do modelo (ex.: gpt-…)", code=4)
+    emb_reg = prov.PROVIDERS["embeddings"][emb]
+    emb_model = str(emb_in.get("model") or emb_reg.get("model", "")).strip()
+    emb_base_url = str(emb_in.get("base_url") or emb_reg.get("base_url", "")).strip()
+    if mode != "none" and emb == "custom" and not (emb_model and emb_base_url):
+        raise util.BrainError("embeddings custom exige model e base_url", code=4)
+
+    rer_flat = "" if isinstance(raw_rer, dict) else str(raw_rer or data.get("rer") or "")
+    rer = str(rer_in.get("provider") or rer_flat or "off").strip()
+    if rer not in prov.PROVIDERS["reranker"]:
+        raise util.BrainError("reranker inválido", code=4)
+
     consent = bool(data.get("consent")) or str(data.get("approval") or "").strip().lower() == "ok"
     if mode == "full" and not consent:
         raise util.BrainError('o modo full precisa do seu aceite ("ok"/consent): o texto do vault vai para a API',
                               code=4)
     if mode == "full" and os.environ.get("BRAIN_NIGHTLY") == "1":
         raise util.BrainError("o noturno não liga o modo full (gate de egress pede o dono presente)", code=4)
+
+    k_top = _key_ok(data.get("key"))
+    k_llm = _key_ok(llm_in.get("key"))
+    k_emb = _key_ok(emb_in.get("key")) or _key_ok(data.get("emb_key"))
+    k_rer = _key_ok(rer_in.get("key")) or _key_ok(data.get("reranker_key")) or _key_ok(data.get("rer_key"))
+
+    if mode == "embed":
+        emb_key = k_emb or k_top
+        key = k_top or emb_key
+        llm_key = k_llm
+    else:
+        llm_key = k_llm or k_top
+        emb_key = k_emb
+        key = llm_key
+
+    slots: dict[str, dict] = {}
+    if mode == "full":
+        slots["llm"] = {"provider": provider, "key": llm_key, "model": model, "base_url": llm_base_url}
+    slots["embeddings"] = {"provider": emb, "key": emb_key, "model": emb_model, "base_url": emb_base_url}
+    slots["reranker"] = {"provider": rer, "key": k_rer}
+
     return {"mode": mode, "provider": provider, "emb": emb, "rer": rer, "model": model, "consent": consent,
-            "key": _key_ok(data.get("key")), "emb_key": _key_ok(data.get("emb_key")),
-            "rer_key": _key_ok(data.get("reranker_key"))}
+            "key": key, "emb_key": emb_key, "rer_key": k_rer, "slots": slots}
 
 
 def configure_memory(brain, data: dict, say=print) -> str:
     """Fluxo headless do passo Memória: valida, monta as chaves por variável de ambiente e roda o
     wizard com o roteiro (proveedores → compose → modo → bancos → health/llm). Devolve o modo final."""
-    from . import memory
+    from . import memory, providers as prov
     v = validate_memory_setup(data)
     mode, provider, emb, rer = v["mode"], v["provider"], v["emb"], v["rer"]
     if mode == "none":
@@ -787,24 +833,30 @@ def configure_memory(brain, data: dict, say=print) -> str:
         return "none"
     key, emb_key, rer_key = v["key"], v["emb_key"], v["rer_key"]
     # fireworks embeddings+reranker = mesma conta: a chave de um serve no outro quando sobra
-    fw_shared = rer_key or (emb_key if emb == "fireworks" else "") or (key if (mode == "embed" and emb == "fireworks") else "")
+    fw_shared = (rer_key or (emb_key if emb == "fireworks" else "")
+                 or (key if (mode == "embed" and emb == "fireworks") else "")
+                 or (key if (mode == "full" and provider == "fireworks") else ""))
     keys: dict[str, str] = {}
-    if mode == "embed":
-        if key and emb != "local":
-            keys["HINDSIGHT_API_EMBEDDINGS_OPENAI_API_KEY"] = key
-    else:
-        if key:
-            keys["HINDSIGHT_API_LLM_API_KEY"] = key
-        if emb_key:
-            keys["HINDSIGHT_API_EMBEDDINGS_OPENAI_API_KEY"] = emb_key
-        elif key and provider == "openai" and emb == "openai":
-            keys["HINDSIGHT_API_EMBEDDINGS_OPENAI_API_KEY"] = key   # mesma conta OpenAI: uma chave serve
-    if rer == "fireworks" and fw_shared:
-        keys["HINDSIGHT_API_RERANKER_LITELLM_SDK_API_KEY"] = fw_shared
-    elif rer == "cohere" and rer_key:
-        keys["HINDSIGHT_API_RERANKER_COHERE_API_KEY"] = rer_key
+    cur_env = config.load_env(brain.inst)
+    for slot, s in v["slots"].items():
+        p = s["provider"]
+        reg = prov.PROVIDERS[slot][p]
+        key_env = reg.get("key_env", "")
+        if not key_env or reg.get("local") or p in ("local", "off"):
+            continue
+        k = s.get("key", "")
+        if not k and slot == "embeddings" and mode == "full" and provider == emb and key:
+            k = key                     # mesma conta (ex.: OpenAI ou Fireworks em LLM + embeddings)
+        elif not k and slot == "reranker" and p == "fireworks" and fw_shared:
+            k = fw_shared
+        if k:
+            keys[key_env] = k
+        if not (keys.get(key_env) or cur_env.get(key_env)):
+            raise util.BrainError(
+                f"cole a chave de {slot} ({key_env}) — ou escolha um provedor local", code=4)
+    llm_base = v["slots"].get("llm", {}).get("base_url", "")
     ui = ScriptedMemoriaUI(_SayOnly(say), {"LLM": provider, "embeddings": emb, "reranker": rer},
-                           keys, v["model"], v["consent"])
+                           keys, v["model"], v["consent"], base_url=llm_base)
     _run_memoria(brain, ui, mode_hint=mode)
     final = memory.mode(config.reload(brain.inst).cfg["memory"])
     if final == "none":

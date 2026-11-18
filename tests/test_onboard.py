@@ -193,10 +193,10 @@ class StepTests(unittest.TestCase):
         # embed aceita local ou nuvem — nada além disso
         with self.assertRaises(util.BrainError):
             onboard.apply_memory(self.b, {"mode": "embed", "embeddings": "turbo"})
-        # reranker fora do cardápio do fluxo (off/fireworks/cohere) — outros: brain memory providers set
+        # reranker fora do registro é recusado
         with self.assertRaises(util.BrainError):
             onboard.apply_memory(self.b, {"mode": "full", "consent": True, "key": "sk-x",
-                                          "provider": "anthropic", "reranker": "zeroentropy"})
+                                          "provider": "anthropic", "reranker": "nope"})
 
     def test_upload_lands_in_the_inbox_with_a_safe_name(self):
         r = onboard.save_upload(self.b, "../../../etc/Planejamento 2027 (v2).PDF", b"%PDF-1.4 teste")
@@ -649,6 +649,32 @@ class SourcesEditorTests(unittest.TestCase):
         self.assertIn("gmail-hoje", {s["key"] for s in st["sources"]})
         self.assertTrue(all(len(k) == 2 for k in st["watch_kinds"]))
         self.assertIn("gmail", {k[0] for k in st["watch_kinds"]})
+
+
+class MemoryProvidersStateTests(unittest.TestCase):
+    """Payload do registro completo de provedores de memória no state() (plano F5)."""
+
+    def setUp(self):
+        self._td = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._td.name)
+        self.b = Brain(_inst(self.tmp))
+
+    def tearDown(self):
+        self._td.cleanup()
+
+    def test_state_exposes_full_provider_registry_and_stack(self):
+        st = onboard.state(self.b)
+        mem = st["memory"]
+        llm_by_key = {p["key"]: p for p in mem["providers"]["llm"]}
+        self.assertIn("anthropic", llm_by_key)
+        self.assertTrue(llm_by_key["anthropic"]["recommended"])
+        self.assertTrue(llm_by_key["anthropic"]["cloud"])
+        self.assertIn("zai", llm_by_key)
+        rer_by_key = {p["key"]: p for p in mem["providers"]["reranker"]}
+        self.assertIn("off", rer_by_key)
+        self.assertFalse(rer_by_key["off"]["cloud"])
+        self.assertIsInstance(mem["stack"], dict)
+        self.assertEqual(set(mem["stack"].keys()), {"llm", "embeddings", "reranker"})
 
 
 if __name__ == "__main__":

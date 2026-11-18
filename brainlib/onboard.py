@@ -309,7 +309,8 @@ def _prereqs() -> dict:
 
 
 def state(brain) -> dict:
-    from . import memory, perms, setup
+    from . import memory, perms, providers as _providers, setup
+    providers_registry = _providers.PROVIDERS
     inst, cfg = brain.inst, brain.inst.cfg
     person = brain.state.people.get(brain.owner)
     env = config.load_env(inst)
@@ -355,7 +356,15 @@ def state(brain) -> dict:
                    "emb_key": bool(env.get("HINDSIGHT_API_EMBEDDINGS_OPENAI_API_KEY")),
                    "rer_provider": cfg["memory"].get("reranker_provider", ""),
                    "rer_key": bool(env.get("HINDSIGHT_API_RERANKER_LITELLM_SDK_API_KEY")
-                                   or env.get("HINDSIGHT_API_RERANKER_COHERE_API_KEY"))},
+                                   or env.get("HINDSIGHT_API_RERANKER_COHERE_API_KEY")),
+                   "providers": {slot: [{"key": k, "label": v["label"], "recommended": bool(v.get("recommended")),
+                                         "cloud": not (v.get("local") or k == "off"),
+                                         "key_set": bool(v.get("key_env") and env.get(v["key_env"]))}
+                                        for k, v in providers_registry[slot].items()]
+                                 for slot in ("llm", "embeddings", "reranker")},
+                   "stack": {"llm": cfg["memory"].get("llm_provider", ""),
+                             "embeddings": cfg["memory"].get("embeddings_provider", ""),
+                             "reranker": cfg["memory"].get("reranker_provider", "")}},
         "keys": {k: {"label": v, "set": bool(env.get(k))} for k, v in KEY_NAMES.items()},
         "planning": {"goals": plan_goals, "proposal": progress(inst).get("proposal")},
         "maquina": maquina_state(brain),
