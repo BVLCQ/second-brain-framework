@@ -453,7 +453,8 @@ V["cfg/memoria"] = () => {
   }).join("");
   const hw = (M.harnesses || []).map(h => "<tr><td>" + esc(h.label) + "</td><td>" +
     (h.wired ? '<span class="ok">✓ conectado</span>' : (h.detected ? '<span class="dim">instalado, não conectado</span>' : '<span class="dim">não encontrado</span>')) +
-    '</td><td><button class="btn" data-hw="' + esc(h.name) + '">' + (h.wired ? "reinstalar" : "conectar") + "</button></td></tr>").join("");
+    '</td><td><button class="btn" data-hw="' + esc(h.name) + '">' + (h.wired ? "reinstalar" : "conectar") + "</button>" +
+    (h.wired ? ' <button class="btn" data-hwrm="' + esc(h.name) + '">remover</button>' : "") + "</td></tr>").join("");
   return '<div class="pagehead"><div><h1>Memória</h1><p class="sub">O modo, os provedores (LLM · embeddings · reranker) e os harnesses — configuração viva: mude quando quiser.</p></div></div>' +
     '<div id="setup" data-step="memoria"></div>' +
     panel("Provedores", '<div class="twrap"><table><tr><th>Slot</th><th>Provedor</th><th>Modelo</th><th></th></tr>' + rows + "</table></div>" +

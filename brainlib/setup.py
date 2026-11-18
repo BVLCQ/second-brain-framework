@@ -829,18 +829,9 @@ def _harness_step(brain, ui) -> None:
         label = harness.AGENTS.get(name, "Hermes")
         if not ui.confirm(f"Conectar {label} no Hindsight do cérebro?", False):
             continue
-        if name == harness.HERMES:
-            r = harness.wire_hermes(brain)
-            ui.say(f"✓ config do Hermes escrita ({r['config']})")
-            ui.say("✓ memory.provider hindsight gravado" if r.get("cli")
-                   else "⚠ " + (r.get("hint") or "rode: hermes config set memory.provider hindsight"))
-            if r.get("plugin_recipe"):
-                ui.say("⚠ plugin do Hindsight ausente — rode você mesmo (pede confirmação interativa): "
-                       "hermes plugins install hindsight — vale na PRÓXIMA sessão do Hermes")
-        else:
-            for r in harness.install(brain, [name]):
-                ui.say(f"✓ {harness.AGENTS[r['agent']]} conectado (instalador oficial)" if r["ok"]
-                       else f"✗ {r['agent']}: {r['hint']}")
+        for r in harness.install(brain, [name]):
+            for line in harness.format_install_lines(r, mem):
+                ui.say(line)
     wired = brain.inst.cfg["memory"].get("harnesses") or []
     if wired:
         try:

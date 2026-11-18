@@ -1478,6 +1478,12 @@ def build_parser() -> argparse.ArgumentParser:
     hsub = x.add_subparsers(dest="hcmd", required=True)
     xi = hsub.add_parser("install", help="conecta harnesses no servidor do cérebro (guides/memory.md)")
     xi.add_argument("agents", nargs="+", choices=["claude-code", "cursor-cli", "codex", "hermes"])
+    xi.add_argument("--no-recall", action="store_true",
+                    help="não registra o hook de recall do cérebro no Claude Code")
+    xi.add_argument("--no-mcp", action="store_true",
+                    help="não registra o servidor MCP somente-leitura do cérebro no agente")
+    xrm = hsub.add_parser("remove", help="desconecta harnesses do cérebro (MCP e hook de recall)")
+    xrm.add_argument("agents", nargs="+", choices=["claude-code", "cursor-cli", "codex", "hermes"])
     xv = hsub.add_parser("verify", help="banco dos agentes, recall ping e configs")
     xv.add_argument("--json", action="store_true")
     xp = ms.add_parser("providers", help="provedores da memória — LLM · embeddings · reranker "

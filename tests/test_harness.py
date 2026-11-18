@@ -120,7 +120,8 @@ class WireHermesTests(unittest.TestCase):
             self.assertEqual(cfg["bank_id"], "hermes")
             self.assertEqual(cfg["recall_budget"], "mid")            # do dono, preservado
             self.assertFalse(out["cli"])                              # sem CLI no PATH: receita
-            self.assertEqual(b.inst.cfg["memory"]["harnesses"], ["hermes"])
+            self.assertFalse(out["ok"])                               # #19: sem CLI e sem provider=hindsight, não registra
+            self.assertEqual(b.inst.cfg["memory"]["harnesses"], [])
 
 
 class VerifyTests(unittest.TestCase):

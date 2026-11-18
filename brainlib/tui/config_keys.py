@@ -29,8 +29,10 @@ class ConfigKeys:
                     add("enter", "ficha", self.toggle_zoom)
             else:                                         # Harnesses
                 if w(it and it.kind == "hw"):
-                    add("i", "conectar" if not it.data["wired"] else "reinstalar",
+                    add("i", "conectar" if not (it and it.data.get("wired")) else "reinstalar",
                         lambda: self.f_harness_install())
+                if w(it and it.kind == "hw" and it.data.get("wired")):
+                    add("x", "remover", lambda: self.f_harness_remove())
                 add("v", "verificar conexão", lambda: self.exec(
                     [["memory", "harness", "verify"]], render=False, show="Harnesses"))
                 if w(it):
@@ -77,3 +79,17 @@ class ConfigKeys:
         name = it.data["name"]
         self.exec([["memory", "harness", "install", name]], render=False,
                   show="Harnesses")
+
+    def f_harness_remove(self) -> None:
+        from .modals import ConfirmModal
+        it = self.cur()
+        if not (it and it.kind == "hw" and it.data.get("wired")):
+            return
+        name = it.data["name"]
+        label = it.data.get("label", name)
+        cmd = ["memory", "harness", "remove", name]
+        self.push_screen(
+            ConfirmModal(f"Remover {label}?",
+                         "Remove o servidor MCP e o hook de recall do cérebro neste agente (o banco dos agentes não é apagado).",
+                         cmd),
+            lambda ok: self.exec([cmd], render=False, show="Harnesses") if ok else None)
