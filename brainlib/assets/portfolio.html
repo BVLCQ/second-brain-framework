@@ -665,10 +665,12 @@ const BRAIN_FORMS = (function(){
   }
 
   // ── valor inicial ──
-  const INIT = {str: x => str(x), csv: x => (x || []).join(", "), csvc: x => (x || []).join(","), dur: fmtDur, num: num,
+  const INIT = {str: x => str(x),
+    bool: x => (x === false || ["false", "0", "nao", "não"].includes(str(x).trim().toLowerCase())) ? "false" : "true",
+    csv: x => (x || []).join(", "), csvc: x => (x || []).join(","), dur: fmtDur, num: num,
     prio: x => x || "normal", jscope: x => x ? "jql" : "mine"};
   const SRC_META = ["key", "kind", "in_watch", "last_ok", "last_error", "failures", "pulls", "last_changed", "window", "note",
-    "channel", "user", "query", "folder", "doc", "jql", "cloud", "mode", "path"];
+    "channel", "user", "query", "folder", "doc", "jql", "cloud", "mode", "path", "exclude", "enabled", "problem", "problem_reason"];
   const IFMT = {
     goal_of: goalOf,
     deliv_short: item => { const d = item.deliverable || "", p = item.project || ""; return p && d.startsWith(p + ".") ? d.split(".").slice(1).join(".") : d; },

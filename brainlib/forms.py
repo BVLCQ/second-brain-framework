@@ -117,6 +117,8 @@ def _source_fields(edit: bool) -> tuple:
         F("kind", "tipo", choices="@source_kinds", value="gmail", init="kind", **({"arg": "--kind"} if edit else {})),
         F("channel", "canal", req=True, ph="#time-dados ou @pessoa", show={"kind": ["slack"]}, init="channel", **s("channel")),
         F("user", "só de quem", ph="@pessoa (opcional)", show={"kind": ["slack"]}, init="user", **s("user")),
+        F("exclude", "ignorar (DMs)", ph="U12345, @fulano (opcional)", show={"kind": ["slack-dm"]}, init="exclude:csv",
+          **s("exclude")),
         F("query", "filtro", ph="from:alguem label:x (opcional; busca do Gmail)", show={"kind": ["gmail"]}, init="query",
           **s("query")),
         F("folder", "pasta (URL)", req=True, ph="https://drive.google.com/drive/folders/…", show={"kind": ["drive"]},
@@ -135,12 +137,14 @@ def _source_fields(edit: bool) -> tuple:
         F("path", "pasta local", req=True, ph="~/Github/", show={"kind": ["github"]}, init="path", **s("path")),
         F("window", "janela", ph="auto · 1d · 7d", show={"kind!": no_window, "mode!": ["state"]}, init="window",
           arg="--window", **({"clear": ("--unset", "window")} if edit else {})),
+        *((F("enabled", "ativa", choices=(("true", "sim — puxar normalmente"), ("false", "não — desligada")),
+             value="true", init="enabled:bool", set="enabled"),) if edit else ()),
         F("other", "outros", ph="campo=valor; campo=valor", check="pairs", init=":source_other", set="*"),
     )
 
 
 _SRC_ORDER = ("key", "kind", "window", "note", "channel", "user", "query", "folder", "doc", "path", "jscope", "cloud",
-              "mode", "other")
+              "mode", "exclude", "enabled", "other")
 
 
 def _proc_fields() -> tuple:
@@ -729,7 +733,8 @@ def _deliv_short(item, ctx, m):
 
 def _source_other(item, ctx, m):
     meta = {"key", "kind", "in_watch", "last_ok", "last_error", "failures", "pulls", "last_changed", "window", "note",
-            "channel", "user", "query", "folder", "doc", "jql", "cloud", "mode", "path"}
+            "channel", "user", "query", "folder", "doc", "jql", "cloud", "mode", "path", "exclude", "enabled",
+            "problem", "problem_reason"}
     return "; ".join(f"{k}={v}" for k, v in item.items() if k not in meta and v not in (None, ""))
 
 
@@ -739,6 +744,7 @@ def _cloud0(item, ctx, m):
 
 INIT = {   # "chave:fmt" → fmt(valor cru do item)
     "str": lambda x: "" if x is None else str(x),
+    "bool": lambda x: "false" if x is False or str(x).strip().lower() in ("false", "0", "nao", "não") else "true",
     "csv": lambda x: ", ".join(x or []),
     "csvc": lambda x: ",".join(x or []),
     "dur": _fmt_dur,

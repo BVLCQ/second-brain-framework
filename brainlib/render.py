@@ -60,13 +60,16 @@ def _sources(brain) -> list[dict]:
     for s in listed:
         c = conns.get(s.get("key", ""))
         seen.add(s.get("key"))
+        st = watch.source_status(s, c)
         out.append({**s, "in_watch": True, "last_ok": c.last_ok if c else "", "last_error": c.last_error if c else "",
                     "failures": c.consecutive_failures if c else 0, "pulls": c.pulls if c else 0,
-                    "last_changed": c.last_changed if c else ""})
+                    "last_changed": c.last_changed if c else "",
+                    "enabled": st["enabled"], "problem": st["problem"], "problem_reason": st["problem_reason"]})
     for k, c in conns.items():
         if k not in seen:
             out.append({"key": k, "kind": "", "in_watch": False, "last_ok": c.last_ok, "last_error": c.last_error,
-                        "failures": c.consecutive_failures, "pulls": c.pulls, "last_changed": c.last_changed})
+                        "failures": c.consecutive_failures, "pulls": c.pulls, "last_changed": c.last_changed,
+                        "enabled": True, "problem": False, "problem_reason": ""})
     return out
 
 

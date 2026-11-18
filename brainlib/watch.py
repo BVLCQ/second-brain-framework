@@ -24,7 +24,7 @@ HEADER = ("# Universo observável do /update e do noturno.\n"
           "# Leituras passam pelos MCPs do agente; o resultado cai na inbox via:\n"
           "#   ./brain snapshot --key <key> --prefix <kind>\n"
           "# Hash idêntico ao último pull da mesma key = silêncio (nada escrito).\n")
-FIELD_ORDER = ["key", "kind", "window", "channel", "jql", "doc", "link", "note"]
+FIELD_ORDER = ["key", "kind", "enabled", "window", "channel", "jql", "doc", "link", "exclude", "note"]
 DRIVE_DOC = "drive-doc"             # playbook de um processo: relido só quando o modifiedTime muda
 DRIVE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{10,}$")
 DRIVE_URL_RE = re.compile(r"/(?:d|folders)/([A-Za-z0-9_-]{10,})|[?&]id=([A-Za-z0-9_-]{10,})")
@@ -83,17 +83,59 @@ def list_sources(inst) -> list[dict]:
         raise util.BrainError(f"watch.toml inválido: {e}", code=4) from e
 
 
+def is_enabled(src: dict) -> bool:
+    """Fonte sem `enabled` é ativa por padrão; aceita bool TOML e strings defensivas."""
+    if "enabled" not in src or src["enabled"] is None:
+        return True
+    val = src["enabled"]
+    if isinstance(val, bool):
+        return val
+    if isinstance(val, str):
+        s = val.strip().lower()
+        if s in ("false", "0", "nao", "não"):
+            return False
+        if s in ("true", "1", "sim"):
+            return True
+    return bool(val)
+
+
 def _q(value: str) -> str:
     return json.dumps(str(value), ensure_ascii=False)      # string básica TOML: mesmas regras de escape do JSON
+
+
+def _toml_value(value) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (list, tuple)):
+        return "[" + ", ".join(_q(x) for x in value) + "]"
+    return _q(value)
 
 
 def _clean(fields: dict) -> dict:
     out = {}
     for k, v in fields.items():
-        if v is None or str(v).strip() == "":
+        if v is None or (not isinstance(v, (bool, list, tuple)) and str(v).strip() == ""):
             continue
         if not FIELD_RE.match(k):
             raise util.BrainError(f"campo inválido: {k!r} (minúsculas, números e _)", code=4)
+        if k == "enabled":
+            if isinstance(v, bool):
+                out[k] = v
+            else:
+                s = str(v).strip().lower()
+                if s in ("true", "1", "sim"):
+                    out[k] = True
+                elif s in ("false", "0", "nao", "não"):
+                    out[k] = False
+                else:
+                    raise util.BrainError(f"enabled inválido: {v!r} (use true ou false)", code=4)
+            continue
+        if k == "exclude":
+            raw = v if isinstance(v, (list, tuple)) else str(v).split(",")
+            items = [str(x).strip() for x in raw if str(x).strip()]
+            if items:
+                out[k] = items
+            continue
         out[k] = str(v).strip()
         if k == "window":
             parse_window(out[k])
@@ -126,6 +168,8 @@ def since(brain, key: str) -> dict:
     src = next((s for s in list_sources(brain.inst) if s.get("key") == key), None)
     if src is None:
         raise util.BrainError(f"fonte '{key}' não está no watch.toml", code=3)
+    if not is_enabled(src):
+        raise util.BrainError(f"fonte '{key}' está desligada no watch.toml", code=3)
     spec = str(src.get("window") or "1d")
     delta, now = parse_window(spec), util.now()
     if delta is not None:
@@ -225,7 +269,7 @@ def docs(brain, revs: dict[str, str] | None = None) -> dict:
     state = util.read_json(brain.inst.state_file, {})
     rows: list[dict] = []
     for s in list_sources(brain.inst):
-        if s.get("kind") != DRIVE_DOC:
+        if s.get("kind") != DRIVE_DOC or not is_enabled(s):
             continue
         doc = drive_doc_id(str(s.get("doc") or ""))
         prev = state.get(f"snapshot:{s.get('key')}#{doc}") if doc else None
@@ -249,7 +293,7 @@ def docs(brain, revs: dict[str, str] | None = None) -> dict:
 
 
 def _split_value(rhs: str) -> tuple[str, str]:
-    """('"valor" # nota') → ('"valor"', ' # nota'). Só entende string entre aspas; o resto vai inteiro."""
+    """('"valor" # nota' · 'true # nota' · '["a"] # nota') → (valor, comentário)."""
     rhs = rhs.rstrip()
     if rhs.startswith('"'):
         i = 1
@@ -260,6 +304,25 @@ def _split_value(rhs: str) -> tuple[str, str]:
             if rhs[i] == '"':
                 return rhs[: i + 1], rhs[i + 1:]
             i += 1
+    if rhs.startswith("["):
+        i, in_str = 1, False
+        while i < len(rhs):
+            ch = rhs[i]
+            if in_str:
+                if ch == "\\":
+                    i += 2
+                    continue
+                if ch == '"':
+                    in_str = False
+            else:
+                if ch == '"':
+                    in_str = True
+                elif ch == "]":
+                    return rhs[: i + 1], rhs[i + 1:]
+            i += 1
+    m = re.match(r"^(true|false)(?=$|[\s#])(.*)$", rhs)
+    if m:
+        return m.group(1), m.group(2)
     return rhs, ""
 
 
@@ -290,7 +353,7 @@ def _find(blocks: list[Block], key: str) -> Block:
 
 def _format_block(fields: dict) -> list[str]:
     ordered = [k for k in FIELD_ORDER if k in fields] + sorted(k for k in fields if k not in FIELD_ORDER)
-    return ["[[source]]"] + [f"{k} = {_q(fields[k])}" for k in ordered]
+    return ["[[source]]"] + [f"{k} = {_toml_value(fields[k])}" for k in ordered]
 
 
 def add(inst, key: str, fields: dict) -> dict:
@@ -333,10 +396,10 @@ def edit(inst, key: str, set_: dict | None = None, unset: list[str] | None = Non
             continue
         if name in changes:
             _, trail = _split_value(m.group(4))
-            ln = f"{m.group(1)}{name}{m.group(3)}{_q(changes[name])}{trail}"
+            ln = f"{m.group(1)}{name}{m.group(3)}{_toml_value(changes[name])}{trail}"
             seen.add(name)
         new_body.append(ln)
-    extra = [f"{k} = {_q(v)}" for k, v in changes.items() if k not in seen]
+    extra = [f"{k} = {_toml_value(v)}" for k, v in changes.items() if k not in seen]
     insert_at = len(new_body)
     while insert_at > 0 and not new_body[insert_at - 1].strip():
         insert_at -= 1
@@ -366,9 +429,31 @@ def drive_doc_id(ref: str) -> str | None:
 
 
 KINDS = [("gmail", "gmail · e-mails"), ("gcal", "gcal · agenda"), ("slack", "slack · canal ou DM"),
+         ("slack-dm", "slack-dm · DMs e grupos do Slack"),
          ("drive", "drive · pasta"), (DRIVE_DOC, "drive-doc · doc, planilha ou slides"), ("jira", "jira · épico, board, projeto…"),
          ("github", "github · clones git locais"), ("granola", "granola · reuniões e transcrições")]
 NO_WINDOW = {DRIVE_DOC, "github"}    # relidos por modifiedTime / pelas pontas do git, não por janela
+
+
+def source_status(src: dict, conn, now=None) -> dict:
+    """Estado operacional de uma fonte para ordenação/destaque no TUI e no painel HTML."""
+    enabled = is_enabled(src)
+    if not enabled:
+        return {"enabled": False, "problem": False, "problem_reason": "desligada", "sort_bucket": 2}
+    if conn and conn.consecutive_failures > 0:
+        return {"enabled": True, "problem": True, "problem_reason": f"{conn.consecutive_failures} falha(s)", "sort_bucket": 0}
+    if not conn or not conn.last_ok:
+        return {"enabled": True, "problem": True, "problem_reason": "nunca puxada", "sort_bucket": 0}
+    if src.get("kind") not in NO_WINDOW:
+        try:
+            delta = parse_window(src.get("window") or "1d")
+        except util.BrainError:
+            delta = None
+        if delta is not None:
+            cur_now = (now.replace(tzinfo=util.tz()) if now.tzinfo is None else now) if now is not None else util.now()
+            if cur_now - util.parse_dt(conn.last_ok) > max(delta * 1.5, delta + timedelta(hours=6)):
+                return {"enabled": True, "problem": True, "problem_reason": "atrasada", "sort_bucket": 0}
+    return {"enabled": True, "problem": False, "problem_reason": "", "sort_bucket": 1}
 JIRA_SCOPES = [("mine", "meus cards (atribuído, reporter ou observador)"), ("epic", "épico (os filhos dele)"),
                ("project", "projeto"), ("board", "board (o projeto do board)"), ("filter", "filtro salvo"), ("jql", "JQL livre")]
 JIRA_MINE = "(assignee = currentUser() OR reporter = currentUser() OR watcher = currentUser())"
@@ -494,12 +579,13 @@ def cli(args, brain) -> None:
     if c == "list":
         rows = list_sources(inst)
         if args.json:
-            print(json.dumps(rows, ensure_ascii=False, indent=2))
+            print(json.dumps([{**s, "enabled": is_enabled(s)} for s in rows], ensure_ascii=False, indent=2))
             return
         if not rows:
             print(f"nenhuma fonte em {util.relpath(path(inst), inst.root)} — `brain watch add KEY --kind gmail`")
         for s in rows:
-            rest = " · ".join(f"{k}={v}" for k, v in s.items() if k not in ("key", "kind"))
+            tag = [] if is_enabled(s) else ["desligada"]
+            rest = " · ".join(tag + [f"{k}={v}" for k, v in s.items() if k not in ("key", "kind", "enabled")])
             print(f"{s['key']}\t{s.get('kind', '?')}\t{rest}")
     elif c == "since":
         r = since(brain, args.key)

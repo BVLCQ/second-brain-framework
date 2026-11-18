@@ -22,6 +22,15 @@
 # channel = "#time-dados"
 # window = "1d"
 
+# DMs e DMs em grupo do dono (opt-in; conteúdo fica só no vault local, nunca vai para share/publish/oppdrive).
+# Use `enabled = false` em qualquer fonte para pausá-la sem apagar do arquivo.
+# [[source]]
+# key = "slack-dms"
+# kind = "slack-dm"
+# window = "1d"
+# exclude = ["U00000000"]
+# note = "DMs e grupos ativos"
+
 # Pasta do Drive: cada arquivo e subpasta tem hash próprio (`snapshot --item … --rev …`);
 # só o que mudou entra na inbox. Ver commands/drive/SKILL.md.
 # [[source]]

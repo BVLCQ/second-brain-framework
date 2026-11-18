@@ -269,13 +269,16 @@ class Store:
         for s in watch.list_sources(self.inst):
             c = conns.get(s.get("key", ""))
             seen.add(s.get("key"))
+            st = watch.source_status(s, c)
             out.append({**s, "in_watch": True, "last_ok": c.last_ok if c else "", "last_error": c.last_error if c else "",
                         "failures": c.consecutive_failures if c else 0, "pulls": c.pulls if c else 0,
-                        "last_changed": c.last_changed if c else ""})
+                        "last_changed": c.last_changed if c else "",
+                        "enabled": st["enabled"], "problem": st["problem"], "problem_reason": st["problem_reason"]})
         for k, c in conns.items():
             if k not in seen:
                 out.append({"key": k, "kind": "", "in_watch": False, "last_ok": c.last_ok, "last_error": c.last_error,
-                            "failures": c.consecutive_failures, "pulls": c.pulls, "last_changed": c.last_changed})
+                            "failures": c.consecutive_failures, "pulls": c.pulls, "last_changed": c.last_changed,
+                            "enabled": True, "problem": False, "problem_reason": ""})
         return out
 
     def is_empty(self) -> bool:
@@ -548,7 +551,7 @@ class Store:
             if tab == 0:
                 out = [Item("resumo", "resumo", q="resumo hoje")]
             elif tab == 1:
-                out = [Item(f"src:{s['key']}", "src", s, q=f"{s['key']} {s.get('kind', '')} {s.get('channel', '')}") for s in self.sources]
+                out = self._source_items(sort, filt)
             else:
                 out = [Item(o["id"], "sys", o, q=f"{o['name']} {' '.join(o.get('args', []))} {o.get('agent', '')}") for o in SYS_OPS]
         elif panel == 2:
@@ -621,6 +624,39 @@ class Store:
                 out = [i for i in out if self._shown(i, rel, f)]
             else:
                 out = [i for i in out if f in util.fold(i.q)]
+        return out
+
+    def _source_items(self, sort: int = 0, filt: str = "") -> list[Item]:
+        """Fontes agrupadas por tipo (grupos com problema primeiro, depois alfabético), problemas no topo."""
+        kind_labels = dict(watch.KINDS)
+        groups: dict[str, list[dict]] = defaultdict(list)
+        for s in self.sources:
+            groups[s.get("kind") or ""].append(s)
+
+        def _bucket(s: dict) -> int:
+            if not s.get("enabled", True):
+                return 2
+            return 0 if s.get("problem") else 1
+
+        ordered_kinds = sorted(groups, key=lambda k: (not any(x.get("problem") for x in groups[k]), k == "", k))
+        out: list[Item] = []
+        for k in ordered_kinds:
+            rows = list(groups[k])
+            rows.sort(key=lambda s: s["key"])
+            if sort == 1:
+                rows.sort(key=lambda s: (not s.get("last_ok"), s.get("last_ok") or ""))
+            else:
+                rows.sort(key=lambda s: s.get("last_ok") or "", reverse=True)
+            rows.sort(key=_bucket)
+            label = kind_labels.get(k, k or "avulsas (fora do watch)")
+            probs = sum(1 for x in rows if x.get("problem"))
+            if not filt:
+                out.append(Item(f"sgrp:{k or 'avulsa'}", "sgrp",
+                                {"kind": k, "label": label, "count": len(rows), "problems": probs},
+                                q=f"{k} {label}"))
+            for s in rows:
+                out.append(Item(f"src:{s['key']}", "src", s,
+                                q=f"{s['key']} {s.get('kind', '')} {s.get('channel', '')} {s.get('problem_reason', '')}"))
         return out
 
     def _items_face(self, face: int, panel: int, tab: int, show_all: bool, filt: str) -> list[Item]:

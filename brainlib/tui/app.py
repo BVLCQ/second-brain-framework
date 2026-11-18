@@ -242,7 +242,7 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
         """Estado de navegação de uma face: cada face volta exatamente onde estava."""
         return {"p": start, "lp": start,   # lp: último painel de lista (1-5) em foco; o log (6) mantém o detalhe dele
                 "tab": {1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0}, "sel_idx": {}, "sel_id": {}, "win": {},
-                "filt": None, "zoom": False, "show_all": False, "view": 0, "sort": 0, "items": {}}
+                "filt": None, "zoom": False, "show_all": False, "view": 0, "sort": 0, "source_sort": 0, "items": {}}
 
     # As propriedades abaixo apontam para a face atual: o resto do app lê e escreve `self.p`, `self.tab[p]`,
     # `self.filt`… sem saber de faces. Trocar de face é só trocar `self.face`.
@@ -330,6 +330,14 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
         self._nv["sort"] = v
 
     @property
+    def source_sort(self) -> int:
+        return self._nv["source_sort"]
+
+    @source_sort.setter
+    def source_sort(self, v: int) -> None:
+        self._nv["source_sort"] = v
+
+    @property
     def show_all(self) -> bool:
         return self._nv["show_all"]
 
@@ -397,9 +405,25 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
                 else:
                     self._items[key] = []
             else:
+                sort_arg = (self.source_sort if (self.face == 0 and p == 1 and t == 1)
+                            else (self.sort if p == 2 and self.face == 0 else 0))
                 self._items[key] = self.store.items(self.face, p, t, self.show_all, self.filt_levels(key), self.collapsed,
-                                              self.view if p == 2 and self.face == 0 else 0, self.sort if p == 2 and self.face == 0 else 0)
+                                              self.view if p == 2 and self.face == 0 else 0, sort_arg)
         return self._items[key]
+
+    @staticmethod
+    def _skip_header(its: list[Item], i: int, step: int = 1) -> int:
+        i = min(max(i, 0), len(its) - 1)
+        if its[i].kind != "sgrp":
+            return i
+        d = 1 if step >= 0 else -1
+        for j in range(i + d, len(its) if d > 0 else -1, d):
+            if its[j].kind != "sgrp":
+                return j
+        for j in range(i - d, -1 if d > 0 else len(its), -d):
+            if its[j].kind != "sgrp":
+                return j
+        return i
 
     def sel_index(self, p: int) -> int:
         key = (p, self.tab[p])
@@ -409,19 +433,19 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
         want = self.sel_id.get(key)
         if want is not None:
             for i, it in enumerate(its):
-                if it.id == want:
+                if it.id == want and it.kind != "sgrp":
                     self.sel_idx[key] = i
                     return i
-        i = min(max(self.sel_idx.get(key, 0), 0), len(its) - 1)
+        i = self._skip_header(its, self.sel_idx.get(key, 0), 1)
         self.sel_idx[key] = i
         self.sel_id[key] = its[i].id
         return i
 
-    def set_sel(self, p: int, i: int) -> None:
+    def set_sel(self, p: int, i: int, step: int = 1) -> None:
         key, its = (p, self.tab[p]), self.items(p)
         if not its:
             return
-        i = min(max(i, 0), len(its) - 1)
+        i = self._skip_header(its, i, step)
         self.sel_idx[key], self.sel_id[key] = i, its[i].id
 
     def cur(self) -> Item | None:
@@ -536,6 +560,8 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
             t.append(f" · vista {ACTION_VIEWS[self.view]}", "bold magenta")
         if pid == 2 and self.face == 0 and self.sort:
             t.append(f" · ordem {ACTION_SORTS[self.sort].lower()}", "bold magenta")
+        if pid == 1 and self.face == 0 and self.tab[1] == 1 and self.source_sort:
+            t.append(" · ordem ↑ antigo", "bold magenta")
         lv = self.filt_levels((pid, self.tab[pid]))
         if lv:
             t.append(f" · ⌕ filtro: {self.filt_label(lv)}", "bold magenta")
@@ -568,7 +594,7 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
         if pid == 6 and i == 1:
             n = sum(1 for f in self.store.brain.state.feedbacks.values() if f.status in ("pendente", "falhou"))
         if pid == 1 and i == 1:
-            n = sum(1 for x in self.store.sources if x["failures"])
+            n = sum(1 for x in self.store.sources if x.get("enabled", True) and x["failures"])
         return str(n) if n else ""
 
     def redraw(self) -> None:
@@ -617,8 +643,10 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
         t = Text(f" {self.sel_index(pid) + 1} de {n} ")
         key = (pid, self.tab[pid])
         if self.store and self.filt_levels(key):
+            sort_arg = (self.source_sort if (self.face == 0 and pid == 1 and key[1] == 1)
+                        else (self.sort if pid == 2 and self.face == 0 else 0))
             total = len(self.store.items(self.face, pid, key[1], self.show_all, "", self.collapsed,
-                                         self.view if pid == 2 and self.face == 0 else 0, self.sort if pid == 2 and self.face == 0 else 0))
+                                         self.view if pid == 2 and self.face == 0 else 0, sort_arg))
             t.append(f"· filtrado de {total} ", "bold magenta")
         return t
 
@@ -897,7 +925,7 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
         its = self.items(self.p)
         if not its:
             return
-        self.set_sel(self.p, self.sel_index(self.p) + d)
+        self.set_sel(self.p, self.sel_index(self.p) + d, step=1 if d >= 0 else -1)
         self.redraw()
 
     def jump(self, node: str) -> None:
@@ -969,13 +997,15 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
                 add("o", "painel HTML", lambda: self.run_sys("sys:open"))
             elif t == 1:
                 add("n", "adicionar", self.f_source_add)
-                if w(it and it.data["in_watch"]):
+                if w(it and it.kind == "src" and it.data["in_watch"]):
                     add("e", "editar", self.f_source_edit)
+                    add("x", "ligar" if it and not it.data.get("enabled", True) else "desligar", self.toggle_source_enabled)
                     add("d", "remover", self.f_source_remove)
-                if w(it and not it.data["in_watch"]):
+                if w(it and it.kind == "src" and not it.data["in_watch"]):
                     add("w", "incluir no watch", self.f_source_include)
-                if w(it):
+                if w(it and it.kind == "src"):
                     add("c", "puxar", self.agent_connect_selected, agent=True)
+                add("o", f"ordem: {'↑ antigo' if self.source_sort else '↓ recente'}", self.toggle_source_sort)
                 add("u", "atualizar tudo", self.agent_update, agent=True)
             else:
                 add("enter", "executar", self.run_selected_sys)
@@ -1768,9 +1798,13 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
             self.agent_connect(it.data["key"])
 
     def agent_update(self) -> None:
-        keys = [x["key"] for x in self.store.sources if x["in_watch"]]
-        if not keys:
+        in_watch = [x for x in self.store.sources if x["in_watch"]]
+        if not in_watch:
             self.log_line("Nenhuma fonte no config/watch.toml: o /update não teria o que puxar. Painel 1, aba Fontes, tecla n.", "yellow")
+            return
+        keys = [x["key"] for x in in_watch if x.get("enabled", True)]
+        if not keys:
+            self.log_line("Todas as fontes do config/watch.toml estão desligadas (tecla x liga).", "yellow")
             return
         shown = ", ".join(keys[:5]) + (f" e mais {len(keys) - 5}" if len(keys) > 5 else "")
         self.ask_agent("Atualizar tudo (/update)", [f"Lê {len(keys)} fonte(s) do watch.toml pelo MCP de leitura: {shown}",
@@ -1823,8 +1857,24 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
         if it and it.kind == "src":
             self.f_source_add({"key": it.data["key"]})
 
+    def toggle_source_sort(self) -> None:
+        self.source_sort = 1 - self.source_sort
+        self.redraw()
+
+    def toggle_source_enabled(self) -> None:
+        it = self.cur()
+        if not it or it.kind != "src" or not it.data.get("in_watch"):
+            return
+        key = it.data["key"]
+        nxt = "false" if it.data.get("enabled", True) else "true"
+        self.exec([["watch", "edit", key, "--set", f"enabled={nxt}"]], render=False,
+                  after=lambda: self._source_after(lambda: key))
+
     def f_source_edit(self) -> None:
-        old = self.cur().data
+        it = self.cur()
+        if not it or it.kind != "src":
+            return
+        old = it.data
         made: dict[str, str] = {}
 
         def remember(cmds, v):
@@ -1835,7 +1885,10 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
                        after=lambda: self._source_after(lambda: made.get("key")))
 
     def f_source_remove(self) -> None:
-        self.open_form("watch.remove", {"key": self.cur().data["key"]}, render=False,
+        it = self.cur()
+        if not it or it.kind != "src":
+            return
+        self.open_form("watch.remove", {"key": it.data["key"]}, render=False,
                        after=lambda: self._source_after(lambda: None))
 
     def agent_send(self) -> None:

@@ -176,14 +176,30 @@ def row(store, it, width: int) -> Text:
         mark, st = {"ok": ("✓", GRN), "warn": ("⚠", AMB), "error": ("✗", RED)}[lvl]
         agent = (it.extra.get("fix") or {}).get("agent")
         return two(T((mark, st), " ", f"{d['title']}: {d['detail']}"), T(("⚡", VIO) if agent else ""), width)
+    if k == "sgrp":
+        left = T(("▾ ", DIM), (d["label"], "bold"), (f" ({d['count']})", DIM))
+        right = T((f"⚠ {d['problems']}", RED)) if d["problems"] else T("")
+        return two(left, right, width)
     if k == "src":
-        mark, st = ("●", GRN) if d["last_ok"] and not d["failures"] else (("✗", RED) if d["failures"] else ("○", AMB))
+        extra = " · ".join(x for x in (d.get("kind"), d.get("window")) if x)
+        if not d.get("enabled", True):
+            return two(T(("○", DIM), " ", (d["key"], DIM), ("  " + extra if extra else "", DIM)),
+                       T(("[desligada]", DIM)), width)
         if not d["in_watch"]:
             mark, st = "◌", FAINT
-        right = (T((f"{d['failures']} falha(s)", RED)) if d["failures"] else
-                 T(("fora do watch", FAINT)) if not d["in_watch"] else
-                 T((util.fmt_date(d["last_ok"][:10]), DIM)) if d["last_ok"] else T(("nunca puxada", AMB)))
-        extra = " · ".join(x for x in (d.get("kind"), d.get("window")) if x)
+            right = T(("fora do watch", FAINT))
+        elif d["failures"]:
+            mark, st = "✗", RED
+            right = T((f"{d['failures']} falha(s)", RED))
+        elif not d["last_ok"]:
+            mark, st = "○", AMB
+            right = T(("nunca puxada", AMB))
+        elif d.get("problem"):
+            mark, st = "⚠", AMB
+            right = T((f"{d.get('problem_reason') or 'atrasada'} · {util.fmt_date(d['last_ok'][:10])}", AMB))
+        else:
+            mark, st = "●", GRN
+            right = T((util.fmt_date(d["last_ok"][:10]), DIM))
         return two(T((mark, st), " ", d["key"], ("  " + extra if extra else "", DIM)), right, width)
     if k == "opp":
         g, gs = OPP_GLYPH.get(d["status"], ("○", DIM))
@@ -340,7 +356,7 @@ def detail(store, it) -> Text:
         return Text("Nada aqui.", DIM)
     fn = {"resumo": d_resumo, "action": d_action, "g": d_plan, "p": d_plan, "d": d_plan, "prop": d_prop,
           "ask": d_ask, "msg": d_msg, "fday": d_focus, "fwarn": d_focus, "pub": d_pub, "dec": d_dec, "del": d_del,
-          "per": d_person, "art": d_art, "doc": d_doc, "sys": d_sys, "src": d_src, "opp": d_opp, "proc": d_proc,
+          "per": d_person, "art": d_art, "doc": d_doc, "sys": d_sys, "src": d_src, "sgrp": d_sgrp, "opp": d_opp, "proc": d_proc,
           "pgrp": d_pgrp, "pvfunil": d_funil, "pvgaps": d_gaps, "mx": d_matrix, "area": d_area, "docl": d_docl,
           "fb": d_fb, "prov": d_prov}[it.kind]
     return fn(store, it).text()
@@ -386,16 +402,28 @@ def d_doc(store, it) -> Doc:
     return doc.sec("Equivalente na CLI").cmd("brain doctor --online")
 
 
+def d_sgrp(store, it) -> Doc:
+    d = it.data
+    sub = f"{d['count']} fonte(s)" + (f" · {d['problems']} com problema" if d["problems"] else "")
+    return Doc().h(d["label"]).p((sub, DIM)).blank().p(("Cabeçalho de grupo: as fontes abaixo pertencem a este tipo.", DIM))
+
+
 def d_src(store, it) -> Doc:
     s = it.data
     doc = Doc().h(Text(s["key"], "bold"), (f"  · {s['kind']}" if s.get("kind") else "", DIM))
     if not s["in_watch"]:
         doc.blank().p(Text("Fonte puxada avulso (/connect). Não está no watch.toml, então o /update e o noturno não a puxam.", AMB))
         doc.p(("Tecla w inclui no watch.toml.", DIM))
-    skip = {"key", "kind", "in_watch", "last_ok", "last_error", "failures", "pulls", "last_changed"}
-    fields = [(k, Text(str(v))) for k, v in s.items() if k not in skip]
+    elif not s.get("enabled", True):
+        doc.blank().p(Text("Fonte desligada (enabled = false). O /update e o noturno a pulam.", DIM))
+    skip = {"key", "kind", "in_watch", "last_ok", "last_error", "failures", "pulls", "last_changed",
+            "enabled", "problem", "problem_reason"}
+    fields = [(k, Text(", ".join(str(x) for x in v) if isinstance(v, list) else str(v)))
+              for k, v in s.items() if k not in skip]
     last = Text(f"{s['last_ok'][:16].replace('T', ' ')} · {s['pulls']} pull(s)") if s["last_ok"] else Text("nunca puxada", AMB)
-    rows_ = [("kind", Text(s.get("kind") or "—"))] + fields + [
+    estado = (Text("desligada", DIM) if not s.get("enabled", True) else
+              Text(s["problem_reason"], RED if s["failures"] else AMB) if s.get("problem") else Text("ativa", GRN))
+    rows_ = [("kind", Text(s.get("kind") or "—")), ("estado", estado)] + fields + [
         ("último pull", last),
         ("novidade", Text(util.fmt_date(s["last_changed"][:10]))) if s["last_changed"] else None,
         ("falhas seguidas", Text(str(s["failures"]), RED if s["failures"] else DIM)),
@@ -404,7 +432,7 @@ def d_src(store, it) -> Doc:
     if s["in_watch"]:
         doc.sec("O que acontece").p("O /update lê esta fonte pelo MCP de leitura e grava com brain snapshot (hash igual = silêncio). "
                                     "Duas falhas seguidas pedem a sua atenção.")
-        doc.p(("Tecla c puxa só esta fonte; u atualiza todas.", DIM))
+        doc.p(("Tecla c puxa só esta fonte; x desliga/liga; o ordena; u atualiza todas.", DIM))
     doc.sec("Arquivo").p(("config/watch.toml (fora do git). Fonte que não está lá NÃO é puxada.", DIM))
     return doc.sec("Equivalente na CLI").cmd(f"brain watch edit {s['key']} --window 7d" if s["in_watch"] else f"brain watch add {s['key']} --kind …")
 
