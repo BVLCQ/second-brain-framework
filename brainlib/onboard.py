@@ -629,7 +629,7 @@ def _chosen_agent_label(brain) -> str | None:
 
 
 def agents_state(brain) -> list[dict]:
-    """Detectados na máquina + canal MCP do cérebro já registrado? (mesma deteccão do `brain memory harness`)."""
+    """Detectados na máquina + canal MCP do cérebro já registrado? (mesma detecção do `brain harness status`)."""
     from . import harness
     det = harness.detect()
     cur = brain.inst.cfg["runner"].get("agent", "") or ""

@@ -2575,6 +2575,7 @@ class CoverageTest(unittest.TestCase):
         "feedback revise", "feedback pushed", "feedback failed",   # revise = corrigir texto no terminal; recuperação manual (o push morreu depois de criar) — agente/terminal
     }
     NOT_IN_TUI = {"demo", "tui", "migrate ids", "agent permissions", "serve", "open", "app install", "app uninstall", "memory cost",
+                  "harness connect", "harness disconnect", "harness status",   # canal MCP: CLI do agente (2.25)
                   "query actions", "query decisions", "query person", "query entity", "query sql",
                   "index rebuild", "index update", "index status", "route", "memory dossier", "memory eval",
                   "memory models list", "memory models show", "memory models sync", "memory models refresh"}   # query/index/route/dossier = ferramenta do agente + doctor   # migração única no terminal; serve é a ponte do painel HTML; custo = doctor/CLI; models = CLI do dono/agente (full-only)

@@ -52,28 +52,28 @@ def _brain(tmp: Path, title: str = "Revisar orçamento") -> Brain:
 
 
 class RecallHookConfigTest(unittest.TestCase):
-    def test_default_is_auto_and_validation_accepts_bool_or_auto(self):
-        self.assertEqual(config.DEFAULTS["memory"]["recall_hook"], "auto")
+    def test_default_off_and_legacy_auto_normalizes_to_false(self):
+        """Desde a 2.25 não existe "auto": default false; o legado "auto" vira false no load."""
+        self.assertIs(config.DEFAULTS["memory"]["recall_hook"], False)
         with tempfile.TemporaryDirectory() as td:
             p = Path(td)
-            for raw, expected in (('recall_hook = "auto"', "auto"),
+            for raw, expected in (('recall_hook = "auto"', False),        # legado: aceito, normalizado
                                   ("recall_hook = true", True),
                                   ("recall_hook = false", False)):
                 inst = _inst(p, f"[memory]\n{raw}\n")
-                self.assertIs(inst.cfg["memory"]["recall_hook"], expected) if isinstance(expected, bool) else (
-                    self.assertEqual(inst.cfg["memory"]["recall_hook"], expected))
+                self.assertIs(inst.cfg["memory"]["recall_hook"], expected)
             for bad in ('recall_hook = "sempre"', "recall_hook = 1", 'recall_hook = ""'):
                 with self.assertRaises(util.BrainError):
                     _inst(p, f"[memory]\n{bad}\n")
 
 
 class RecallHookPermsTest(unittest.TestCase):
-    def test_four_cases_of_recall_hook_and_harnesses(self):
+    def test_hook_follows_recall_hook_bool_only(self):
         cases = [
-            ('recall_hook = "auto"\nharnesses = ["claude-code"]\n', 1),
-            ('recall_hook = "auto"\nharnesses = []\n', 0),
-            ('recall_hook = false\nharnesses = ["claude-code"]\n', 0),
-            ('recall_hook = true\nharnesses = []\n', 1),
+            ('recall_hook = true\n', 1),                                # o único jeito de ligar: explícito
+            ('recall_hook = false\nharnesses = ["claude-code"]\n', 0),  # harnesses é chave morta (2.25)
+            ('recall_hook = "auto"\n', 0),                              # legado: normalizado para false
+            ('recall_hook = true\nharnesses = ["claude-code"]\n', 1),   # harnesses presente e irrelevante
         ]
         for mem_toml, expected_count in cases:
             with self.subTest(mem_toml=mem_toml), tempfile.TemporaryDirectory() as td:
@@ -123,7 +123,7 @@ class RecallHookPermsTest(unittest.TestCase):
                 json.dumps({"hooks": {"UserPromptSubmit": [owner_entry], "Stop": other_event}}),
                 encoding="utf-8",
             )
-            inst_on = _inst(p, '[memory]\nrecall_hook = "auto"\nharnesses = ["claude-code"]\n')
+            inst_on = _inst(p, '[memory]\nrecall_hook = true\n')
             self.assertTrue(perms.sync(inst_on)["changed"])
             self.assertFalse(perms.sync(inst_on)["changed"])
             data_on = json.loads(lf.read_text(encoding="utf-8"))

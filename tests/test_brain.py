@@ -1009,7 +1009,8 @@ class DashboardAssetTests(unittest.TestCase):
         "demo", "tui", "serve", "open", "app install", "app uninstall", "migrate ids", "update", "upstream hook", "upstream scan", "backup", "mcp",
         "nightly", "schedule", "validate", "sync", "memory setup", "memory rebuild", "memory sync",
         "memory status", "memory cost", "agent allow",   # (watch add/edit/remove e doc link/unlink: formulários de forms.py)
-        # (memory harness saiu daqui: a face Configurações do painel emite install/verify)
+        # (memory harness saiu: o canal MCP é CLI do agente — brain harness connect/disconnect/status)
+        "harness connect", "harness disconnect", "harness status",
         "note edit", "setup",                          # wizard do dono: terminal primeiro (TUI/painel = Fases 2–3 do plano)
         "query actions", "query decisions", "query person", "query entity", "query sql",   # ferramenta do agente/MCP (brain_query)
         "index rebuild", "index update", "index status",          # ciclo de vida: terminal (doctor avisa)

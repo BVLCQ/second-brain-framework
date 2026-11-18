@@ -367,10 +367,11 @@ Camada auxiliar, mão única: o vault alimenta o banco e o vault continua a verd
 `embed` = chunks, **zero LLM, zero chave, nada sai da máquina**; `full` = extração
 de fatos, observações e mental models (aterrissando) — envia texto do vault à API
 de LLM **com a chave do dono** (`cloud_llm = true`), medida por `brain memory cost`
-(medidor mensal, sem teto). O mesmo servidor pode hospedar a memória dos agentes
-de código (Claude Code, Cursor, Codex, Hermes) no banco próprio `harness_bank`
-(default `hermes`) — nunca tocada pelo `memory rebuild`, nunca lida como fato do
-vault (`brain memory harness install|verify`).
+(medidor mensal, sem teto). **Memória dos agentes de código (Claude Code, Cursor, Codex,
+Hermes) é concern dos próprios agentes** — o cérebro não cria, não aponta e não verifica
+banco nenhum deles (decisão de 2026-11-18, revogando a hospedagem compartilhada). O que o
+cérebro registra nesses agentes é só o canal de LEITURA: MCP somente-leitura e hook de
+recall (`brain harness connect`).
 Sem servidor, o motor é `none` e `/ask` usa índice → artefato → RAW. Guias:
 `guides/memory.md` (setups) e `guides/plans/memory-setups.md` (plano com as decisões).
 

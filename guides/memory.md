@@ -157,44 +157,35 @@ use quando trocar de modo, mudar o mission ou suspeitar de lixo.
 - **`full` → `embed`**: `brain memory setup --mode embed` → `brain memory rebuild`.
   O hook de recall continua no banco único (o padrão do `BRAIN_RECALL_BANKS` é `brain`).
 
-## Harnesses de código no mesmo servidor
+## Memória dos agentes: traga a sua (o cérebro não gerencia)
 
-O servidor do cérebro também guarda a **memória dos agentes de código** (Claude Code,
-Cursor CLI, Codex, Hermes) — no banco próprio `harness_bank` (default `hermes`),
-separado **por construção** do `brain`: `memory rebuild` só toca o que o `[memory]`
-nomeia, e memória de conversa de agente nunca vira fato do vault.
+O cérebro **não cria, não aponta e não verifica bancos de memória de agentes** (decisão
+de 2026-11-18). Cada agente tem memória própria e configuração própria:
 
-```bash
-brain memory harness install claude-code cursor-cli   # instalador oficial + canais do cérebro (hook/MCP)
-brain memory harness install hermes                   # config local_external + memory.provider + MCP
-brain memory harness verify                           # banco, recall ping, configs e canais por agente
-brain memory harness remove claude-code               # remove o canal MCP e devolve recall_hook a auto
-```
+- **Hermes** tem provedor de memória de primeira classe: `hermes config set memory.provider
+  hindsight` (+ `~/.hermes/hindsight/config.json` apontando para o SEU servidor e banco).
+  O plugin pede consentimento interativo (`hermes plugins install hindsight`).
+- **Claude Code / Cursor / Codex** usam o instalador oficial
+  (`npx -y @vectorize-io/hindsight-coding-agents install <agente>`) apontado para o
+  servidor que VOCÊ escolher — nada disso passa pelo cérebro.
 
-- Claude Code / Cursor / Codex: o installer oficial escreve os hooks/MCP/skill e o
-  `~/.hindsight/coding-agent.json` ganha `bankId = "hermes"` com **proveniência**
-  (`retainTags: project/harness`) — todo documento carrega de onde veio. Remova o
-  `bankId` para voltar ao padrão por-repo do upstream (`coding-agent::<repo>`).
-- O hook de leitura do cérebro (`services/hooks/recall_context.py`) **não nasce ativo por
-  acidente**: é gravado em `.claude/settings.local.json` por `perms.sync` quando
-  `[memory].recall_hook` é `true` (ou `"auto"` com `"claude-code"` em `[memory].harnesses`).
-  Veja a seção *Os dois canais do cérebro nos agentes* abaixo.
-- Hermes: `memory.provider = hindsight` precisa ficar gravado no `~/.hermes/config.yaml`
-  para o harness contar como conectado; o plugin pede consentimento interativo
-  (`hermes plugins install hindsight`) e a ativação vale na **próxima** sessão.
-- O sub-passo "Harnesses" do `brain setup --only memoria` faz tudo isso perguntando;
-  o doctor avisa se o banco dos agentes sumir do servidor ou se faltar algum canal.
+Se você já tem um servidor Hindsight (como o do próprio cérebro), aponte os agentes para
+ele por conta e risco dos bancos: use um banco por agente, e lembre que `brain memory
+rebuild` só toca o banco que o `[memory]` nomeia.
+
+O que o cérebro registra nesses agentes é só o **canal de leitura** (MCP somente-leitura
+e, no Claude Code, o hook de recall): `brain harness connect <agente>` — ver a seção
+*Os dois canais do cérebro nos agentes* abaixo.
 
 ## Os dois canais do cérebro nos agentes
 
-Além da memória de conversa dos próprios agentes (banco `harness_bank`, default `hermes`),
-`brain memory harness install` registra até **dois canais de leitura do cérebro** (banco
-`bank`, default `brain` — os bancos permanecem estritamente separados):
+`brain harness connect <agente>` registra **canais de LEITURA do cérebro** nos agentes de
+código — nada de memória, nada de banco:
 
 1. **Hook de recall (`UserPromptSubmit`, só Claude Code)** — controlado por
-   `[memory].recall_hook` (`"auto"` | `true` | `false`). `harness install claude-code`
-   grava `recall_hook = true` e sincroniza `.claude/settings.local.json` (independente de
-   `npx` estar instalado). Depois de instalar, **abra uma sessão nova; o Claude pode pedir
+   `[memory].recall_hook` (`true` | `false`). `brain harness connect claude-code`
+   grava `recall_hook = true` e sincroniza `.claude/settings.local.json`. Depois de
+   conectar, **abra uma sessão nova; o Claude pode pedir
    revisão do hook em `/hooks`**. Para registro manual em `.claude/settings.local.json`:
 
    ```json
@@ -215,8 +206,8 @@ Além da memória de conversa dos próprios agentes (banco `harness_bank`, defau
    }
    ```
 
-2. **Servidor MCP somente-leitura (`brain mcp`)** — expõe a busca e leitura do vault sem
-   tocar em `harness_bank`:
+2. **Servidor MCP somente-leitura (`brain mcp`)** — expõe a busca e leitura do vault
+   (o próprio banco `brain`, quando a memória está ligada):
    - **Claude Code** (`~/.claude.json`, via CLI):
      `claude mcp add --scope user brain --env BRAIN_HOME=/Users/marina-demo/Apps/second-brain-framework -- /Users/marina-demo/Apps/second-brain-framework/brain mcp`
    - **Hermes** (`~/.hermes/config.yaml`, via CLI `hermes mcp add brain --command /Users/marina-demo/Apps/second-brain-framework/brain --env BRAIN_HOME=/Users/marina-demo/Apps/second-brain-framework --args mcp`):
@@ -251,7 +242,7 @@ Além da memória de conversa dos próprios agentes (banco `harness_bank`, defau
    - **Codex** (`~/.codex/config.toml`, bloco demarcado validado com `tomllib`):
 
      ```toml
-     # >>> brain: servidor MCP somente-leitura (gerenciado por `brain memory harness`) >>>
+     # >>> brain: servidor MCP somente-leitura (gerenciado por `brain harness`) >>>
      [mcp_servers.brain]
      command = "/Users/marina-demo/Apps/second-brain-framework/brain"
      args = ["mcp"]
@@ -263,11 +254,9 @@ Flags e remoção:
 
 - `--no-recall`: não registra o hook de recall no Claude Code (`recall_hook = false`).
 - `--no-mcp`: não registra o servidor MCP somente-leitura no agente.
-- `brain memory harness remove <agente>`: remove o servidor MCP, tira o agente de
-  `[memory].harnesses` e, no Claude Code, devolve `recall_hook` para `"auto"` e sincroniza
-  `.claude/settings.local.json`. O banco `harness_bank` no Hindsight nunca é apagado pelo
-  cérebro. No Hermes, `memory.provider` permanece em `hindsight` até você trocar com
-  `hermes config set memory.provider <outro>`.
+- `brain harness disconnect <agente>`: remove o servidor MCP e, no Claude Code, grava
+  `recall_hook = false` e sincroniza `.claude/settings.local.json`. Memória do agente não
+  é mexida — nunca foi do cérebro.
 
 ## Provedores — LLM · embeddings · reranker (plano memory-providers.md)
 
@@ -315,7 +304,9 @@ Regras do desenho:
 3. **Escolha o setup** — `brain setup --only memoria`: `embed` (chunks, US$ 0, sem chave)
    ou `full` (extração com a sua chave; o wizard pede o "ok" literal do gate de saída).
    Trocar depois é o mesmo comando — nos dois sentidos.
-4. **Harnesses (opcional)** — `brain memory harness install …` ou o sub-passo do wizard.
+4. **Agentes de código (opcional)** — canal de leitura: `brain harness connect <agente>`
+   (MCP somente-leitura; no Claude Code também o hook de recall). Memória dos agentes fica
+   com os próprios agentes — veja *"Memória dos agentes: traga a sua"*.
 
 Usuários do `f7ecb0e` para cá: nada quebra sem esses passos — mas o doctor mostra
 ⚠ bancos legados no servidor até o `rebuild`, e ⚠ servidor antigo até o bump.

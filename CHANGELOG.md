@@ -1,3 +1,27 @@
+## 2.25.0 — o cérebro não gerencia memória de agentes
+
+- **Decisão do dono (18/11, revogando a de 05/11):** memória de agente é concern do próprio
+  agente. O cérebro **não cria, não aponta e não verifica banco nenhum** de Claude Code,
+  Cursor, Codex ou Hermes — quem já tem memória configurada nunca mais tem o ponteiro
+  reescrito por baixo (`~/.hermes/hindsight/config.json` e `memory.provider` ficam intactos).
+- **Saiu:** `wire_hermes`, o instalador oficial via `npx`, o `~/.hindsight/coding-agent.json`,
+  as chaves `[memory].harness_bank`/`harnesses`, `brain memory harness install|verify|remove`,
+  o sub-passo "Harnesses" do wizard, a seção de harnesses da aba Memória (painel e TUI) e os
+  checks de banco do doctor. **Migração:** configs antigas com `harness_bank`/`harnesses` são
+  ignoradas sem erro; `recall_hook = "auto"` vira `false` (o hook liga explícito com
+  `brain harness connect claude-code`); blocos do Codex escritos com o marcador antigo ficam
+  órfãos — remova à mão se houver.
+- **Ficou (não é memória):** o canal de LEITURA do cérebro nos agentes, agora com CLI própria
+  e enxuta — `brain harness connect|disconnect|status <agente>` (MCP somente-leitura; no
+  Claude Code também o hook de recall, flags `--no-mcp`/`--no-recall`). A detecção de agentes
+  do onboarding ("Seu agente") usa a mesma máquina.
+- **Guia novo:** *"Memória dos agentes: traga a sua"* (`guides/memory.md`) — a receita de como
+  apontar CADA agente para o servidor que VOCÊ escolher, sem passar pelo cérebro.
+- **Onboarding (feedback do teste real):** boas-vindas mostra o ícone do app (não a arte
+  navy); a dica de conectores segue o agente escolhido; o almoço sai do wizard (tunável fino
+  não se pergunta); token do GitHub com passo a passo (link com `public_repo` pré-marcado e
+  `No expiration` sugerido); formulário de fonte se molda ao tipo escolhido.
+
 ## 2.24.0 — o lote das issues #21–#25: aprovação sem atrito, retratação e painel vivo
 
 - **Confirmar já aprova (#21).** Nos formulários de gate do painel e da TUI (goal/projeto, promover

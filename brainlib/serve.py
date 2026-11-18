@@ -28,7 +28,7 @@ ALLOWED: dict[str, set[str] | None] = {
     "action": {"open", "update", "close", "reopen", "merge", "drop"},
     "ask": {"answer", "drop"},
     "focus": {"approve", "apply", "plan", "sync"},
-    "memory": {"providers", "harness"},          # face Configurações: provedores + conectar/verificar harnesses
+    "memory": {"providers"},                 # face Configurações: provedores (harness saiu — canal MCP é CLI, `brain harness`)
     "outbox": {"draft", "approve", "cancel"},
     "decision": {"add", "supersede"},              # supersede: o mesmo formulário da TUI (forms.py)
     "delivery": None,                                   # posicional, sem subcomando

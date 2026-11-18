@@ -126,7 +126,8 @@ class WatchTest(_WatchBase):
         r = run("list", "--json")
         self.assertEqual(json.loads(r.stdout)[0]["channel"], "#dados")
         self.assertEqual(run("edit", "slack-dados", "--window", "7d", "--unset", "channel").returncode, 0)
-        self.assertEqual(json.loads(run("list", "--json").stdout), [{"key": "slack-dados", "kind": "slack", "window": "7d"}])
+        self.assertEqual(json.loads(run("list", "--json").stdout),
+                         [{"key": "slack-dados", "kind": "slack", "window": "7d", "enabled": True}])  # enabled veio no #29
         bad = run("add", "slack-dados", "--kind", "slack")
         self.assertEqual((bad.returncode, "já existe" in bad.stderr), (4, True))
         self.assertEqual(run("remove", "slack-dados").returncode, 0)

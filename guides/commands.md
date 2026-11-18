@@ -1060,8 +1060,6 @@ chave do dono — `guides/memory.md`), escolha livre e reversível.
 | `cost [--json]` | medidor mensal de LLM (embed: US$ 0; full: tokens + US$ por operação/modelo) — sem teto, só informação |
 | `recall CONSULTA [--tags a,b]` | busca semântica no banco único (`--bank` é legado, ignorado) |
 | `reflect CONSULTA [--tags]` | resposta sintetizada pelo LLM a partir das memórias |
-| `harness install AGENTE…` | conecta agentes de código no servidor do cérebro: `claude-code` · `cursor-cli` · `codex` (instalador oficial) · `hermes` (config local_external) — banco próprio `harness_bank`, fora do `rebuild` |
-| `harness verify` | banco dos agentes existe? recall ping? configs apontam pra cá? |
 | `models sync\|refresh\|list\|show` | mental models (Fase 8, modo full): catálogo do PLANNING + pessoas (`mm-goal-#`/`mm-proj-#`/`mm-pessoa-<id>`), refresh em delta com intervalo mínimo de 24h — exige `mental_models = true` |
 | `eval [--gold …] [--route on\|off\|ledger] [--k N] [--save …]` | conjunto-ouro (Fase 0): recall@k, MRR, citação, itens, abstenção e tokens por tipo — gold em `vault/eval/memory-gold.jsonl` (exemplo no `template/`) |
 
@@ -1070,8 +1068,6 @@ brain memory sync
 brain memory sync --dry-run
 brain memory recall "o que foi decidido sobre o forno?"
 brain memory recall "prazos" --tags proj:PROJ-1,pessoa:marina-demo
-brain memory harness install claude-code cursor-cli   # memória dos agentes no mesmo servidor
-brain memory harness verify
 brain memory providers show                          # o stack atual (chave: presença, nunca valor)
 brain memory providers set embeddings --provider fireworks --key …   # escolha sem wizard
 brain memory providers set reranker --off            # volta à fusão RRF
@@ -1089,6 +1085,16 @@ Servidor MCP **somente leitura** (stdio) para outras IAs consultarem o cérebro 
 ```bash
 claude mcp add segundo-cerebro -- brain mcp
 ```
+
+### `brain harness`
+Registra o **canal de leitura** do cérebro nos agentes de código (MCP somente-leitura e, no
+Claude Code, o hook de recall). **Nada de memória**: bancos de memória dos agentes são
+configurados pelos próprios agentes/usuarios (`guides/memory.md` § "Memória dos agentes").
+| Subcomando | O que faz |
+|---|---|
+| `connect AGENTE…` | registra o MCP somente-leitura no agente (`claude-code` · `hermes` · `cursor-cli` · `codex`; claude-code também liga o hook de recall) |
+| `disconnect AGENTE…` | remove o canal (claude-code: hook volta a `false`) |
+| `status` | por agente detectado: presente na máquina? canal registrado? |
 
 ---
 
