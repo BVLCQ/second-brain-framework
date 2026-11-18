@@ -50,6 +50,14 @@ def _pairs(f: Field, vals: dict) -> list[tuple[str, str]]:
     return [((c[1], c[0]) if isinstance(c, tuple) else (c, c)) for c in raw]
 
 
+EMPTY_CHOICE = ("— escolha —", "")
+
+
+def _pairs_or_empty(f: Field, vals: dict) -> list[tuple[str, str]]:
+    """Como `_pairs`, mas nunca vazia: sem opções, o campo fica em "— escolha —" (valor vazio) e o submit é barrado pelo obrigatório."""
+    return _pairs(f, vals) or [EMPTY_CHOICE]
+
+
 @dataclass
 class FormSpec:
     title: str
@@ -112,9 +120,7 @@ class FormModal(ModalScreen):
                         if f.multi:
                             yield TextArea(f.value, placeholder=f.ph, id=f"f_{f.id}", classes="fin")
                         elif f.choice or f.options:
-                            pairs = _pairs(f, {x.id: x.value for x in s.fields})
-                            if not pairs:                  # fonte dinâmica sem opções: campo inerte, o form segue
-                                pairs = [("—", "")]
+                            pairs = _pairs_or_empty(f, {x.id: x.value for x in s.fields})
                             val = f.value if f.value in [v for _, v in pairs] else pairs[0][1]
                             # opção vazia ("— escolha —") no topo: o estado sem escolha mostra o prompt dela
                             prompt = pairs[0][0] if pairs and pairs[0][1] == "" else "Select"
@@ -186,7 +192,7 @@ class FormModal(ModalScreen):
     def _refresh_options(self, f: Field) -> None:
         """Recalcula a lista de um campo que depende de outro (ex.: projetos do goal escolhido), mantendo o valor se ainda existir."""
         sel = self.query_one(f"#f_{f.id}", Select)
-        pairs = _pairs(f, self.vals())
+        pairs = _pairs_or_empty(f, self.vals())
         keep = sel.value if sel.value in [v for _, v in pairs] else pairs[0][1]
         sel.set_options(pairs)
         sel.value = keep
