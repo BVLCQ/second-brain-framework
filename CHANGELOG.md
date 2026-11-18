@@ -1,3 +1,36 @@
+## 2.21.0 — o lote das issues #5–#18: noturno honesto, hook de recall e TUI sem armadilhas
+
+- **Noturno que não mente mais (#6, #7).** O agente headless é sondado no setup (interativo) e no
+  `doctor --online` com um prompt mínimo — sem login, o dono vê o motivo e o comando que corrige. Quando
+  o agente escolhido morre antes de produzir nada (sessão expirada, `Authentication required`), o noturno
+  tenta o próximo da ordem automática (`[runner].fallback = true`, desligável); se ele já tocou no ledger
+  ou na inbox, não há fallback — o erro sobe inteiro. O doctor mostra o passo e o motivo das falhas em
+  vez de um "com falhas" mudo, e quem usa runner que não é o claude com fontes MCP no watch.toml recebe
+  o aviso de que só o preset claude recebe as regras de leitura (limite documentado no guia).
+- **O contexto do cérebro chega ao Claude Code (#5).** `perms.sync` registra o hook de recall
+  (`services/hooks/recall_context.py`) em `UserPromptSubmit` do `.claude/settings.local.json` quando
+  `[memory].recall_hook = "auto"` (default) e o harness `claude-code` está conectado — `true`/`false`
+  forçam. O hook silencia no noturno (`BRAIN_NIGHTLY=1`), resolve a instância por `BRAIN_HOME` antes do
+  cwd e sai em silêncio quando não acha instância. Hooks do dono e o `settings.json` versionado ficam
+  intocados.
+- **TUI sem armadilhas (#11, #14, #15, #16, #17).** Pousar em painel que a face não define e usar `?`
+  ou `h/l`/`[ ]` não derruba mais o app; a tecla `s` volta a mover ação cujo bloqueador já foi fechado
+  (só bloqueadores abertos travam, como o status derivado); `brain render` com falha após uma escrita
+  vira aviso em amarelo ("FRESH e o painel ficaram velhos") em vez de linha de sucesso; o subtítulo dos
+  painéis alinha à direita de verdade (via estilos, não atributo fantasma); o relógio do log segue o fuso
+  da instância e o `BRAIN_NOW` dos testes; e um Select que fica sem opções (nenhum goal ativo, p. ex. no
+  promover oportunidade) abre em "— escolha —" com o submit barrado — não explode mais.
+- **Onboarding e instalador (#8, #13).** Sem o Claude Code na máquina, o passo Conectores conclui com o
+  caminho (menciona o Hermes quando presente) em vez de job de erro; o rascunho de planejamento aceita
+  qualquer agente configurado e cita o certo. O `install.sh` roda `mise trust` no clone novo antes de
+  qualquer Python e, se o `init` falhar, imprime a correção exata em vez de abortar mudo.
+- **RAW e memória (#10, #12, #18).** O nome do tipo é prefixo válido: `snapshot --prefix connectors`
+  arquiva em `connectors/` (e o snapshot avisa quando um `--prefix` não classifica); arquivos
+  `connectors-*`/`github-*` que caíram em `documents/` ficam fora do banco vetorial. O corpus não é mais
+  relido e re-hashado várias vezes na mesma execução (`sync`/`status`/`doctor` pagam uma leitura só,
+  por assinatura exata), `NO_LLM_CONFIG` existe uma única vez e `gemini` entra na lista do runner no
+  wizard.
+
 ## 2.20.1 — hotfix: tecla m com a memória desligada não derruba mais a TUI
 
 - **Correção.** Abrir o formulário "Memória: modo e provedores" com o modo atual `nenhuma` derrubava a
