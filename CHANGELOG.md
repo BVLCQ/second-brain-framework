@@ -1,3 +1,29 @@
+## 2.26.0 — o lote das issues #26–#31
+
+- **Doctor/boot do Hindsight (#27):** `brain doctor` reconhece o estado transitório do container
+  nos primeiros 3 minutos pós-boot (ou em restart-loop aguardando o LM Studio) e avisa em vez de
+  errar "banco ausente"; o watchdog só aciona o `lms` se ele existir, espera até 30s pelo `:1234`
+  e registra o que o `compose up -d` realmente fez (subiu/recriou vs "Running" sem efeito).
+- **Operações falhas do servidor no doctor (#26):** o contador `failed_operations` do Hindsight
+  entra no `memory status`/doctor — o level vira `warn` mesmo sem documento rastreado localmente e,
+  quando o erro diz `No models loaded`, a causa é nomeada junto do comando que corrige (`lms load`
+  no LM Studio ou `brain memory providers set llm …`).
+- **Arrastar para a inbox (#28):** arrastar arquivo ou pasta sobre o painel vivo (`./brain serve`)
+  mostra as zonas **Mover**/**Copiar** (estilo Telegram) e entrega em `vault/RAW/inbox/` pela ponte
+  (`POST /api/inbox`: 50 MB por envio, sufixo `-2` em colisão, `.DS_Store`/`.keep.md` ignorados,
+  noturno bloqueado). Sem a ponte, o painel avisa como entregar de outra forma; quando o navegador
+  não deixa apagar o original, copia e diz isso na tela.
+- **Fontes: ligar/desligar, agrupamento e slack-dm (#29, #30):** o `watch.toml` ganha `enabled`
+  (padrão `true`; desligada é pulada no `/update`, no noturno e no `watch since`, e segue listada,
+  esmaecida) e o novo `kind = "slack-dm"` com `exclude` — DMs e DMs em grupo do dono (recebidas e
+  enviadas), um snapshot por conversa ativa, conteúdo só no vault. A aba Fontes (TUI e painel)
+  agrupa por tipo, traz os problemas primeiro, alterna a ordem por último pull e liga/desliga por
+  fonte (`x` na TUI, interruptor no painel — `brain watch edit <key> --set enabled=…`).
+- **Autocompletar entidades nos formulários (#31):** campos que referenciam entidades (destino da
+  mesclagem, bloqueios, pessoas) filtram ao digitar — número ou palavras do título/nome, sem
+  acento/caixa — mostrando `ID · título` na TUI e no painel pela mesma especificação
+  (`forms.filter_options`); confirmar a sugestão preenche o ID.
+
 ## 2.25.0 — o cérebro não gerencia memória de agentes
 
 - **Decisão do dono (18/11, revogando a de 05/11):** memória de agente é concern do próprio
