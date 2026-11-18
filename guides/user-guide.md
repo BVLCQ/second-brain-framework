@@ -615,7 +615,9 @@ em outros agentes, o texto é entendido do mesmo jeito.)
   offline fica `pendente` — `brain feedback list` mostra a fila, `push` tenta de novo.
 - **Token (uma vez, no `./brain setup`, passo Portas — ou `./brain setup --only portas`):** token fine-grained em
   github.com/settings/personal-access-tokens/new, dono do repo do framework, só esse repo, **Issues: Read and write**.
-  Quem não é colaborador do repo usa um token clássico com `public_repo`. O wizard pede o valor mascarado (nunca no
+  Quem não é colaborador do repo usa um token clássico com `public_repo` (o wizard do onboarding já abre a página com o
+  escopo marcado: `github.com/settings/tokens/new?scopes=public_repo&description=…`) e pode escolher **No expiration** —
+  o token só abre e lê issues em repos públicos. O wizard pede o valor mascarado (nunca no
   chat), valida (`GET /user`), confere que o repo está visível e com Issues ligadas, e grava em `config/.env`.
   O `brain doctor` avisa quando há sugestão na fila e falta o token.
 - O issue é público: a porta recusa texto com seu nome, e-mail ou caminhos da máquina, e não publica
@@ -699,7 +701,7 @@ O painel tem três **faces** (como o TUI): **Execução**, **Portfólio** e **Co
 `Tab`/`Shift+Tab` troca, e cada face lembra onde você estava. A barra
 lateral traz as páginas (com badges), a busca ⌘K e a barra inferior mostra
 as teclas do contexto — clicáveis, com os gates em destaque. A face
-**Configurações** mostra provedores da memória, harnesses e saúde — e o
+**Configurações** mostra provedores da memória e saúde — e o
 formulário de trocar provedor roda a mesma linha da TUI e do CLI.
 
 **As mesmas teclas no TUI e no painel.** `n` novo · `e` editar · `d` descartar, remover, cancelar, aposentar,
@@ -747,8 +749,8 @@ por uma versão.
 - **Fontes** — o `watch.toml` e o último pull de cada fonte: `n` adiciona, `e` edita, `d` remove, `w` inclui um pull
   avulso; `c`/`u` executam `/connect`/`/update` pelo `[runner]` quando a ponte está no ar (transmitindo a saída no console lateral; no retrato ou sem runner, dizem o comando do chat). `N` abre a nota rápida em qualquer página.
 
-**Configurações** — páginas: **Memória** (provedores, harnesses; `s` troca
-provedor, `v` verifica os harnesses, `i` conecta o selecionado) e **Saúde**
+**Configurações** — páginas: **Memória** (provedores; `s` troca
+provedor) e **Saúde**
 (badge: avisos) — o `doctor` visual + `f` corrige o aviso selecionado (leva à página, ou roda/diz o comando do agente) + `o` testa online de novo; desde a face
 Configurações a Saúde mora só aqui, como na TUI (a paleta também leva só
 aqui — o link antigo `#health` redireciona).

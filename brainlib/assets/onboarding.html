@@ -970,8 +970,13 @@ V.chaves = () => {
   $("#view").innerHTML = `${head("Conexões", "Chaves e portas", "Nada aqui é obrigatório. As chaves ficam só no seu computador e nunca aparecem de novo na tela.")}
     <div class="card">
       <h2>Sugestões e bugs do Brain ${k.GITHUB_TOKEN.set ? '<span class="pill ok" style="margin-left:6px">configurado</span>' : ""}</h2>
-      <p class="sub">Com um token do GitHub, as sugestões que você mandar pelo Brain viram issues públicas no repositório do projeto. <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">Criar token →</a></p>
-      <label class="f" style="margin:0"><span>Token do GitHub (GITHUB_TOKEN)</span><input type="password" id="gh" placeholder="${k.GITHUB_TOKEN.set ? "deixe vazio para manter o atual" : "github_pat_…"}" autocomplete="off"></label>
+      <p class="sub">Com um token do GitHub, as sugestões que você mandar pelo Brain viram issues públicas no repositório do projeto.</p>
+      <ol class="howto" style="margin:4px 0 12px;padding-left:20px;color:var(--muted)">
+        <li>Abra <a href="https://github.com/settings/tokens/new?scopes=public_repo&description=Brain%20%E2%80%94%20sugest%C3%B5es%20e%20bugs" target="_blank" rel="noopener">a página de criação do GitHub</a> — o escopo <b>public_repo</b> já vem marcado (é o único necessário: este token só abre e lê issues em repositórios públicos).</li>
+        <li>Em <b>Expiration</b>, escolha <b>No expiration</b> — sem validade, pra não parar de funcionar num mês (o risco é mínimo: issues em repos públicos, nada mais).</li>
+        <li>Role até o fim e clique em <b>Generate token</b>; depois cole o valor abaixo.</li>
+      </ol>
+      <label class="f" style="margin:0"><span>Token do GitHub (GITHUB_TOKEN)</span><input type="password" id="gh" placeholder="${k.GITHUB_TOKEN.set ? "deixe vazio para manter o atual" : "ghp_… (clássico, escopo public_repo)"}" autocomplete="off"></label>
     </div>
     <div class="card soft">
       <h2>Google — foco na agenda e backup no Drive</h2>
