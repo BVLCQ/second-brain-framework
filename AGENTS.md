@@ -147,8 +147,15 @@ somente-leitura para o mundo.
    cérebro (`brain proposal add --kind framework`, com `--issue-title` e `--issue-body[-file]` no molde
    `framework`) viram issue **quando o dono aceita**: o `proposal accept` registra o `FB-####` e
    publica — o "aceito" aprova o texto que ele viu; rejeitada, nada sobe. `brain feedback revise`
-   corrige o texto de um FB que ainda não virou issue. Token: `GITHUB_TOKEN` em `config/.env`. No
-   noturno nada é publicado. `feedback sync`
+   corrige o texto de um FB que ainda não virou issue. **Retirada e retratação:** `brain feedback
+   withdraw <id> --reason` retira um rascunho pendente (o dono qualquer um; o agente só rascunho
+   próprio, ainda sem issue) — sai da fila do `push` e do `list` padrão, `list --all` mostra o motivo.
+   `brain feedback retract <id>` retrata uma issue publicada: `--withdraw` comenta explicando a
+   premissa errada e fecha como "não será feita" — o agente pode fazer sozinho em item que ELE mesmo
+   publicou, com evidência registrada (decisão do dono), sem apagar e sem editar o corpo; `--correct`
+   revisa o corpo e exige o "ok" literal do dono. Comentário e correção passam pelos mesmos guardas
+   de texto público. Estados `retirado`/`retratado` no ledger. Token: `GITHUB_TOKEN` em `config/.env`. No
+   noturno nada é publicado nem retratado — a retratação vira ASK para o dono. `feedback sync`
    relê o estado de cada issue (aberta/fechada · concluída/não será feita) e grava `feedback.synced` —
    observação de porta já aberta, roda até no noturno (passo 6 do `/update`).
 
@@ -340,10 +347,13 @@ apontar, trate como pista e confirme no arquivo.
   nenhuma ferramenta escreve. Para escrever, usam o agente desta instância.
 - **Formulários (TUI e painel)** — uma especificação só, `brainlib/forms.py`: campos, rótulos, obrigatórios, quando
   aparecem, validação e a linha `brain …`. Mudou um formulário? Mude lá — nunca numa ponta só
-  (`tests/test_forms.py` recusa e compara Python × JS). Aprovação de gate nunca vem preenchida.
+  (`tests/test_forms.py` recusa e compara Python × JS). Em gates, confirmar o formulário na TUI ou no painel já é a
+  aprovação: a interface preenche `--approval`/`--quote` com `tui`/`painel`. Na CLI o texto não vazio continua
+  obrigatório; o consentimento do modo full da memória segue digitado.
 - **TUI** — `./brain tui` (extra opcional, Textual). Cockpit de teclado: lê em processo
-  e escreve **só chamando `./brain`**, com a linha exata no log. Gates e portas pedem a
-  resposta literal do dono; ações do agente (⚡) rodam o runner configurado. Recusa abrir
+  e escreve **só chamando `./brain`**, com a linha exata no log. Gates são aprovados ao confirmar o
+  formulário (a interface preenche `tui`; o consentimento full da memória segue digitado); ações do
+  agente (⚡) rodam o runner configurado. Recusa abrir
   com `BRAIN_NIGHTLY=1`. **Faces:** Tab / Shift+Tab giram
   entre `Execução` (painéis de hoje), `Portfólio` (Visão, Processos, Oportunidades, Matriz,
   Registro) e `Configurações` (Memória: Provedores, Harnesses · Instância: Saúde); cada face

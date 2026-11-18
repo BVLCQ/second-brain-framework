@@ -1,3 +1,31 @@
+## 2.24.0 — o lote das issues #21–#25: aprovação sem atrito, retratação e painel vivo
+
+- **Confirmar já aprova (#21).** Nos formulários de gate do painel e da TUI (goal/projeto, promover
+  oportunidade, aprovar mensagem, plano de foco, publicação, aceitar/rejeitar proposta) o campo
+  "sua aprovação" deixa de existir: apertar "aprovar" é a aprovação, e a interface preenche
+  `--approval`/`--quote` com `painel` ou `tui` — o ledger segue registrando a aprovação e a
+  superfície de origem. Na CLI nada muda (o texto não vazio continua obrigatório) e o consentimento
+  do modo full da memória segue digitado, por ser consentimento de nuvem.
+- **O TODO não esvazia com "todas" (#22).** Marcado o filtro "todas (fechadas além de 14d)", a coluna
+  Feita agora mostra as ações fechadas sem corte de data; desmarcado, mantém a janela de 14 dias.
+  (O corte era recuada só com o filtro desligado — ligá-lo fixava o corte em hoje e esvaziava a
+  coluna.)
+- **Pessoas moram no Portfólio (#23).** No painel e na TUI, o cadastro de pessoas sai da face
+  Execução e passa a morar no Portfólio, junto de Áreas, Processos e Documentos — mesmo
+  agrupamento nas duas superfícies, com rota, busca e links preservados.
+- **A porta de sugestões aprende a se corrigir (#24).** `brain feedback withdraw` retira um rascunho
+  pendente (o dono qualquer; o agente só rascunho próprio, sem issue) — sai da fila, `push` recusa,
+  `list --all` mostra o motivo. `brain feedback retract` retrata uma issue publicada:
+  `--withdraw` comenta e fecha como "não será feita" (o agente pode sozinho em item que ele mesmo
+  publicou, com evidência registrada — decisão do dono, opção B); `--correct` revisa o corpo e
+  exige o "ok" do dono. No noturno nada chega ao GitHub: vira pergunta (ASK) e o doctor avisa das
+  retratações pendentes. Textos de comentário e correção passam pelos mesmos guardas públicos.
+- **O painel roda as ações do agente (#25).** Com `brain serve` no ar e runner configurado, os
+  botões e atalhos "(agente)" (atualizar tudo, puxar fonte, processar inbox, brief…) disparam o
+  mesmo caminho headless da TUI (`/api/agent` + `/api/agent/job/<id>`), com saída transmitida no
+  console lateral, uma ação por vez (409 na segunda) e recusa no noturno. Sem ponte ou sem runner,
+  o aviso de hoje continua — agora com o motivo.
+
 ## 2.23.0 — onboarding unificado: um cérebro, uma configuração
 
 - **Um registro de passos, duas renderizações.** O wizard do navegador e o de terminal agora falam a
