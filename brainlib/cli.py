@@ -861,6 +861,40 @@ def cmd_memory(args, b: Brain) -> None:
     memory.cli(args, b)
 
 
+def cmd_harness(args, b: Brain) -> None:
+    from . import harness
+    hcmd = getattr(args, "hcmd", "")
+    if hcmd == "connect":
+        recall = not getattr(args, "no_recall", False)
+        mcp = not getattr(args, "no_mcp", False)
+        results = harness.connect(b, args.agents, recall=recall, mcp=mcp)
+        lines = harness.format_connect_lines(results)
+        _out(args, results, "\n".join(lines))
+        if results and not any(r.get("ok") for r in results):
+            raise SystemExit(1)
+    elif hcmd == "disconnect":
+        results = harness.disconnect(b, args.agents)
+        lines = []
+        for r in results:
+            a = r["agent"]
+            m = r.get("mcp") or {}
+            lines.append(
+                f"✓ {a}: canal MCP desconectado"
+                + (" · servidor MCP removido" if m.get("ok") else (f" · MCP: {m.get('hint')}" if m.get("hint") else ""))
+                + (" · hook de recall desligado" if a == "claude-code" else "")
+            )
+        _out(args, results, "\n".join(lines))
+    elif hcmd == "status":
+        st = harness.status(b)
+        lines = [
+            f"{'✓' if info['mcp'] else ('○' if info['detected'] else '–')} {name}: "
+            + ("detectado" if info["detected"] else "não detectado")
+            + " · MCP " + ("registrado" if info["mcp"] else "ausente")
+            for name, info in st.items()
+        ]
+        _out(args, st, "\n".join(lines))
+
+
 def cmd_mcp(args, b: Brain) -> None:
     from . import mcp_server
     mcp_server.serve(b)
@@ -1474,18 +1508,6 @@ def build_parser() -> argparse.ArgumentParser:
     xs = msub.add_parser("show")
     xs.add_argument("mid")
     xs.add_argument("--json", action="store_true")
-    x = ms.add_parser("harness")
-    hsub = x.add_subparsers(dest="hcmd", required=True)
-    xi = hsub.add_parser("install", help="conecta harnesses no servidor do cérebro (guides/memory.md)")
-    xi.add_argument("agents", nargs="+", choices=["claude-code", "cursor-cli", "codex", "hermes"])
-    xi.add_argument("--no-recall", action="store_true",
-                    help="não registra o hook de recall do cérebro no Claude Code")
-    xi.add_argument("--no-mcp", action="store_true",
-                    help="não registra o servidor MCP somente-leitura do cérebro no agente")
-    xrm = hsub.add_parser("remove", help="desconecta harnesses do cérebro (MCP e hook de recall)")
-    xrm.add_argument("agents", nargs="+", choices=["claude-code", "cursor-cli", "codex", "hermes"])
-    xv = hsub.add_parser("verify", help="banco dos agentes, recall ping e configs")
-    xv.add_argument("--json", action="store_true")
     xp = ms.add_parser("providers", help="provedores da memória — LLM · embeddings · reranker "
                                          "(plano memory-providers.md); configurável também no wizard")
     ps = xp.add_subparsers(dest="pcmd", required=True)
@@ -1525,6 +1547,22 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("mcp", help="servidor MCP somente-leitura (stdio) para outras IAs")
     p.set_defaults(fn=cmd_mcp)
+
+    p = sub.add_parser("harness", help="registra o canal MCP somente-leitura do cérebro no agente — nada de memória")
+    hsub = p.add_subparsers(dest="hcmd", required=True)
+    xc = hsub.add_parser("connect", help="registra o canal MCP somente-leitura do cérebro no agente — nada de memória")
+    xc.add_argument("agents", nargs="+", choices=["claude-code", "cursor-cli", "codex", "hermes"])
+    xc.add_argument("--no-recall", action="store_true",
+                    help="não registra o hook de recall do cérebro no Claude Code")
+    xc.add_argument("--no-mcp", action="store_true",
+                    help="não registra o servidor MCP somente-leitura do cérebro no agente")
+    xc.add_argument("--json", action="store_true")
+    xd = hsub.add_parser("disconnect", help="remove o canal MCP somente-leitura do cérebro do agente (e desliga o hook de recall no Claude Code)")
+    xd.add_argument("agents", nargs="+", choices=["claude-code", "cursor-cli", "codex", "hermes"])
+    xd.add_argument("--json", action="store_true")
+    xs = hsub.add_parser("status", help="estado do canal MCP somente-leitura do cérebro por agente detectado")
+    xs.add_argument("--json", action="store_true")
+    p.set_defaults(fn=cmd_harness)
 
     p = sub.add_parser("nightly", help="rotina noturna: render → agente → memória → backup → render")
     p.add_argument("--skip-agent", action="store_true")

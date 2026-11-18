@@ -690,7 +690,6 @@ def _run_memoria(brain, ui, mode_hint: str | None = None) -> None:
             ui.say("✓ LLM verificado no servidor (health/llm) — valide o custo com `brain memory cost`")
         except util.BrainError as e:
             ui.say(f"⚠ verificação do LLM falhou: {e} — confira chave/provedor (docker logs hindsight)")
-    _harness_step(brain, ui)
 
 
 class _SayOnly:
@@ -862,40 +861,6 @@ def configure_memory(brain, data: dict, say=print) -> str:
     if final == "none":
         raise util.BrainError("a memória não ligou — veja o que faltou acima", code=4)
     return final
-
-
-def _harness_step(brain, ui) -> None:
-    """Sub-passo Harnesses (plano memory-harness-wizard.md §4.1): o servidor do cérebro
-    também guarda a memória dos agentes de código, em banco próprio (fora do rebuild)."""
-    from . import harness, memory as _memory
-    if not getattr(ui, "interactive", False):
-        return                                   # conectar é opt-in do dono — sem pergunta, sem ação
-    det = harness.detect()
-    opts = [k for k, on in det.items() if on]
-    if not opts:
-        return
-    mem = brain.inst.cfg["memory"]
-    ui.say(f"harnesses detectados: {', '.join(opts)} — memória dos agentes no banco "
-           f"'{mem['harness_bank']}' (nunca tocada pelo `memory rebuild`)")
-    for name in opts:
-        label = harness.AGENTS.get(name, "Hermes")
-        if not ui.confirm(f"Conectar {label} no Hindsight do cérebro?", False):
-            continue
-        for r in harness.install(brain, [name]):
-            for line in harness.format_install_lines(r, mem):
-                ui.say(line)
-    wired = brain.inst.cfg["memory"].get("harnesses") or []
-    if wired:
-        try:
-            v = harness.verify(brain, _memory.client(brain))
-            if v["bank_exists"]:
-                ui.say(f"✓ banco dos agentes '{v['bank']}' no servidor · recall ping "
-                       + ("ok" if v["ping"] else "sem resposta (banco vazio é normal no começo)"))
-            else:
-                ui.say(f"⚠ banco '{v['bank']}' ainda não existe no servidor — criado no primeiro uso; "
-                       "`brain memory harness verify` confere depois")
-        except util.BrainError as e:
-            ui.say(f"⚠ verificação dos harnesses: {e}")
 
 
 def _st_portas(brain) -> str:

@@ -1,4 +1,4 @@
-"""Teclas e formulários da face Configurações (provedores da memória, harnesses, saúde).
+"""Teclas e formulários da face Configurações (provedores da memória, saúde).
 
 Mixin do BrainApp — entra ANTES dos demais na MRO e delega face≠2 ao PortfolioKeys via super().
 Cada tecla monta uma linha `brain …` (o TUI nunca escreve config na mão); o wizard interativo
@@ -20,23 +20,12 @@ class ConfigKeys:
         from .app import Key
         add = lambda k, label, fn, **kw: K.append(Key(k, label, fn, **kw))  # noqa: E731
         w = lambda cond: every or cond  # noqa: E731
-        if p == 1:
-            if t == 0:                                    # Provedores
-                add("m", "modo da memória", self.f_memory_mode)
-                add("s", "mudar provedor", self.f_providers_set)
-                add("w", "wizard da memória", self.f_wizard_memoria)
-                if w(it):
-                    add("enter", "ficha", self.toggle_zoom)
-            else:                                         # Harnesses
-                if w(it and it.kind == "hw"):
-                    add("i", "conectar" if not (it and it.data.get("wired")) else "reinstalar",
-                        lambda: self.f_harness_install())
-                if w(it and it.kind == "hw" and it.data.get("wired")):
-                    add("x", "remover", lambda: self.f_harness_remove())
-                add("v", "verificar conexão", lambda: self.exec(
-                    [["memory", "harness", "verify"]], render=False, show="Harnesses"))
-                if w(it):
-                    add("enter", "ficha", self.toggle_zoom)
+        if p == 1:                                        # Provedores
+            add("m", "modo da memória", self.f_memory_mode)
+            add("s", "mudar provedor", self.f_providers_set)
+            add("w", "wizard da memória", self.f_wizard_memoria)
+            if w(it):
+                add("enter", "ficha", self.toggle_zoom)
         elif p == 2:                                      # Saúde
             if w(it and it.extra.get("fix")):
                 add("f", "corrigir", self.fix_doc)
@@ -71,25 +60,3 @@ class ConfigKeys:
         from .bridge import FRAMEWORK
         self.log_line("$ brain setup --only memoria  (terminal interativo)", "cyan")
         self.external([sys.executable, str(FRAMEWORK / "brain"), "setup", "--only", "memoria"])
-
-    def f_harness_install(self) -> None:
-        it = self.cur()
-        if not (it and it.kind == "hw"):
-            return
-        name = it.data["name"]
-        self.exec([["memory", "harness", "install", name]], render=False,
-                  show="Harnesses")
-
-    def f_harness_remove(self) -> None:
-        from .modals import ConfirmModal
-        it = self.cur()
-        if not (it and it.kind == "hw" and it.data.get("wired")):
-            return
-        name = it.data["name"]
-        label = it.data.get("label", name)
-        cmd = ["memory", "harness", "remove", name]
-        self.push_screen(
-            ConfirmModal(f"Remover {label}?",
-                         "Remove o servidor MCP e o hook de recall do cérebro neste agente (o banco dos agentes não é apagado).",
-                         cmd),
-            lambda ok: self.exec([cmd], render=False, show="Harnesses") if ok else None)

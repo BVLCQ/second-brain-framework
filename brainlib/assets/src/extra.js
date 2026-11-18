@@ -783,20 +783,6 @@ SETUP.integracoes = box => {
 function wireCfgMemoria(){
   const b = document.querySelector("[data-provform]");
   if (b) b.onclick = () => provForm();
-  document.querySelectorAll("#view [data-hw]").forEach(btn => {
-    btn.onclick = () => runCommand("brain memory harness install " + btn.dataset.hw, m => {
-      const x = (m.harnesses || []).find(y => y.name === btn.dataset.hw);
-      if (x) x.wired = true;                       // otimista: o refresh da ponta confirma
-    });
-  });
-  document.querySelectorAll("#view [data-hwrm]").forEach(btn => {
-    btn.onclick = () => runCommand("brain memory harness remove " + btn.dataset.hwrm, m => {
-      const x = (m.harnesses || []).find(y => y.name === btn.dataset.hwrm);
-      if (x) x.wired = false;
-    });
-  });
-  const v = document.querySelector("[data-hwverify]");
-  if (v) v.onclick = () => runCommand("brain memory harness verify", () => {});
 }
 
 function provForm(){
@@ -1476,17 +1462,6 @@ function ctxKeys(k){
     return false; }
   if (h.startsWith("#cfg/memoria")) {
     if (k === "s") { const b = document.querySelector("[data-provform]"); if (b) b.click(); else provForm(); return true; }
-    if (k === "v") { runCommand("brain memory harness verify", () => {}); return true; }
-    if (k === "i") { const id = selId() || ""; const hw = (window.BRAIN.M.harnesses || []).find(x => (x.name || x.id) === id);
-      if (hw) runCommand("brain memory harness install " + (hw.name || hw.id), m => {
-        const x = (m.harnesses || []).find(y => (y.name || y.id) === (hw.name || hw.id)); if (x) x.wired = true; });
-      else needSel();
-      return true; }
-    if (k === "x") { const id = selId() || ""; const hw = (window.BRAIN.M.harnesses || []).find(x => (x.name || x.id) === id);
-      if (hw && hw.wired) runCommand("brain memory harness remove " + (hw.name || hw.id), m => {
-        const x = (m.harnesses || []).find(y => (y.name || y.id) === (hw.name || hw.id)); if (x) x.wired = false; });
-      else needSel();
-      return true; }
     return false; }
   if (h.startsWith("#cfg/saude")) {
     if (k === "o") { runCommand("brain doctor --online"); return true; }   // re-check ao vivo; a régua da página é do render
@@ -1542,7 +1517,7 @@ function helpOverlay(){
     ["Portfólio · Processos", ""], ["n", "novo"], ["e", "editar"], ["a", "nova oportunidade daqui"], ["d", "aposentar"], ["L", "ligar documento"], ["o", "abrir playbook"],
     ["Portfólio · Matriz", ""], ["s", "status"], ["i", "ICE"],
     ["Portfólio · Documentos", ""], ["L", "ligar"], ["d", "desligar"], ["enter", "abrir"],
-    ["Configurações · Memória", ""], ["s", "trocar provedor"], ["v", "verificar harnesses"], ["i", "conectar selecionado"],
+    ["Configurações · Memória", ""], ["s", "trocar provedor"],
     ["Configurações · Saúde", ""], ["f", "corrigir o aviso selecionado"], ["o", "testar online (doctor --online)"],
     ["Ficha de projeto", ""], ["space", "entregável feito"], ["s", "estado do entregável"],
     ["Outros n", ""], ["n", "nota (Início) · estrutura do plano (Projetos) · rascunhar msg · nova decisão · nova entrega · nova pessoa · novo processo · nova área"],
@@ -1675,7 +1650,7 @@ function keyLegend(){
   else if (h.startsWith("#pf/procs")) { add("n", "novo"); add("e", "editar", !id.startsWith("PROC-"));
     add("a", "nova oportunidade daqui", !id.startsWith("PROC-")); add("d", "aposentar", !id.startsWith("PROC-")); add("L", "ligar doc", !id.startsWith("PROC-")); add("o", "abrir playbook", !id.startsWith("PROC-")); }
   else if (h.startsWith("#pf/docs")) { add("L", "ligar"); add("d", "desligar", !id.startsWith("doc:")); add("enter", "abrir", !id.startsWith("doc:")); }
-  else if (h.startsWith("#cfg/memoria")) { add("s", "provedor"); add("v", "verificar harnesses"); add("i", "conectar", !id); add("x", "remover", !id); }
+  else if (h.startsWith("#cfg/memoria")) { add("s", "provedor"); }
   else if (h.startsWith("#cfg/saude")) { const hc = id.startsWith("health:") ? (M.health || [])[+id.slice(7)] : null;
     add("f", "corrigir", !(hc && hc.fix)); add("o", "testar online"); }
   else if (h.startsWith("#pf/areas")) { add("n", "nova"); add("e", "editar", !sel); }

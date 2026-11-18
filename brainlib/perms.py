@@ -98,8 +98,7 @@ def local_permissions(inst) -> dict:
 
 
 def recall_hook_on(inst) -> bool:
-    v = inst.cfg["memory"].get("recall_hook", "auto")
-    return v is True or (v == "auto" and "claude-code" in (inst.cfg["memory"].get("harnesses") or []))
+    return inst.cfg["memory"].get("recall_hook") is True
 
 
 def recall_hook_command(inst) -> str:

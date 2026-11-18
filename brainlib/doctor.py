@@ -157,52 +157,6 @@ def checks(brain, online: bool = False, probe_agent: bool = False) -> list[dict]
                 out.append(_c("error", "memória",
                               f"{slot} em nuvem ({s['provider']}) sem a chave no config/.env ({s['key_env']}) — "
                               f"`brain memory providers set {slot} --provider {s['provider']} --key …`"))
-        harnesses = cfg["memory"].get("harnesses") or []
-        if harnesses:
-            problems = []
-            v = None
-            try:
-                from . import harness as _harness
-                v = _harness.verify(brain, memory.client(brain), online=online)
-            except util.BrainError as e:
-                problems.append(f"sem conexão ao servidor ({e})")
-            else:
-                if not v["bank_exists"]:
-                    problems.append(f"banco '{v['bank']}' não existe no servidor — criado no primeiro uso; "
-                                    f"`brain memory harness install`")
-                elif not v["ping"]:
-                    problems.append(f"banco '{v['bank']}' não responde ao recall — `docker logs hindsight`")
-                channels = v.get("channels") or {}
-                for name in harnesses:
-                    if name == "hermes" and not v["hermes_config"]:
-                        problems.append("Hermes: config não aponta para este servidor — "
-                                        "`brain memory harness install hermes`")
-                    elif name != "hermes" and not v["coding_agent"]:
-                        problems.append(f"{name}: config do agente não aponta para este servidor — "
-                                        f"`brain memory harness install {name}`")
-                    ch = channels.get(name) or {}
-                    if name == "claude-code" and not ch.get("hook", True):
-                        problems.append("claude-code: hook de recall não registrado — "
-                                        "`brain memory harness install claude-code`")
-                    if name == "hermes" and not ch.get("provider", True):
-                        problems.append("hermes: memory.provider não é hindsight — "
-                                        "`hermes config set memory.provider hindsight`")
-                    if "mcp" in ch and not ch["mcp"]:
-                        problems.append(f"{name}: servidor MCP do cérebro ausente — "
-                                        f"`brain memory harness install {name}`")
-                    if "plugin" in ch and not ch["plugin"]:
-                        problems.append("hermes: plugin hindsight ausente — "
-                                        "`hermes plugins install hindsight`")
-            if problems:
-                out.append(_c("warn", "harnesses", "; ".join(problems[:3])
-                              + (" …" if len(problems) > 3 else "")))
-            else:
-                channels = (v or {}).get("channels") or {}
-                ch_tail = (" · canais: " + "; ".join(f"{n} {'+'.join(k for k, ok in ch.items() if ok)}"
-                                                     for n, ch in channels.items())) if channels else ""
-                out.append(_c("ok", "harnesses",
-                              f"{len(harnesses)} conectado(s) · banco '{(v or {}).get('bank', '?')}' responde ao recall"
-                              + ch_tail))
         if status.get("mode") == "full":
             # full é só-nuvem (regra do dono): instância legada com embeddings locais ganha aviso, não erro
             from . import providers as _prov

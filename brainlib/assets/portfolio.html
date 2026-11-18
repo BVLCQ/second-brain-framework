@@ -1642,20 +1642,6 @@ SETUP.integracoes = box => {
 function wireCfgMemoria(){
   const b = document.querySelector("[data-provform]");
   if (b) b.onclick = () => provForm();
-  document.querySelectorAll("#view [data-hw]").forEach(btn => {
-    btn.onclick = () => runCommand("brain memory harness install " + btn.dataset.hw, m => {
-      const x = (m.harnesses || []).find(y => y.name === btn.dataset.hw);
-      if (x) x.wired = true;                       // otimista: o refresh da ponta confirma
-    });
-  });
-  document.querySelectorAll("#view [data-hwrm]").forEach(btn => {
-    btn.onclick = () => runCommand("brain memory harness remove " + btn.dataset.hwrm, m => {
-      const x = (m.harnesses || []).find(y => y.name === btn.dataset.hwrm);
-      if (x) x.wired = false;
-    });
-  });
-  const v = document.querySelector("[data-hwverify]");
-  if (v) v.onclick = () => runCommand("brain memory harness verify", () => {});
 }
 
 function provForm(){
@@ -2335,17 +2321,6 @@ function ctxKeys(k){
     return false; }
   if (h.startsWith("#cfg/memoria")) {
     if (k === "s") { const b = document.querySelector("[data-provform]"); if (b) b.click(); else provForm(); return true; }
-    if (k === "v") { runCommand("brain memory harness verify", () => {}); return true; }
-    if (k === "i") { const id = selId() || ""; const hw = (window.BRAIN.M.harnesses || []).find(x => (x.name || x.id) === id);
-      if (hw) runCommand("brain memory harness install " + (hw.name || hw.id), m => {
-        const x = (m.harnesses || []).find(y => (y.name || y.id) === (hw.name || hw.id)); if (x) x.wired = true; });
-      else needSel();
-      return true; }
-    if (k === "x") { const id = selId() || ""; const hw = (window.BRAIN.M.harnesses || []).find(x => (x.name || x.id) === id);
-      if (hw && hw.wired) runCommand("brain memory harness remove " + (hw.name || hw.id), m => {
-        const x = (m.harnesses || []).find(y => (y.name || y.id) === (hw.name || hw.id)); if (x) x.wired = false; });
-      else needSel();
-      return true; }
     return false; }
   if (h.startsWith("#cfg/saude")) {
     if (k === "o") { runCommand("brain doctor --online"); return true; }   // re-check ao vivo; a régua da página é do render
@@ -2401,7 +2376,7 @@ function helpOverlay(){
     ["Portfólio · Processos", ""], ["n", "novo"], ["e", "editar"], ["a", "nova oportunidade daqui"], ["d", "aposentar"], ["L", "ligar documento"], ["o", "abrir playbook"],
     ["Portfólio · Matriz", ""], ["s", "status"], ["i", "ICE"],
     ["Portfólio · Documentos", ""], ["L", "ligar"], ["d", "desligar"], ["enter", "abrir"],
-    ["Configurações · Memória", ""], ["s", "trocar provedor"], ["v", "verificar harnesses"], ["i", "conectar selecionado"],
+    ["Configurações · Memória", ""], ["s", "trocar provedor"],
     ["Configurações · Saúde", ""], ["f", "corrigir o aviso selecionado"], ["o", "testar online (doctor --online)"],
     ["Ficha de projeto", ""], ["space", "entregável feito"], ["s", "estado do entregável"],
     ["Outros n", ""], ["n", "nota (Início) · estrutura do plano (Projetos) · rascunhar msg · nova decisão · nova entrega · nova pessoa · novo processo · nova área"],
@@ -2534,7 +2509,7 @@ function keyLegend(){
   else if (h.startsWith("#pf/procs")) { add("n", "novo"); add("e", "editar", !id.startsWith("PROC-"));
     add("a", "nova oportunidade daqui", !id.startsWith("PROC-")); add("d", "aposentar", !id.startsWith("PROC-")); add("L", "ligar doc", !id.startsWith("PROC-")); add("o", "abrir playbook", !id.startsWith("PROC-")); }
   else if (h.startsWith("#pf/docs")) { add("L", "ligar"); add("d", "desligar", !id.startsWith("doc:")); add("enter", "abrir", !id.startsWith("doc:")); }
-  else if (h.startsWith("#cfg/memoria")) { add("s", "provedor"); add("v", "verificar harnesses"); add("i", "conectar", !id); add("x", "remover", !id); }
+  else if (h.startsWith("#cfg/memoria")) { add("s", "provedor"); }
   else if (h.startsWith("#cfg/saude")) { const hc = id.startsWith("health:") ? (M.health || [])[+id.slice(7)] : null;
     add("f", "corrigir", !(hc && hc.fix)); add("o", "testar online"); }
   else if (h.startsWith("#pf/areas")) { add("n", "nova"); add("e", "editar", !sel); }
@@ -2579,7 +2554,7 @@ function normalizeBrain(m){
   m.outbox = m.outbox || []; m.health = m.health || []; m.deliveries = m.deliveries || [];
   m.feedback = m.feedback || [];
   m.sources = m.sources || []; m.source_kinds = m.source_kinds || []; m.doc_kinds = m.doc_kinds || [];   // Fontes e Documentos (ausentes em instância antiga)
-  m.providers = m.providers || {}; m.harnesses = m.harnesses || [];   // face Configurações (ausente em instância antiga)
+  m.providers = m.providers || {};   // face Configurações (ausente em instância antiga)
   m.actions = m.actions || []; m.publishes = m.publishes || []; m.focus = m.focus || null;
   m.deliverables_done = m.deliverables_done || [];
   m.timeline = m.timeline || {past: [], ahead: []}; m.people = m.people || [];
@@ -3034,18 +3009,11 @@ V["cfg/memoria"] = () => {
     const key = p.key_env ? (p.key_present ? '<span class="ok">chave ok</span>' : '<span class="late">sem chave</span>') : "";
     return "<tr><td><b>" + icon + "</b></td><td>" + esc(p.label || "—") + "</td><td>" + esc(p.model || "—") + "</td><td>" + egress + " " + key + "</td></tr>";
   }).join("");
-  const hw = (M.harnesses || []).map(h => "<tr><td>" + esc(h.label) + "</td><td>" +
-    (h.wired ? '<span class="ok">✓ conectado</span>' : (h.detected ? '<span class="dim">instalado, não conectado</span>' : '<span class="dim">não encontrado</span>')) +
-    '</td><td><button class="btn" data-hw="' + esc(h.name) + '">' + (h.wired ? "reinstalar" : "conectar") + "</button>" +
-    (h.wired ? ' <button class="btn" data-hwrm="' + esc(h.name) + '">remover</button>' : "") + "</td></tr>").join("");
-  return '<div class="pagehead"><div><h1>Memória</h1><p class="sub">O modo, os provedores (LLM · embeddings · reranker) e os harnesses — configuração viva: mude quando quiser.</p></div></div>' +
+  return '<div class="pagehead"><div><h1>Memória</h1><p class="sub">O modo e os provedores (LLM · embeddings · reranker) — configuração viva: mude quando quiser.</p></div></div>' +
     '<div id="setup" data-step="memoria"></div>' +
     panel("Provedores", '<div class="twrap"><table><tr><th>Slot</th><th>Provedor</th><th>Modelo</th><th></th></tr>' + rows + "</table></div>" +
       '<p class="note-s" style="margin:10px 2px">A chave mora no config/.env e nunca aparece aqui. Trocou embeddings? O comando rebuild da memória re-deriva os vetores do vault. Depois de trocar, recrie o container (compose com o env-file da config).</p>' +
-      '<button class="btn primary" data-provform>Trocar provedor</button>') +
-    panel("Harnesses — agentes de código", '<div class="twrap"><table><tr><th>Agente</th><th>Estado</th><th></th></tr>' + hw + "</table></div>" +
-      '<p class="note-s" style="margin:10px 2px">Conectar roda o instalador oficial apontado ao servidor do cérebro (banco próprio, fora do rebuild da memória). Verificar confere a conexão: banco, recall e configs apontando para cá.</p>' +
-      '<button class="btn ghost" data-hwverify>verificar conexão</button>');
+      '<button class="btn primary" data-provform>Trocar provedor</button>');
 };
 V.action = (q, id) => {
   const a = A[id]; if (!a) return empty("Ação não encontrada");

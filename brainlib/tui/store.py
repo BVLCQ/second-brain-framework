@@ -61,10 +61,10 @@ PANELS_PORT = {
     6: ("Log de comandos", ["Log", "Feedback"]),
 }
 
-# Configurações (face 2): o que o dono re-edita quando quer — provedores da memória, harnesses, saúde.
+# Configurações (face 2): o que o dono re-edita quando quer — provedores da memória, saúde.
 # A configuração é seção viva, não "setup uma vez": as mesmas escolhas do wizard, sem refazer a instalação.
 PANELS_CFG = {
-    1: ("Memória", ["Provedores", "Harnesses"]),
+    1: ("Memória", ["Provedores"]),
     2: ("Instância", ["Saúde"]),
     6: ("Log de comandos", ["Log", "Feedback"]),
 }
@@ -113,9 +113,6 @@ SYS_OPS = [
     {"id": "sys:wizmem", "name": "Wizard da memória (terminal interativo)", "args": ["setup", "--only", "memoria"],
      "external": True,
      "desc": "Re-roda o passo Memória do setup: modo, provedores, chaves. Configuração é seção viva, não uma vez só."},
-    {"id": "sys:hwverify", "name": "Harnesses: verificar", "args": ["memory", "harness", "verify"],
-     "show": "Harnesses",
-     "desc": "Conexão dos agentes de código com o Hindsight: banco existe, recall responde, configs apontando pra cá."},
     {"id": "sys:memrebuild", "name": "Memória: reconstruir tudo", "args": ["memory", "rebuild"], "confirm": True,
      "desc": "APAGA os dois bancos e reenvia tudo a partir do vault. Demora; o vault não é tocado."},
     {"id": "sys:backup", "name": "Backup do vault", "args": ["backup"], "door": "backup · Drive",
@@ -732,27 +729,16 @@ class Store:
         return None
 
     def _items_cfg(self, panel: int, tab: int, filt: str) -> list[Item]:
-        """Face Configurações: provedores da memória (llm · embeddings · reranker), harnesses, saúde."""
+        """Face Configurações: provedores da memória (llm · embeddings · reranker) e saúde."""
         out: list[Item] = []
         if panel == 1:
-            if tab == 0:
-                from .. import providers as _prov
-                icons = {"llm": "LLM", "embeddings": "Embeddings", "reranker": "Reranker"}
-                st = _prov.stack(self.brain)
-                for slot in _prov.SLOTS:
-                    s = st[slot]
-                    out.append(Item(f"prov:{slot}", "prov", {"slot": slot, "icon": icons[slot], **s},
-                                    q=f"{slot} {s['provider']} {s['model']} {s['label']}"))
-            else:
-                from .. import harness as _h
-                wired = self.inst.cfg["memory"].get("harnesses") or []
-                det = _h.detect()
-                for name in ("claude-code", "cursor-cli", "codex", "hermes"):
-                    label = _h.AGENTS.get(name, "Hermes")
-                    out.append(Item(f"hw:{name}", "hw",
-                                    {"name": name, "label": label, "wired": name in wired,
-                                     "detected": det.get(name, False)},
-                                    q=f"{name} {label} {'conectado' if name in wired else 'não conectado'}"))
+            from .. import providers as _prov
+            icons = {"llm": "LLM", "embeddings": "Embeddings", "reranker": "Reranker"}
+            st = _prov.stack(self.brain)
+            for slot in _prov.SLOTS:
+                s = st[slot]
+                out.append(Item(f"prov:{slot}", "prov", {"slot": slot, "icon": icons[slot], **s},
+                                q=f"{slot} {s['provider']} {s['model']} {s['label']}"))
         elif panel == 2:
             out = [Item(f"doc:{i}", "doc", c, q=f"{c['title']} {c['detail']}",
                         extra={"fix": self._fix_for(c)}) for i, c in enumerate(self.health)]

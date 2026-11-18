@@ -1,9 +1,6 @@
-"""Canais do cérebro nos agentes (hook de recall no Claude Code + MCP somente-leitura + #19 Hermes provider)."""
+"""Canais do cérebro nos agentes (hook de recall no Claude Code + MCP somente-leitura)."""
 from __future__ import annotations
 
-import contextlib
-import importlib.util as _ilu
-import io
 import json
 import os
 import shlex
@@ -20,14 +17,8 @@ sys.path.insert(0, str(ROOT))
 
 os.environ.setdefault("BRAIN_NOW", "2026-10-09T10:00:00-03:00")
 
-from brainlib import cli, config, doctor, harness, memory, perms                    # noqa: E402
+from brainlib import config, harness, perms                                         # noqa: E402
 from brainlib.core import Brain                                                     # noqa: E402
-
-_spec = _ilu.spec_from_file_location("test_brain", ROOT / "tests" / "test_brain.py")
-_tb = _ilu.module_from_spec(_spec)
-assert _spec and _spec.loader
-_spec.loader.exec_module(_tb)
-FakeHindsight = _tb.FakeHindsight
 
 
 def _inst(tmp: Path, extra_mem: str = "") -> config.Instance:
@@ -78,94 +69,8 @@ class _RecRun:
         return subprocess.CompletedProcess(argv, self.rc, self.stdout, self.stderr)
 
 
-class HermesProviderTests(unittest.TestCase):
-    """#19: Hermes só entra em [memory].harnesses quando memory.provider == hindsight."""
-
-    def test_no_hermes_leaves_unregistered_and_hint_has_command_and_cli_exits_1(self):
-        with tempfile.TemporaryDirectory() as td, mock.patch.dict(os.environ, {"HOME": td}):
-            home = Path(td)
-            b = _brain(home / "inst")
-            run = _RecRun()
-            with mock.patch.object(harness.shutil, "which", return_value=None):
-                res = harness.install(b, ["hermes"], home=home, run=run)
-            self.assertFalse(res[0]["ok"])
-            self.assertNotIn("hermes", b.inst.cfg["memory"]["harnesses"])
-            self.assertIn("hermes config set memory.provider hindsight", res[0]["hint"])
-            self.assertIn("brain memory harness install hermes", res[0]["hint"])
-
-            # Pela CLI: imprime ✗ com o hint e sai com código 1 quando todos falham
-            args = cli.build_parser().parse_args(["memory", "harness", "install", "hermes"])
-            buf = io.StringIO()
-            with mock.patch.object(harness.shutil, "which", return_value=None), \
-                 contextlib.redirect_stdout(buf):
-                with self.assertRaises(SystemExit) as cm:
-                    memory.cli(args, b)
-            self.assertEqual(cm.exception.code, 1)
-            self.assertIn("✗", buf.getvalue())
-            self.assertIn("hermes config set memory.provider hindsight", buf.getvalue())
-
-    def test_which_hermes_and_provider_call_rc_0_registers(self):
-        with tempfile.TemporaryDirectory() as td, mock.patch.dict(os.environ, {"HOME": td}):
-            home = Path(td)
-            b = _brain(home / "inst")
-            run = _RecRun(rc=0)
-            with mock.patch.object(harness.shutil, "which", return_value="/usr/local/bin/hermes"):
-                res = harness.install(b, ["hermes"], home=home, run=run)
-            self.assertTrue(res[0]["ok"])
-            self.assertIn("hermes", b.inst.cfg["memory"]["harnesses"])
-            self.assertIn(["hermes", "config", "set", "memory.provider", "hindsight"], run.argvs)
-
-    def test_config_yaml_with_hindsight_registers_even_if_cli_call_failed(self):
-        with tempfile.TemporaryDirectory() as td, mock.patch.dict(os.environ, {"HOME": td}):
-            home = Path(td)
-            y = harness.hermes_yaml(home)
-            y.parent.mkdir(parents=True, exist_ok=True)
-            y.write_text("# comentário\nmemory:\n  provider: hindsight\n", encoding="utf-8")
-            b = _brain(home / "inst")
-            run = _RecRun(rc=1, stderr="erro")
-            with mock.patch.object(harness.shutil, "which", return_value="/usr/local/bin/hermes"):
-                res = harness.install(b, ["hermes"], home=home, run=run)
-            self.assertTrue(res[0]["ok"])
-            self.assertIn("hermes", b.inst.cfg["memory"]["harnesses"])
-
-    def test_verify_and_doctor_warn_when_registered_hermes_has_builtin_provider(self):
-        with tempfile.TemporaryDirectory() as td, mock.patch.dict(os.environ, {"HOME": td}):
-            home = Path(td)
-            b = _brain(home / "inst", 'harnesses = ["hermes"]\n')
-            hc = harness.hermes_config(home)
-            hc.parent.mkdir(parents=True, exist_ok=True)
-            hc.write_text(json.dumps({"api_url": "http://localhost:8888"}), encoding="utf-8")
-            y = harness.hermes_yaml(home)
-            y.write_text("memory:\n  provider: builtin\n", encoding="utf-8")
-            hs = FakeHindsight()
-            hs.put_bank("hermes", {"name": "agentes"})
-
-            v = harness.verify(b, hs, home=home)
-            self.assertFalse(v["channels"]["hermes"]["provider"])
-
-            with mock.patch.object(memory, "client", return_value=hs), \
-                 mock.patch.object(memory, "status", return_value={"level": "ok", "detail": "ok"}):
-                cks = doctor.checks(b, online=False)
-            hw = next(c for c in cks if c["title"] == "harnesses")
-            self.assertEqual(hw["level"], "warn")
-            self.assertIn("hermes: memory.provider não é hindsight — `hermes config set memory.provider hindsight`",
-                          hw["detail"])
-
-    def test_doctor_offline_spawns_no_subprocess(self):
-        with tempfile.TemporaryDirectory() as td, mock.patch.dict(os.environ, {"HOME": td}):
-            home = Path(td)
-            b = _brain(home / "inst", 'harnesses = ["hermes", "claude-code"]\n')
-            hs = FakeHindsight()
-            hs.put_bank("hermes", {"name": "agentes"})
-            with mock.patch.object(memory, "client", return_value=hs), \
-                 mock.patch.object(memory, "status", return_value={"level": "ok", "detail": "ok"}), \
-                 mock.patch("subprocess.run", side_effect=AssertionError("subprocess proibido no doctor offline")):
-                cks = doctor.checks(b, online=False)
-            self.assertTrue(any(c["title"] == "harnesses" for c in cks))
-
-
 class McpWritersTests(unittest.TestCase):
-    """10b + emendas (b) e (c): Cursor JSON, Codex TOML, Hermes CLI+YAML e Claude CLI+JSON."""
+    """Cursor JSON, Codex TOML, Hermes CLI+YAML e Claude CLI+JSON."""
 
     def test_cursor_preserves_other_server_and_unwires_cleanly(self):
         with tempfile.TemporaryDirectory() as td, mock.patch.dict(os.environ, {"HOME": td}):
@@ -305,16 +210,16 @@ class McpWritersTests(unittest.TestCase):
             self.assertEqual(run_rm.argvs[0], ["hermes", "mcp", "remove", "brain"])
 
 
-class ClaudeChannelsAndRemoveTests(unittest.TestCase):
-    """10c + 10d: claude-code hook + MCP, --no-mcp, --no-recall, remove e separação de bancos."""
+class ClaudeChannelsAndDisconnectTests(unittest.TestCase):
+    """claude-code hook + MCP, --no-mcp, --no-recall e disconnect."""
 
-    def test_claude_code_mcp_argv_and_flags_and_remove(self):
+    def test_claude_code_mcp_argv_and_flags_and_disconnect(self):
         with tempfile.TemporaryDirectory() as td, mock.patch.dict(os.environ, {"HOME": td}):
             home = Path(td)
             b = _brain(home / "inst")
             run = _RecRun(rc=0)
             with mock.patch.object(harness.shutil, "which", side_effect=lambda x: f"/usr/bin/{x}"):
-                res = harness.install(b, ["claude-code"], home=home, run=run)
+                res = harness.connect(b, ["claude-code"], home=home, run=run)
             self.assertTrue(res[0]["ok"])
             self.assertTrue(res[0]["mcp"]["ok"])
             self.assertTrue(res[0]["recall"]["ok"])
@@ -332,68 +237,36 @@ class ClaudeChannelsAndRemoveTests(unittest.TestCase):
             # --no-mcp → nenhuma chamada `claude mcp add`
             run_no_mcp = _RecRun(rc=0)
             with mock.patch.object(harness.shutil, "which", side_effect=lambda x: f"/usr/bin/{x}"):
-                harness.install(b, ["claude-code"], home=home, run=run_no_mcp, mcp=False)
+                harness.connect(b, ["claude-code"], home=home, run=run_no_mcp, mcp=False)
             self.assertFalse(any(a[:3] == ["claude", "mcp", "add"] for a in run_no_mcp.argvs))
 
             # --no-recall → recall_hook False e settings.local.json sem entrada de recall
             run_no_rec = _RecRun(rc=0)
             with mock.patch.object(harness.shutil, "which", side_effect=lambda x: f"/usr/bin/{x}"):
-                harness.install(b, ["claude-code"], home=home, run=run_no_rec, recall=False)
+                harness.connect(b, ["claude-code"], home=home, run=run_no_rec, recall=False)
             self.assertIs(b.inst.cfg["memory"]["recall_hook"], False)
             local_off = json.loads(perms.local_path(b.inst).read_text(encoding="utf-8"))
             ups_off = (local_off.get("hooks") or {}).get("UserPromptSubmit") or []
             self.assertEqual([e for e in ups_off if perms._is_recall(e)], [])
 
-            # Religa e remove → recall_hook == "auto", fora de harnesses, sem recall entry e `claude mcp remove` chamado
+            # Religa e disconnect → recall_hook == False, sem recall entry e `claude mcp remove` chamado
             with mock.patch.object(harness.shutil, "which", side_effect=lambda x: f"/usr/bin/{x}"):
-                harness.install(b, ["claude-code"], home=home, run=_RecRun(rc=0))
+                harness.connect(b, ["claude-code"], home=home, run=_RecRun(rc=0))
             run_rm = _RecRun(rc=0)
             with mock.patch.object(harness.shutil, "which", side_effect=lambda x: f"/usr/bin/{x}"):
-                harness.remove(b, ["claude-code"], home=home, run=run_rm)
-            self.assertEqual(b.inst.cfg["memory"]["recall_hook"], "auto")
-            self.assertNotIn("claude-code", b.inst.cfg["memory"]["harnesses"])
+                harness.disconnect(b, ["claude-code"], home=home, run=run_rm)
+            self.assertIs(b.inst.cfg["memory"]["recall_hook"], False)
             local_rm = json.loads(perms.local_path(b.inst).read_text(encoding="utf-8"))
             ups_rm = (local_rm.get("hooks") or {}).get("UserPromptSubmit") or []
             self.assertEqual([e for e in ups_rm if perms._is_recall(e)], [])
             self.assertIn(["claude", "mcp", "remove", "--scope", "user", "brain"], run_rm.argvs)
 
-    def test_bank_separation_across_hook_and_all_mcp_writers(self):
+    def test_recall_hook_uses_only_vault_bank(self):
         with tempfile.TemporaryDirectory() as td, mock.patch.dict(os.environ, {"HOME": td}):
             home = Path(td)
-            b = _brain(home / "inst", 'bank = "banco-vault"\nharness_bank = "banco-agentes"\nrecall_hook = true\n')
+            b = _brain(home / "inst", 'bank = "banco-vault"\nrecall_hook = true\n')
             tokens = shlex.split(perms.recall_hook_command(b.inst))
             self.assertIn("BRAIN_RECALL_BANKS=banco-vault", tokens)
-            self.assertNotEqual(b.inst.cfg["memory"]["bank"], b.inst.cfg["memory"]["harness_bank"])
-            self.assertTrue(all("banco-agentes" not in t for t in tokens))
-
-            run = _RecRun(rc=0)
-            with mock.patch.object(harness.shutil, "which", side_effect=lambda x: f"/usr/bin/{x}"):
-                for agent in ("claude-code", "cursor-cli", "codex", "hermes"):
-                    harness.wire_mcp(b.inst, agent, home=home, run=run)
-            for argv in run.argvs:
-                self.assertTrue(all("banco-agentes" not in a for a in argv))
-            for rel in (".cursor/mcp.json", ".codex/config.toml"):
-                self.assertNotIn("banco-agentes", (home / rel).read_text(encoding="utf-8"))
-
-    def test_doctor_ok_message_keeps_conectados_prefix_and_lists_channels(self):
-        with tempfile.TemporaryDirectory() as td, mock.patch.dict(os.environ, {"HOME": td}):
-            home = Path(td)
-            b = _brain(home / "inst", 'harnesses = ["claude-code"]\nrecall_hook = true\n')
-            perms.sync(b.inst)
-            harness.merge_coding_agent(harness.coding_agent_config(home), "http://localhost:8888", "hermes")
-            (home / ".claude.json").write_text(
-                json.dumps({"mcpServers": {"brain": harness.mcp_spec(b.inst)}}),
-                encoding="utf-8",
-            )
-            hs = FakeHindsight()
-            hs.put_bank("hermes", {"name": "agentes"})
-            with mock.patch.object(memory, "client", return_value=hs), \
-                 mock.patch.object(memory, "status", return_value={"level": "ok", "detail": "ok"}):
-                cks = doctor.checks(b, online=False)
-            hw = next(c for c in cks if c["title"] == "harnesses")
-            self.assertEqual(hw["level"], "ok")
-            self.assertTrue(hw["detail"].startswith("1 conectado(s) · banco 'hermes' responde ao recall"))
-            self.assertIn("· canais: claude-code hook+mcp", hw["detail"])
 
 
 if __name__ == "__main__":
