@@ -57,6 +57,7 @@ TYPES: dict[str, dict] = {
     "proposal.superseded": {"entity": "proposal", "req": ["reason"]},
     "progress.declared": {"entity": "plannode", "req": ["pct"]},
     "plan.changed": {"entity": None, "req": ["diff", "reason", "approval"]},
+    "onboarding.finished": {"entity": None, "req": []},
     "message.drafted": {"entity": "message", "new": True, "prefix": ids.prefix("message"), "req": ["to", "text"]},
     "message.approved": {"entity": "message", "req": ["quote", "text_sha"]},
     "message.sent": {"entity": "message", "req": ["text_sha"]},

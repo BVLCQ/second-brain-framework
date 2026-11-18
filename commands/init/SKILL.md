@@ -1,11 +1,11 @@
 ---
 name: init
-description: "Primeira entrevista do cérebro: descobre quem é o dono, seus goals, projetos e pessoas, e monta PROFILE + PLANNING como proposta. Use quando PROFILE e PLANNING estiverem vazios (cérebro novo). Arquivos soltos na inbox viram o primeiro dump."
+description: "Primeira entrevista do cérebro: descobre quem é o dono, seus goals, projetos e pessoas, e monta PROFILE + PLANNING como proposta. Use quando PROFILE e PLANNING estiverem vazios (cérebro novo) OU quando houver ASK aberta da entrevista do onboarding (perguntas de pessoas + fontes — o wizard do navegador já deixou PROFILE/PLANNING iniciais). Arquivos soltos na inbox viram o primeiro dump."
 ---
 
 # /init — o nascimento do cérebro
 
-**Gatilho:** `vault/PROFILE/profile.md` e `vault/PLANNING/goals.md` sem conteúdo real (só template).
+**Gatilho:** `vault/PROFILE/profile.md` e `vault/PLANNING/goals.md` sem conteúdo real (só template) — **ou** ASK aberta com `source: onboarding` (o wizard do navegador terminou e deixou a entrevista de profundidade pendente: pessoas recorrentes + fontes que valem observar).
 
 Antes de perguntar: `./brain init --owner-name "<nome>"` se o ledger ainda não tiver o dono (o id é gerado do nome; nunca peça id ao dono). Confira com `./brain doctor`.
 

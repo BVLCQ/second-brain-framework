@@ -677,5 +677,50 @@ class MemoryProvidersStateTests(unittest.TestCase):
         self.assertEqual(set(mem["stack"].keys()), {"llm", "embeddings", "reranker"})
 
 
+class FinishAskTests(unittest.TestCase):
+    """Fechamento do onboarding (F6/F7): evento no ledger + ASK da entrevista — o /init retoma por ela."""
+
+    def setUp(self):
+        self._td = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._td.name)
+        self.b = Brain(_inst(self.tmp))
+
+    def tearDown(self):
+        self._td.cleanup()
+
+    def test_finish_records_event_and_leaves_the_interview_ask(self):
+        r = onboard.finish(self.b)
+        self.assertTrue(r["ok"])
+        self.assertTrue(r["ask"].startswith("ASK-"))
+        kinds = [e["type"] for e in self.b.read_events()]
+        self.assertIn("onboarding.finished", kinds)
+        q = self.b.state.questions[r["ask"]]
+        self.assertEqual(q.status, "aberta")
+        self.assertEqual(q.source, "onboarding")
+        self.assertIn("pessoas recorrentes", q.text)
+        self.assertFalse(onboard.needed(self.b))                       # progresso finished gravado
+
+    def test_finish_twice_does_not_duplicate_the_ask(self):
+        onboard.finish(self.b)
+        r = onboard.finish(self.b)
+        ids2 = [q for q in self.b.state.questions.values()
+                if q.source == "onboarding" and q.status == "aberta"]
+        self.assertEqual(len(ids2), 1)
+        self.assertEqual(r["ask"], ids2[0].id)
+
+    def test_finish_never_runs_in_the_nightly(self):
+        old = os.environ.get("BRAIN_NIGHTLY")
+        os.environ["BRAIN_NIGHTLY"] = "1"
+        try:
+            with self.assertRaises(util.BrainError):
+                onboard.finish(self.b)
+            self.assertEqual([e for e in self.b.read_events() if e["type"] == "onboarding.finished"], [])
+        finally:
+            if old is None:
+                os.environ.pop("BRAIN_NIGHTLY", None)
+            else:
+                os.environ["BRAIN_NIGHTLY"] = old
+
+
 if __name__ == "__main__":
     unittest.main()

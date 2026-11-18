@@ -911,11 +911,23 @@ def apply_planning(brain, data: dict) -> dict:
 
 
 def finish(brain) -> dict:
-    from . import render
+    from . import ask, render
+    if os.environ.get("BRAIN_NIGHTLY") == "1":
+        raise util.BrainError("o onboarding nunca termina no noturno — o dono fecha no app", code=4)
     _mark(brain.inst, "pronto")
     _save_progress(brain.inst, finished=util.today().isoformat())
+    brain.record_one({"type": "onboarding.finished", "by": "owner", "prov": "declarado",
+                      "source": "onboarding", "data": {}})
+    # a entrevista que o /init faz de profundidade não morre com o formulário: vira ASK aberta —
+    # o agente retoma sozinho na próxima sessão (/dump passo 0 aplica a resposta) ou pela TUI ⚡
+    _, ask_id, _ = ask.add(
+        brain,
+        "Terminar a entrevista do onboarding: quem são as pessoas recorrentes (nome, e-mail, como te chamam) "
+        "e quais fontes além das conectadas valem observar?",
+        options=["conversar agora", "deixar para depois"], kind="outro",
+        by="agent", prov="observado", source="onboarding")
     render.render_all(brain)
-    return {"ok": True}
+    return {"ok": True, "ask": ask_id}
 
 
 ACTIONS = {
