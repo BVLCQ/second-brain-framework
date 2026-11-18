@@ -522,5 +522,76 @@ class MaquinaTests(unittest.TestCase):
         self.assertEqual(set(onboard._JOBS), before)                # nada rodou
 
 
+class AgentStepTests(unittest.TestCase):
+    """Passo "Seu agente" (plano F3): detecta, conecta runner+MCP+permissões, depois vira TASK."""
+
+    def setUp(self):
+        self._td = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._td.name)
+        (self.tmp / "bin").mkdir()
+        self._env = {"HOME": str(self.tmp), "PATH": str(self.tmp / "bin")}
+        self._old = {k: os.environ.get(k) for k in self._env}
+        os.environ.update(self._env)
+        self.b = Brain(_inst(self.tmp))
+
+    def tearDown(self):
+        for k, v in self._old.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        self._td.cleanup()
+
+    def test_agents_state_detects_home_dirs(self):
+        (self.tmp / ".cursor").mkdir()
+        for a in onboard.agents_state(self.b):
+            if a["key"] == "cursor-cli":
+                self.assertTrue(a["detected"])
+                self.assertFalse(a["mcp"])
+                self.assertEqual(a["runner"], "cursor")
+                self.assertEqual(a["label"], "Cursor CLI")
+            if a["key"] == "codex":
+                self.assertFalse(a["detected"])
+
+    def test_agent_connect_cursor_writes_mcp_json_and_runner(self):
+        (self.tmp / ".cursor").mkdir()
+        r = onboard.connect_agent(self.b, {"agent": "cursor-cli"})
+        j = _wait_job(r["job"])
+        self.assertEqual(j["status"], "done", j["log"])
+        self.assertTrue(j["result"]["mcp"], j["log"])
+        cfg = tomllib.loads((self.tmp / "config" / "brain.toml").read_text(encoding="utf-8"))
+        self.assertEqual(cfg["runner"]["agent"], "cursor")
+        mcp = json.loads((self.tmp / ".cursor" / "mcp.json").read_text(encoding="utf-8"))
+        self.assertIn("brain", mcp["mcpServers"])
+        self.assertIn("agente", onboard.progress(self.b.inst).get("done", []))
+
+    def test_agent_connect_claude_without_cli_returns_manual_hint(self):
+        (self.tmp / ".claude").mkdir()                       # detectado pelo diretório, sem binário
+        r = onboard.connect_agent(self.b, {"agent": "claude-code"})
+        j = _wait_job(r["job"])
+        self.assertEqual(j["status"], "done", j["log"])
+        self.assertFalse(j["result"]["mcp"])
+        self.assertTrue(any("MCP não registrado" in ln for ln in j["log"]), j["log"])
+
+    def test_agent_connect_validates(self):
+        with self.assertRaises(util.BrainError):
+            onboard.connect_agent(self.b, {"agent": "gemini"})
+        with self.assertRaises(util.BrainError):
+            onboard.connect_agent(self.b, {"agent": "codex"})          # não detectado
+
+    def test_agent_later_creates_a_real_task(self):
+        onboard.save_about(self.b, {"name": "Marina Demo"})          # passo Você: dono registrado
+        r = onboard.agent_later(self.b, {"agent": "hermes"})
+        self.assertTrue(r["id"].startswith("TASK-"))
+        a = self.b.state.actions[r["id"]]
+        self.assertTrue(a.open)
+        self.assertIn("Hermes", a.title)
+        self.assertIn("agente", onboard.progress(self.b.inst).get("done", []))
+
+    def test_agent_later_without_registered_owner_refuses(self):
+        with self.assertRaises(util.BrainError):
+            onboard.agent_later(self.b, {"agent": "hermes"})
+
+
 if __name__ == "__main__":
     unittest.main()

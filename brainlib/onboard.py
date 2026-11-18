@@ -332,6 +332,7 @@ def state(brain) -> dict:
         "routine": {"timezone": cfg["timezone"], "start": cfg["work"]["start"], "end": cfg["work"]["end"],
                     "lunch": cfg["work"].get("lunch", "")},
         "agent": _agent_name(runner.agent_command(cfg)),
+        "agents": agents_state(brain),
         "claude_installed": bool(shutil.which("claude")),
         "connectors": connector_status(_MCP_CACHE["servers"], cfg),
         "connectors_scanned": _MCP_CACHE["servers"] is not None,
@@ -549,6 +550,87 @@ def apply_memory(brain, data: dict) -> dict:
         _mark(b.inst, "memoria")
         return {"mode": {"embed": "lite"}.get(final, final)}
     return {"job": _start("memory", run).id}
+
+
+# ── passo "Seu agente" (plano F3): harness antes dos conectores ───────────────
+AGENT_KEYS = ("claude-code", "hermes", "cursor-cli", "codex")
+_RUNNER_OF = {"claude-code": "claude", "cursor-cli": "cursor", "codex": "codex"}
+
+
+def _agent_label(key: str) -> str:
+    from . import harness
+    return harness.AGENTS.get(key, "Hermes")
+
+
+def agents_state(brain) -> list[dict]:
+    """Detectados na máquina + canal MCP do cérebro já registrado? (mesma deteccão do `brain memory harness`)."""
+    from . import harness
+    det = harness.detect()
+    cur = brain.inst.cfg["runner"].get("agent", "") or ""
+    out = []
+    for key in AGENT_KEYS:
+        detected = bool(det.get(key))
+        mcp = False
+        if detected:
+            try:
+                mcp = harness.mcp_present(brain.inst, key)
+            except Exception:                                  # noqa: BLE001 — status é informativo
+                mcp = False
+        preset = _RUNNER_OF.get(key, "")
+        out.append({"key": key, "label": _agent_label(key), "detected": detected, "mcp": mcp,
+                    "runner": preset, "selected": bool(preset) and cur == preset})
+    return out
+
+
+def connect_agent(brain, data: dict) -> dict:
+    """Conecta o agente escolhido (job visível): [runner].agent + MCP somente-leitura + permissões
+    (claude). Hermes é chat, não runner headless — os canais conectam, o runner segue no automático."""
+    from . import harness
+    if os.environ.get("BRAIN_NIGHTLY") == "1":
+        raise util.BrainError("conectar agente é decisão do dono presente — nunca no noturno", code=4)
+    key = str(data.get("agent") or "")
+    if key not in AGENT_KEYS:
+        raise util.BrainError(f"agente desconhecido: {key!r}", code=4)
+    if not harness.detect().get(key):
+        raise util.BrainError(f"{_agent_label(key)} não foi encontrado nesta máquina", code=4)
+    inst0 = brain.inst
+
+    def run(j: _Job) -> dict:
+        from . import perms
+        from .core import Brain
+        b = Brain(config.reload(inst0))
+        preset = _RUNNER_OF.get(key, "")
+        if preset:
+            config.set_keys(b.inst, "runner", {"agent": preset})
+            b.inst = config.reload(b.inst)
+            b.reload()
+            j.say(f"✓ [runner].agent = {preset} — é ele quem responde pelo cérebro (noturno, propostas)")
+        else:
+            j.say("• Hermes é o seu chat: o runner headless segue no automático (cursor/claude/codex/agy/gemini)")
+        res = harness.wire_mcp(b.inst, key)
+        if res.get("ok"):
+            j.say(f"✓ servidor MCP somente-leitura do cérebro registrado no {_agent_label(key)} ({res.get('how')})")
+        else:
+            j.say(f"⚠ MCP não registrado — {res.get('hint')}")
+        if key == "claude-code":
+            perms.sync(b.inst)
+            j.say("✓ permissões do Claude nesta pasta liberadas (leitura + comandos do brain; segredo e ledger seguem trancados)")
+        _mark(b.inst, "agente")
+        return {"mcp": bool(res.get("ok")), "runner": preset or ""}
+    return {"job": _start("agent", run).id}
+
+
+def agent_later(brain, data: dict) -> dict:
+    """"Fazer depois" com entidade: TASK nomeada no ledger, não frase de ajuda (plano F3)."""
+    if brain.owner not in brain.state.people:
+        raise util.BrainError("preencha o passo Você primeiro — a tarefa precisa do dono registrado", code=4)
+    key = str(data.get("agent") or "")
+    label = _agent_label(key) if key in AGENT_KEYS else "um agente de IA"
+    ev = brain.record_one({"type": "action.opened", "by": "owner", "prov": "declarado", "source": "onboarding",
+                           "data": {"title": f"Conectar o {label} ao Brain (MCP somente-leitura + permissões)",
+                                    "owner": brain.owner, "list": "mine"}})
+    _mark(brain.inst, "agente")
+    return {"id": ev["id"]}
 
 
 def maquina_state(brain) -> dict:
@@ -788,6 +870,7 @@ ACTIONS = {
     "connectors_scan": lambda b, d: scan_connectors(bool(d.get("force"))),
     "connectors_enable": enable_connectors, "permissions": lambda b, d: apply_permissions(b),
     "keys": save_keys, "memory": apply_memory, "maquina": apply_maquina,
+    "agent_connect": connect_agent, "agent_later": agent_later,
     "planning_note": save_planning_note,
     "planning_draft": lambda b, d: draft_planning(b), "planning_apply": apply_planning,
     "skip": lambda b, d: (_mark(b.inst, str(d.get("step"))) if d.get("step") in STEPS else None) or {},
