@@ -287,7 +287,7 @@ def _goal_tags(brain, project_ids) -> list[str]:
     return out
 
 
-def documents(brain) -> list[dict]:
+def _build_documents(brain) -> list[dict]:
     """Corpus do banco único (§3.2 do plano — vale para os dois setups).
 
     Vai: RAW dos tipos permitidos (a letra exata; binários até max_file_mb) + docs
@@ -315,8 +315,8 @@ def documents(brain) -> list[dict]:
             continue
         rel = inst.rel(path)
         parts = _raw_parts(rel)
-        if len(parts) >= 3 and parts[2] in exclude:      # RAW/<ano>/<mês>/<tipo>/ — §3.2: connectors/github não vão
-            continue
+        if len(parts) >= 3 and (parts[2] in exclude or path.name.split("-", 1)[0].lower() in exclude):
+            continue    # connectors-*/github-* arquivados fora da pasta do tipo também ficam fora do vetor
         art_id = st.raw_index.get(rel)
         art = st.artifacts.get(art_id) if art_id else None
         if art is None:
@@ -363,6 +363,32 @@ def documents(brain) -> list[dict]:
                                       json.dumps(d.get("entities") or [], ensure_ascii=False),
                                       d.get("context") or ""]))
     return docs
+
+
+def _docs_signature(brain) -> tuple:
+    """Assinatura barata do que `documents()` lê: stat (sem ler) do RAW, ledger, goals.md e o [memory]."""
+    inst = brain.inst
+    def st(p: Path) -> tuple:
+        try:
+            s = p.stat()
+            return (s.st_mtime_ns, s.st_size)
+        except OSError:
+            return (0, 0)
+    raw = inst.vault / "RAW"
+    files = sorted((str(p.relative_to(raw)), *st(p)) for p in raw.rglob("*") if p.is_file()) if raw.exists() else []
+    return (st(brain.ledger_path), st(inst.planning_file),
+            json.dumps(inst.cfg["memory"], sort_keys=True, default=str), util.today().isoformat(), tuple(files))
+
+
+def documents(brain) -> list[dict]:
+    """Corpus do banco (ver `_build_documents`), memoizado por assinatura exata: o RAW não muda durante uma
+    execução, e sync/status/doctor pedem o corpus 2–4 vezes."""
+    sig = _docs_signature(brain)
+    cached = getattr(brain, "_memory_docs", None)
+    if cached is None or cached[0] != sig:
+        cached = (sig, _build_documents(brain))
+        brain._memory_docs = cached
+    return [dict(d) for d in cached[1]]
 
 
 def awaiting_dump(brain) -> list[str]:
@@ -417,11 +443,6 @@ def _entity_docs(brain) -> list[tuple[str, str, str, list[str]]]:
 
 def _state_path(brain) -> Path:
     return brain.inst.config_dir / STATE_NAME
-
-
-# Bancos só de embeddings: o retain guarda os trechos como estão e não há consolidação nem observações —
-# nada no brain consome `reflect`/observações, e eram elas que mantinham o LLM local ocupado.
-NO_LLM_CONFIG = {"retain_extraction_mode": "chunks", "enable_auto_consolidation": False, "enable_observations": False}
 
 
 def pending(brain) -> list[dict]:
