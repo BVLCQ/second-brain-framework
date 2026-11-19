@@ -1,3 +1,37 @@
+## 2.28.0 — o lote das issues #56–#61 (ativação, fila de revisão, assinaturas e rotina da manhã)
+
+- **Importar histórico na primeira sessão (#56):** novo `brain seed folder <pasta>` — varre
+  .md/.txt/.docx/.pdf, grava snapshots na inbox com a **data de captura original** (o mtime vira
+  o nome e o carimbo do arquivo), lote retomável (`--limit`, padrão 30; rodar de novo continua de
+  onde parou) e idempotência por hash (pasta já importada = silêncio). Recusa pasta dentro do
+  vault (auto-ingestão) e deixa a extração para o `/dump` normal.
+- **Fila de revisão (#61):** `brain review list` agrupa, num só lugar derivado do ledger, tudo o
+  que espera o dono — propostas com evidência, rascunhos, publicações, perguntas, plano de foco e
+  duplicadas — com uma contagem única (`review` no view-model) para painel e TUI. `brain review
+  accept <id>…` aceita propostas **em lote com um confirm**, gravando um evento por item (falha em
+  um não derruba os outros); portas (mensagem/publicação/foco) nunca entram em lote.
+- **Memória full por assinatura (#59):** o slot LLM passa a aceitar **Assinatura** (Claude
+  Pro/Max, ChatGPT, Cursor, GitHub Copilot, SuperGrok, Nous Portal — sem chave nova) ou chave de
+  API; **LLM local saiu do menu do slot** (máquina pesada; extrator fraco polui). Doctor
+  slot-aware: full com assinatura é válido sem chave no .env; embeddings seguem locais por padrão
+  e reranker segue opcional — existe full com zero chave nova. `memory cost` marca assinatura
+  como custo incluído no plano.
+- **Recall com verdade no tempo (#58):** recall ganha decaimento temporal
+  (`recall_half_life_days`, padrão 45; 0 desliga) para fatos de estado/configuração/compromisso —
+  perenes (preferência, identidade, decisão) não decaem —, contradição marcada (o mais novo
+  "vale", o velho aparece "supercedado", nada é apagado), supersessão explícita (`brain memory
+  supersede`) e payload com âncora, data e proveniência: item sem âncora no vault chega como
+  `[pista]`, nunca como fato. O hook renderiza `[memória · as of AAAA-MM-DD · prov]`.
+- **Doctor que cura (#57):** `brain doctor --fix` (dry-run por padrão; `--apply` executa) com diff
+  determinístico e quatro classes seguras — pid órfão da ponte, índice de busca velho, views
+  velhas, memória dessincronizada; achados de gate viram sugestão com o comando exato, nunca
+  auto-fix. Métricas de frescor (idade de dump/render/sync + backlog da inbox) no view-model para
+  o painel anunciar a própria decrepitude.
+- **Rotina da manhã (#60):** a sincronização diária passa a correr por padrão às **09:00**
+  (horário do dono, configurável; quem já agendou mantém a escolha) e termina deixando o **brief
+  do dia pronto** em FRESH/notes — uma linha quando não há novidade; `brain note write` grava
+  narrativa derivada sem evento de dono (funciona no noturno).
+
 ## 2.27.0 — o lote das issues #32–#55 (engenharia + UI/UX do painel)
 
 - **Índice SQLite rápido e confiável (#32, #34, #36):** escrita normal no ledger não refaz mais o
