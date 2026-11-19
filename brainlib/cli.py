@@ -1558,15 +1558,18 @@ def build_parser() -> argparse.ArgumentParser:
     xs.add_argument("--json", action="store_true")
     xp = ms.add_parser("providers", help="provedores da memória — LLM · embeddings · reranker "
                                          "(plano memory-providers.md); configurável também no wizard")
-    ps = xp.add_subparsers(dest="pcmd", required=True)
+    xp.set_defaults(json=False)
+    ps = xp.add_subparsers(dest="pcmd")
     pw = ps.add_parser("show", help="o stack atual (chave: presença, nunca valor)")
     pw.add_argument("--json", action="store_true")
     pv = ps.add_parser("set", help="grava a escolha (config/.env + [memory]); recrie o container para aplicar")
     pv.add_argument("slot", choices=["llm", "embeddings", "reranker"])
     pv.add_argument("--provider", required=True,
-                    help="llm: anthropic|openai|fireworks|zai|lmstudio|custom · embeddings: local|fireworks|openai|cohere|custom "
-                         "· reranker: off|fireworks|cohere|zeroentropy|openrouter|custom")
-    pv.add_argument("--model", help="modelo (default do provedor quando omitido — exceto llm custom/openai)")
+                    help="llm (assinatura): claude-code|chatgpt|cursor|github-copilot|xai-oauth|nous · "
+                         "llm (chave): anthropic|openai|fireworks|zai|gemini|custom · "
+                         "embeddings: local|fireworks|openai|cohere|custom · "
+                         "reranker: off|fireworks|cohere|zeroentropy|openrouter|custom")
+    pv.add_argument("--model", help="modelo (opcional em assinatura/anthropic; exigido em llm custom/openai/zai/gemini)")
     pv.add_argument("--models", help="llm por operação: retain=…,consolidation=…,mental_models=…,reflect=…,default=…")
     pv.add_argument("--base-url", help="endpoint (custom / openai-wire)")
     pv.add_argument("--dimensions", type=int, default=0, help="embeddings: dimensão de saída (ex.: 1536 MRL)")

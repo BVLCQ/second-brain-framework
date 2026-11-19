@@ -235,27 +235,95 @@ def checks(brain, online: bool = False, probe_agent: bool = False, docker_probe=
                 status = {**status, "level": "warn", "detail": transient}
         out.append(_c(status["level"], "memória", status["detail"]))
         from . import providers as _prov
-        for slot, s in _prov.stack(brain).items():
-            if s["cloud"] and s["key_env"] and not s["key_present"]:
-                out.append(_c("error", "memória",
-                              f"{slot} em nuvem ({s['provider']}) sem a chave no config/.env ({s['key_env']}) — "
-                              f"`brain memory providers set {slot} --provider {s['provider']} --key …`"))
-        if status.get("mode") == "full":
-            # full é só-nuvem (regra do dono): instância legada com embeddings locais ganha aviso, não erro
-            from . import providers as _prov
-            if _prov.stack(brain)["embeddings"]["provider"] == "local":
-                out.append(_c("warn", "memória", "full com embeddings locais (LM Studio) — o full é só-nuvem: "
-                                              "`brain memory providers set embeddings --provider fireworks --key …`"))
-            # régua do full: chave presente; gasto do mês como INFORMAÇÃO (sem teto — decisão do dono)
-            if not any(k.startswith("HINDSIGHT_API") and k.endswith("API_KEY") and v for k, v in env.items()):
-                out.append(_c("error", "memória", "modo full sem chave de LLM no config/.env — "
-                                             "`brain setup --only memoria` ou volte ao embed (guides/memory.md)"))
-            elif online:
-                try:
-                    c = memory.cost(brain)
-                    out.append(_c("ok", "memória", f"gasto do mês ({c['month']}): {c['detail']} — brain memory cost"))
-                except util.BrainError as e:
-                    out.append(_c("warn", "memória", f"medidor indisponível: {e}"))
+        st_prov = _prov.stack(brain)
+        mem_mode = status.get("mode") or memory.mode(cfg["memory"])
+
+        # Slot LLM
+        llm_ok = True
+        if mem_mode == "embed":
+            out.append(_c("ok", "memória · LLM", "não exigido no modo embed (LLM não é chamado)"))
+        elif mem_mode == "full":
+            llm_s = st_prov["llm"]
+            llm_prov = llm_s["provider"]
+            llm_p = _prov.PROVIDERS["llm"].get(llm_prov)
+            if llm_prov in _prov.LOCAL_LLM_BLOCKED:
+                llm_ok = False
+                out.append(_c("error", "memória · LLM",
+                              f"provedor local ({llm_prov}) não é suportado no slot LLM — "
+                              "escolha assinatura ou chave via `brain memory providers`"))
+            elif not llm_prov:
+                if env.get("HINDSIGHT_API_LLM_API_KEY"):
+                    out.append(_c("ok", "memória · LLM", "configurado via config/.env (HINDSIGHT_API_LLM_API_KEY presente)"))
+                else:
+                    llm_ok = False
+                    out.append(_c("error", "memória",
+                                  "modo full sem chave de LLM no config/.env — "
+                                  "`brain memory providers` ou `brain setup --only memoria` (guides/memory.md)"))
+            elif llm_p is None:
+                llm_ok = False
+                out.append(_c("error", "memória · LLM",
+                              f"provedor desconhecido ({llm_prov}) — escolha via `brain memory providers`"))
+            elif llm_p.get("family") == "subscription":
+                out.append(_c("ok", "memória · LLM",
+                              f"{llm_p['label']} (assinatura — {llm_p['rate_limit_note']})"))
+            else:
+                kenv = llm_p.get("key_env", "")
+                if kenv and not env.get(kenv):
+                    llm_ok = False
+                    out.append(_c("error", "memória · LLM",
+                                  f"LLM ({llm_prov}) sem a chave no config/.env ({kenv}) — "
+                                  f"`brain memory providers set llm --provider {llm_prov} --key …`"))
+                else:
+                    out.append(_c("ok", "memória · LLM",
+                                  f"{llm_p['label']} (chave presente no config/.env)"))
+
+        # Slot Embeddings
+        emb_s = st_prov["embeddings"]
+        emb_prov = emb_s["provider"]
+        emb_p = _prov.PROVIDERS["embeddings"].get(emb_prov)
+        if emb_prov == "local" or (emb_p and not emb_p.get("key_env")):
+            if mem_mode == "full":
+                out.append(_c("warn", "memória · embeddings",
+                              "full com embeddings locais (LM Studio) — o full é só-nuvem: "
+                              "`brain memory providers set embeddings --provider fireworks --key …`"))
+            else:
+                out.append(_c("ok", "memória · embeddings", f"{emb_s['label']} (local, sem chave)"))
+        elif emb_p is None:
+            out.append(_c("error", "memória · embeddings",
+                          f"provedor desconhecido ({emb_prov}) — `brain memory providers`"))
+        else:
+            kenv = emb_p.get("key_env", "")
+            if kenv and not env.get(kenv):
+                out.append(_c("error", "memória · embeddings",
+                              f"embeddings em nuvem ({emb_prov}) sem a chave no config/.env ({kenv}) — "
+                              f"`brain memory providers set embeddings --provider {emb_prov} --key …`"))
+            else:
+                out.append(_c("ok", "memória · embeddings", f"{emb_s['label']} (chave presente no config/.env)"))
+
+        # Slot Reranker
+        rer_s = st_prov["reranker"]
+        rer_prov = rer_s["provider"]
+        rer_p = _prov.PROVIDERS["reranker"].get(rer_prov)
+        if rer_prov == "off" or (rer_p and not rer_p.get("key_env")):
+            out.append(_c("ok", "memória · reranker", f"{rer_s['label']}"))
+        elif rer_p is None:
+            out.append(_c("error", "memória · reranker",
+                          f"provedor desconhecido ({rer_prov}) — `brain memory providers`"))
+        else:
+            kenv = rer_p.get("key_env", "")
+            if kenv and not env.get(kenv):
+                out.append(_c("error", "memória · reranker",
+                              f"reranker em nuvem ({rer_prov}) sem a chave no config/.env ({kenv}) — "
+                              f"`brain memory providers set reranker --provider {rer_prov} --key …`"))
+            else:
+                out.append(_c("ok", "memória · reranker", f"{rer_s['label']} (chave presente no config/.env)"))
+
+        if mem_mode == "full" and llm_ok and online:
+            try:
+                c = memory.cost(brain)
+                out.append(_c("ok", "memória", f"gasto do mês ({c['month']}): {c['detail']} — brain memory cost"))
+            except util.BrainError as e:
+                out.append(_c("warn", "memória", f"medidor indisponível: {e}"))
     # ── régua da instalação (guides/setup.md): o doctor valida o que o setup montou ──
     from . import setup as _setup
     from . import index as _index_mod

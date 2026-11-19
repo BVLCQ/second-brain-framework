@@ -26,24 +26,81 @@ LLM_OPS = (("retain", "RETAIN_LLM_MODEL"), ("consolidation", "CONSOLIDATION_LLM_
 
 _EMB = "HINDSIGHT_API_EMBEDDINGS_"
 _RER = "HINDSIGHT_API_RERANKER_"
+_SUB_NOTE = "Custo incluído no plano, sujeito ao limite de taxa da assinatura."
+
+LOCAL_LLM_BLOCKED = frozenset({"lmstudio", "ollama", "llama.cpp"})
 
 # key_env: onde a chave mora no .env (para o doctor conferir presença, nunca valor).
 PROVIDERS: dict[str, dict[str, dict]] = {
     "llm": {
-        "anthropic": {"label": "Anthropic", "recommended": True,
+        # ── Assinatura (sem chave de API) ────────────────────────────────────
+        "claude-code": {
+            "label": "Claude Code (assinatura Claude Pro/Max)",
+            "family": "subscription",
+            "key_env": "",
+            "cost_mode": "subscription",
+            "rate_limit_note": _SUB_NOTE,
+            "setup_hint": "Autentique o Claude Code CLI (`claude login`) e confirme a sessão ativa antes de subir o servidor de memória.",
+        },
+        "chatgpt": {
+            "label": "ChatGPT (sign-in / assinatura Plus/Pro)",
+            "family": "subscription",
+            "key_env": "",
+            "cost_mode": "subscription",
+            "rate_limit_note": _SUB_NOTE,
+            "setup_hint": "Faça sign-in na sua conta ChatGPT Plus/Pro para autorizar o uso na memória.",
+        },
+        "cursor": {
+            "label": "Cursor (assinatura)",
+            "family": "subscription",
+            "key_env": "",
+            "cost_mode": "subscription",
+            "rate_limit_note": _SUB_NOTE,
+            "setup_hint": "Entre com sua conta Cursor ativa e confirme a sessão da assinatura no ambiente do servidor.",
+        },
+        "github-copilot": {
+            "label": "GitHub Copilot (assinatura)",
+            "family": "subscription",
+            "key_env": "",
+            "cost_mode": "subscription",
+            "rate_limit_note": _SUB_NOTE,
+            "setup_hint": "Faça sign-in no GitHub Copilot com assinatura ativa antes de subir o container.",
+        },
+        "xai-oauth": {
+            "label": "xAI / SuperGrok (sign-in)",
+            "family": "subscription",
+            "key_env": "",
+            "cost_mode": "subscription",
+            "rate_limit_note": _SUB_NOTE,
+            "setup_hint": "Faça sign-in na sua conta xAI / SuperGrok para vincular o plano ao servidor de memória.",
+        },
+        "nous": {
+            "label": "Nous Portal (assinatura)",
+            "family": "subscription",
+            "key_env": "",
+            "cost_mode": "subscription",
+            "rate_limit_note": _SUB_NOTE,
+            "setup_hint": "Autentique sua assinatura no Nous Portal e confirme que a sessão está ativa.",
+        },
+        # ── Chave de API ─────────────────────────────────────────────────────
+        "anthropic": {"label": "Anthropic", "family": "key", "cost_mode": "api_key", "recommended": True,
                       "models": {"retain": "claude-haiku-5-5", "consolidation": "claude-haiku-5-5",
                                  "mental_models": "claude-sonnet-5-5", "reflect": "claude-sonnet-5-5",
                                  "default": "claude-haiku-5-5"},
                       "key_env": "HINDSIGHT_API_LLM_API_KEY"},
-        "openai": {"label": "OpenAI", "key_env": "HINDSIGHT_API_LLM_API_KEY"},
-        "fireworks": {"label": "Fireworks", "recommended": True, "model": "accounts/fireworks/models/deepseek-v4p1-flash",
+        "openai": {"label": "OpenAI", "family": "key", "cost_mode": "api_key",
+                   "key_env": "HINDSIGHT_API_LLM_API_KEY"},
+        "fireworks": {"label": "Fireworks", "family": "key", "cost_mode": "api_key", "recommended": True,
+                      "model": "accounts/fireworks/models/deepseek-v4p1-flash",
                       "base_url": "https://api.fireworks.ai/inference/v1", "wire": "openai",
                       "key_env": "HINDSIGHT_API_LLM_API_KEY"},
-        "zai": {"label": "Z.ai (GLM, plano coding)", "base_url": "https://api.z.ai/api/coding/paas/v4",
+        "zai": {"label": "Z.ai (GLM, plano coding)", "family": "key", "cost_mode": "api_key",
+                "base_url": "https://api.z.ai/api/coding/paas/v4",
                 "wire": "openai", "key_env": "HINDSIGHT_API_LLM_API_KEY"},
-        "lmstudio": {"label": "LM Studio (local, sem chave)", "local": True,
-                     "base_url": "http://host.docker.internal:1234/v1", "key_env": ""},
-        "custom": {"label": "Outro (OpenAI-compatível)", "wire": "openai", "key_env": "HINDSIGHT_API_LLM_API_KEY"},
+        "gemini": {"label": "Google Gemini", "family": "key", "cost_mode": "api_key",
+                   "key_env": "HINDSIGHT_API_LLM_API_KEY"},
+        "custom": {"label": "Outro (OpenAI-compatível)", "family": "key", "cost_mode": "api_key",
+                   "wire": "openai", "key_env": "HINDSIGHT_API_LLM_API_KEY"},
     },
     "embeddings": {
         "local": {"label": "Local — LM Studio bge-m3 (zero egress)", "recommended": True, "local": True,
@@ -117,17 +174,23 @@ def slot_env(slot: str, provider: str, *, model: str = "", models: dict | None =
     """Env do .env para a escolha (sem tocar disco). Valores vazios caem fora — segredo nunca ecoa."""
     p = PROVIDERS[slot][provider]
     if slot == "llm":
-        env = {"HINDSIGHT_API_LLM_PROVIDER": "lmstudio" if p.get("local") else ("openai" if p.get("wire") == "openai" else provider)}
-        if p.get("local") or p.get("wire") == "openai":
+        if p.get("family") == "subscription":
+            env = {"HINDSIGHT_API_LLM_PROVIDER": p.get("wire", provider)}
+            ops = models or {}
+            for op, envk in LLM_OPS:
+                m = ops.get(op) or (model if op == "default" else "")
+                if m:
+                    env[f"HINDSIGHT_API_{envk}"] = m
+            return env
+        env = {"HINDSIGHT_API_LLM_PROVIDER": "openai" if p.get("wire") == "openai" else provider}
+        if p.get("wire") == "openai":
             env["HINDSIGHT_API_LLM_BASE_URL"] = base_url or p.get("base_url", "")
         ops = models or {}
         for op, envk in LLM_OPS:
             m = ops.get(op) or (model if op == "default" else "")
             if m:
                 env[f"HINDSIGHT_API_{envk}"] = m
-        if p.get("local"):
-            env.setdefault("HINDSIGHT_API_LLM_API_KEY", "lm-studio")
-        elif key:
+        if key and p.get("key_env"):
             env[p["key_env"]] = key
         return env
     if slot == "embeddings":
@@ -140,17 +203,24 @@ def set_slot(brain, slot: str, provider: str, *, model: str = "", models: dict |
     """Grava a escolha: .env (wire + chave) + [memory] (provedor/modelo/flags). Devolve o resumo."""
     if slot not in SLOTS:
         raise util.BrainError(f"slot inválido: {slot!r} — use {', '.join(SLOTS)}", code=4)
+    if slot == "llm" and provider in LOCAL_LLM_BLOCKED:
+        raise util.BrainError(
+            f"LLM local ({provider!r}) não é suportado no slot LLM — use um provedor por assinatura ou chave de API "
+            "(embeddings locais continuam no modo embed)",
+            code=4,
+        )
     if provider not in PROVIDERS[slot]:
         raise util.BrainError(f"provedor inválido para {slot}: {provider!r} — "
                               f"{', '.join(PROVIDERS[slot])}", code=4)
     p = PROVIDERS[slot][provider]
+    is_sub = slot == "llm" and p.get("family") == "subscription"
     if slot == "embeddings" and provider == "local":
         from .memory import mode as _mem_mode                   # lazy: evita ciclo em tempo de import
         if _mem_mode(brain.inst.cfg["memory"]) == "full":
             raise util.BrainError("no modo full os embeddings são de nuvem — fireworks (qwen3-embedding-8b) "
                                   "ou openai; o bge-m3 local é do modo embed (guides/memory.md)", code=4)
-    if slot == "llm" and provider != "lmstudio" and not (models or model):
-        rec = PROVIDERS["llm"]["anthropic"]["models"] if provider == "anthropic" else {}
+    if slot == "llm" and not is_sub and not (models or model):
+        rec = p.get("models") or {}
         if not rec:
             raise util.BrainError(f"provedor {provider!r} precisa de --model (ou --models por operação)", code=4)
     if slot == "embeddings" and provider in ("custom",) and not (model and (base_url or p.get("base_url"))):
@@ -167,8 +237,12 @@ def set_slot(brain, slot: str, provider: str, *, model: str = "", models: dict |
 
     cfg_updates: dict = {f"{slot}_provider": provider}
     if slot == "llm":
-        cfg_updates["llm_models"] = ",".join(f"{op}={m}" for op, m in (models or {}).items() if m) \
-            if models else ("" if provider == "lmstudio" else model)
+        if models:
+            cfg_updates["llm_models"] = ",".join(f"{op}={m}" for op, m in models.items() if m)
+        elif model:
+            cfg_updates["llm_models"] = model
+        elif not is_sub:
+            cfg_updates["llm_models"] = ""
     else:
         if model or p.get("model"):
             cfg_updates[f"{slot}_model"] = model or p.get("model", "")
@@ -190,9 +264,18 @@ def set_slot(brain, slot: str, provider: str, *, model: str = "", models: dict |
                and mem.get("engine") == "hindsight"
                and (prev["provider"] != provider or (prev["model"] and prev["model"] != (model or p.get("model", ""))))
                and (brain.inst.root / ".memory-state.json").exists())
-    return {"slot": slot, "provider": provider, "label": p["label"],
-            "cloud": bool(flag and cfg_updates.get(flag)) or (slot == "llm" and provider not in ("lmstudio",)),
-            "env": sorted(changed_env), "cfg": sorted(changed_cfg), "rebuild_needed": rebuild}
+    return {
+        "slot": slot,
+        "provider": provider,
+        "label": p["label"],
+        "family": p.get("family", ""),
+        "setup_hint": p.get("setup_hint", ""),
+        "rate_limit_note": p.get("rate_limit_note", ""),
+        "cloud": bool(flag and cfg_updates.get(flag)) or (slot == "llm"),
+        "env": sorted(changed_env),
+        "cfg": sorted(changed_cfg),
+        "rebuild_needed": rebuild,
+    }
 
 
 def stack(brain) -> dict:
@@ -203,18 +286,33 @@ def stack(brain) -> dict:
     for slot in SLOTS:
         provider = mem.get(f"{slot}_provider", "") or ("off" if slot == "reranker" else
                                                        "local" if slot == "embeddings" else "")
-        p = PROVIDERS[slot].get(provider, {})
+        p = PROVIDERS[slot].get(provider) or {}
         if slot == "llm":
             models = mem.get("llm_models", "")
             detail = models if models else (p.get("models") and "recomendados (cenário B)") or (p.get("model") or "")
         else:
             detail = mem.get(f"{slot}_model", "") or p.get("model", "") or ("—" if provider == "off" else "")
         kenv = p.get("key_env", "")
-        out[slot] = {"provider": provider, "label": p.get("label", provider), "model": detail,
-                     "cloud": (slot != "llm" and provider not in ("local", "off"))
-                              or (slot == "llm" and provider not in ("", "lmstudio")),
-                     "key_env": kenv, "key_present": bool(kenv and env.get(kenv)),
-                     "local": bool(p.get("local"))}
+        entry = {
+            "provider": provider,
+            "label": p.get("label", provider),
+            "model": detail,
+            "cloud": (slot != "llm" and provider not in ("local", "off"))
+                     or (slot == "llm" and bool(provider) and provider not in LOCAL_LLM_BLOCKED),
+            "key_env": kenv,
+            "key_present": bool(kenv and env.get(kenv)),
+            "local": bool(p.get("local")) or (slot == "llm" and provider in LOCAL_LLM_BLOCKED),
+        }
+        if slot == "llm":
+            entry.update({
+                "family": p.get("family", ""),
+                "cost_mode": p.get("cost_mode", ""),
+                "legacy_local": provider in LOCAL_LLM_BLOCKED,
+                "key_required": bool(p and p.get("key_env")),
+                "setup_hint": p.get("setup_hint", ""),
+                "rate_limit_note": p.get("rate_limit_note", ""),
+            })
+        out[slot] = entry
     return out
 
 
@@ -233,6 +331,11 @@ def cli(args, brain) -> None:
             print(f"  .env: {', '.join(res['env'])} (valor não impresso)")
         if res["cfg"]:
             print(f"  [memory]: {', '.join(res['cfg'])}")
+        if res.get("family") == "subscription":
+            if res.get("setup_hint"):
+                print(f"  setup: {res['setup_hint']}")
+            if res.get("rate_limit_note"):
+                print(f"  limite: {res['rate_limit_note']}")
         if res["cloud"]:
             from .memory import mode as _mem_mode
             _full = " -f services/compose.full.yaml" if _mem_mode(brain.inst.cfg["memory"]) == "full" else ""
@@ -250,12 +353,26 @@ def cli(args, brain) -> None:
              "reranker": "Reranker"}
     for slot in SLOTS:
         s = st[slot]
-        key = " · chave ok" if s["key_present"] else (" · sem chave" if s["key_env"] else "")
+        if slot == "llm" and s.get("family") == "subscription":
+            key = " · assinatura (sem chave de API)"
+        else:
+            key = " · chave ok" if s["key_present"] else (" · sem chave" if s["key_env"] else "")
         cloud = " · ☁ egress" if s["cloud"] else (" · local" if s["local"] else "")
         name = s["label"] or "—"
         print(f"{icons[slot]}: {name}{cloud}{key}")
         if s["model"] and s["model"] != "—":
             print(f"  modelo: {_fmt_models(s['model'])}")
+        if slot == "llm" and s.get("rate_limit_note"):
+            print(f"  nota: {s['rate_limit_note']}")
+    print("\nProvedores LLM disponíveis (modo full):")
+    print("  Assinatura (sem chave de API):")
+    for pid, p in PROVIDERS["llm"].items():
+        if p.get("family") == "subscription":
+            print(f"    {pid:<16} {p['label']}")
+    print("  Chave de API:")
+    for pid, p in PROVIDERS["llm"].items():
+        if p.get("family") == "key":
+            print(f"    {pid:<16} {p['label']}")
 
 
 def _parse_models(spec: str) -> dict:

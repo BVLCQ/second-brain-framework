@@ -20,10 +20,10 @@ services:
       - "127.0.0.1:${HINDSIGHT_API_PORT:-8888}:8888"   # API (o brain usa [memory].url)
       - "127.0.0.1:${HINDSIGHT_UI_PORT:-9999}:9999"    # UI
     environment:
-      HINDSIGHT_API_LLM_PROVIDER: lmstudio
-      HINDSIGHT_API_LLM_BASE_URL: http://host.docker.internal:1234/v1
-      HINDSIGHT_API_LLM_MODEL: qwen/qwen3-4b-2507
-      HINDSIGHT_API_LLM_API_KEY: lm-studio   # placeholder; o LM Studio ignora
+      HINDSIGHT_API_LLM_PROVIDER: lmstudio                       # não chamado (usado apenas como placeholder no modo embed)
+      HINDSIGHT_API_LLM_BASE_URL: http://host.docker.internal:1234/v1   # não chamado (usado apenas como placeholder no modo embed)
+      HINDSIGHT_API_LLM_MODEL: qwen/qwen3-4b-2507                # não chamado (usado apenas como placeholder no modo embed)
+      HINDSIGHT_API_LLM_API_KEY: lm-studio                       # não chamado (usado apenas como placeholder no modo embed)
       HINDSIGHT_API_LLM_OUTPUT_LANGUAGE: Brazilian Portuguese (pt-BR)
       # Modo embed: os bancos usam chunks, sem consolidação nem observações (brainlib/memory.py NO_LLM_CONFIG):
       # o LLM abaixo não é chamado — pode ficar descarregado no LM Studio. Só o bge-m3 (embeddings, ~635 MB)

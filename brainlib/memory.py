@@ -852,6 +852,20 @@ def cost(brain, hs: Hindsight | None = None) -> dict:
     if m != "full":
         n_docs = len(documents(brain)) if m == "embed" else 0
         return {"mode": m, "month": month, "usd": 0.0, "detail": f"US$ 0 — o modo {m} não usa LLM", "documents": n_docs}
+    from . import providers as _prov
+    llm_s = _prov.stack(brain)["llm"]
+    if llm_s.get("family") == "subscription":
+        note = "custo incluído no plano, sujeito a limite"
+        lbl = llm_s.get("label") or llm_s.get("provider") or "assinatura"
+        return {
+            "mode": m,
+            "month": month,
+            "usd": 0.0,
+            "billing": "subscription",
+            "billing_note": note,
+            "detail": f"{lbl} — {note}",
+            "rows": [],
+        }
     hs = hs or client(brain)
     stats = hs.llm_stats(mem["bank"])
     rows: dict[tuple[str, str], dict[str, float]] = {}
@@ -872,9 +886,13 @@ def cost(brain, hs: Hindsight | None = None) -> dict:
 
 
 def _cost_text(c: dict) -> str:
+    note = c.get("billing_note")
+    head = c["detail"]
+    if note and note not in head:
+        head = f"{head} — {note}"
     if not c.get("rows"):
-        return c["detail"]
-    lines = [c["detail"]]
+        return head
+    lines = [head]
     for r in c["rows"]:
         lines.append(f"  {r['operation']} · {r['model']}: {r['requests']} chamadas · "
                      f"{r['input_tokens']:,} in/{r['output_tokens']:,} out tokens · US$ {r['cost_usd']:.2f}".replace(",", "."))
@@ -892,8 +910,11 @@ def _apply_mode(brain, new_mode: str) -> None:
     if new_mode == "embed":
         updates.update({"extract": False, "cloud_llm": False, "mental_models": False, "raw_awaiting_dump": "degraded"})
     elif new_mode == "full":
+        from . import providers as _prov
+        llm_prov = brain.inst.cfg["memory"].get("llm_provider", "")
+        is_sub = _prov.PROVIDERS["llm"].get(llm_prov, {}).get("family") == "subscription"
         env = config.load_env(brain.inst)
-        if not any(k.startswith("HINDSIGHT_API") and k.endswith("API_KEY") and v for k, v in env.items()):
+        if not is_sub and not any(k.startswith("HINDSIGHT_API") and k.endswith("API_KEY") and v for k, v in env.items()):
             raise util.BrainError("modo full exige a chave de LLM do dono no config/.env (ex.: HINDSIGHT_API_LLM_API_KEY) — "
                                   "o compose lê o .env (services/compose.full.yaml); guides/memory.md", code=4)
         updates.update({"extract": True, "cloud_llm": True, "raw_awaiting_dump": "hold"})
