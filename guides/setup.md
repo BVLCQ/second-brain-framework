@@ -4,6 +4,11 @@ O setup assistido configura a **estrutura** da instância (config, memória, TUI
 portas). A **vida** (PROFILE, goals, pessoas) continua da entrevista `/init` com o
 seu agente — o wizard termina oferecendo-a.
 
+> **2.30:** o wizard do navegador agora mora NO PRÓPRIO painel — primeira vez,
+> "reconfigurar" e a rota `/onboarding` (atalho para `/#onboarding`) abrem o modo
+> wizard da mesma página, e "Abrir meu Brain" volta às faces sem recarregar.
+> Esta nota continua valendo para o wizard de TERMINAL abaixo.
+
 > **2.23:** o wizard do navegador (`/onboarding`) e este daqui renderizam o MESMO
 > registro de passos (`setup.WEB_STEPS`) — mesmos ids, mesmos títulos. O do navegador
 > cobre também identidade/perfil, agente, conectores+fontes, memória completa e

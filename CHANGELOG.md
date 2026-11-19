@@ -1,3 +1,23 @@
+## 2.30.0 — o wizard mora no painel: configuração e uso são o mesmo aplicativo (F8)
+
+- **Primeira vez, mesma página.** O painel bootou em modo wizard: sem faces, sem ⌘K —
+  a barra lateral vira a lista de passos (com grupos e progresso), a marca e o tema
+  continuam os do painel, e "Abrir meu Brain" faz a transição para as faces **sem
+  recarregar a página**. É o F8 do plano `onboarding-unification.md`, o último
+  ponto de costura da 2.23.0.
+- **A rota antiga `/onboarding` vira atalho** (302 → `/#onboarding`); o app e o
+  `./brain open --setup` apontam para o modo. A página própria segue no repo como
+  rollback documentado do plano.
+- **O hub "Seu Brain" reconfigura sem recarregar** — "Rever boas-vindas" troca para
+  o wizard no hash, na mesma página.
+- **Retrato continua honesto:** painel aberto como arquivo mostra o aviso de abrir
+  pelo app (regra das abas em modo leitura mantida).
+- **Contratos pinados por teste** (`tests/test_onboarding_panel.py`): os três
+  registros de passos — painel, página própria e `setup.WEB_STEPS` — falam a mesma
+  língua; o view model carrega `onboarding.needed` e o `finish` apaga; a rota
+  redireciona. Verificação de verdade: probe headless contra ponte viva — boot
+  `bridge-live obmode` com os 11 passos renderizados, e retrato com o aviso.
+
 ## 2.29.0 — bootstrap do instalador: uma ação, a máquina inteira pronta
 
 - **O `install.sh` deixou de verificar e desistir.** Máquina nova sem nada

@@ -1,10 +1,12 @@
 # Plano — Onboarding unificado: um cérebro, uma configuração
 
-> **Estado: PARCIALMENTE ENTREGUE (2.23.0).** F1–F7 aterrissaram (identidade visual,
-> registro único `setup.WEB_STEPS`, "Seu agente", conectores, memória completa, jobs
-> visíveis, `Abrir o Brain.command`); **F8 permanece pendente**. Ressalva 2.25.0: o
-> cérebro não gerencia memória de agentes — o que o F3 conecta é só o canal de leitura
-> (`brain harness connect`).
+> **Estado: ENTREGUE (2.23.0 + 2.30.0).** F1–F7 aterrissaram na 2.23.0 (identidade
+> visual, registro único `setup.WEB_STEPS`, "Seu agente", conectores, memória
+> completa, jobs visíveis, `Abrir o Brain.command`); **F8 aterrissou na 2.30.0**
+> (o wizard é um modo do painel: `/onboarding` vira atalho para `/#onboarding`,
+> transição sem recarregar; a página própria segue no repo como rollback).
+> Ressalva 2.25.0: o cérebro não gerencia memória de agentes — o que o F3
+> conecta é só o canal de leitura (`brain harness connect`).
 
 Executor: agente de código da instância. Regime: suite verde
 (`python3 -m unittest discover -s tests`, TUI com o venv `.venv-tui` quando tocar nela),
