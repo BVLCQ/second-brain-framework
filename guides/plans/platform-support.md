@@ -1,5 +1,10 @@
 # Plano — Suporte de plataformas: macOS + Linux nativos, Windows via WSL2
 
+> **Estado: PARCIALMENTE ENTREGUE.** A 2.26.0 entregou parte da Fase 2: atalho de um
+> clique (ícone no Dock no macOS / `.desktop` no Linux-WSLg, passo "A máquina" do
+> wizard) e reuso da aba do painel em TODOS os navegadores abertos. O resto (matrix
+> por SO, doctor por SO, CI `ubuntu-latest`, Fase 0 do WSL2) segue pendente.
+
 Executor: agente de código da instância. Regime: suite verde (`python3 -m unittest
 discover -s tests`, ~7–8 min, rodar em background com log), **um commit local por
 passo verde**, nada do dono no repo, `./brain upstream scan` antes de propor o push.

@@ -1,8 +1,11 @@
 # Proposta — A configuração guiada mora na face Configurações
 
-Status: **passos 3–5 feitos na 2.17.0** (abas, Memória unificada, Visão geral e remoção do atalho). Faltam o passo 1
-(identidade visual, decisão 1) e o passo 6 (`/onboarding` como modo de primeira vez do painel). Executor: agente de
-código da instância. Regime dos outros planos: testes verdes (`python3 -m unittest discover -s tests`),
+> **Estado: SUPERSEDED por `guides/plans/onboarding-unification.md`.** A 2.17.0 entregou
+> os passos 3–5 (abas, Memória unificada, Visão geral, remoção do atalho); a direção
+> visual (decisão 1, opção b) foi decidida em 2026-11-18 e entregue na 2.23.0; os dois
+> passos pendentes viraram F1 (entregue) e F8 (pendente) do plano unificado.
+
+Executor: agente de código da instância. Regime dos outros planos: testes verdes (`python3 -m unittest discover -s tests`),
 um commit local por passo, nada do dono no repo, `./brain upstream scan` antes de propor o push.
 
 ## 1. O problema — a experiência quebra ao sair do onboarding

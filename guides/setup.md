@@ -7,7 +7,8 @@ seu agente — o wizard termina oferecendo-a.
 > **2.23:** o wizard do navegador (`/onboarding`) e este daqui renderizam o MESMO
 > registro de passos (`setup.WEB_STEPS`) — mesmos ids, mesmos títulos. O do navegador
 > cobre também identidade/perfil, agente, conectores+fontes, memória completa e
-> "A máquina" (noturno · comando · TUI · foco · framework), com cada ação como job
+> "A máquina" (noturno · comando · TUI · foco · framework · atalho de um clique —
+> ícone no Dock no macOS, atalho na área de trabalho no Linux/WSLg), com cada ação como job
 > visível. A entrada sem terminal é o `Abrir o Brain.command` na raiz do repo.
 
 ## Três caminhos de instalar
@@ -26,7 +27,7 @@ Os três terminam no mesmo lugar: `./brain doctor` verde (no máximo ⚠ normais
 |---|---|---|---|
 | 0 | instancia | **pergunta seu nome** (o id é gerado dele; padrão = nome da conta do Mac), semeia vault + config (demo detectado → arquiva e nasce de novo, com confirmação) | zonas + doctor |
 | 1 | identidade | dono no ledger (`person.added`); só pergunta se o `init` rodou sem nome | `brain.person` no state |
-| 2 | rotina | fuso + expediente + almoço (`[work]`) | parse |
+| 2 | rotina | fuso + expediente (`[work]`; o almoço ficou como tunável fino do config, sem pergunta) | parse |
 | 3 | comando | **`brain` no PATH** (symlink `~/.local/bin/brain` → repo) | `which brain` resolve |
 | 3b | painel | **ícone do painel** (`brain app install`; interativo pergunta, `--yes` cria — como o passo `comando`) | app/entrada existe |
 | 4 | foco | `ics` (default, zero config) ou `google` com OAuth inline (loopback; token gravado no `.env`, nunca impresso) | chaves no `.env` |
@@ -46,14 +47,15 @@ Os três terminam no mesmo lugar: `./brain doctor` verde (no máximo ⚠ normais
 - **`embed`** — banco único de chunks (`brain`), **zero LLM, zero chave, nada sai da
   máquina**. O wizard sobe o Hindsight pelo compose (OrbStack), avisa se o LM Studio/bge-m3
   não está no ar, cria o banco e roda um sync de validação (`--limit 3`).
-- **Harnesses (sub-passo)** — com a memória ligada, o wizard oferece conectar os agentes
-  de código detectados (Claude Code, Cursor, Codex, Hermes) no mesmo servidor, no banco
-  próprio dos agentes (`hermes`) — fora do `memory rebuild`. Opt-in por pergunta.
 - **`full`** — banco único com extração de fatos: **porta de saída de dados**. Exige o
   **"ok" literal** ("texto do vault vai à API de LLM com a sua chave"), a chave no
   `.env` (mascarada, 0600), o compose com `--env-file config/.env`, e o `health/llm`
   verde antes de confiar. Medidor mensal: `brain memory cost` (sem teto — decisão do
   dono). Voltar ao embed é primeira classe: `brain memory setup --mode embed` + rebuild.
+- **Agentes de código** — o cérebro **não gerencia memória de agente** (decisão de
+  2026-11-18): registra só o canal de leitura — `brain harness connect <agente>` (MCP
+  somente-leitura; no Claude Code também o hook de recall). Memória do agente é
+  configurada por ele mesmo (receita: `guides/memory.md`).
 
 Detalhes por modo: `guides/memory.md`.
 

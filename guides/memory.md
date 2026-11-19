@@ -10,14 +10,14 @@ para achar mais rápido. Se o servidor cair, nada se perde.
 | Banco | **1** (`bank`, default `brain`), chunks | **1** (`bank`, default `brain`) com extração de fatos |
 | LLM em operação | nenhum | extração + consolidação (modelo barato); mental models (Fase 8, ainda não aterrissado) |
 | Sai da máquina? | **não** | sim — texto do vault à API de LLM **com a chave do dono** (`config/.env`) |
-| Chaves no `.env` | nenhuma | 1 (provider de LLM) |
+| Chaves no `.env` | nenhuma | 1 por conta de nuvem (LLM sempre; embeddings e reranker quando de nuvem — a OpenAI nos dois papéis usa a mesma) |
 | Custo de API | US$ 0 | medido por `brain memory cost` (medidor mensal, sem teto — decisão do dono) |
 | RAW sem `/dump` | entra como está | **hold**: fica retido até o artefato existir (`raw_awaiting_dump = "hold"`) |
 
 Config (`config/brain.toml` `[memory]`) — o modo é derivado: `engine = "none"` → `none`;
 `engine = "hindsight"` + `extract = false` → `embed`; `extract = true` (exige `cloud_llm = true`)
 → `full`. O atalho `brain memory setup --mode none|embed|full` grava as chaves do modo e
-cria os bancos na sequência. O CLI **recusa** `extract` sem `cloud_llm`, e o modo `full`
+cria o banco na sequência. O CLI **recusa** `extract` sem `cloud_llm`, e o modo `full`
 sem chave `HINDSIGHT_API_*_API_KEY` no `.env`.
 
 ### O que muda no `full`
@@ -117,12 +117,12 @@ Sem LLM no caminho, o único modelo que importa é o de embeddings. O padrão do
 Recomendado: **`bge-m3` servido pelo LM Studio** (melhor qualidade com o menor RAM; 1024 dims).
 Sem o LM Studio, `multilingual-e5-small` via `HINDSIGHT_API_EMBEDDINGS_PROVIDER=onnx` perde pouco,
 mas tem 384 dims (exige recriar os bancos) e limite de 512 tokens (o chunk padrão de 3000 caracteres
-passa disso — reduza `retain_chunk_size`). Não carregue um LLM no LM Studio só para o Hindsight.
+passa disso — reduza o tamanho de chunk na configuração do servidor Hindsight). Não carregue um LLM no LM Studio só para o Hindsight.
 
 ## Ligar nesta instância
 
 ```bash
-brain memory setup --mode embed     # ou full (exige chave no .env) — grava [memory] e cria os bancos
+brain memory setup --mode embed     # ou full (exige chave no .env) — grava [memory] e cria o banco
 brain memory sync                   # incremental; --limit 50 --dry-run disponível
 brain memory status                 # modo, pendências, fila, RAW retidos (full)
 brain memory recall "quem decidiu o ponto novo?"
@@ -288,8 +288,9 @@ Regras do desenho:
   os cinco campos do stack local são fallback de fábrica. Trocou provedor? Recrie com
   `--env-file config/.env`. **Trocou embeddings?** Vetores antigos ficam incompatíveis —
   `brain memory rebuild` re-deriva tudo do vault.
-- **Doctor**: provedor de nuvem sem chave = erro; harness conectado sem resposta (banco,
-  recall ping, config apontando pra cá) = aviso com o comando que corrige.
+- **Doctor**: provedor de nuvem sem chave = erro; operações falhas do servidor
+  (`failed_operations`, ex.: `No models loaded`) = aviso com a causa nomeada e o
+  comando que corrige (`lms load` ou `brain memory providers set llm …`).
 - `jina-mlx` existe no servidor mas **fica fora do menu** — benchmark 2026-11-07 reprovou
   (§4.2 do plano da memória).
 
@@ -377,6 +378,6 @@ fora degrada para o que o ledger tiver. Variáveis:
   sem achar, a perna ledger silencia (a vetorial segue).
 
 O mesmo classificador está na CLI: `brain route "<pergunta>"` (o `/ask` usa antes de
-buscar). **Reranker:** o `jina-mlx` local fica **pendente de benchmark** (exige o modelo
-carregado no LM Studio da máquina; regra 4 do dono: só entra se p95 < 400 ms com 30
-candidatos) — enquanto isso, fusão RRF do servidor + corte 0.62.
+buscar). **Reranker:** o `jina-mlx` local ficou **fora do menu** — benchmark 2026-11-07
+reprovou (não bateu o p95 < 400 ms). Fusão RRF do servidor + corte 0.62; rerankers de
+nuvem são opção (`brain memory providers set reranker …`).

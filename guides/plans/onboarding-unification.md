@@ -1,6 +1,12 @@
 # Plano — Onboarding unificado: um cérebro, uma configuração
 
-Executor: agente de código da instância. Regime dos outros planos: suite verde
+> **Estado: PARCIALMENTE ENTREGUE (2.23.0).** F1–F7 aterrissaram (identidade visual,
+> registro único `setup.WEB_STEPS`, "Seu agente", conectores, memória completa, jobs
+> visíveis, `Abrir o Brain.command`); **F8 permanece pendente**. Ressalva 2.25.0: o
+> cérebro não gerencia memória de agentes — o que o F3 conecta é só o canal de leitura
+> (`brain harness connect`).
+
+Executor: agente de código da instância. Regime: suite verde
 (`python3 -m unittest discover -s tests`, TUI com o venv `.venv-tui` quando tocar nela),
 **um commit local por passo**, assets do painel reconstruídos (`scripts/build_assets.py`)
 em toda mudança de `assets/src/`, nada do dono no repo, `./brain upstream scan` antes de

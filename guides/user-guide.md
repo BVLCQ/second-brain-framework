@@ -49,9 +49,12 @@ rastreável.
 **O contrato (memorize este parágrafo):** ele **observa e organiza**. Ele
 NÃO trabalha por você no mundo exterior. Não cria card no Jira, não responde
 e-mail, não comenta PR, não manda mensagem, não marca reunião. As únicas
-quatro exceções — quatro "portas" — exigem a sua aprovação explícita, uma a
-uma: blocos de foco no calendário, mensagem no Slack, publicação no espaço
-do time e backup no Drive. Nem um "responde esse aqui rapidinho" no calor
+exceções são as **sete portas** da constituição (`AGENTS.md`), cada uma com
+CLI próprio e escopo mínimo: foco no calendário, mensagem no Slack,
+publicação no espaço do time, backup no Drive, upstream do framework (git),
+pastas de oportunidade no Drive e issues de sugestão/bug no GitHub. Toda
+porta exige a sua aprovação explícita — a de oportunidade, uma única vez ao
+ligá-la. Nem um "responde esse aqui rapidinho" no calor
 do momento autoriza pular isso; a resposta certa do agente é lembrar da
 regra e usar a porta certa.
 
@@ -105,6 +108,11 @@ Os prefixos que você vai ver o dia inteiro:
 | `MSG-####` | mensagem rascunhada no outbox | `MSG-0001` |
 | `PUB-####` | publicação | `PUB-0001` |
 | `FOCUS-####` | plano de foco | `FOCUS-0001` |
+| `PROC-####` | processo (portfólio) | `PROC-0003` |
+| `OPP-####` | oportunidade / iniciativa (portfólio) | `OPP-0007` |
+| `ASK-####` | pergunta do agente esperando sua resposta | `ASK-0001` |
+| `FB-####` | sugestão/bug do cérebro (vira issue no repo público) | `FB-0001` |
+| slug | área do portfólio | `operacoes` |
 | `GOAL-#` / `PROJ-#` / `PROJ-#.#` | goal / projeto / entregável | `GOAL-1`, `PROJ-1`, `PROJ-1.2` |
 
 O `#` é para você não precisar decorar: cite "TASK-0014" e pronto.
@@ -130,7 +138,7 @@ falha.
 `FRESH/` (home, todo, goals, dashboard…) é **100% derivado** do
 livro-razão + PLANNING. Qualquer hora, `./brain render` apaga e redesenha
 tudo do zero. Você nunca precisa "manter" nada ali — e nada que você
-estragar ali tem valor perdido. As três exceções colhidas antes de
+estragar ali tem valor perdido. As quatro exceções colhidas antes de
 sobrescrever (seção 9): checkbox no `todo.md`, `status:` na ficha da ação, `status:`
 na ficha da oportunidade e checkbox de entregável em `PLANNING/goals.md`.
 
@@ -153,7 +161,8 @@ agente: *"execute o setup.md"* resolve.
 ### Passo 1 — criar a instância
 
 O caminho normal é o instalador (`sh install.sh`): ele cria o app **Brain** e abre a configuração guiada no
-navegador — nome, apelido, cargo, perfil, rotina, conectores, permissões, memória e goals, cada passo com
+navegador — nome, apelido, cargo, perfil, rotina, agente, conectores e fontes, memória
+e "A máquina" (noturno, comando, TUI, foco, framework), cada passo com
 explicação e "fazer depois". Para reabrir: `./brain open --setup`. No terminal, as alternativas:
 
 ```bash
@@ -679,7 +688,7 @@ Já coberto na seção 3. Gatilho: PROFILE e PLANNING vazios.
 ## 8. O painel — um passeio
 
 **Abrir com dois cliques:** `./brain app install` cria o app **Brain** em `/Applications`
-(macOS — a pasta Aplicativos, ou `~/Applications` se a conta não escreve lá; aparece no Launchpad e no Spotlight; arraste para o Dock) ou uma entrada no menu de aplicativos
+(macOS — a pasta Aplicativos, ou `~/Applications` se a conta não escreve lá; aparece no Launchpad e no Spotlight — o passo "A máquina" da configuração guiada também prega o ícone no Dock por você) ou uma entrada no menu de aplicativos
 (Linux). `--dest ~/Desktop` coloca em outra pasta e `--name` troca o nome. Na primeira vez, o clique abre a
 configuração guiada no navegador; depois, faz o mesmo que o terminal: regenera as views, sobe a ponte se preciso
 e abre o painel vivo (`./brain open --setup` volta à configuração). Se algo falhar, aparece um aviso
@@ -705,7 +714,7 @@ arquivo** que funciona em qualquer navegador, com dois modos:
 
 O painel tem três **faces** (como o TUI): **Execução**, **Portfólio** e **Configurações** —
 `Tab`/`Shift+Tab` troca, e cada face lembra onde você estava. A barra
-lateral traz as páginas (com badges), a busca ⌘K e a barra inferior mostra
+lateral traz as páginas (com badges), a busca e a barra inferior mostra
 as teclas do contexto — clicáveis, com os gates em destaque. A face
 **Configurações** mostra provedores da memória e saúde — e o
 formulário de trocar provedor roda a mesma linha da TUI e do CLI.
@@ -772,7 +781,7 @@ clicar numa área abre a página da área com processos, oportunidades e
 pessoas dela), **Documentos** (tudo que está ligado a processos e oportunidades: `L` liga, `d` desliga, `enter` abre)
 e **Pessoas** (ficha por pessoa: `n` nova pessoa, `e` edita, `a` alias, `R` "quem é…?" resolve um nome ou alias, sem gravar).
 
-`/` filtra a lista da página — de novo, refina o que sobrou (filtros em cascata, `esc` tira um por vez, igual à TUI; uma barra no topo mostra a corrente e quantos itens restam); `g`, `:` ou ⌘K busca em tudo; `?` mostra o mapa de teclas; `` ` `` abre o console. O mapa de oportunidades
+`/` filtra a lista da página — de novo, refina o que sobrou (filtros em cascata, `esc` tira um por vez, igual à TUI; uma barra no topo mostra a corrente e quantos itens restam); `g` ou `:` busca em tudo; `?` mostra o mapa de teclas; `` ` `` abre o console. O mapa de oportunidades
 também sai como arquivo próprio — `vault/FRESH/dashboard/portfolio.html`,
 só o recorte do portfólio, feito para circular (`brain share portfolio`).
 
@@ -881,8 +890,9 @@ O arquivo é Markdown **estrito**. Fora deste formato a linha é ignorada ou vir
 
 ## 10. Limites e segurança — o que ele NUNCA faz
 
-- **Nunca** escreve no mundo exterior fora das 4 portas — e cada uso de
-  porta exige a sua aprovação explícita.
+- **Nunca** escreve no mundo exterior fora das 7 portas da constituição — e
+  toda porta exige a sua aprovação explícita (a de pastas de oportunidade,
+  uma única vez ao ligá-la).
 - **Nunca** edita, renomeia ou apaga um original em `RAW/` (o arquivo morto
   é imutável).
 - **Nunca** edita o livro-razão na mão (toda escrita é validada pelo CLI) —
@@ -934,8 +944,9 @@ edita `events.jsonl` à mão — com backup, uma linha.
 - **Proveniência** — de onde veio o fato: `[declarado]` `[doc]`
   `[observado]` `[sem-fonte]`.
 - **Gate** — ponto onde o sistema para e espera a sua aprovação (no chat/CLI, literal; na TUI/painel, confirmar no formulário).
-- **Portas** — as 4 únicas escritas no mundo: foco (Calendar), mensagem
-  (Slack), publicação (canvas/Drive), backup (Drive).
+- **Portas** — as 7 únicas escritas no mundo: foco (Calendar), mensagem
+  (Slack), publicação (canvas/Drive), backup (Drive), upstream do framework
+  (git), pastas de oportunidade (Drive) e issues de sugestão/bug (GitHub).
 - **mine / waiting / watching** — as três listas: eu devo, me devem, é contexto. `mine` é sempre do dono do Brain:
   escolher `mine` preenche o dono (`eu`) e o TODO do painel mostra essa lista.
 - **Proposta (`PROP-####`)** — sugestão do agente esperando seu veredito.

@@ -1,5 +1,12 @@
 # Plano — Memória de equipe (porta 8), v2: automática por padrão, privada por construção
 
+> **Estado: PROPOSTA ATIVA (não implementada — porta 8 não existe no CLI nem na
+> constituição).** Duas ressalvas ao executar: a decisão 11 de `memory-setups.md`
+> (servidor também serve os harnesses) foi **revogada** em 2026-11-18 (v2.25.0); e a
+> mecânica de "resposta literal" nos gates foi superada pela v2.24.0 (confirmar o
+> formulário no painel/TUI já é a aprovação — a resposta digitada ficou só na CLI e
+> no consentimento de nuvem do modo full).
+
 Executor: agente de código da instância. Regime dos outros planos: testes verdes
 (`python3 -m pytest tests/`), **um commit local por passo**, nada do dono no repo,
 `./brain upstream scan` antes de propor o push.

@@ -1,5 +1,11 @@
 # Plano — Memória em dois setups: `embed` (sem LLM) e `full` (com LLM)
 
+> **Estado: PARCIALMENTE ENTREGUE (v2.4.0–v2.7.0).** O núcleo aterrissou (índice SQLite,
+> roteador + hook de recall, `dossier`, `eval`, `cost`, banco único); a Fase 8 (mental
+> models) segue pendente (`mental_models = false`). **Decisão 11 revogada em 2026-11-18
+> (v2.25.0):** o cérebro não gerencia memória de agente nenhum — só o canal de leitura
+> (`brain harness connect`); nada de banco `hermes` hospedado aqui.
+
 Executor: agente de código da instância. Regime dos outros planos: testes verdes
 (`python3 -m pytest tests/`, e a TUI com o venv `.venv-tui` quando tocar nela), **um
 commit local por passo**, nada do dono no repo, `./brain upstream scan` antes de propor
@@ -954,3 +960,6 @@ classificador), recuperação temporal real (datas do mundo), CLI/MCP/TUI que es
     hospeda `brain` (derivado do vault) e `hermes` (memória dos agentes: Claude
     Code/Cursor/Codex/Hermes). Banco de agente nunca é tocado pelo `memory rebuild`
     nem vira fato do vault. Design completo: `guides/plans/memory-harness-wizard.md`.
+    **REVOGADA em 2026-11-18 (v2.25.0)** — memória de agente é concern do próprio
+    agente; o banco `hermes` não existe mais e o plano `memory-harness-wizard.md`
+    foi removido. O cérebro registra só o canal de leitura (`brain harness connect`).

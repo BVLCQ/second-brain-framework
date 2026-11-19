@@ -1,5 +1,12 @@
 # Plano — Estado da arte da memória (ledger + Hindsight)
 
+> **Estado: SUPERSEDED (2026-11-07) por `guides/plans/memory-setups.md`.** O núcleo das
+> Fases 0–2 foi entregue, mas este plano descreve um mundo que mudou: banco único
+> `brain` (não `brain-mem`), mental models na Fase 8 (`mental_models = false` por
+> padrão), `full` só-nuvem para embeddings (2.19.0) — e as chaves `[memory.prices]`,
+> `entity_types` e `monthly_budget_usd` nunca existiram no config. Consulte o plano
+> vigente antes de executar qualquer fase daqui; o texto permanece como registro.
+
 Executor: agente de código da instância. Regime dos outros planos: testes verdes
 (`python3 -m pytest tests/`, e a TUI com o venv `.venv-tui` quando tocar nela), **um
 commit local por passo**, nada do dono no repo, `./brain upstream scan` antes de propor

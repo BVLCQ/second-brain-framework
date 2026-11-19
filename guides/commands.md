@@ -5,15 +5,15 @@ Para o *porquê* do sistema, veja [`user-guide.md`](user-guide.md); para o
 detalhe de cada fluxo, a seção 7 do user-guide. Para operar sem decorar
 comandos, use o cockpit de terminal (`brain tui`);
 
-> Esta referência foi gerada a partir do parser real do CLI (`brain 2.0.0`):
-> 32 comandos, com seus subcomandos. Se uma versão nova acrescentar algo,
-> `brain <comando> --help` é sempre a fonte final.
+> Esta referência acompanha o parser real do CLI (`brain 2.26.0`):
+> os 53 comandos de topo, com seus subcomandos. Se uma versão nova
+> acrescentar algo, `brain <comando> --help` é sempre a fonte final.
 
 ## Índice
 
 1. [Como chamar](#1-como-chamar)
 2. [Conceitos que aparecem em todo comando](#2-conceitos-que-aparecem-em-todo-comando)
-3. [Instância e saúde](#3-instância-e-saúde) — `init` · `demo` · `doctor` · `validate` · `status` · `update` · `upstream` · `watch` · `tui` · `app`
+3. [Instância e saúde](#3-instância-e-saúde) — `init` · `demo` · `doctor` · `validate` · `status` · `update` · `upstream` · `watch` · `tui` · `app` · `open` · `serve` · `pdf` · `video` · `raw` · `note`
 4. [Pessoas](#4-pessoas--person) — `person`
 5. [Ações](#5-ações--action) — `action`
 6. [Decisões](#6-decisões--decision) — `decision`
@@ -46,7 +46,7 @@ comandos, use o cockpit de terminal (`brain tui`);
 brain <comando> [subcomando] [opções]
 brain --help                 # lista os comandos
 brain <comando> --help       # opções de um comando
-brain --version              # brain 2.0.0
+brain --version              # brain 2.26.0
 ```
 
 - **`brain` funciona de qualquer pasta.** Ele está em `~/.local/bin/brain`, um link
@@ -77,6 +77,7 @@ brain --version              # brain 2.0.0
 | `MSG-####` | mensagem no outbox | `MSG-0001` |
 | `PUB-####` | pedido de publicação | `PUB-0001` |
 | `FOCUS-####` | plano de foco | `FOCUS-0001` |
+| `ASK-####` | pergunta do agente ao dono (o dono responde) | `ASK-0001` |
 | `FB-####` | sugestão/bug do cérebro (vira issue no repo público) | `FB-0001` |
 | `PROC-####` | processo (portfólio) | `PROC-0003` |
 | `OPP-####` | oportunidade / iniciativa (portfólio) | `OPP-0007` |
@@ -105,8 +106,7 @@ Aparecem em todo comando que **grava** um fato no livro-razão:
 
 Proveniência, em uma linha cada:
 `[declarado]` você disse · `[doc]` está escrito num documento · `[observado]` o agente
-extraiu de reunião/e-mail/Slack · `[sem-fonte]` sem base (evite) · `[sistema]` o
-próprio motor.
+extraiu de reunião/e-mail/Slack · `[sem-fonte]` sem base (evite).
 
 ### Listas de ação
 
@@ -144,7 +144,7 @@ Cria uma instância fictícia, completa, para ver o painel ou mostrar a alguém.
 | Opção | Uso |
 |---|---|
 | `--dir PASTA` | **obrigatório**: onde criar |
-| `--open [execucao\|portfolio]` | abre no navegador o painel (padrão) ou o mapa de oportunidades (`dashboard/portfolio.html`) |
+| `--open` | abre o painel no navegador ao terminar |
 
 ```bash
 brain demo --dir /tmp/brain-demo --open
@@ -637,6 +637,7 @@ do `/dump`: a mesma fonte não é processada duas vezes. Normalmente quem chama 
 | `--people PESSOAS` | envolvidos |
 | `--projects PROJ-#,PROJ-#` | projetos |
 | `--summary TEXTO` | resumo curto |
+| `--link PROC-#\|OPP-#` | liga o artefato a um processo/oportunidade |
 | + opções de registro | |
 
 ```bash
@@ -1173,7 +1174,7 @@ Específicos desta instalação (OrbStack + LM Studio + watchdog + hook).
 
 | O quê | Comando |
 |---|---|
-| Subir/atualizar o Hindsight | `docker compose -f ~/brain/services/compose.yaml up -d` |
+| Subir/atualizar o Hindsight | `docker compose -f ~/brain/services/compose.yaml up -d` — no modo `full`, sempre com o override: `docker compose -f services/compose.yaml -f services/compose.full.yaml --env-file config/.env up -d` |
 | Parar o Hindsight | `docker compose -f ~/brain/services/compose.yaml down` |
 | Logs do Hindsight | `docker logs --tail 50 hindsight` |
 | Saúde do Hindsight | `curl -s localhost:8888/health` |
@@ -1188,8 +1189,8 @@ Específicos desta instalação (OrbStack + LM Studio + watchdog + hook).
 | Log / estado do descarregador | `cat ~/brain/vault/logs/idle.log` · `cat ~/brain/vault/logs/idle-state.json` (tempo atual de cada modelo) |
 | Instalar o descarregador | da raiz da instância: `sed "s\|__BRAIN_DIR__\|$PWD\|g" services/com.segundo-cerebro.idle.plist > ~/Library/LaunchAgents/com.segundo-cerebro.idle.plist && launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.segundo-cerebro.idle.plist` (o plist do repo traz o placeholder `__BRAIN_DIR__`, nunca um caminho) |
 | Ajustar o descarregador | `BRAIN_IDLE_LLM_MIN` (`5`), `BRAIN_IDLE_EMBED_MIN` (`15`), `BRAIN_IDLE_MAX_MIN` (`60`), `BRAIN_IDLE_KEEP` (nunca descarregar, ex.: `text-embedding-bge-m3`), `BRAIN_IDLE_UNLOAD_OFF=1` — em `EnvironmentVariables` de `services/com.segundo-cerebro.idle.plist`, depois `launchctl bootout gui/$(id -u)/com.segundo-cerebro.idle`, refazer o `sed` da linha acima e `bootstrap` |
-| Desligar o contexto automático do Claude | `BRAIN_RECALL_OFF=1` no ambiente, ou remover o hook de `~/.claude/settings.json` |
-| Ajustar o filtro do contexto automático | `BRAIN_RECALL_MIN_SCORE` (padrão `0.55`), `BRAIN_RECALL_MAX` (padrão `8`) |
+| Desligar o contexto automático do Claude | `BRAIN_RECALL_OFF=1` no ambiente, ou remover o hook de `~/.claude/settings.local.json` |
+| Ajustar o filtro do contexto automático | `BRAIN_RECALL_MIN_SCORE` (padrão `0.62`), `BRAIN_RECALL_MAX` (padrão `5`) |
 
 ---
 
@@ -1250,7 +1251,7 @@ Mapa de processos (`PROC-####`) e oportunidades/iniciativas (`OPP-####`) por ár
 | `score OPP-#### --impact I --confidence C --ease F` | ICE 1–5 cada (score 1–125, calculado pelo CLI). `--suggest --reason "…"` (agente) grava só uma sugestão; o dono confirma ou muda. O que cada nota significa: `rubric` |
 | `rubric [--md\|--json]` | o rubric do ICE: critério, horas/proveniência/prazo e vínculo com as medidas de sucesso de cada nota, por eixo — a fonte única (CLI, TUI, painel e guia) |
 | `evidence OPP-#### --source ARTEFATO` | mais uma fonte que reforça a oportunidade |
-| `promote OPP-#### --level goal\|project\|deliverable [--title] [--approval "ok"]` | **gate**: promove a nó do PLANNING no nível escolhido — `goal` (goal novo) · `project --goal GOAL-#` (projeto novo no goal) · `deliverable --project PROJ-#` (entregável novo no projeto). Sem `--level`: `--goal` ⇒ projeto, `--project` ⇒ entregável. Sem `--approval` imprime o diff proposto do `goals.md` e sai com código 4; com ele cria o nó, liga OPP ↔ nó e põe `em-andamento` (mesmo lote do ledger + linha em `PLANNING/log.md`; entregável não grava `plan.changed`, como `plan add deliverable`). Proibido no noturno |
+| `promote OPP-#### --level goal\|project\|deliverable [--title] [--approval "ok"]` | **gate**: promove a nó do PLANNING no nível escolhido — `goal` (goal novo) · `project --goal GOAL-#` (projeto novo no goal) · `deliverable --project PROJ-#` (entregável novo no projeto). Sem `--level`: `--goal` ⇒ projeto, `--project` ⇒ entregável. Sem `--approval` imprime o diff proposto do `goals.md` e sai com código 4; com ele cria o nó, liga OPP ↔ nó e põe `em-andamento` (mesmo lote do ledger + linha em `PLANNING/log.md`; entregável não grava `plan.changed`, como `plan add-deliverable`). Proibido no noturno |
 | `show OPP-####` · `list [--status] [--area] [--sort score]` | leitura |
 
 ### `brain doc`
@@ -1337,7 +1338,7 @@ brain query sql "SELECT status, COUNT(*) n FROM opportunities GROUP BY status"
 
 ### Versão, aviso de atualização e novidades
 
-O painel (canto inferior direito) e a TUI (barra inferior) mostram a versão — `v2.1.0` —
+O painel (canto inferior direito) e a TUI (barra inferior) mostram a versão — `v2.26.0` —
 e, quando o noturno ou `brain update --check` encontrarem novidades no upstream, o aviso
 **⚡ atualização** com as mudanças a um clique (painel) ou na barra (TUI). O `doctor`
 ganha a linha `framework: em dia (v…)` / `atualização disponível`.
