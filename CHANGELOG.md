@@ -1,3 +1,45 @@
+## 2.27.0 — o lote das issues #32–#55 (engenharia + UI/UX do painel)
+
+- **Índice SQLite rápido e confiável (#32, #34, #36):** escrita normal no ledger não refaz mais o
+  índice inteiro — crescimento vira append incremental (o tail no offset antigo confirma que nada
+  foi reescrito) e rebuild completo só quando o ledger encolhe ou a última linha mudou de verdade.
+  Pesos bm25 corrigidos: título volta a levar 3× (o boost caía na coluna `kind` e o corpo pontuava
+  zero). Leitores conferem frescor (`last_seq` × ledger) antes de usar o índice e caem na dobra ao
+  vivo quando atrasado; falha da atualização pós-escrita ganha linha em `logs/index-errors.log` em
+  vez de silêncio.
+- **Instância e ledger resistentes (#33, #37):** `brain init` com `BRAIN_HOME` fora do clone semeia
+  o vault a partir da raiz do framework (e avisa com os caminhos procurados quando não acha);
+  referência quebrada no ledger agora vira `BrainError` nomeando seq/tipo/id + "rode
+  ./brain validate" — e o `validate` segue reportando tudo com saída 4, sem traceback.
+- **Ponte e subprocessos com limite (#35, #38):** a GC de jobs da ponte roda ANTES da checagem de
+  "já existe em execução" — job de agente preso é expirado (rc 124) em vez de deixar as ações ⚡ em
+  409 para sempre; o `proc.wait()` pós-EOF do agente herda o orçamento de timeout. pdftotext/
+  pdftoppm (120 s), venv+pip (600 s) e abertura de OAuth (15 s) ganham timeout com `BrainError`
+  nomeando a ferramenta.
+- **TUI (#39, #40, #41, #42):** "Saúde online" da paleta executa `doctor --online` de verdade
+  (itens `sys:*` chamam `run_sys` direto); alerta "não cabe: 0" some quando nada está em risco;
+  o índice de duplicatas é cacheado por carga da store e a checagem por tecla ganha debounce de
+  120 ms; checklist de higiene aplicado (bloqueadores múltiplos na ficha, `esc` só tira o filtro
+  da aba em foco, auto-reload sem TOCTOU, código morto removido).
+- **Painel — contraste e layout (#43, #44, #49, #50, #51):** pílula da face atual com tinta do
+  tema e 12,5 px (6,05:1 no escuro); tokens de primeiro plano do tema claro escurecidos até
+  4,5:1 em todos os pares texto×fundo (verificado por teste que calcula a razão WCAG); resumo do
+  projeto com clamp de 2 linhas; telas de 500 px sem overflow lateral (grade do Foco com scroller
+  próprio); alvos de toque ≥ 24 px nos botões pequenos e área expandida invisível nos links de
+  pessoa.
+- **Painel — comportamento (#45, #46, #47, #48, #52, #54):** agenda do Início e semana do Foco
+  ordenadas por hora (não por id); datas ISO cruas viram dd/mm/aaaa; Ctrl K / ⌘K implementado com
+  rótulo por plataforma; hierarquia de títulos h1→h2 sem mudança visual; portfólio standalone
+  mostra travessão onde o recorte não traz a contagem (não mais zeros falsos); goals fora de
+  "em dia" ganham mini-chip clicável com o motivo que salta até o projeto responsável.
+- **CSS higiene (#53):** seletores e `@media` duplicados consolidados preservando a cascata, cores
+  literais tokenizadas, tokens mortos removidos e escala tipográfica fechada em
+  10,5/11,5/12,5/14/16/20/26 px.
+- **Passo "Seu agente" agnóstico (#55):** os quatro agentes conhecidos aparecem sempre, com a
+  detecção como selo ("detectado"/"não detectado") — conectar um não detectado devolve a receita
+  manual — e o card "Outros harnesses" entrega os snippets MCP prontos (JSON, TOML e CLI) para
+  qualquer ferramenta que fale MCP, marcando o passo como manual.
+
 ## 2.26.0 — o lote das issues #26–#31
 
 - **Atalho de um clique + aba reaproveitada:** o passo "A máquina" do wizard ganhou a linha
