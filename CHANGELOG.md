@@ -1,3 +1,14 @@
+## 2.31.1 — passos do wizard sempre à vista
+
+- **A lista de passos da configuração guiada usa a altura de que precisa**
+  (modo primeira vez F8 do painel e rota `/onboarding`): em janelas baixas —
+  celular em modo "site do computador", telas curtas — o container dos passos
+  encolhia e escondia opções num rolo interno sem nenhuma indicação (círculo
+  cortado no meio, nota logo abaixo do corte e meio painel vazio; 8 dos 11
+  passos sumiam numa janela de 573 px). Agora os passos têm altura natural
+  (`flex: 1 0 auto`, sem rolo interno): se faltar espaço, quem rola é a
+  própria barra lateral — e com altura normal tudo cabe sem rolagem nenhuma.
+
 ## 2.31.0 — versão no rodapé, atualização pela ponte e frescor à vista
 
 - **A versão mora no rodapé da barra lateral** (#62): no lugar da linha "gerado

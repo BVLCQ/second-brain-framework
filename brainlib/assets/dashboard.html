@@ -543,10 +543,13 @@ html[data-live="1"] .only-portrait,html:not([data-live="1"]) .only-live{display:
 
 /* passos na barra lateral do painel (substituem faces+abas no modo primeira vez) */
 body.obmode #faces, body.obmode #tabs, body.obmode #openpal { display: none; }
-.obnav { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+/* altura natural: nunca recorta passo no meio — quem rola, se precisar, é a própria
+   barra lateral (aside.side já é overflow-y:auto). flex 1 0 auto = ocupa o que sobra,
+   mas não encolhe abaixo do conteúdo. */
+.obnav { flex: 1 0 auto; display: flex; flex-direction: column; }
 .obnav .grp { font: 700 10.5px/1 system-ui, sans-serif; letter-spacing: .08em; text-transform: uppercase;
   color: var(--muted); margin: 12px 8px 4px; }
-.obnav .steps { list-style: none; margin: 0; padding: 0; overflow-y: auto; }
+.obnav .steps { list-style: none; margin: 0; padding: 0; }
 .obnav .steps li { display: flex; align-items: center; gap: 9px; padding: 7px 9px; border-radius: 9px;
   color: var(--muted); cursor: pointer; font-size: 13px; font-weight: 500; transition: .12s; }
 .obnav .steps li:hover { background: var(--line2); color: var(--ink); }
@@ -1898,7 +1901,13 @@ SETUP.memoria = box => {
   const draw = () => {
     box.innerHTML = sec("Modo", '<div class="stopts">' + opts.map(([k, t, d]) => '<button class="stopt' + (k === sel ? " sel" : "") + '" data-m="' + k + '"><b>' + t + (k === cur ? ' <span class="chip h-info">atual</span>' : "") + "</b><span>" + d + "</span></button>").join("") + "</div>" +
       (sel !== "none" ? '<p class="small">' + (m.docker ? '<span class="ok">✓</span>' : '<span class="late">✗</span>') + " OrbStack (o banco da memória)" +
-        '<span id="s-lms"' + (sel === "embed" ? "" : " hidden") + '> · ' + (m.lmstudio ? '<span class="ok">✓</span>' : '<span class="late">✗</span>') + " LM Studio com <code>text-embedding-bge-m3</code> (só no embeddings local)</span></p>" : "") +
+        '<span id="s-lms"' + (sel === "embed" ? "" : " hidden") + '> · ' + (() => {
+          const lst = m.lmstudio_state || (m.lmstudio ? "up" : "missing");
+          if (lst === "up") return '<span class="ok">✓</span> LM Studio com <code>text-embedding-bge-m3</code> pronto';
+          return lst === "installed"
+            ? '<span class="late">⚠</span> LM Studio instalado, servidor desligado — ativar sobe e configura'
+            : '<span class="late">✗</span> LM Studio ausente — o Brain instala e configura ao ativar';
+        })() + " (só no embeddings local)</span></p>" : "") +
       (sel === "embed" ? '<div class="stgrid">' + fld("Embeddings", selHTML(embOpts(false), curEmb(false), "s-emb")) +
         '<div id="s-ekey-wrap"' + (curEmb(false) === "local" ? " hidden" : "") + ">" + fld("API key do embeddings" + keyChip(m.emb_key), keyInp("s-ekey"), "Fireworks ou OpenAI, conforme o escolhido.") + "</div></div>" +
         '<p class="small" id="s-egress"' + (curEmb(false) === "local" ? " hidden" : "") + '>☁ com provedor de nuvem, o texto do vault vai à API para virar vetores.</p>' : "") +
@@ -4134,7 +4143,14 @@ OBV.memoria = () => {
   });
   const getProv = (slot, key) => listFor(slot).find(p => p.key === key) || null;
 
-  const pre = (on, t, link) => '<div style="display:flex;align-items:center;gap:8px;margin-top:4px">' + (on ? '<span class="pill ok">pronto</span>' : '<span class="pill warn">falta</span>') + " <span>" + t + (!on && link ? ' — <a href="' + link + '" target="_blank" rel="noopener">baixar</a>' : "") + "</span></div>";
+  const pre = (on, t, link) => {
+    const mid = on === "installed";
+    return '<div style="display:flex;align-items:center;gap:8px;margin-top:4px">' +
+      (mid ? '<span class="pill info">instalado</span>' : on ? '<span class="pill ok">pronto</span>' : '<span class="pill warn">falta</span>') +
+      " <span>" + t +
+      (!on && !mid && link ? ' — <a href="' + link + '" target="_blank" rel="noopener">baixar</a>' : "") +
+      (mid ? " — o Brain sobe o servidor e o modelo ao ativar" : "") + "</span></div>";
+  };
 
   obSet(obHead("Conexões · memória de IA", "Memória", "A memória deixa o Brain responder perguntas pelo <b>significado</b>. Sem ela, o Brain continua funcionando inteiro com busca por palavras.") +
     '<div class="grid3">' +
@@ -4183,7 +4199,9 @@ OBV.memoria = () => {
     const prereqs = '<div class="rowline" style="margin-top:12px;padding-bottom:0;border-top:1px solid var(--line2)">' +
       '<div class="info"><b>Servidor e modelos locais</b>' +
         pre(m.docker, "<b>OrbStack</b> — roda o servidor de memória (precisa em qualquer modo)", "https://orbstack.dev") +
-        (usesLocal ? pre(m.lmstudio, "<b>LM Studio</b> — modelo local escolhido acima", "https://lmstudio.ai") : "") +
+        (usesLocal ? pre(m.lmstudio_state || m.lmstudio,
+                         "<b>LM Studio</b> — embeddings locais (o Brain instala e configura ao ativar)",
+                         "https://lmstudio.ai") : "") +
       "</div></div>";
     $("#det").innerHTML = "<h2>Motores</h2>" +
       '<p class="sub">Escolha os provedores por slot — os itens recomendados já vêm selecionados.</p>' +

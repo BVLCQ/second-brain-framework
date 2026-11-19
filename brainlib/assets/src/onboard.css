@@ -5,10 +5,13 @@
 
 /* passos na barra lateral do painel (substituem faces+abas no modo primeira vez) */
 body.obmode #faces, body.obmode #tabs, body.obmode #openpal { display: none; }
-.obnav { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+/* altura natural: nunca recorta passo no meio — quem rola, se precisar, é a própria
+   barra lateral (aside.side já é overflow-y:auto). flex 1 0 auto = ocupa o que sobra,
+   mas não encolhe abaixo do conteúdo. */
+.obnav { flex: 1 0 auto; display: flex; flex-direction: column; }
 .obnav .grp { font: 700 10.5px/1 system-ui, sans-serif; letter-spacing: .08em; text-transform: uppercase;
   color: var(--muted); margin: 12px 8px 4px; }
-.obnav .steps { list-style: none; margin: 0; padding: 0; overflow-y: auto; }
+.obnav .steps { list-style: none; margin: 0; padding: 0; }
 .obnav .steps li { display: flex; align-items: center; gap: 9px; padding: 7px 9px; border-radius: 9px;
   color: var(--muted); cursor: pointer; font-size: 13px; font-weight: 500; transition: .12s; }
 .obnav .steps li:hover { background: var(--line2); color: var(--ink); }
