@@ -120,7 +120,7 @@ class DoctorSlotAwareTests(unittest.TestCase):
                 mock.patch.object(setup, "FRAMEWORK", Path("/nonexistent-fw")):
             return doctor.checks(b)
 
-    def test_full_subscription_without_key_is_ok(self):
+    def test_full_subscription_without_credential_is_error_naming_auth(self):
         with tempfile.TemporaryDirectory() as td:
             b = _brain(Path(td))
             config.set_keys(b.inst, "memory", {
@@ -132,8 +132,26 @@ class DoctorSlotAwareTests(unittest.TestCase):
             b.inst = config.load(b.inst.root)
             cks = self._checks(b)
             llm_ck = next(c for c in cks if c["title"] == "memória · LLM")
+            self.assertEqual(llm_ck["level"], "error")
+            self.assertIn("brain memory auth claude-code", llm_ck["detail"])
+
+    def test_full_subscription_with_token_is_ok(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            config.set_keys(b.inst, "memory", {
+                "engine": "hindsight", "extract": True, "cloud_llm": True,
+                "raw_awaiting_dump": "hold", "llm_provider": "claude-code",
+                "embeddings_provider": "fireworks",
+            })
+            b.inst.env_file.write_text("HINDSIGHT_API_EMBEDDINGS_OPENAI_API_KEY=fw-1\n"
+                                       "HINDSIGHT_API_LLM_API_KEY=" + "sk-" + "ant-oat01-demo-token\n",
+                                       encoding="utf-8")
+            b.inst = config.load(b.inst.root)
+            cks = self._checks(b)
+            llm_ck = next(c for c in cks if c["title"] == "memória · LLM")
             self.assertEqual(llm_ck["level"], "ok")
             self.assertIn("assinatura", llm_ck["detail"])
+            self.assertIn("token", llm_ck["detail"])
 
     def test_full_anthropic_without_key_is_error(self):
         with tempfile.TemporaryDirectory() as td:
@@ -234,6 +252,150 @@ class CostAndCliTests(unittest.TestCase):
 
             cfg = config.load(tmp).cfg["memory"]
             self.assertEqual(cfg["llm_provider"], "cursor")
+
+
+class AuthStateTests(unittest.TestCase):
+    """providers.auth_state: o que o painel/doctor/noturno leem do provedor de assinatura."""
+
+    def _brain_with(self, tmp: Path, provider: str) -> Brain:
+        b = _brain(tmp)
+        config.set_keys(b.inst, "memory", {"llm_provider": provider})
+        b.inst = config.load(tmp)
+        return b
+
+    def test_claude_code_pending_without_token_and_ok_with_it(self):
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            b = self._brain_with(tmp, "claude-code")
+            st = providers.auth_state(b)
+            self.assertEqual(st["state"], "pending")
+            self.assertEqual(st["fix"], "brain memory auth claude-code")
+            self.assertEqual(st["flow"], "claude-token")
+
+            b.inst.env_file.write_text("HINDSIGHT_API_LLM_API_KEY=" + "sk-" + "ant-oat01-demo\n", encoding="utf-8")
+            b.inst = config.load(tmp)
+            self.assertEqual(providers.auth_state(b)["state"], "ok")
+
+    def test_xai_state_from_container_store_probe(self):
+        class _Res:
+            def __init__(self, rc): self.returncode = rc
+
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            b = self._brain_with(tmp, "xai-oauth")
+            providers._AUTH_CACHE.update(at=0.0, value=None)
+            st = providers.auth_state(b, run=lambda *a, **k: _Res(0))
+            self.assertEqual(st["state"], "ok")
+            providers._AUTH_CACHE.update(at=0.0, value=None)
+            st = providers.auth_state(b, run=lambda *a, **k: _Res(1))
+            self.assertEqual(st["state"], "pending")
+            self.assertEqual(st["fix"], "brain memory auth xai-oauth")
+            providers._AUTH_CACHE.update(at=0.0, value=None)
+
+            def _boom(*a, **k): raise OSError("docker ausente")
+            st = providers.auth_state(b, run=_boom)
+            self.assertEqual(st["state"], "unknown")
+            providers._AUTH_CACHE.update(at=0.0, value=None)
+
+    def test_key_provider_and_manual_flow_states(self):
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            b = self._brain_with(tmp, "anthropic")
+            self.assertEqual(providers.auth_state(b)["state"], "na")
+            config.set_keys(b.inst, "memory", {"llm_provider": "chatgpt"})
+            b.inst = config.load(tmp)
+            st = providers.auth_state(b)
+            self.assertEqual(st["state"], "manual")
+            self.assertTrue(st["note"])
+
+
+class _LogUI:
+    interactive = False
+
+    def __init__(self): self.log: list[str] = []
+
+    def say(self, msg): self.log.append(str(msg))
+
+
+class RunLlmAuthTests(unittest.TestCase):
+    """setup.run_llm_auth: fluxo visível do botão Autenticar / `brain memory auth`."""
+
+    def test_non_subscription_refuses_with_the_list(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            ui = _LogUI()
+            self.assertFalse(setup.run_llm_auth(b, ui, "anthropic"))
+            self.assertTrue(any("assinatura" in ln for ln in ui.log))
+
+    def test_nightly_gate_raises(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            with mock.patch.dict("os.environ", {"BRAIN_NIGHTLY": "1"}):
+                with self.assertRaises(util.BrainError):
+                    setup.run_llm_auth(b, _LogUI(), "claude-code")
+
+    def test_claude_token_flow_without_cli_narrates_install(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            ui = _LogUI()
+            with mock.patch.object(setup.shutil, "which", return_value=None):
+                self.assertFalse(setup.run_llm_auth(b, ui, "claude-code"))
+            self.assertTrue(any("brew install" in ln or "npm install" in ln for ln in ui.log))
+
+    def test_claude_token_flow_captures_token_into_env_and_never_echoes_it(self):
+        token = "sk-" + "ant-oat01-" + "x" * 30
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            b = _brain(tmp)
+            ui = _LogUI()
+            with mock.patch.object(setup.shutil, "which", return_value="/usr/local/bin/claude"), \
+                    mock.patch.object(setup, "_run", return_value=(0, f"Long-lived token:\n{token}\n")), \
+                    mock.patch.object(memory, "mode", return_value="full"):
+                self.assertTrue(setup.run_llm_auth(b, ui, "claude-code"))
+            env = config.load_env(b.inst)
+            self.assertEqual(env.get("HINDSIGHT_API_LLM_API_KEY"), token)
+            self.assertFalse(any(token in ln or "x" * 30 in ln for ln in ui.log))
+            self.assertTrue(any("config/.env" in ln for ln in ui.log))
+
+    def test_claude_token_flow_failure_redacts_and_narrates_login(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            ui = _LogUI()
+            with mock.patch.object(setup.shutil, "which", return_value="/usr/local/bin/claude"), \
+                    mock.patch.object(setup, "_run",
+                                      return_value=(1, "not logged in — " + "sk-" + "ant-short-abcdef123 run claude first")):
+                self.assertFalse(setup.run_llm_auth(b, ui, "claude-code"))
+            self.assertTrue(any("falta login" in ln for ln in ui.log))
+            self.assertFalse(any("ant-short-abcdef123" in ln for ln in ui.log))
+
+    def test_manual_flow_provider_narrates_hint(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            ui = _LogUI()
+            self.assertFalse(setup.run_llm_auth(b, ui, "chatgpt"))
+            self.assertTrue(any("sem fluxo automático" in ln for ln in ui.log))
+
+    def test_cli_memory_auth_runs_flow(self):
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            _brain(tmp)
+            with mock.patch.object(setup.shutil, "which", return_value=None):
+                out = _run_cli(tmp, ["memory", "auth", "claude-code"])
+            self.assertIn("Claude Code CLI não encontrado", out)
+
+    def test_configure_memory_accepts_subscription_without_key(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            config.set_keys(b.inst, "memory", {"extract": True, "cloud_llm": True, "raw_awaiting_dump": "hold"})
+            b.inst = config.load(b.inst.root)
+            with mock.patch.object(setup, "_run_memoria") as run_mem:
+                v = setup.configure_memory(b, {
+                    "mode": "full", "consent": True,
+                    "llm": {"provider": "claude-code"},
+                    "embeddings": {"provider": "fireworks", "key": "fw-1"},
+                })
+                self.assertEqual(v, "full")
+                run_mem.assert_called_once()
 
 
 if __name__ == "__main__":

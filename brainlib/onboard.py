@@ -305,6 +305,16 @@ def connector_status(servers: dict[str, str] | None, cfg: dict, sources: set[str
 _PREREQ: dict = {"at": 0.0, "value": None}
 
 
+def _llm_auth_state(brain, _providers) -> dict:
+    """Estado de autenticação do LLM por assinatura, à prova de falha (docker lento nunca
+    derruba o passo Memória — vira unknown e a tela mostra o que sabe)."""
+    try:
+        return _providers.auth_state(brain)
+    except Exception:                                        # noqa: BLE001 — estado é informativo
+        return {"provider": brain.inst.cfg["memory"].get("llm_provider", ""), "state": "unknown",
+                "note": "", "fix": "", "flow": "", "family": ""}
+
+
 def _prereqs() -> dict:
     """Docker/OrbStack e LM Studio no ar? (até 13 s de checagem — guardado por 60 s, o painel consulta toda hora).
     `lmstudio` é o booleano (servidor responde); `lmstudio_state` distingue instalado (o Brain sobe ao ativar)
@@ -371,9 +381,13 @@ def state(brain) -> dict:
                                    or env.get("HINDSIGHT_API_RERANKER_COHERE_API_KEY")),
                    "providers": {slot: [{"key": k, "label": v["label"], "recommended": bool(v.get("recommended")),
                                          "cloud": not (v.get("local") or k == "off"),
+                                         "subscription": slot == "llm" and v.get("family") == "subscription",
+                                         "flow": _providers.AUTH_FLOWS.get(k, "") if slot == "llm" else "",
+                                         "hint": v.get("setup_hint", ""),
                                          "key_set": bool(v.get("key_env") and env.get(v["key_env"]))}
                                         for k, v in providers_registry[slot].items()]
                                  for slot in ("llm", "embeddings", "reranker")},
+                   "llm_auth": _llm_auth_state(brain, _providers),
                    "stack": {"llm": cfg["memory"].get("llm_provider", ""),
                              "embeddings": cfg["memory"].get("embeddings_provider", ""),
                              "reranker": cfg["memory"].get("reranker_provider", "")}},
@@ -1062,13 +1076,35 @@ def finish(brain) -> dict:
     return {"ok": True, "ask": ask_id, "people_added": applied_inline}
 
 
+def memory_auth(brain, data: dict) -> dict:
+    """Autentica o provedor de assinatura do slot LLM (botão Autenticar do passo Memória) —
+    job visível: cada linha do fluxo (token/setup-token, URL do device-code) cai no log."""
+    if os.environ.get("BRAIN_NIGHTLY") == "1":
+        raise util.BrainError("autenticar provedor é ato do dono presente — nunca no noturno", code=4)
+    from . import providers as _providers
+    provider = str(data.get("provider") or "")
+    reg = _providers.PROVIDERS["llm"].get(provider)
+    if not reg or reg.get("family") != "subscription":
+        raise util.BrainError(f"provedor de LLM (assinatura) desconhecido: {provider!r}", code=4)
+    inst0 = brain.inst
+
+    def run(j: _Job) -> dict:
+        from . import setup
+        from .core import Brain
+        b = Brain(config.reload(inst0))
+        ok = setup.run_llm_auth(b, _JobUI(j), provider)
+        return {"ok": ok}
+    return {"job": _start("memory_auth", run).id}
+
+
 ACTIONS = {
     "about": save_about, "profile_preview": lambda b, d: {"markdown": profile_markdown(b, d)},
     "profile_save": save_profile, "routine": save_routine,
     "connectors_scan": lambda b, d: scan_connectors(bool(d.get("force"))),
     "connectors_enable": enable_connectors, "permissions": lambda b, d: apply_permissions(b),
     "source_add": source_add, "source_remove": source_remove,
-    "keys": save_keys, "memory": apply_memory, "maquina": apply_maquina, "foco_google": apply_foco_google,
+    "keys": save_keys, "memory": apply_memory, "memory_auth": memory_auth,
+    "maquina": apply_maquina, "foco_google": apply_foco_google,
     "entrevista": apply_entrevista,
     "agent_connect": connect_agent, "agent_later": agent_later,
     "planning_note": save_planning_note,

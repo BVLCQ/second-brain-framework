@@ -888,11 +888,17 @@ V.memoria = () => {
     ? m.providers
     : {
         llm: [
+          {key: "claude-code", label: "Claude Code (assinatura Claude Pro/Max)", recommended: false, cloud: true, subscription: true, flow: "claude-token", key_set: false},
+          {key: "chatgpt", label: "ChatGPT (sign-in / assinatura Plus/Pro)", recommended: false, cloud: true, subscription: true, key_set: false},
+          {key: "cursor", label: "Cursor (assinatura)", recommended: false, cloud: true, subscription: true, key_set: false},
+          {key: "github-copilot", label: "GitHub Copilot (assinatura)", recommended: false, cloud: true, subscription: true, key_set: false},
+          {key: "xai-oauth", label: "xAI / SuperGrok (sign-in)", recommended: false, cloud: true, subscription: true, flow: "xai-device", key_set: false},
+          {key: "nous", label: "Nous Portal (assinatura)", recommended: false, cloud: true, subscription: true, key_set: false},
           {key: "anthropic", label: "Anthropic", recommended: true, cloud: true, key_set: !!m.llm_key},
           {key: "fireworks", label: "Fireworks", recommended: false, cloud: true, key_set: !!m.llm_key},
           {key: "openai", label: "OpenAI", recommended: false, cloud: true, key_set: !!m.llm_key},
           {key: "zai", label: "Z.ai (GLM, plano coding)", recommended: false, cloud: true, key_set: !!m.llm_key},
-          {key: "lmstudio", label: "LM Studio (local, sem chave)", recommended: false, cloud: false, key_set: false},
+          {key: "gemini", label: "Google Gemini (chave do AI Studio)", recommended: false, cloud: true, key_set: !!m.llm_key},
           {key: "custom", label: "Outro (OpenAI-compatível)", recommended: false, cloud: true, key_set: !!m.llm_key},
         ],
         embeddings: [
@@ -945,6 +951,13 @@ V.memoria = () => {
     <div class="msg" id="m"></div>
     ${nav({main: "Ativar", skip: "Fazer depois"})}`;
 
+  const authChip = key => {
+    const a = m.llm_auth || {};
+    if (a.provider !== key) return "";
+    if (a.state === "ok") return '<span class="pill ok" style="margin-left:6px">autenticado</span>';
+    if (a.state === "pending") return '<span class="pill warn" style="margin-left:6px">autenticar</span>';
+    return "";
+  };
   const renderSlot = (slot, title) => {
     const list = listFor(slot);
     const curKey = chosen[slot];
@@ -955,7 +968,11 @@ V.memoria = () => {
       <select id="prov-${slot}">
         ${list.map(it => `<option value="${esc(it.key)}" ${it.key === curKey ? "selected" : ""}>${esc(it.label)}${it.recommended ? " — ✓ recomendado" : ""}</option>`).join("")}
       </select>
-      ${p.cloud ? `<div style="margin-top:10px">
+      ${p.subscription ? `<label class="f" style="margin-top:10px;margin-bottom:0">
+        <span>Assinatura — sem chave de API${authChip(curKey)}</span>
+        <small>${esc(p.hint || "Autentique pelo botão abaixo; a credencial nunca passa pela tela.")}</small>
+        ${p.flow ? `<div style="margin-top:8px"><button class="btn" type="button" id="auth-llm">${m.llm_auth && m.llm_auth.state === "ok" && m.llm_auth.provider === curKey ? "Reautenticar" : "Autenticar"}</button></div>` : ""}
+      </label>` : p.cloud ? `<div style="margin-top:10px">
         <label class="f" style="margin-bottom:${needModelUrl ? "10px" : "0"}">
           <span>API key ${p.key_set ? '<span class="pill ok" style="margin-left:6px">chave já salva</span>' : ""}</span>
           <input type="password" id="key-${slot}" placeholder="${p.key_set ? "deixe vazio para manter a atual" : "cole a chave aqui"}" autocomplete="off">
@@ -997,6 +1014,24 @@ V.memoria = () => {
       const sEl = $("#prov-" + slot);
       if (sEl) sEl.onchange = () => { chosen[slot] = sEl.value; drawDetails(); };
     });
+    const aBtn = $("#auth-llm");
+    if (aBtn) aBtn.onclick = async () => {
+      busy(aBtn, true, "Autenticando…");
+      const log = $("#log");
+      try {
+        const r = await act("memory_auth", {provider: chosen.llm});
+        if (r.job) {
+          const j = await waitJob(r.job, jj => tickLog(log, jj));
+          if (j.status === "error") return msg($("#m"), "err", (j.result && j.result.error) || "não consegui autenticar");
+          if (j.result && j.result.ok === false)
+            msg($("#m"), "late", "Autenticação não completou — o log acima diz o que faltou.");
+          else msg($("#m"), "ok", "✓ Autenticado.");
+        }
+        await refresh();
+        Object.assign(m, S.memory || {});
+        drawDetails();
+      } catch (e) { msg($("#m"), "err", e.message); } finally { busy(aBtn, false); }
+    };
   };
 
   $$(".opt").forEach(o => o.onclick = () => { sel = o.dataset.m; drawDetails(); });
@@ -1028,7 +1063,7 @@ V.memoria = () => {
       : (sel === "embed" ? [["embeddings", "Embeddings"], ["reranker", "Reranker"]] : []);
     for (const [slot, label] of checkSlots) {
       const p = getProv(slot, body[slot].provider);
-      if (p && p.cloud && !p.key_set && !body[slot].key) {
+      if (p && p.cloud && !p.subscription && !p.key_set && !body[slot].key) {
         return msg($("#m"), "err", `Cole a API key de ${label} (${p.label}) — ou escolha "Fazer depois".`);
       }
     }

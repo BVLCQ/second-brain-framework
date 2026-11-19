@@ -1142,10 +1142,14 @@ def cli(args, brain) -> None:
     c = args.mcmd
     mem = brain.inst.cfg["memory"]
     # --mode é justamente o que liga o engine: setup com --mode passa mesmo com engine = "none"
-    if mem["engine"] != "hindsight" and c not in ("status", "cost", "dossier", "eval", "providers", "supersede") \
+    if mem["engine"] != "hindsight" and c not in ("status", "cost", "dossier", "eval", "providers", "supersede", "auth") \
             and not (c == "setup" and getattr(args, "mode", None)):
         raise util.BrainError("memória desligada: ponha [memory] engine = \"hindsight\" no config/brain.toml "
                               "depois de subir o servidor (guides/memory.md)", code=1)
+    if c == "auth":
+        from .setup import _SayOnly, run_llm_auth
+        run_llm_auth(brain, _SayOnly(), args.provider)
+        return
     if c == "setup":
         _headless = ("provider", "embeddings", "reranker", "key", "emb_key", "reranker_key", "model", "approval")
         if any(getattr(args, k, None) for k in _headless):

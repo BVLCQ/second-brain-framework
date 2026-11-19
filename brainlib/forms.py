@@ -24,6 +24,11 @@ from dataclasses import asdict, dataclass, replace
 from datetime import date
 
 from . import dates, ids, util
+from . import providers as _providers
+
+# LLM por assinatura não tem chave de API: o campo some (autenticação é `brain memory auth`).
+_LLM_SUBSCRIPTIONS = tuple(p for p, v in _providers.PROVIDERS["llm"].items()
+                           if v.get("family") == "subscription")
 
 ELLIPSIS = "…"                       # obrigatório vazio no preview (o formulário não deixa confirmar assim)
 NONE = "—"                           # opção "sem valor" das listas
@@ -564,12 +569,14 @@ def _forms() -> list[Form]:
             F("model", "modelo", ph="vazio = recomendado do provedor", hint="provider_model", arg="--model"),
             F("base_url", "base URL", ph="custom / openai-wire", show={"provider": ["custom"]}, arg="--base-url"),
             F("key", "API key", ph="vazio = mantém a do config/.env", secret=True,
-              show={"provider!": ["local", "off", ""]}, arg="--key"),
+              show={"provider!": ["local", "off", "", *_LLM_SUBSCRIPTIONS]}, arg="--key"),
             F("models", "modelos por operação", ph="retain=…,consolidation=… (vazio = recomendados)",
               show={"slot": ["llm"]}, arg="--models"),
             F("candidates", "top-N candidatos", ph="vazio = default do provedor",
               show={"slot": ["reranker"], "provider!": ["off"]}, arg="--candidates")),
-            sub="A escolha vai ao config/.env (chave nunca volta em output) e ao [memory]. Trocou embeddings? vetores "
+            sub="A escolha vai ao config/.env (chave nunca volta em output) e ao [memory]. Provedor de LLM por "
+                "assinatura (claude-code, xai-oauth…) não tem chave de API: autentique com `brain memory auth "
+                "<provedor>`. Trocou embeddings? vetores "
                 "antigos ficam incompatíveis — brain memory rebuild. Depois recrie o container (modo full inclui o "
                 "override): docker compose -f services/compose.yaml -f services/compose.full.yaml "
                 "--env-file config/.env up -d — no embed, sem o segundo -f. Full é só-nuvem: embeddings locais "

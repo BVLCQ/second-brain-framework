@@ -21,6 +21,7 @@ import getpass
 import html
 import json
 import os
+import re
 import secrets
 import shutil
 import subprocess
@@ -773,6 +774,106 @@ def _providers_step(brain, ui, slots: list[str]) -> bool:
                    "re-deriva tudo do vault depois do wizard")
         changed = changed or bool(res["env"])
     return changed
+
+
+def _redact_token(text: str) -> str:
+    return re.sub(r"sk-ant-\S{6,}", "sk-ant-…", text)
+
+
+def _auth_claude_token(brain, ui) -> bool:
+    """claude-code: `claude setup-token` na máquina vira token de longo prazo no config/.env
+    (server-held token documentado do Hindsight) — o container lê pelo env_file."""
+    claude = shutil.which("claude")
+    if not claude:
+        ui.say("✗ Claude Code CLI não encontrado na máquina — instale (`npm install -g @anthropics/claude-code` "
+               "ou `brew install anthropic/claude-code/claude-code`), entre na sua conta e rode de novo")
+        return False
+    ui.say("gerando o token de longo prazo (claude setup-token)…")
+    code, out = _run([claude, "setup-token"], timeout=180)
+    m = re.search(r"sk-ant-[A-Za-z0-9_\-]{16,}", out or "")
+    if code != 0 or not m:
+        ui.say("✗ o CLI não devolveu token — normalmente falta login: rode `claude` uma vez, entre na sua "
+               "conta no navegador e tente de novo (saída do CLI abaixo)")
+        for ln in (out or "").strip().splitlines()[-5:]:
+            ui.say("  " + _redact_token(ln))
+        return False
+    set_env(brain.inst, {"HINDSIGHT_API_LLM_API_KEY": m.group(0)})
+    ui.say("✓ token gravado no config/.env (HINDSIGHT_API_LLM_API_KEY, 0600) — nunca volta para a tela")
+    from . import memory
+    _full = " -f services/compose.full.yaml" if memory.mode(brain.inst.cfg["memory"]) == "full" else ""
+    ui.say(f"  para valer no servidor: docker compose -f services/compose.yaml{_full} "
+           "--env-file config/.env up -d")
+    return True
+
+
+def _stream_exec(cmd: list[str], ui, timeout: int = 420) -> int:
+    """Roda um comando narrando cada linha (device-code login: a URL/código precisa aparecer
+    ENQUANTO o processo espera a aprovação). Devolve o código de saída; -1 no timeout."""
+    try:
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                text=True, bufsize=1)
+    except OSError as e:
+        ui.say(f"✗ não consegui rodar {cmd[0]}: {e}")
+        return -1
+    try:
+        assert proc.stdout is not None
+        for ln in proc.stdout:
+            ln = ln.rstrip()
+            if ln:
+                ui.say("  " + ln)
+        proc.wait(timeout=timeout)
+        return proc.returncode
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        ui.say(f"✗ timeout ({timeout}s) — login não completou")
+        return -1
+
+
+def _auth_xai_device(brain, ui) -> bool:
+    """xai-oauth: login por código de dispositivo DENTRO do container — o store (com o refresh
+    token que gira a cada renovação) precisa do volume hindsight-auth, então o servidor é
+    recriado ANTES do login; a aprovação acontece no navegador de qualquer aparelho."""
+    if not docker_available():
+        ui.say("✗ Docker/OrbStack não encontrado — o login roda dentro do servidor de memória (container)")
+        return False
+    from . import memory
+    mem = brain.inst.cfg["memory"]
+    env_file = brain.inst.env_file if brain.inst.env_file.exists() else None
+    ui.say("subindo o servidor de memória com o volume de credenciais…")
+    mode = memory.mode(mem)
+    if not compose_up(mode, ui, env_file=env_file) or not wait_hindsight(mem["url"], 120):
+        ui.say(f"✗ Hindsight não respondeu em {mem['url']} — veja `docker logs hindsight`")
+        return False
+    ui.say("iniciando o login — abra a URL acima no navegador e aprove com a sua conta xAI")
+    code = _stream_exec(["docker", "exec", "hindsight", "/app/api/.venv/bin/python", "-m",
+                         "hindsight_api.engine.providers.xai_oauth_auth", "login"], ui)
+    if code != 0:
+        ui.say("✗ login não completou — manual: docker exec -it hindsight /app/api/.venv/bin/python "
+               "-m hindsight_api.engine.providers.xai_oauth_auth login")
+        return False
+    ui.say("✓ login gravado no servidor (volume hindsight-auth) — o access token renova sozinho")
+    return True
+
+
+def run_llm_auth(brain, ui, provider: str) -> bool:
+    """Autentica o provedor de assinatura do slot LLM — o MESMO fluxo no botão Autenticar do
+    painel e no `brain memory auth` (job visível: cada passo narrado, segredo nunca ecoa).
+    Devolve True com a credencial pronta; False narra o caminho exato do que faltou."""
+    from . import providers as prov
+    reg = prov.PROVIDERS["llm"].get(provider)
+    subs = [p for p, v in prov.PROVIDERS["llm"].items() if v.get("family") == "subscription"]
+    if os.environ.get("BRAIN_NIGHTLY") == "1":
+        raise util.BrainError("autenticar provedor é ato do dono presente — nunca no noturno", code=4)
+    if not reg or reg.get("family") != "subscription":
+        ui.say(f"✗ {provider!r} não é provedor de assinatura — use um de: {', '.join(subs)}")
+        return False
+    flow = prov.AUTH_FLOWS.get(provider, "")
+    if flow == "claude-token":
+        return _auth_claude_token(brain, ui)
+    if flow == "xai-device":
+        return _auth_xai_device(brain, ui)
+    ui.say(f"• {reg['label']}: ainda sem fluxo automático nesta instalação — {reg.get('setup_hint', '')}")
+    return False
 
 
 def _local_emb_model(brain) -> str:

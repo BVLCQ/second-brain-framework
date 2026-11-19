@@ -14,6 +14,8 @@ o wizard diz isso na tela e o doctor narra enquanto ativos.
 from __future__ import annotations
 
 import json
+import subprocess
+import time
 
 from . import config, util
 
@@ -30,6 +32,16 @@ _SUB_NOTE = "Custo incluído no plano, sujeito ao limite de taxa da assinatura."
 
 LOCAL_LLM_BLOCKED = frozenset({"lmstudio", "ollama", "llama.cpp"})
 
+# Fluxos de autenticação que o Brain consegue DIRIGIR (provedores de assinatura do slot LLM):
+#   claude-token → CLI `claude` na máquina: `claude setup-token` gera o token de longo prazo
+#                  (caminho "server-held token" documentado do Hindsight) que o Brain grava
+#                  no config/.env — sobrevive a recreate do container.
+#   xai-device   → device-code DENTRO do container (sem callback de navegador): o login
+#                  escreve ~/.hindsight/xai_oauth.json no volume hindsight-auth e o servidor
+#                  renova o token sozinho a cada uso.
+# Vazio = fluxo manual nesta instalação: o setup_hint carrega o caminho exato.
+AUTH_FLOWS = {"claude-code": "claude-token", "xai-oauth": "xai-device"}
+
 # key_env: onde a chave mora no .env (para o doctor conferir presença, nunca valor).
 PROVIDERS: dict[str, dict[str, dict]] = {
     "llm": {
@@ -40,7 +52,8 @@ PROVIDERS: dict[str, dict[str, dict]] = {
             "key_env": "",
             "cost_mode": "subscription",
             "rate_limit_note": _SUB_NOTE,
-            "setup_hint": "Autentique o Claude Code CLI (`claude login`) e confirme a sessão ativa antes de subir o servidor de memória.",
+            "setup_hint": "Autentique pelo botão Autenticar (painel) ou `brain memory auth claude-code`: "
+                          "o token de longo prazo do `claude setup-token` vai para o config/.env.",
         },
         "chatgpt": {
             "label": "ChatGPT (sign-in / assinatura Plus/Pro)",
@@ -48,7 +61,8 @@ PROVIDERS: dict[str, dict[str, dict]] = {
             "key_env": "",
             "cost_mode": "subscription",
             "rate_limit_note": _SUB_NOTE,
-            "setup_hint": "Faça sign-in na sua conta ChatGPT Plus/Pro para autorizar o uso na memória.",
+            "setup_hint": "Login por navegador no servidor de memória (hindsight-admin chatgpt login) — "
+                          "nesta instalação Docker é manual; prefira claude-code ou uma chave de API.",
         },
         "cursor": {
             "label": "Cursor (assinatura)",
@@ -56,7 +70,8 @@ PROVIDERS: dict[str, dict[str, dict]] = {
             "key_env": "",
             "cost_mode": "subscription",
             "rate_limit_note": _SUB_NOTE,
-            "setup_hint": "Entre com sua conta Cursor ativa e confirme a sessão da assinatura no ambiente do servidor.",
+            "setup_hint": "Exige o cursor-agent logado no servidor de memória — não disponível na instalação "
+                          "Docker do Brain; prefira claude-code ou uma chave de API.",
         },
         "github-copilot": {
             "label": "GitHub Copilot (assinatura)",
@@ -64,7 +79,8 @@ PROVIDERS: dict[str, dict[str, dict]] = {
             "key_env": "",
             "cost_mode": "subscription",
             "rate_limit_note": _SUB_NOTE,
-            "setup_hint": "Faça sign-in no GitHub Copilot com assinatura ativa antes de subir o container.",
+            "setup_hint": "Exige login do Copilot no servidor de memória, ou COPILOT_GITHUB_TOKEN/GH_TOKEN "
+                          "no config/.env (o container lê o arquivo inteiro).",
         },
         "xai-oauth": {
             "label": "xAI / SuperGrok (sign-in)",
@@ -72,7 +88,8 @@ PROVIDERS: dict[str, dict[str, dict]] = {
             "key_env": "",
             "cost_mode": "subscription",
             "rate_limit_note": _SUB_NOTE,
-            "setup_hint": "Faça sign-in na sua conta xAI / SuperGrok para vincular o plano ao servidor de memória.",
+            "setup_hint": "Autentique pelo botão Autenticar (painel) ou `brain memory auth xai-oauth`: "
+                          "código de dispositivo que você aprova no navegador; o token renova sozinho.",
         },
         "nous": {
             "label": "Nous Portal (assinatura)",
@@ -80,7 +97,8 @@ PROVIDERS: dict[str, dict[str, dict]] = {
             "key_env": "",
             "cost_mode": "subscription",
             "rate_limit_note": _SUB_NOTE,
-            "setup_hint": "Autentique sua assinatura no Nous Portal e confirme que a sessão está ativa.",
+            "setup_hint": "Exige o login do Hermes (hermes portal) no servidor de memória — nesta instalação "
+                          "Docker é manual; prefira claude-code ou uma chave de API.",
         },
         # ── Chave de API ─────────────────────────────────────────────────────
         "anthropic": {"label": "Anthropic", "family": "key", "cost_mode": "api_key", "recommended": True,
@@ -97,7 +115,7 @@ PROVIDERS: dict[str, dict[str, dict]] = {
         "zai": {"label": "Z.ai (GLM, plano coding)", "family": "key", "cost_mode": "api_key",
                 "base_url": "https://api.z.ai/api/coding/paas/v4",
                 "wire": "openai", "key_env": "HINDSIGHT_API_LLM_API_KEY"},
-        "gemini": {"label": "Google Gemini", "family": "key", "cost_mode": "api_key",
+        "gemini": {"label": "Google Gemini (chave do AI Studio)", "family": "key", "cost_mode": "api_key",
                    "key_env": "HINDSIGHT_API_LLM_API_KEY"},
         "custom": {"label": "Outro (OpenAI-compatível)", "family": "key", "cost_mode": "api_key",
                    "wire": "openai", "key_env": "HINDSIGHT_API_LLM_API_KEY"},
@@ -313,6 +331,58 @@ def stack(brain) -> dict:
                 "rate_limit_note": p.get("rate_limit_note", ""),
             })
         out[slot] = entry
+    return out
+
+
+_AUTH_CACHE: dict = {"at": 0.0, "value": None}
+
+
+def _container_store(run=None) -> bool | None:
+    """O store de credencial existe no servidor de memória? True/False; None = sem como ver
+    (Docker fora ou container ausente). Resultado guardado 60 s (o painel consulta a cada passo)."""
+    now = time.time()
+    if _AUTH_CACHE["value"] is None or now - _AUTH_CACHE["at"] > 60:
+        try:
+            res = (run or subprocess.run)(
+                ["docker", "exec", "hindsight", "sh", "-c", "test -f $HOME/.hindsight/xai_oauth.json"],
+                capture_output=True, text=True, timeout=10, check=False)
+            _AUTH_CACHE.update(at=now, value=(res.returncode == 0) if hasattr(res, "returncode") else bool(res))
+        except Exception:                                          # noqa: BLE001 — docker ausente/lento
+            _AUTH_CACHE.update(at=now, value=None)
+    return _AUTH_CACHE["value"]
+
+
+def auth_state(brain, run=None) -> dict[str, str]:
+    """Estado da credencial do provedor de LLM por assinatura (o access token o servidor
+    renova sozinho; o que morre e pede dono é o login/token raiz — é isso que se vigia).
+    `state`: ok (pronta) · pending (falta autenticar — `fix` carrega o comando) ·
+             unknown (não deu para verificar agora) · manual (sem verificação automática) ·
+             na (o slot não é assinatura)."""
+    provider = brain.inst.cfg["memory"].get("llm_provider", "")
+    p = PROVIDERS["llm"].get(provider) or {}
+    out: dict = {"provider": provider, "family": p.get("family", ""), "flow": AUTH_FLOWS.get(provider, ""),
+                 "state": "na", "note": "", "fix": ""}
+    if p.get("family") != "subscription":
+        return out
+    if provider == "claude-code":
+        env = config.load_env(brain.inst)
+        if env.get("HINDSIGHT_API_LLM_API_KEY"):
+            out.update(state="ok", note="token de longo prazo no config/.env")
+        else:
+            out.update(state="pending", fix="brain memory auth claude-code",
+                       note="sem token no config/.env (gere com `claude setup-token`)")
+        return out
+    if provider == "xai-oauth":
+        found = _container_store(run)
+        if found is None:
+            out.update(state="unknown", note="servidor de memória fora do ar — verifica ao subir")
+        elif found:
+            out.update(state="ok", note="login ativo no servidor de memória (renova sozinho)")
+        else:
+            out.update(state="pending", fix="brain memory auth xai-oauth",
+                       note="sem login no servidor de memória")
+        return out
+    out.update(state="manual", note=p.get("setup_hint", ""))
     return out
 
 

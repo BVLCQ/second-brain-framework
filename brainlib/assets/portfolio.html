@@ -1913,8 +1913,11 @@ SETUP.memoria = box => {
         '<p class="small" id="s-egress"' + (curEmb(false) === "local" ? " hidden" : "") + '>☁ com provedor de nuvem, o texto do vault vai à API para virar vetores.</p>' : "") +
       (sel === "full" ?
         '<div class="stgrid">' +
-        fld("LLM", '<select id="s-prov"><option value="anthropic"' + (m.llm_provider === "openai" ? "" : " selected") + '>Anthropic (Claude) — Haiku/Sonnet por operação</option><option value="openai"' + (m.llm_provider === "openai" ? " selected" : "") + ">OpenAI</option></select>") +
-        fld("API key (LLM)" + keyChip(m.llm_key), keyInp("s-key")) + "</div>" +
+        fld("LLM", '<select id="s-prov"><option value="anthropic"' + (m.llm_provider === "openai" ? "" : " selected") + '>Anthropic (Claude) — Haiku/Sonnet por operação</option><option value="openai"' + (m.llm_provider === "openai" ? " selected" : "") + '>OpenAI</option><option value="claude-code"' + (m.llm_provider === "claude-code" ? " selected" : "") + '>Claude Code (assinatura Pro/Max)</option><option value="xai-oauth"' + (m.llm_provider === "xai-oauth" ? " selected" : "") + ">xAI / SuperGrok (assinatura)</option></select>") +
+        '<div id="s-key-wrap">' + fld("API key (LLM)" + keyChip(m.llm_key), keyInp("s-key")) + "</div>" +
+        '<div id="s-auth-wrap" hidden>' + fld("Assinatura — sem chave de API" + ((m.llm_auth || {}).state === "ok" ? ' <span class="chip h-em-dia">autenticado</span>' : ((m.llm_auth || {}).state === "pending" ? ' <span class="chip h-late">autenticar</span>' : "")),
+          '<button class="btn" type="button" id="s-auth">' + ((m.llm_auth || {}).state === "ok" ? "Reautenticar" : "Autenticar") + "</button>",
+          "A credencial nasce aqui mesmo (job narrado) — nunca passa pela tela.") + "</div></div>" +
         '<div class="stgrid" id="s-model-wrap"' + (m.llm_provider === "openai" ? "" : " hidden") + ">" + fld("Modelo do LLM", '<input type="text" id="s-model" placeholder="gpt-… (exigido no OpenAI)">') + "</div>" +
         '<div class="stgrid">' + fld("Embeddings", selHTML(embOpts(true), curEmb(true), "s-emb")) +
         '<div id="s-ekey-wrap">' + fld("API key do embeddings" + keyChip(m.emb_key), keyInp("s-ekey"), "Fireworks ou OpenAI — conta própria do embeddings.") + "</div></div>" +
@@ -1934,7 +1937,10 @@ SETUP.memoria = box => {
         if (q("#s-lms")) q("#s-lms").hidden = !q("#s-emb") || q("#s-emb").value !== "local";
       } else if (sel === "full" && q("#s-emb")) {
         const openai = q("#s-prov") && q("#s-prov").value === "openai";
+        const subscr = q("#s-prov") && ["claude-code", "xai-oauth"].includes(q("#s-prov").value);
         if (q("#s-model-wrap")) q("#s-model-wrap").hidden = !openai;
+        if (q("#s-key-wrap")) q("#s-key-wrap").hidden = !!subscr;
+        if (q("#s-auth-wrap")) q("#s-auth-wrap").hidden = !subscr;
         const same = openai && q("#s-emb").value === "openai";
         if (q("#s-ekey-wrap")) q("#s-ekey-wrap").hidden = same;
         if (q("#s-samekey")) q("#s-samekey").hidden = !same;
@@ -1961,7 +1967,10 @@ SETUP.memoria = box => {
         body.reranker_key = q("#s-rkey") ? q("#s-rkey").value : "";
         body.consent = q("#s-consent").checked;
         if (!body.consent) return stMsg(q("#s-m"), "late", "marque o aceite de envio à API");
-        if (!body.key && !m.llm_key) return stMsg(q("#s-m"), "late", "cole a API key do LLM");
+        const subscr = ["claude-code", "xai-oauth"].includes(body.provider);
+        if (!subscr && !body.key && !m.llm_key) return stMsg(q("#s-m"), "late", "cole a API key do LLM");
+        if (subscr && (m.llm_auth || {}).state === "pending" && (m.llm_auth || {}).provider === body.provider)
+          return stMsg(q("#s-m"), "late", "autentique a assinatura primeiro (botão Autenticar ao lado)");
         if (body.provider === "openai" && !body.model) return stMsg(q("#s-m"), "late", "digite o modelo do OpenAI");
         const sameAcct = body.provider === "openai" && body.embeddings === "openai";
         if (!sameAcct && !body.emb_key && !m.emb_key) return stMsg(q("#s-m"), "late", "cole a API key do embeddings (" + (body.embeddings === "fireworks" ? "Fireworks" : "OpenAI") + ")");
@@ -1980,6 +1989,19 @@ SETUP.memoria = box => {
           const j = await obJob(r.job, jj => { log.textContent = (jj.log || []).join("\n"); log.scrollTop = 1e9; });
           if (j.status === "error") return stMsg(q("#s-m"), "late", (j.result && j.result.error) || "não consegui mudar a memória"); }
         await obState(); toast("memória: modo " + (MEM_LABEL[SS.memory.mode] || SS.memory.mode)); SETUP.memoria(box);
+      } catch (err) { stMsg(q("#s-m"), "late", err.message); }
+    });
+    const authBtn = q("#s-auth");
+    if (authBtn) authBtn.onclick = e => stBusy(e.currentTarget, "autenticando…", async () => {
+      try {
+        const r = await obAct("memory_auth", {provider: q("#s-prov").value});
+        if (r.job) { const log = q("#s-log"); log.hidden = false;
+          const j = await obJob(r.job, jj => { log.textContent = (jj.log || []).join("\n"); log.scrollTop = 1e9; });
+          if (j.status === "error") return stMsg(q("#s-m"), "late", (j.result && j.result.error) || "não consegui autenticar");
+          stMsg(q("#s-m"), (j.result && j.result.ok === false) ? "late" : "ok",
+                (j.result && j.result.ok === false) ? "autenticação não completou — o log acima diz o que faltou" : "✓ autenticado");
+        }
+        await obState(); SETUP.memoria(box);
       } catch (err) { stMsg(q("#s-m"), "late", err.message); }
     });
   };
@@ -4099,11 +4121,17 @@ OBV.memoria = () => {
     ? m.providers
     : {
         llm: [
+          {key: "claude-code", label: "Claude Code (assinatura Claude Pro/Max)", recommended: false, cloud: true, subscription: true, flow: "claude-token", key_set: false},
+          {key: "chatgpt", label: "ChatGPT (sign-in / assinatura Plus/Pro)", recommended: false, cloud: true, subscription: true, key_set: false},
+          {key: "cursor", label: "Cursor (assinatura)", recommended: false, cloud: true, subscription: true, key_set: false},
+          {key: "github-copilot", label: "GitHub Copilot (assinatura)", recommended: false, cloud: true, subscription: true, key_set: false},
+          {key: "xai-oauth", label: "xAI / SuperGrok (sign-in)", recommended: false, cloud: true, subscription: true, flow: "xai-device", key_set: false},
+          {key: "nous", label: "Nous Portal (assinatura)", recommended: false, cloud: true, subscription: true, key_set: false},
           {key: "anthropic", label: "Anthropic", recommended: true, cloud: true, key_set: !!m.llm_key},
           {key: "fireworks", label: "Fireworks", recommended: false, cloud: true, key_set: !!m.llm_key},
           {key: "openai", label: "OpenAI", recommended: false, cloud: true, key_set: !!m.llm_key},
           {key: "zai", label: "Z.ai (GLM, plano coding)", recommended: false, cloud: true, key_set: !!m.llm_key},
-          {key: "lmstudio", label: "LM Studio (local, sem chave)", recommended: false, cloud: false, key_set: false},
+          {key: "gemini", label: "Google Gemini (chave do AI Studio)", recommended: false, cloud: true, key_set: !!m.llm_key},
           {key: "custom", label: "Outro (OpenAI-compatível)", recommended: false, cloud: true, key_set: !!m.llm_key},
         ],
         embeddings: [
@@ -4163,6 +4191,13 @@ OBV.memoria = () => {
     '<div class="msg" id="m"></div>' +
     obNav({main: "Ativar", skip: "Fazer depois"}));
 
+  const authChip = key => {
+    const a = m.llm_auth || {};
+    if (a.provider !== key) return "";
+    if (a.state === "ok") return '<span class="pill ok" style="margin-left:6px">autenticado</span>';
+    if (a.state === "pending") return '<span class="pill warn" style="margin-left:6px">autenticar</span>';
+    return "";
+  };
   const renderSlot = (slot, title) => {
     const list = listFor(slot);
     const curKey = chosen[slot];
@@ -4173,7 +4208,13 @@ OBV.memoria = () => {
       '<select id="prov-' + slot + '">' +
         list.map(it => '<option value="' + esc(it.key) + '" ' + (it.key === curKey ? "selected" : "") + ">" + esc(it.label) + (it.recommended ? " — ✓ recomendado" : "") + "</option>").join("") +
       "</select>" +
-      (p.cloud ? '<div style="margin-top:10px">' +
+      (p.subscription ? '<label class="f" style="margin-top:10px;margin-bottom:0">' +
+        "<span>Assinatura — sem chave de API" + authChip(curKey) + "</span>" +
+        '<small>' + esc(p.hint || "Autentique pelo botão abaixo; a credencial nunca passa pela tela.") + "</small>" +
+        (p.flow ? '<div style="margin-top:8px"><button class="btn sm" type="button" id="auth-llm">' +
+          (m.llm_auth && m.llm_auth.state === "ok" && m.llm_auth.provider === curKey ? "Reautenticar" : "Autenticar") +
+          "</button></div>" : "") +
+      "</label>" : p.cloud ? '<div style="margin-top:10px">' +
         '<label class="f" style="margin-bottom:' + (needModelUrl ? "10px" : "0") + '">' +
           "<span>API key " + (p.key_set ? '<span class="pill ok" style="margin-left:6px">chave já salva</span>' : "") + "</span>" +
           '<input type="password" id="key-' + slot + '" placeholder="' + (p.key_set ? "deixe vazio para manter a atual" : "cole a chave aqui") + '" autocomplete="off">' +
@@ -4216,6 +4257,24 @@ OBV.memoria = () => {
       const sEl = $("#prov-" + slot);
       if (sEl) sEl.onchange = () => { chosen[slot] = sEl.value; drawDetails(); };
     });
+    const aBtn = $("#auth-llm");
+    if (aBtn) aBtn.onclick = async () => {
+      obBusy(aBtn, true, "Autenticando…");
+      const log = $("#log");
+      try {
+        const r = await obAct("memory_auth", {provider: chosen.llm});
+        if (r.job) {
+          const j = await obJob(r.job, jj => obTickLog(log, jj));
+          if (j.status === "error") return obMsg($("#m"), "err", (j.result && j.result.error) || "não consegui autenticar");
+          if (j.result && j.result.ok === false)
+            obMsg($("#m"), "late", "Autenticação não completou — o log acima diz o que faltou.");
+          else obMsg($("#m"), "ok", "✓ Autenticado.");
+        }
+        await obRefresh();
+        Object.assign(m, OBS.memory || {});
+        drawDetails();
+      } catch (e) { obMsg($("#m"), "err", e.message); } finally { obBusy(aBtn, false); }
+    };
   };
 
   obAll("#view .opt").forEach(o => o.onclick = () => { sel = o.dataset.m; drawDetails(); });
@@ -4247,7 +4306,7 @@ OBV.memoria = () => {
       : (sel === "embed" ? [["embeddings", "Embeddings"], ["reranker", "Reranker"]] : []);
     for (const pair of checkSlots) {
       const p = getProv(pair[0], body[pair[0]].provider);
-      if (p && p.cloud && !p.key_set && !body[pair[0]].key) {
+      if (p && p.cloud && !p.subscription && !p.key_set && !body[pair[0]].key) {
         return obMsg($("#m"), "err", 'Cole a API key de ' + pair[1] + " (" + p.label + ') — ou escolha "Fazer depois".');
       }
     }

@@ -1601,6 +1601,10 @@ def build_parser() -> argparse.ArgumentParser:
     pv.add_argument("--dimensions", type=int, default=0, help="embeddings: dimensão de saída (ex.: 1536 MRL)")
     pv.add_argument("--candidates", type=int, default=0, help="reranker: top-N candidatos (default do provedor)")
     pv.add_argument("--key", help="chave da API — vai ao config/.env (0600), nunca volta em output")
+    xa = ms.add_parser("auth", help="autentica o provedor de assinatura do LLM (claude-code: token de longo "
+                                    "prazo via `claude setup-token` · xai-oauth: código de dispositivo no servidor)")
+    xa.add_argument("provider", help="provedor de assinatura: claude-code | xai-oauth (demais: caminho manual "
+                                     "no `brain memory providers`)")
     x = ms.add_parser("eval", help="roda o conjunto-ouro contra as pernas do sistema (Fase 0)")
     x.add_argument("--gold", help="caminho do gold (padrão vault/eval/memory-gold.jsonl)")
     x.add_argument("--route", choices=["on", "off", "ledger"], default="on",

@@ -297,6 +297,33 @@ Regras do desenho:
 - `jina-mlx` existe no servidor mas **fica fora do menu** — benchmark 2026-11-07 reprovou
   (§4.2 do plano da memória).
 
+### LLM por assinatura — sem chave de API (botão Autenticar)
+
+O slot LLM aceita provedores por **assinatura**: `claude-code` (Pro/Max), `xai-oauth`
+(SuperGrok), `chatgpt`, `cursor`, `github-copilot`, `nous`. Nenhum deles pede chave na
+tela — o campo some e no lugar entra um bloco **Autenticar** (wizard e Configurações ›
+Memória), com o chip de estado: *autenticado* ✓ / *autenticar* ⚠.
+
+| Provedor | Como autentica | O que o Brain dirige |
+|---|---|---|
+| `claude-code` | `claude setup-token` na máquina → token de longo prazo no `config/.env` (`HINDSIGHT_API_LLM_API_KEY`, o caminho *server-held token* do Hindsight — sobrevive a recreate) | Sim, ponta a ponta (`brain memory auth claude-code`): exige o CLI `claude` logado na máquina |
+| `xai-oauth` | device-code DENTRO do container: URL + código que você aprova em qualquer navegador; store no volume `hindsight-auth` | Sim (`brain memory auth xai-oauth`): sobe o servidor com o volume e narra a URL no job |
+| `chatgpt` · `cursor` · `github-copilot` · `nous` | login no servidor de memória (navegador/CLI do próprio provedor) | Não nesta instalação Docker — o hint do provedor carrega o caminho exato |
+
+**Renovação (o que é automático e o que não é):** o *access token* o Hindsight renova
+sozinho (proativo antes de expirar, reativo no 401 — cada provedor gira o próprio store).
+O que eventualmente morre é o **login/token raiz** — e aí nenhuma renovação silenciosa é
+possível nem desejável (é um ato do dono). O Brain vigia por três frentes: o chip de
+estado na tela, o **doctor** (assinatura sem credencial = erro nomeando o comando) e o
+**noturno**, que abre uma tarefa `mine` com o comando exato quando a credencial fica
+pendente — a memória nunca morre em silêncio. Reautenticar é clicar o mesmo botão
+(vira "Reautenticar") ou rodar o `brain memory auth <provedor>` de novo.
+
+Nota ToS (documentada do Hindsight): provedores por assinatura são para **uso pessoal,
+máquina local** — exatamente o caso do Brain. Para uso compartilhado/servidor, use
+provedor de chave (`anthropic`, `gemini`…). O Google **não tem** faixa de assinatura no
+Hindsight: Gemini (`gemini-3.8-flash` default) é pela chave do AI Studio.
+
 ## Migração de instâncias antigas (0.10.x · dois bancos · sem harnesses)
 
 1. **Atualize o servidor** — `guides/memory.md` § *Atualizar o Hindsight de versão*

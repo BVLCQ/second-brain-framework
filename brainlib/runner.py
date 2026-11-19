@@ -239,6 +239,30 @@ def nightly(brain, skip_agent: bool = False) -> dict:
         from . import memory
         step("memória", lambda: (lambda r: f"{r['sent']} enviados, {r['remaining']} pendentes"
                                                    + (f", {len(r['resent'])} reenviados por retain falho" if r.get("resent") else ""))(memory.sync(brain)))
+        from . import providers as _prov
+
+        def _auth_guard() -> str:
+            # o access token o Hindsight renova sozinho; o que mata a memória é o login/token
+            # raiz expirado — vira tarefa acionável do dono (uma só), não falha do noturno
+            auth = _prov.auth_state(brain)
+            st = auth.get("state", "na")
+            if st != "pending":
+                return {"ok": "autenticada", "unknown": "não verificada (servidor fora do ar?)",
+                        "manual": "verificação manual", "na": "não é assinatura"}.get(st, st)
+            fix = auth.get("fix") or "brain memory auth"
+            title = f"Reautenticar a memória ({auth.get('provider')}) — {fix}"
+            if any(a.open and a.title == title for a in brain.state.actions.values()):
+                return "pendente — tarefa já aberta no TODO"
+            brain.record_one({"type": "action.opened", "by": "agent", "prov": "observado", "source": "nightly",
+                              "data": {"title": title, "owner": brain.owner, "list": "mine", "due": None,
+                                       "due_suggested": None, "due_reason": "",
+                                       "due_none_reason": "reautenticação pede o dono presente (login/token) — "
+                                                          "rode o comando do título",
+                                       "effort_min": None, "project": None, "deliverable": None, "blocked_by": [],
+                                       "unblocks": [], "people": [], "priority": None, "link": "",
+                                       "origin": "nightly"}})
+            return "pendente — tarefa aberta no TODO"
+        step("memória autenticação", _auth_guard)
     bk = brain.inst.cfg["backup"]
     if bk["enabled"] and util.today().isoweekday() == bk["weekday"]:
         from . import backup

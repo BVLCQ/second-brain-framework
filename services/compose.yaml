@@ -53,6 +53,9 @@ services:
         required: false
     volumes:
       - hindsight-data:/home/hindsight/.pg0
+      # Store de credenciais dos provedores de ASSINATURA (login xai-oauth, chatgpt…): o
+      # Hindsight persiste aí cada token renovado — sem o volume, um recreate apagaria o login.
+      - hindsight-auth:/home/hindsight/.hindsight
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request,sys; sys.exit(0 if b'connected' in urllib.request.urlopen('http://127.0.0.1:8888/health', timeout=5).read() else 1)"]
       interval: 30s

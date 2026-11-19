@@ -338,8 +338,17 @@ def checks(brain, online: bool = False, probe_agent: bool = False, docker_probe=
                 out.append(_c("error", "memória · LLM",
                               f"provedor desconhecido ({llm_prov}) — escolha via `brain memory providers`"))
             elif llm_p.get("family") == "subscription":
-                out.append(_c("ok", "memória · LLM",
-                              f"{llm_p['label']} (assinatura — {llm_p['rate_limit_note']})"))
+                auth = _prov.auth_state(brain)
+                if auth.get("state") == "pending":
+                    llm_ok = False
+                    out.append(_c("error", "memória · LLM",
+                                  f"{llm_p['label']} sem credencial — {auth.get('note', '')} · {auth.get('fix', '')}"))
+                elif auth.get("state") == "unknown":
+                    out.append(_c("warn", "memória · LLM",
+                                  f"{llm_p['label']} (assinatura — {auth.get('note') or 'autenticação não verificada'})"))
+                else:
+                    note = auth.get("note") if auth.get("state") == "ok" else f"verificação manual: {auth.get('note', '')}"
+                    out.append(_c("ok", "memória · LLM", f"{llm_p['label']} (assinatura — {note})"))
             else:
                 kenv = llm_p.get("key_env", "")
                 if kenv and not env.get(kenv):

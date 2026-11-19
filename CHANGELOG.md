@@ -1,3 +1,27 @@
+## 2.32.0 — assinatura sem chave na tela: botão Autenticar e memória vigiada
+
+- **Provedor de LLM por assinatura não pede mais chave na tela.** Escolher `Claude Code
+  (assinatura Pro/Max)` — ou `xAI / SuperGrok`, `ChatGPT`, `Cursor`, `Copilot`, `Nous` —
+  no passo Motores faz o campo de API key sumir; no lugar nasce o bloco **Autenticar**,
+  com o chip de estado (*autenticado* ✓ / *autenticar* ⚠). Vale no wizard do painel, na
+  página Configurações › Memória e no formulário de provedores da TUI. Antes o campo
+  aparecia — e o assistente ainda travava a ativação pedindo uma chave que esse tipo de
+  provedor não tem.
+- **O botão Autenticar roda o fluxo de verdade, narrado:** `claude-code` gera o token de
+  longo prazo (`claude setup-token`) e grava direto no `config/.env` — nunca passa pela
+  tela; `xai-oauth` sobe o servidor com o novo volume de credenciais e narra a URL do
+  código de dispositivo para você aprovar no navegador. O mesmo fluxo existe no terminal:
+  `brain memory auth claude-code` (ou `xai-oauth`).
+- **A memória não morre em silêncio.** O access token o servidor de memória renova
+  sozinho; o que pode expirar é o login raiz — e para isso o doctor agora aponta o erro
+  com o comando exato, e o noturno abre uma tarefa no seu TODO ("Reautenticar a
+  memória…") no mesmo dia em que a credencial fica pendente. Reautenticar é o mesmo
+  botão (vira "Reautenticar") ou o mesmo comando.
+- **Google Gemini esclarecido no menu:** não há faixa de assinatura do Google no servidor
+  de memória — o Gemini (default `gemini-3.8-flash`) entra pela **chave do AI Studio**, e
+  o rótulo do provedor agora diz isso. O Gemini também voltou ao cardápio do wizard
+  (tinha sumido da lista reserva).
+
 ## 2.31.1 — passos do wizard sempre à vista
 
 - **A lista de passos da configuração guiada usa a altura de que precisa**
