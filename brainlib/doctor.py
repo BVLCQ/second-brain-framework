@@ -66,9 +66,32 @@ def _machine_checks(cfg: dict, which=shutil.which, exists=None) -> list[dict]:
             "warn", "máquina",
             "docker ausente com memória ligada — OrbStack no macOS (brew install --cask orbstack) "
             "ou Docker Engine no Linux (curl -fsSL https://get.docker.com | sh)"))
+        _lms_machine_check(cfg, out)
     elif not docker:
         out.append(_c("ok", "máquina", "docker ausente — só é preciso ao ligar a memória (embed/full)"))
     return out
+
+
+def _lms_machine_check(cfg: dict, out: list) -> None:
+    """Embeddings locais do modo embed: o LM Studio precisa existir e responder. Warn, nunca
+    error (a saída gateia o modal da TUI) — e a dica acompanha o estado real: instalado com
+    servidor desligado ≠ ausente (o `brain setup --only memoria` resolve os dois sozinho)."""
+    from . import memory as _memory, setup
+    mem = cfg.get("memory") or {}
+    # exige a chave explícita (configs carregadas sempre a trazem pelo DEFAULTS): dict de teste
+    # mínimo não aciona probe de rede
+    if _memory.mode(mem) != "embed" or mem.get("cloud_embeddings") \
+            or mem.get("embeddings_provider") != "local":
+        return
+    state = setup.lmstudio_state()
+    if state == "up":
+        out.append(_c("ok", "máquina", "LM Studio respondendo em :1234 (embeddings locais)"))
+    elif state == "installed":
+        out.append(_c("warn", "máquina", "LM Studio instalado com o servidor desligado — "
+                                   "`brain setup --only memoria` sobe e configura o modelo"))
+    else:
+        out.append(_c("warn", "máquina", "LM Studio ausente — `brain setup --only memoria` baixa e "
+                                         "configura (instalador oficial, embeddings locais)"))
 
 
 def _lms_reachable(http_get=None) -> bool:

@@ -248,6 +248,36 @@ class MachineChecksTests(unittest.TestCase):
                 for ex in (None, (lambda p: False)):
                     self.assertFalse([c for c in self._cks(engine, wm, ex) if c["level"] == "error"])
 
+    def test_lmstudio_check_acompanha_o_estado_real(self):
+        from unittest import mock
+        from brainlib import setup
+        cfg = {"memory": {"engine": "hindsight", "embeddings_provider": "local"}}
+        which_ok = {"git": "/g", "mise": "/m", "docker": "/d"}
+        for state, fragment in (("installed", "servidor desligado"),
+                                ("missing", "LM Studio ausente")):
+            with mock.patch.object(setup, "lmstudio_state", return_value=state):
+                cks = doctor._machine_checks(cfg, which=lambda c: which_ok.get(c))
+            lms = [c for c in cks if "LM Studio" in c["detail"]]
+            self.assertEqual(len(lms), 1)
+            self.assertEqual(lms[0]["level"], "warn")                 # warn, nunca error (modal da TUI)
+            self.assertIn(fragment, lms[0]["detail"])
+            self.assertIn("setup --only memoria", lms[0]["detail"])   # a dica resolve sozinha
+        with mock.patch.object(setup, "lmstudio_state", return_value="up"):
+            cks = doctor._machine_checks(cfg, which=lambda c: which_ok.get(c))
+        self.assertTrue(any(c["level"] == "ok" and "LM Studio respondendo" in c["detail"] for c in cks))
+
+    def test_lmstudio_check_so_no_embed_local(self):
+        from unittest import mock
+        from brainlib import setup
+        with mock.patch.object(setup, "lmstudio_state", return_value="missing") as ms:
+            # full é só-nuvem; nuvem de embeddings; e dict mínimo sem a chave não probeia rede
+            doctor._machine_checks({"memory": {"engine": "hindsight", "extract": True,
+                                               "embeddings_provider": "local"}}, which=lambda c: None)
+            doctor._machine_checks({"memory": {"engine": "hindsight",
+                                               "embeddings_provider": "fireworks"}}, which=lambda c: None)
+            doctor._machine_checks({"memory": {"engine": "hindsight"}}, which=lambda c: None)
+        self.assertFalse(ms.called)
+
 
 if __name__ == "__main__":
     unittest.main()

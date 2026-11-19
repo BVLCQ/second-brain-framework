@@ -427,5 +427,178 @@ class PainelPinTests(unittest.TestCase):
         self.assertTrue(any("atalho de um clique" in m for m in ui.log))
 
 
+class LmStudioTests(unittest.TestCase):
+    """Probe granular + lmstudio_ensure: o Brain instala, sobe e configura o LM Studio sozinho
+    (ruling 2026-11-19 — instalado nunca mais vira "falta — baixar")."""
+
+    def test_state_distingue_up_instalado_e_ausente(self):
+        from unittest import mock
+        app = Path("/Applications/LM Studio.app")
+        self.assertEqual(setup.lmstudio_state(up=True), "up")
+        self.assertEqual(setup.lmstudio_state(up=False, which=lambda c: None,
+                                              exists=lambda p: p == app), "installed")
+        self.assertEqual(setup.lmstudio_state(up=False, which=lambda c: "/usr/local/bin/lms",
+                                              exists=lambda p: False), "installed")
+        with tempfile.TemporaryDirectory() as td:                    # sem lms no PATH, sem app
+            with mock.patch.dict(os.environ, {"HOME": td}), \
+                    mock.patch.object(setup, "_LMS_APP_DIRS", ()):
+                self.assertEqual(setup.lmstudio_state(up=False, which=lambda c: None), "missing")
+
+    def _nua(self, home: Path):
+        """run fake da máquina nua: bash install.sh cria o lms; lms responde por subcomando."""
+        disk: list[str] = []
+
+        def fake_run(cmd, cwd=None, timeout=120):
+            if cmd[0] == "bash":
+                b = home / ".lmstudio" / "bin"
+                b.mkdir(parents=True, exist_ok=True)
+                f = b / "lms"
+                f.write_text("#!/bin/sh\n", encoding="utf-8")
+                f.chmod(0o755)                                        # `which` exige executável
+                return 0, "installed"
+            a = cmd[1:]
+            if a[:1] == ["ls"]:
+                return 0, " \n".join(disk) or "(vazio)"
+            if a[:2] == ["server", "start"]:
+                return 0, "started"
+            if a[:1] == ["get"]:
+                disk.append("text-embedding-bge-m3")
+                return 0, "downloaded"
+            if a[:1] == ["load"]:
+                return 0, "loaded"
+            return 1, f"? {cmd}"
+
+        return fake_run, disk
+
+    def test_ensure_na_maquina_nua_instala_sobe_baixa_e_carrega(self):
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as td:
+            home = Path(td)
+            fake_run, _ = self._nua(home)
+            with mock.patch.dict(os.environ, {"HOME": td}), \
+                    mock.patch.object(setup, "_LMS_APP_DIRS", ()), \
+                    mock.patch.object(setup, "_fetch",
+                                      side_effect=lambda url, dest, timeout=120:
+                                      (dest.write_text("#!/bin/sh\n", encoding="utf-8"), None)[1]):
+                # 1ª leitura (antes do server start) falsa, demais verdadeiras:
+                ups = iter([False, True, True, True])
+                with mock.patch.object(setup, "lmstudio_up", side_effect=lambda: next(ups, True)):
+                    ui = ScriptedUI([])
+                    ok = setup.lmstudio_ensure(ui, run=fake_run, which=lambda c: None)
+            self.assertTrue(ok, ui.said)
+            self.assertTrue(any("LM Studio instalado" in s for s in ui.said))
+            self.assertTrue(any("servidor do LM Studio no ar" in s for s in ui.said))
+            self.assertTrue(any("modelo text-embedding-bge-m3 no disco" in s for s in ui.said))
+            self.assertTrue(any("modelo text-embedding-bge-m3 carregado" in s for s in ui.said))
+
+    def test_ensure_com_modelo_ausente_baixa(self):
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as td:
+            home = Path(td)
+            fake_run, _ = self._nua(home)
+            lms = home / ".lmstudio" / "bin" / "lms"                  # já instalado, sem app
+            lms.parent.mkdir(parents=True, exist_ok=True)
+            lms.write_text("#!/bin/sh\n", encoding="utf-8")
+            lms.chmod(0o755)
+            got: list[list[str]] = []
+            orig = fake_run
+
+            def run_rec(cmd, cwd=None, timeout=120):
+                if cmd[:1] == [str(lms)] and cmd[1:2] == ["get"]:
+                    got.append(cmd[1:])
+                return orig(cmd, cwd=cwd, timeout=timeout)
+
+            with mock.patch.dict(os.environ, {"HOME": td}), \
+                    mock.patch.object(setup, "_LMS_APP_DIRS", ()):
+                # 1ª leitura (antes do server start) falsa, demais verdadeiras:
+                ups = iter([False, True, True])
+                with mock.patch.object(setup, "lmstudio_up", side_effect=lambda: next(ups, True)):
+                    ui = ScriptedUI([])
+                    ok = setup.lmstudio_ensure(ui, run=run_rec, which=lambda c: str(lms) if c == "lms" else None)
+            self.assertTrue(ok, ui.said)
+            self.assertEqual(got, [["get", "text-embedding-bge-m3", "-y"]])
+
+    def test_ensure_no_wsl_nao_instala_e_explica(self):
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as td:                    # sem lms na máquina isolada
+            with mock.patch.dict(os.environ, {"HOME": td}), \
+                    mock.patch.object(util, "in_wsl", return_value=True), \
+                    mock.patch.object(setup, "_LMS_APP_DIRS", ()):
+                calls: list = []
+
+                def no_run(cmd, cwd=None, timeout=120):
+                    calls.append(cmd)
+                    return 0, ""
+
+                ui = ScriptedUI([])
+                ok = setup.lmstudio_ensure(ui, run=no_run, which=lambda c: None)
+        self.assertFalse(ok)
+        self.assertEqual(calls, [])                                   # nada executa
+        self.assertTrue(any("host Windows" in s for s in ui.said))
+
+    def test_ensure_tudo_pronto_apenas_carrega(self):
+        from unittest import mock
+        calls: list = []
+
+        def fake_run(cmd, cwd=None, timeout=120):
+            calls.append(cmd[1:2])
+            return (0, "text-embedding-bge-m3") if cmd[1:2] == ["ls"] else (0, "ok")
+
+        with mock.patch.object(setup, "lmstudio_up", return_value=True):
+            ui = ScriptedUI([])
+            ok = setup.lmstudio_ensure(ui, run=fake_run, which=lambda c: "/opt/lms")
+        self.assertTrue(ok, ui.said)
+        self.assertEqual(calls, [["ls"], ["load"]])                   # nada de bash/server/get
+        self.assertTrue(any("carregado" in s for s in ui.said))
+
+    def test_ensure_fallback_do_get_quando_staff_picks_nao_resolve(self):
+        from unittest import mock
+        gets: list[str] = []
+        disk: list[str] = []
+
+        def fake_run(cmd, cwd=None, timeout=120):
+            a = cmd[1:]
+            if a[:1] == ["ls"]:
+                return 0, " ".join(disk)
+            if a[:1] == ["get"]:
+                gets.append(a[1])
+                if a[1].startswith("https://"):        # só a URL do HF resolve
+                    disk.append("text-embedding-bge-m3")
+                    return 0, "downloaded"
+                return 1, "No staff picks found"
+            return 0, "ok"
+
+        with mock.patch.object(setup, "lmstudio_up", return_value=True):
+            ui = ScriptedUI([])
+            ok = setup.lmstudio_ensure(ui, run=fake_run, which=lambda c: "/opt/lms")
+        self.assertTrue(ok, ui.said)
+        self.assertEqual(gets, ["text-embedding-bge-m3",
+                                setup.LMS_GET_FALLBACK["text-embedding-bge-m3"]])
+
+    def test_run_memoria_garante_lmstudio_antes_do_compose(self):
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            order: list = []
+
+            def up() -> bool:
+                return "ensure" in order                              # o ensure resolve; depois é True
+
+            with mock.patch.object(setup, "docker_available", return_value=True), \
+                    mock.patch.object(setup, "hindsight_health", return_value=None), \
+                    mock.patch.object(setup, "compose_up",
+                                      side_effect=lambda *a, **k: order.append("compose") or True), \
+                    mock.patch.object(setup, "wait_hindsight", return_value=True), \
+                    mock.patch.object(setup, "lmstudio_up", side_effect=up), \
+                    mock.patch.object(setup, "lmstudio_ensure",
+                                      side_effect=lambda ui_, model="": order.append("ensure") or True), \
+                    mock.patch.object(setup, "_run", return_value=(0, "sync ok")), \
+                    mock.patch.object(memory, "setup", side_effect=lambda bb: ["brain"]):
+                ui = ScriptedUI([])
+                setup._run_memoria(b, ui, mode_hint="embed")
+            self.assertEqual(order[:2], ["ensure", "compose"])        # boot do Hindsight exige embeddings antes
+            self.assertTrue(any("LM Studio pronto para o Brain" in s for s in ui.said))
+
+
 if __name__ == "__main__":
     unittest.main()

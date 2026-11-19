@@ -924,7 +924,7 @@ O arquivo é Markdown **estrito**. Fora deste formato a linha é ignorada ou vir
 | Pessoa "não consta" ao citar alguém | ficha nova | `/person <nome>` → ele oferece cadastrar com aliases |
 | Duas fichas da mesma pessoa | criadas antes dos aliases | `./brain person alias` evita a segunda ficha; se ela já existe, `./brain person merge DUP --into ID` |
 | `/ask` responde "não consta" para algo que existia | filtro muito estreito na busca | tente termo do título; se memória ligada, `./brain memory sync` |
-| Recall/embeddings falham | LM Studio parado ou sem o `bge-m3` carregado | `lms server start` e `lms load text-embedding-bge-m3` (setup.md §3) |
+| Recall/embeddings falham | LM Studio parado ou sem o `bge-m3` carregado | `brain setup --only memoria` sobe o servidor e configura o modelo; na mão: `lms server start` e `lms load text-embedding-bge-m3` (setup.md §3) |
 | Painel "velho" | ninguém renderizou | `/brief` (renderiza antes) ou `./brain render --open` |
 | Perigo/erro no doctor | ele diz exatamente o quê | siga a linha; se ledger: `./brain validate` |
 | Restauro de backup | — | seção `/backup` acima; o agente guia passo a passo |

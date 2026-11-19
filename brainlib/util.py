@@ -327,6 +327,18 @@ def _tab_prefix(url: str) -> str | None:
     return url.split("#", 1)[0] if url.startswith("file://") else None
 
 
+def in_wsl() -> bool:
+    """True dentro do WSL2 (Linux sob Windows). Seam de plataforma: no WSL o LM Studio
+    mora no host Windows (plano platform-support) — instalar um segundo dentro do WSL
+    brigaria pelo :1234 da rede espelhada."""
+    if sys.platform != "linux":
+        return False
+    try:
+        return "microsoft" in Path("/proc/version").read_text(encoding="utf-8").lower()
+    except OSError:
+        return False
+
+
 def focus_open_tab(url: str) -> bool:
     """macOS: já existe uma aba do Brain em ALGUM navegador aberto? Então a traz para a frente (e, se a ponte
     mudou de token, aponta ela para a URL nova) em vez de abrir outra. Varre o padrão primeiro e depois os

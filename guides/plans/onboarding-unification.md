@@ -292,8 +292,14 @@ dependem de F2; F8 por último porque consolida o que F1–F7 construíram.
 o navegador; `.env` 0600.
 - **Noturno nunca roda setup** — jobs do wizard herdam a trava (`BRAIN_NIGHTLY=1`).
 - **Máquina nua:** defaults precisam funcionar sem apps de terceiro (LM Studio,
-OrbStack) — por isso "nenhuma + TASK" é o caminho honesto quando faltam
-pré-requisitos (decisão 3).
+  OrbStack) — por isso "nenhuma + TASK" é o caminho honesto quando faltam
+  pré-requisitos (decisão 3). **Atualização (ruling 2026-11-19):** o trecho LM Studio
+  desta regra foi revertido pelo dono — o Brain **instala, sobe e configura** o LM
+  Studio sozinho no passo de memória (`setup.lmstudio_ensure`: instalador oficial,
+  servidor :1234, `bge-m3` baixado e carregado, tudo narrado no job; WSL não instala —
+  lá o LM Studio mora no host Windows). O dono fica ciente, não executa; instalado com
+  servidor desligado aparece como "instalado", nunca como "falta — baixar". A regra da
+  máquina nua segue valendo para o OrbStack e para o `up -d` manual.
 - **Repo público:** mockups e exemplos usam os dados fictícios da padaria
 (`marina-demo`, `#seu-canal`); nenhum caminho de máquina em código/doc commitado.
 

@@ -63,6 +63,9 @@ LM Studio do Mac por `host.docker.internal:1234`.
 **Ordem de boot na 1.2.0:** o servidor valida o endpoint de embeddings na inicialização —
 **suba o LM Studio (com o modelo carregado) antes do `up -d`**, senão o container morre na hora
 (o 0.10.x não fazia essa checagem). O modelo de LLM pode continuar descarregado no modo embed.
+No wizard e no `brain setup --only memoria` essa ordem é automática: o passo de memória instala
+(se faltar), sobe o servidor :1234 e baixa/carrega o `bge-m3` antes do compose — a regra acima
+só pesa para quem sobe o container na mão.
 
 **Máquina com outro Hindsight no :8888** (decisão 10): não suba dois containers com o mesmo
 nome/porta — **adopte** o servidor existente (`[memory].url` aponta pra ele; o banco do cérebro

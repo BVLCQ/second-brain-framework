@@ -305,6 +305,17 @@ class MoreStepTests(unittest.TestCase):
         self.assertNotIn("sk-ant-FAKE", json.dumps(j))
         self.assertNotIn("fw-FAKE", json.dumps(j))
 
+    def test_memory_payload_leva_lmstudio_state(self):
+        from unittest import mock
+        from brainlib import setup
+        onboard._PREREQ.update(at=0.0, value=None)      # cache de 60 s vazaria o estado REAL da máquina
+        with mock.patch.object(setup, "docker_available", return_value=True), \
+                mock.patch.object(setup, "lmstudio_up", return_value=False), \
+                mock.patch.object(setup, "lmstudio_state", return_value="installed"):
+            st = onboard.state(self.b)
+        self.assertEqual(st["memory"]["lmstudio_state"], "installed")
+        self.assertFalse(st["memory"]["lmstudio"])     # booleano segue (compat), estado diz o resto
+
 
 class OpenTests(unittest.TestCase):
     def setUp(self):

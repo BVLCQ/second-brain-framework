@@ -232,6 +232,138 @@ def lmstudio_up() -> bool:
         return False
 
 
+LMS_INSTALL_URL = "https://lmstudio.ai/install.sh"      # instalador oficial (runtime headless + lms)
+# o catálogo de staff picks já não resolve "text-embedding-bge-m3" por nome (verificado ao vivo):
+# o fallback aponta para a conversão GGUF canônica — o `lms` registra como text-embedding-bge-m3.
+LMS_GET_FALLBACK = {"text-embedding-bge-m3": "https://huggingface.co/gpustack/bge-m3-GGUF"}
+_LMS_APP_DIRS = (Path("/Applications"), Path.home() / "Applications")
+
+
+def lms_bin(which=shutil.which) -> str | None:
+    """Caminho do `lms`: PATH primeiro, depois o binário que acompanha o app (~/.lmstudio/bin)."""
+    w = which("lms")
+    if w:
+        return w
+    p = Path.home() / ".lmstudio" / "bin" / "lms"
+    try:
+        if p.exists() and os.access(p, os.X_OK):
+            return str(p)
+    except OSError:
+        pass
+    return None
+
+
+def lmstudio_installed(which=shutil.which, exists=None) -> bool:
+    """O LM Studio existe nesta máquina? (binário `lms` OU o app instalado — instalado ≠ no ar.)"""
+    if lms_bin(which):
+        return True
+    for d in _LMS_APP_DIRS:
+        app = d / "LM Studio.app"
+        if exists is not None:
+            if exists(app):
+                return True
+        elif app.exists():
+            return True
+    return False
+
+
+def lmstudio_state(up: bool | None = None, which=shutil.which, exists=None) -> str:
+    """`up` (servidor respondendo em :1234) · `installed` (existe, servidor desligado) ·
+    `missing` (não existe — o Brain pode instalar). Instalado dizendo "falta" é o defeito
+    que fez nascer este probe: a máquina do dono tem o app e o assistente mandava baixar."""
+    if up is None:
+        up = lmstudio_up()
+    if up:
+        return "up"
+    return "installed" if lmstudio_installed(which, exists) else "missing"
+
+
+def lmstudio_model_present(bin_: str, model: str, run=_run) -> bool:
+    code, out = run([bin_, "ls"], timeout=30)
+    return code == 0 and model in out
+
+
+def _fetch(url: str, dest: Path, timeout: int = 120) -> str | None:
+    """Baixa a url para dest (arquivo temporário, nunca `curl | sh`). Devolve erro ou None."""
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as r, open(dest, "wb") as f:
+            shutil.copyfileobj(r, f)
+        return None
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        return str(e)
+
+
+def lmstudio_ensure(ui, model: str = "", run=_run, which=shutil.which) -> bool:
+    """Traz o LM Studio ao estado que o Brain especifica — instalação, servidor :1234 e modelo
+    de embeddings — narrando cada passo (o dono fica ciente, não executa nada à mão). Devolve
+    True quando o servidor responde com o modelo no disco (carregar é best-effort: o JIT cobre).
+    Regra da máquina nua: no WSL o LM Studio mora no host Windows — nada de instalar aqui."""
+    from . import providers as prov
+    model = model or prov.PROVIDERS["embeddings"]["local"].get("model", "text-embedding-bge-m3")
+    bin_ = lms_bin(which)
+    if bin_ is None:
+        installed = lmstudio_installed(which)
+        if util.in_wsl() and not installed:
+            ui.say("✗ LM Studio no WSL mora no host Windows — instale-o lá (lmstudio.ai), ligue o "
+                   "servidor dele e confira a URL em guides/plans/platform-support.md")
+            return False
+        ui.say("baixando o LM Studio (instalador oficial — runtime local, sem interface)…"
+               if not installed else
+               "o LM Studio está instalado sem o CLI — baixando o CLI oficial (mesmos modelos)…")
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            script = Path(td) / "install.sh"
+            err = _fetch(LMS_INSTALL_URL, script)
+            if err:
+                ui.say(f"✗ não consegui baixar o instalador do LM Studio ({err}) — baixe em "
+                       "https://lmstudio.ai e rode `brain setup --only memoria` de novo")
+                return False
+            code, out = run(["bash", str(script)], timeout=900)
+            if code != 0:
+                ui.say(f"✗ instalador do LM Studio falhou: {out[:200]} — baixe em https://lmstudio.ai")
+                return False
+        bin_ = lms_bin(which)
+        if bin_ is None:
+            ui.say("✗ o `lms` não apareceu depois da instalação — abra o LM Studio uma vez e "
+                   "rode `brain setup --only memoria` de novo")
+            return False
+        ui.say("✓ LM Studio instalado" if not installed else "✓ CLI do LM Studio instalado")
+    if not lmstudio_up():
+        ui.say("subindo o servidor do LM Studio (:1234)…")
+        code, out = run([bin_, "server", "start"], timeout=120)
+        if code != 0 and not lmstudio_up():
+            ui.say(f"✗ `lms server start` falhou: {out[:200]}")
+            return False
+        for _ in range(15):                                   # boot do servidor: até ~30 s
+            if lmstudio_up():
+                break
+            time.sleep(2)
+        if not lmstudio_up():
+            ui.say("✗ o servidor do LM Studio não respondeu em :1234 — rode `lms server start` "
+                   "no terminal para ver o erro")
+            return False
+        ui.say("✓ servidor do LM Studio no ar (:1234)")
+    if not lmstudio_model_present(bin_, model, run):
+        ui.say(f"baixando o modelo de embeddings {model} (~600 MB, uma única vez)…")
+        got, out = False, ""
+        for target in [model] + ([LMS_GET_FALLBACK[model]] if model in LMS_GET_FALLBACK else []):
+            code, out = run([bin_, "get", target, "-y"], timeout=1800)
+            if code == 0 and lmstudio_model_present(bin_, model, run):
+                got = True
+                break
+        if not got:
+            ui.say(f"✗ não consegui baixar o modelo {model}: {out[:200]}")
+            return False
+        ui.say(f"✓ modelo {model} no disco")
+    code, _ = run([bin_, "load", model, "-y"], timeout=300)
+    if code == 0:
+        ui.say(f"✓ modelo {model} carregado")
+    else:
+        ui.say(f"• modelo {model} não veio carregado agora — o LM Studio o carrega sozinho na "
+               "primeira chamada (JIT)")
+    return True
+
+
 def github_token_ok(token: str) -> bool:
     req = urllib.request.Request("https://api.github.com/user", headers={"Authorization": f"Bearer {token}",
                                                                         "User-Agent": "brain-setup"})
@@ -643,6 +775,14 @@ def _providers_step(brain, ui, slots: list[str]) -> bool:
     return changed
 
 
+def _local_emb_model(brain) -> str:
+    """Modelo de embeddings que o stack local deve servir (override do config/.env vence)."""
+    from . import providers as prov
+    env = config.load_env(brain.inst)
+    return str(env.get("HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL")
+               or prov.PROVIDERS["embeddings"]["local"].get("model", "text-embedding-bge-m3"))
+
+
 def _run_memoria(brain, ui, mode_hint: str | None = None) -> None:
     from . import memory
     mem = brain.inst.cfg["memory"]
@@ -667,6 +807,10 @@ def _run_memoria(brain, ui, mode_hint: str | None = None) -> None:
     slots = ["llm", "embeddings", "reranker"] if mode == "full" else ["embeddings", "reranker"]
     env_changed = _providers_step(brain, ui, slots)
     mem = brain.inst.cfg["memory"]                       # set_slot recarregou a config
+    if mode == "embed" and mem.get("embeddings_provider") == "local" and not lmstudio_up():
+        # o Hindsight pinga as embeddings no boot: o LM Studio precisa estar pronto ANTES do up -d
+        if lmstudio_ensure(ui, model=_local_emb_model(brain)):
+            ui.say("✓ LM Studio pronto para o Brain")
     if hindsight_health(url) is None:
         ui.say("subindo o Hindsight (docker compose)…")
         if compose_up(mode, ui, env_file=env_file) and not wait_hindsight(url, 120):
@@ -683,8 +827,8 @@ def _run_memoria(brain, ui, mode_hint: str | None = None) -> None:
             ui.say("✓ Hindsight recriado com os provedores escolhidos")
     if mode == "embed":
         if mem["embeddings_provider"] == "local" and not lmstudio_up():
-            ui.say("⚠ LM Studio não responde em :1234 — suba-o com o modelo text-embedding-bge-m3 "
-                   "(guides/memory.md); o sync só vai funcionar com ele no ar")
+            ui.say("⚠ LM Studio ainda não responde em :1234 — o que faltou está narrado acima; "
+                   "`brain setup --only memoria` tenta de novo (detalhes em guides/memory.md)")
         memory._apply_mode(brain, "embed")
         banks = memory.setup(brain)
         ui.say(f"✓ memória embed pronta ({', '.join(banks)})")

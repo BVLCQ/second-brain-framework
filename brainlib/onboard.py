@@ -306,10 +306,14 @@ _PREREQ: dict = {"at": 0.0, "value": None}
 
 
 def _prereqs() -> dict:
-    """Docker/OrbStack e LM Studio no ar? (até 13 s de checagem — guardado por 60 s, o painel consulta toda hora)."""
+    """Docker/OrbStack e LM Studio no ar? (até 13 s de checagem — guardado por 60 s, o painel consulta toda hora).
+    `lmstudio` é o booleano (servidor responde); `lmstudio_state` distingue instalado (o Brain sobe ao ativar)
+    de ausente (o Brain instala ao ativar) — instalado nunca mais vira "falta — baixar"."""
     from . import setup
     if _PREREQ["value"] is None or time.time() - _PREREQ["at"] > 60:
-        _PREREQ.update(at=time.time(), value={"docker": setup.docker_available(), "lmstudio": setup.lmstudio_up()})
+        up = setup.lmstudio_up()
+        _PREREQ.update(at=time.time(), value={"docker": setup.docker_available(), "lmstudio": up,
+                                              "lmstudio_state": setup.lmstudio_state(up=up)})
     return _PREREQ["value"]
 
 
@@ -357,6 +361,7 @@ def state(brain) -> dict:
         "permissions": {"ok": perm.get("local") == "ok", "static": perm.get("static")},
         "memory": {"mode": {"embed": "lite"}.get(mem_mode, mem_mode),
                    "docker": pre["docker"], "lmstudio": pre["lmstudio"],
+                   "lmstudio_state": pre["lmstudio_state"],
                    "llm_key": bool(env.get("HINDSIGHT_API_LLM_API_KEY")),
                    "llm_provider": cfg["memory"].get("llm_provider", ""),
                    "emb_provider": cfg["memory"].get("embeddings_provider", ""),

@@ -50,8 +50,10 @@ Os três terminam no mesmo lugar: `./brain doctor` verde (no máximo ⚠ normais
 
 - **`none`** — sem Hindsight; `/ask` usa índice → artefato → RAW.
 - **`embed`** — banco único de chunks (`brain`), **zero LLM, zero chave, nada sai da
-  máquina**. O wizard sobe o Hindsight pelo compose (OrbStack), avisa se o LM Studio/bge-m3
-  não está no ar, cria o banco e roda um sync de validação (`--limit 3`).
+  máquina**. O wizard sobe o Hindsight pelo compose (OrbStack) e, antes disso, traz o
+  LM Studio ao estado do Brain — instala pelo instalador oficial se faltar, sobe o
+  servidor :1234 e baixa/carrega o `bge-m3` (ruling 2026-11-19: o dono fica ciente,
+  não executa) —, cria o banco e roda um sync de validação (`--limit 3`).
 - **`full`** — banco único com extração de fatos: **porta de saída de dados**. Exige o
   **"ok" literal** ("texto do vault vai à API de LLM com a sua chave"), a chave no
   `.env` (mascarada, 0600), o compose com `--env-file config/.env`, e o `health/llm`
