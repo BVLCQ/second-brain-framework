@@ -291,18 +291,26 @@ def _fts_doc_rows(brain, fts_docs: dict[str, str]) -> list[tuple]:
     return out
 
 
-def _ledger_tail_sha(path: Path) -> str | None:
+def _ledger_slice_sha(path: Path, end_offset: int) -> str | None:
+    if not path.exists():
+        return None
+    if end_offset <= 0:
+        return util.sha("")
+    start = max(0, end_offset - 8192)
+    need = end_offset - start
     try:
         with open(path, "rb") as fh:
-            fh.seek(max(0, path.stat().st_size - 8192))
-            tail = fh.read().rstrip(b"\n").split(b"\n")[-1]
-        return util.sha(tail.decode("utf-8", errors="replace"))
+            fh.seek(start)
+            chunk = fh.read(need)
     except OSError:
         return None
+    if len(chunk) < need:
+        return None
+    return util.sha(chunk.decode("utf-8", errors="replace"))
 
 
 def update(brain) -> dict:
-    """Atualização incremental (seq > last_seq); ledger encolheu/última linha mudou → rebuild."""
+    """Atualização incremental (seq > last_seq); ledger encolheu/trecho anterior mudou → rebuild."""
     path = db_path(brain.inst)
     ledger = brain.inst.processed / "_ledger" / "events.jsonl"
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -314,10 +322,14 @@ def update(brain) -> dict:
             con.executescript(SCHEMA)
             meta = {k: v for k, v in con.execute("SELECT key, value FROM meta")}
             size = ledger.stat().st_size if ledger.exists() else 0
-            tail = _ledger_tail_sha(ledger)
+            old_size = int(meta.get("ledger_size") or 0)
+            old_tail = meta.get("ledger_sha_tail")
+            tail_at_old = _ledger_slice_sha(ledger, old_size)
+            tail_now = _ledger_slice_sha(ledger, size)
             full = (not meta.get("last_seq")
-                    or (int(meta.get("ledger_size") or 0) > size)
-                    or (meta.get("ledger_sha_tail") not in (None, tail)))
+                    or meta.get("schema_version") != SCHEMA_VERSION
+                    or size < old_size
+                    or tail_at_old != old_tail)
             events = brain.state.events
             last = 0 if full else int(meta.get("last_seq") or 0)
             new = events if full else [ev for ev in events if int(ev.get("seq") or 0) > last]
@@ -359,8 +371,9 @@ def update(brain) -> dict:
                     if not now_val or int(now_val[0]) < max_seq:   # primeira construção ou alguém na frente (sob flock): grava
                         con.execute("INSERT OR REPLACE INTO meta VALUES ('last_seq', ?)", (str(max_seq),))
                 con.execute("INSERT OR REPLACE INTO meta VALUES ('schema_version', ?)", (SCHEMA_VERSION,))
-                con.execute("INSERT OR REPLACE INTO meta VALUES ('ledger_size', ?)", (str(size),))
-                con.execute("INSERT OR REPLACE INTO meta VALUES ('ledger_sha_tail', ?)", (str(tail),))
+                if max_seq >= cur:
+                    con.execute("INSERT OR REPLACE INTO meta VALUES ('ledger_size', ?)", (str(size),))
+                    con.execute("INSERT OR REPLACE INTO meta VALUES ('ledger_sha_tail', ?)", (str(tail_now),))
                 con.execute("INSERT OR REPLACE INTO meta VALUES ('built_at', ?)",
                             (util.now().isoformat(timespec="seconds"),))
         finally:
@@ -413,27 +426,35 @@ def search_index(brain, query: str, limit: int = 20) -> list[dict] | None:
     terms = [t for t in util.fold(query).split() if len(t) > 1]
     if not terms:
         return []
-
-    def run(expr: str, partial: bool):
-        sql = ("SELECT kind, ref, title, date, path, bm25(fts, 3.0, 1.0, 1.0, 0.0, 0.0) AS score "
-               "FROM fts WHERE fts MATCH ? ORDER BY score LIMIT ?")
+    max_seq = brain.state.max_seq() if callable(getattr(brain.state, "max_seq")) else brain.state.max_seq
+    try:
         with connect(path, ro=True) as con:
-            return [{"kind": k, "id": r, "title": t, "date": d, "path": p, "score": -s,
-                     **({"match": "parcial"} if partial else {})}
-                    for k, r, t, d, p, s in con.execute(sql, (expr, limit * 3))]
+            row = con.execute("SELECT value FROM meta WHERE key = 'last_seq'").fetchone()
+            if not row or not row[0] or int(row[0]) < max_seq:
+                return None
 
-    hits = run(fts_terms(query), partial=False)
-    if not hits and len(terms) > 1:        # AND não achou: refaz termo a termo (OR), deduplicado
-        seen: set[str] = set()
-        merged = []
-        for w in terms:
-            for h in run(fts_terms(w), partial=True):
-                if h["id"] not in seen:
-                    seen.add(h["id"])
-                    merged.append(h)
-        merged.sort(key=lambda h: -h["score"])
-        hits = merged
-    return hits[:limit]
+            def run(expr: str, partial: bool):
+                sql = ("SELECT kind, ref, title, date, path, "
+                       "bm25(fts, 1.0, 1.0, 3.0, 1.0, 0.0, 0.0) AS score "
+                       "FROM fts WHERE fts MATCH ? ORDER BY score LIMIT ?")
+                return [{"kind": k, "id": r, "title": t, "date": d, "path": p, "score": -s,
+                         **({"match": "parcial"} if partial else {})}
+                        for k, r, t, d, p, s in con.execute(sql, (expr, limit * 3))]
+
+            hits = run(fts_terms(query), partial=False)
+            if not hits and len(terms) > 1:        # AND não achou: refaz termo a termo (OR), deduplicado
+                seen: set[str] = set()
+                merged = []
+                for w in terms:
+                    for h in run(fts_terms(w), partial=True):
+                        if h["id"] not in seen:
+                            seen.add(h["id"])
+                            merged.append(h)
+                merged.sort(key=lambda h: -h["score"])
+                hits = merged
+            return hits[:limit]
+    except sqlite3.Error:
+        return None
 
 
 def resolve_person(con: sqlite3.Connection, ref: str) -> str | None:
