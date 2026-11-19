@@ -509,6 +509,12 @@ def _run_painel(brain, ui) -> None:
         return
     if ui.confirm("Criar o app Brain (clique duplo abre o Brain, sem terminal)?", True):
         ui.say(f"✓ ícone criado: {launcher.install(brain.inst)}")
+        # mesma moeda do passo "A máquina" do wizard: app instalado, prega no Dock/desktop —
+        # idempotente e cosmetico (nunca derruba o passo); as duas superfícies não podem divergir
+        try:
+            ui.say(launcher.pin_shortcut())
+        except (util.BrainError, OSError, subprocess.SubprocessError) as e:
+            ui.say(f"– atalho de um clique: {e}")
 
 
 def _st_foco(brain) -> str:

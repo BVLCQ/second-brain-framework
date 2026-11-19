@@ -339,6 +339,9 @@ def pin_shortcut(name: str = DEFAULT_NAME, *, platform: str | None = None) -> st
     if src != dst:
         shutil.copy2(src, dst)
     dst.chmod(0o755)
+    gio = shutil.which("gio")                                    # GNOME exige confiança explícita no .desktop
+    if gio:                                                      # (KDE/WSLg ignoram; sem gio o dono clica-direito → Permitir)
+        subprocess.run([gio, "set", str(dst), "metadata::trusted", "true"], check=False, timeout=5)
     return f"✓ atalho do {name} na área de trabalho"
 
 

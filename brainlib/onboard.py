@@ -746,10 +746,12 @@ def maquina_state(brain) -> dict:
         plat = launcher._platform()
     except util.BrainError:
         plat = ""
+    ours = bool(launcher._find_ours("Brain", plat)) if plat else False
     return {
         "comando": setup._st_comando(brain),
         "noturno": setup._st_noturno(brain),
-        "icon": "done" if launcher.pin_status() else "pending",
+        # sem o app instalado o pin é recusa honesta: pill de atenção, não "pendente" fingido
+        "icon": ("warn" if not ours else "done" if launcher.pin_status(platform=plat or None) else "pending"),
         "platform": plat,
         "tui": setup._st_tui(brain),
         "foco": setup._st_foco(brain),

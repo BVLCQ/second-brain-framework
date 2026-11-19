@@ -375,5 +375,57 @@ class ProviderRegistryTests(unittest.TestCase):
                 run_mem.assert_not_called()
 
 
+class _PainelUI:
+    """UI roteirizada pro passo painel: confirm responde o que o teste quer, say acumula."""
+
+    def __init__(self, answers: list[bool]):
+        self.answers = list(answers)
+        self.log: list[str] = []
+        self.interactive = True
+
+    def confirm(self, prompt: str, default: bool = False) -> bool:
+        return self.answers.pop(0) if self.answers else default
+
+    def say(self, msg: str) -> None:
+        self.log.append(msg)
+
+
+class PainelPinTests(unittest.TestCase):
+    """O passo painel do terminal não pode divergir do wizard: instala o app E prega o atalho."""
+
+    def setUp(self):
+        from unittest import mock
+        from brainlib import launcher
+        self.mock = mock
+        self.launcher = launcher
+        self._td = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._td.name)
+        self.b = Brain(_inst(self.tmp))
+
+    def tearDown(self):
+        self._td.cleanup()
+
+    def test_install_then_pin_with_same_money_as_the_wizard(self):
+        with self.mock.patch.object(self.launcher, "is_installed", return_value=False), \
+             self.mock.patch.object(self.launcher, "other_owner", return_value=None), \
+             self.mock.patch.object(self.launcher, "install", return_value="/Applications/Brain.app"), \
+             self.mock.patch.object(self.launcher, "pin_shortcut", return_value="✓ Brain pregado no Dock") as pin:
+            ui = _PainelUI([True])
+            setup._run_painel(self.b, ui)
+        pin.assert_called_once()
+        self.assertTrue(any("ícone criado" in m for m in ui.log))
+        self.assertTrue(any("pregado no Dock" in m for m in ui.log))
+
+    def test_pin_failure_never_kills_the_step(self):
+        with self.mock.patch.object(self.launcher, "is_installed", return_value=False), \
+             self.mock.patch.object(self.launcher, "other_owner", return_value=None), \
+             self.mock.patch.object(self.launcher, "install", return_value="/Applications/Brain.app"), \
+             self.mock.patch.object(self.launcher, "pin_shortcut", side_effect=OSError("dock travado")):
+            ui = _PainelUI([True])
+            setup._run_painel(self.b, ui)
+        self.assertTrue(any("ícone criado" in m for m in ui.log))     # o passo seguiu
+        self.assertTrue(any("atalho de um clique" in m for m in ui.log))
+
+
 if __name__ == "__main__":
     unittest.main()

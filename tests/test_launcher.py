@@ -320,6 +320,24 @@ class PinShortcutTests(unittest.TestCase):
             self.assertTrue(dst.exists())
             self.assertEqual(dst.stat().st_mode & 0o111, 0o111)             # executável
 
+    def test_linux_pin_marks_the_desktop_entry_trusted_for_gnome(self):
+        calls: list = []
+        with tempfile.TemporaryDirectory() as td:
+            home = Path(td)
+            (home / "Desktop").mkdir()
+            src = home / ".local/share/applications/brain.desktop"
+            src.parent.mkdir(parents=True)
+            src.write_text("[Desktop Entry]\nName=Brain\n", encoding="utf-8")
+            with mock.patch.object(launcher, "_find_ours", return_value=[src]), \
+                 mock.patch.object(launcher, "_platform", return_value="linux"), \
+                 mock.patch.object(Path, "home", return_value=home), \
+                 mock.patch.object(launcher.shutil, "which", return_value="/usr/bin/gio"), \
+                 mock.patch("subprocess.run") as run:
+                launcher.pin_shortcut()
+            gio = [c for c in run.call_args_list if "gio" in str(c.args[0][0])]
+            self.assertTrue(gio, "precisa marcar metadata::trusted pro GNOME")
+            self.assertIn("metadata::trusted", " ".join(gio[0].args[0]))
+
     def test_pin_status_requires_a_well_formed_tile(self):
         good = {"tile-type": "file-tile", "tile-data": {"file-data": {"_CFURLString": "/Applications/Brain.app"}}}
         # forma que o próprio Dock normaliza depois de um reload (vista na máquina real):
