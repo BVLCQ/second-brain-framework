@@ -486,8 +486,13 @@ class _Handler(BaseHTTPRequestHandler):
                     m = model.build(self._brain())
                 self._html(render.render_html(render_portfolio.html_payload(m), render.PORTFOLIO_ASSET))
             elif path == "/onboarding":
-                from . import render
-                self._html(render.ONBOARDING_ASSET.read_text(encoding="utf-8"))
+                # F8: o wizard mora no painel — a rota antiga vira atalho para o modo primeira vez.
+                # Rollback (plano onboarding-unification F8): voltar a servir o ONBOARDING_ASSET.
+                self.send_response(302)
+                self._sec()
+                self.send_header("Location", "/#onboarding")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
             elif path in ICON_ROUTES:
                 from . import launcher
                 body = getattr(launcher, ICON_ROUTES[path]).read_bytes()

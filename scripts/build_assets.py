@@ -30,6 +30,8 @@ def mark_svg() -> bytes:
 def assemble(pf_only: bool, title: str) -> str:
     shell = (SRC / "shell.html").read_text(encoding="utf-8")
     css = (SRC / "dashboard.css").read_text(encoding="utf-8")
+    css += "\n/* wizard de configuração — modo primeira vez (F8), escopado em .obw/.obnav */\n" + \
+        (SRC / "onboard.css").read_text(encoding="utf-8")
     core = (SRC / "core.js").read_text(encoding="utf-8")
     extra = (SRC / "extra.js").read_text(encoding="utf-8")
     forms = (SRC / "forms.js").read_text(encoding="utf-8")       # motor dos formulários (o mesmo do brainlib/forms.py)

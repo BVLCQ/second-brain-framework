@@ -578,7 +578,7 @@ SETUP.inicio = box => {
     '<div class="stactions"><button class="btn" data-welcome>Rever boas-vindas</button><a class="btn" href="#projects">Goals e projetos em Execução</a></div>';
   box.querySelector("[data-welcome]").onclick = () => {
     try { localStorage.setItem("brain-onboarding-step", "inicio"); } catch (e) {}
-    location.href = "/onboarding";
+    location.hash = "onboarding";   // F8: o wizard mora no painel — mesma página, sem recarregar
   };
 };
 SETUP.perfil = box => {
@@ -1703,6 +1703,7 @@ function helpOverlay(){
 
 // handler único de teclado: captura global para Ctrl/⌘K, depois paleta e teclas de página
 window.addEventListener("keydown", e => {
+  if (document.body.classList.contains("obmode")) return;   // wizard (F8): sem paleta na configuração
   if ((e.metaKey || e.ctrlKey) && !e.altKey && ((e.key && ["k", "p"].includes(e.key.toLowerCase())) || e.code === "KeyK")) {
     e.preventDefault(); e.stopPropagation(); pal.open ? closePal() : openPal();
   }
@@ -2316,5 +2317,1095 @@ document.addEventListener("drop", e => {
   handleInboxDrop(mode, entries, fallbackFiles, rejected);
 });
 window.addEventListener("blur", hideInboxDropOverlay);
+
+// ── wizard de configuração — modo primeira vez do painel (F8) ──────────────
+// Portado do onboarding.html (que segue no repo como rollback da rota /onboarding).
+// Fala com os MESMOS /api/onboard/* do hub "Seu Brain" (uma regra, duas portas),
+// renderiza na shell do painel — marca, tema e barra lateral; sem faces/⌘K —
+// e "Abrir meu Brain" volta às faces SEM recarregar a página.
+const OB_STEPS = [["inicio","Boas-vindas"],["voce","Você e sua rotina"],["sobre","Sobre você"],["agente","Seu agente"],["conectores","Conectores e fontes"],["memoria","Memória"],["chaves","Chaves e portas"],["maquina","A máquina"],["planejamento","Goals e projetos"],["conversa","A conversa"],["pronto","Pronto"]];
+const OB_STEP_GROUPS = {
+  inicio: "Você", voce: "Você", sobre: "Você",
+  agente: "Conexões", conectores: "Conexões", memoria: "Conexões", chaves: "Conexões",
+  maquina: "O cérebro",
+  planejamento: "Começando", conversa: "Começando", pronto: "Começando",
+};
+let OBS = null, obCur = "inicio";
+let obPickedAgent = null;    // destaque (sugestão de detecção conta)
+let obAgentChosen = false;   // mas só o clique do dono é escolha — é o que nomeia a TASK do "Fazer depois"
+let obAgentHint = null;      // receita manual quando wire_mcp devolve mcp=false + hint
+let obProfileDraft = null, obPlan = {goals: []}, obPlanTab = "escrever", obUploads = [];
+let OB_ACTIVE = false;
+try { obCur = localStorage.getItem("brain-onboarding-step") || "inicio"; } catch (e) {}
+if (!OB_STEPS.some(s => s[0] === obCur)) obCur = "inicio";
+
+const obAll = (s, r) => Array.from((r || document).querySelectorAll(s));
+async function obRefresh() { OBS = (await obApi("/api/onboard/state")).state; }
+function obDoneSet() { return new Set((OBS && OBS.progress && OBS.progress.done) || []); }
+function obSet(html) { $("#view").innerHTML = '<div class="obw"><div class="bar"><i id="ob-bar"></i></div><div class="obcontent">' + html + "</div></div>"; }
+function obGo(step) {
+  obCur = step;
+  try { localStorage.setItem("brain-onboarding-step", step); } catch (e) {}
+  obRender();
+  window.scrollTo({top: 0, behavior: "smooth"});
+}
+function obNext() { const i = OB_STEPS.findIndex(s => s[0] === obCur); obGo(OB_STEPS[Math.min(i + 1, OB_STEPS.length - 1)][0]); }
+function obBack() { const i = OB_STEPS.findIndex(s => s[0] === obCur); obGo(OB_STEPS[Math.max(i - 1, 0)][0]); }
+async function obSkip(step) { try { await obAct("skip", {step}); await obRefresh(); } catch (e) {} obNext(); }
+function obMsg(el, kind, text) { if (el) { el.className = "msg show " + kind; el.textContent = text; } }
+function obBusy(btn, on, label) {
+  if (!btn) return;
+  if (on) { btn.dataset.obl = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<i class="spin"></i> ' + esc(label || "Salvando…"); }
+  else { btn.disabled = false; if (btn.dataset.obl) btn.innerHTML = btn.dataset.obl; }
+}
+function obTickLog(logEl, j) {
+  if (!logEl) return;
+  logEl.classList.add("show");
+  logEl.textContent = (j && j.log && j.log.length) ? j.log.join("\n") : "executando…";
+  logEl.scrollTop = logEl.scrollHeight;
+}
+function obRenderSteps() {
+  const list = $("#ob-steps"); if (!list) return;
+  const done = obDoneSet();
+  let lastGrp = "", html = "";
+  OB_STEPS.forEach(([k, t], i) => {
+    const grp = OB_STEP_GROUPS[k] || "";
+    if (grp !== lastGrp) { html += '<div class="grp">' + esc(grp) + "</div>"; lastGrp = grp; }
+    html += '<li data-k="' + k + '" class="' + (k === obCur ? "cur" : "") + " " + (done.has(k) ? "done" : "") + '"><span class="dot">' + (done.has(k) ? "✓" : i) + '</span><span class="t">' + esc(t) + "</span></li>";
+  });
+  list.innerHTML = html;
+  obAll("#ob-steps li").forEach(li => li.onclick = () => obGo(li.dataset.k));
+  const i = OB_STEPS.findIndex(s => s[0] === obCur);
+  const bar = $("#ob-bar");
+  if (bar) bar.style.width = Math.round(i / (OB_STEPS.length - 1) * 100) + "%";
+}
+function obNav(opts) {
+  opts = opts || {};
+  return '<div class="actions" id="nav">' +
+    (obCur !== "inicio" ? '<button class="btn ghost" type="button" data-a="back">← Voltar</button>' : "") +
+    '<span class="spacer"></span>' +
+    (opts.skip ? '<button class="btn ghost" type="button" data-a="skip">' + esc(opts.skip) + "</button>" : "") +
+    (opts.hideMain ? "" : '<button class="btn pri" type="button" data-a="main">' + esc(opts.main || "Continuar") + " →</button>") +
+    "</div>";
+}
+function obBindNav(main, onSkip) {
+  const b = $('[data-a="back"]'); if (b) b.onclick = obBack;
+  const k = $('[data-a="skip"]'); if (k) k.onclick = () => (onSkip ? onSkip(k) : obSkip(obCur));
+  const m = $('[data-a="main"]'); if (m && main) m.onclick = () => main(m);
+}
+function obHead(kicker, title, lead) {
+  return '<div class="kicker">' + esc(kicker) + "</div><h1>" + esc(title) + "</h1>" + (lead ? '<p class="lead">' + lead + "</p>" : "");
+}
+function obMd(text) {
+  return text.split("\n").filter(l => l !== "# PROFILE" && !/^_.*|.*_$/.test(l)).map(l => {
+    if (l.startsWith("# ")) return "<h1>" + esc(l.slice(2)) + "</h1>";
+    if (l.startsWith("## ")) return "<h2>" + esc(l.slice(3)) + "</h2>";
+    if (!l.trim()) return "";
+    const t = esc(l), it = /^_/.test(l) || /_$/.test(l);
+    return it ? "<p><em>" + t.replace(/^_|_$/g, "") + "</em></p>" : "<p>" + t + "</p>";
+  }).join("");
+}
+function obCopyText(text, btn) {
+  const done = () => {
+    if (!btn) return;
+    const old = btn.textContent;
+    btn.textContent = "✓ Copiado";
+    setTimeout(() => { if (btn.isConnected) btn.textContent = old; }, 1400);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(done).catch(() => {});
+    return;
+  }
+  const ta = document.createElement("textarea");
+  ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand("copy"); done(); } catch (e) {}
+  ta.remove();
+}
+function obExtractCmd(hint) {
+  const m = String(hint || "").match(/`([^`]+)`/);
+  return m ? m[1] : String(hint || "");
+}
+
+const OBV = {};
+
+// 1. Boas-vindas
+OBV.inicio = () => {
+  obSet('<div class="welcome"><div>' +
+    obHead("Segundo Cérebro · local e só seu", "Vamos montar o seu Brain", "O Brain organiza sua vida profissional: reuniões, decisões, tarefas, objetivos e as pessoas com quem você trabalha — num lugar só, no seu computador.") +
+    '<div class="feat">' +
+      "<div><b>Leva uns 10 minutos</b>Você pode pular qualquer passo e voltar depois.</div>" +
+      "<div><b>Seus dados são seus</b>Tudo fica nesta máquina. Nada é enviado sem você aprovar.</div>" +
+      '<div><b>Ele observa, você decide</b>O Brain sugere; enviar, publicar e mudar objetivos é sempre com o seu "ok".</div>' +
+    "</div></div>" + markTag() + "</div>" + obNav({main: "Começar"}));
+  obBindNav(() => obNext());
+};
+function markTag() {
+  const src = (document.querySelector(".brand .mark") || {}).src || "/brain.svg";
+  return '<div class="app-tile"><img src="' + src + '" alt="Ícone do app Brain"><small>o app que acaba de entrar nos seus Aplicativos</small></div>';
+}
+
+// 2. Você e sua rotina
+OBV.voce = () => {
+  const o = OBS.owner || {}, r = OBS.routine || {};
+  const guess = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const curTz = r.timezone || guess;
+  const zones = Array.from(new Set([r.timezone, guess, "America/Sao_Paulo", "America/Argentina/Buenos_Aires",
+    "America/Mexico_City", "America/Bogota", "America/Santiago", "America/Lima", "America/New_York",
+    "Europe/Lisbon", "Europe/Madrid", "UTC"].filter(Boolean)));
+  obSet(obHead("Você", "Você e sua rotina", "Assim o Brain reconhece você nas reuniões, nos e-mails e no Slack, e usa seus horários para calcular prazos e sugerir blocos de foco.") +
+    '<div class="card">' +
+      "<h2>Identidade</h2>" +
+      '<label class="f"><span>Nome completo <span class="req">*</span></span><input type="text" id="name" value="' + esc(o.name || o.suggested_name) + '" autocomplete="name"></label>' +
+      '<div class="grid2">' +
+        '<label class="f"><span>Apelido</span><input type="text" id="nick" value="' + esc(o.nickname) + '" placeholder="como as pessoas te chamam"><small>O nome curto que aparece nas reuniões e no Slack. Ajuda a te achar nas transcrições.</small></label>' +
+        '<label class="f"><span>Cargo</span><input type="text" id="role" value="' + esc(o.role) + '" placeholder="ex.: Gerente de Produto"></label>' +
+      "</div>" +
+      '<label class="f" style="margin-bottom:0"><span>E-mail de trabalho</span><input type="email" id="email" value="' + esc(o.email) + '" placeholder="voce@empresa.com" autocomplete="email"><small>Opcional. Usado para reconhecer convites e e-mails seus.</small></label>' +
+    "</div>" +
+    '<div class="card">' +
+      "<h2>Sua rotina</h2>" +
+      '<label class="f"><span>Fuso horário</span><select id="tz">' + zones.map(z => '<option ' + (z === curTz ? "selected" : "") + ">" + esc(z) + "</option>").join("") + "</select></label>" +
+      '<div class="grid2">' +
+        '<label class="f"><span>Começo do expediente</span><input type="time" id="st" value="' + esc(r.start || "09:00") + '"></label>' +
+        '<label class="f" style="margin-bottom:0"><span>Fim do expediente</span><input type="time" id="en" value="' + esc(r.end || "18:00") + '"></label>' +
+      "</div>" +
+      '<small>O planejador de foco desvia do almoço (12:00–13:00 por padrão). Detalhes finos ficam em <span class="kbd">config/brain.toml</span> seção <span class="kbd">[work]</span>.</small>' +
+    "</div>" +
+    '<div class="msg" id="m"></div>' + obNav());
+  $("#name").focus();
+  obBindNav(async btn => {
+    const aboutBody = {name: $("#name").value, nickname: $("#nick").value, role: $("#role").value, email: $("#email").value};
+    if (!aboutBody.name.trim()) return obMsg($("#m"), "err", "Preencha o seu nome completo.");
+    const routineBody = {
+      timezone: $("#tz").value,
+      start: $("#st").value,
+      end: $("#en").value,
+      lunch: r.lunch || "",      // não se pergunta (ruling do dono): o que já está gravado atravessa
+    };
+    obBusy(btn, true);
+    try {
+      await obAct("about", aboutBody);
+      await obAct("routine", routineBody);
+      await obRefresh();
+      obNext();
+    } catch (e) { obMsg($("#m"), "err", e.message); } finally { obBusy(btn, false); }
+  });
+};
+
+// 3. Sobre você
+OBV.sobre = () => {
+  const tpl = OBS.profile.template;
+  obSet(obHead("Você", "Conte um pouco sobre você", "Isto vira o seu perfil — o contexto que o Brain usa para entender o que é importante para você. Escreva como se estivesse explicando para um colega novo.") +
+    (!tpl ? '<div class="msg info show" style="margin:0 0 14px">Você já tem um perfil salvo. Se escrever aqui, o novo texto substitui o atual (você vê a prévia antes).</div>' : "") +
+    '<div class="card" id="form">' +
+      '<label class="f"><span>Sobre você</span><textarea id="about" placeholder="Seu papel, seu time, pelo que você responde, há quanto tempo está na empresa…"></textarea></label>' +
+      '<label class="f"><span>Como você trabalha</span><textarea id="how" placeholder="Rituais da semana, reuniões fixas, como prefere receber informação, horários de foco…"></textarea></label>' +
+      '<label class="f" style="margin-bottom:0"><span>O que importa agora</span><textarea id="focus" placeholder="As 2–3 coisas que mais pesam neste trimestre."></textarea></label>' +
+      '<div class="msg" id="m"></div>' +
+    "</div>" +
+    '<div class="card hidden" id="prev"><h2>Prévia do seu perfil</h2><p class="sub">É isto que será salvo. Confira e confirme.</p><div class="preview" id="pv"></div>' +
+      '<div class="actions" style="margin-top:16px"><button class="btn" type="button" id="edit">Editar texto</button><span class="spacer"></span><button class="btn pri" type="button" id="save">Salvar perfil →</button></div><div class="msg" id="m2"></div></div>' +
+    obNav({main: "Ver prévia", skip: "Pular por agora"}));
+  if (obProfileDraft) { $("#about").value = obProfileDraft.about; $("#how").value = obProfileDraft.how; $("#focus").value = obProfileDraft.focus; }
+  obBindNav(async btn => {
+    obProfileDraft = {about: $("#about").value, how: $("#how").value, focus: $("#focus").value};
+    if (!(obProfileDraft.about + obProfileDraft.how + obProfileDraft.focus).trim()) return obMsg($("#m"), "err", "Escreva pelo menos um dos campos — ou pule este passo.");
+    obBusy(btn, true, "Montando…");
+    try {
+      const r = await obAct("profile_preview", obProfileDraft);
+      $("#pv").innerHTML = obMd(r.markdown); $("#pv").dataset.md = r.markdown;
+      $("#form").classList.add("hidden"); $("#prev").classList.remove("hidden"); $("#nav").classList.add("hidden");
+    } catch (e) { obMsg($("#m"), "err", e.message); } finally { obBusy(btn, false); }
+  });
+  $("#edit").onclick = () => { $("#prev").classList.add("hidden"); $("#form").classList.remove("hidden"); $("#nav").classList.remove("hidden"); };
+  $("#save").onclick = async () => {
+    const b = $("#save"); obBusy(b, true);
+    try { await obAct("profile_save", {markdown: $("#pv").dataset.md, overwrite: !tpl}); await obRefresh(); obNext(); }
+    catch (e) { obMsg($("#m2"), "err", e.message); } finally { obBusy(b, false); }
+  };
+};
+
+// 4. Seu agente
+const OB_AGENT_URLS = {
+  "claude-code": "https://claude.ai/claude-code",
+  "hermes": "https://hermes.nousresearch.com",
+  "cursor-cli": "https://cursor.com",
+  "codex": "https://openai.com/codex",
+};
+const OB_AGENT_ICONS = {"claude-code": "⌘", "hermes": "✳", "cursor-cli": "▷", "codex": "◇"};
+OBV.agente = () => {
+  const agents = OBS.agents || [];
+  const sn = OBS.mcp_snippets || {};
+  if (!obPickedAgent || (obPickedAgent !== "other" && !agents.some(a => a.key === obPickedAgent))) {
+    const pre = agents.find(a => a.selected) || agents.find(a => a.mcp)
+      || (OBS.agent_mode === "manual" ? {key: "other"} : null)
+      || agents.find(a => a.detected) || agents[0];
+    obPickedAgent = pre ? pre.key : "other";
+    obAgentChosen = false;               // destaque é sugestão; escolha é clique (ruling)
+  }
+  const isOther = obPickedAgent === "other";
+  const currentObj = () => agents.find(a => a.key === obPickedAgent) || null;
+  const anyConnected = agents.some(a => a.mcp || a.selected) || OBS.agent_mode === "manual" || Boolean(obAgentHint);
+  const preStyle = "margin:0;font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;word-break:break-all;overflow-x:auto";
+  obSet(obHead("Conexões · primeiro o agente", "Seu agente", "O cérebro funciona com um agente de IA para ler suas fontes e ajudar nas rotinas. Escolha o seu agente principal ou configure outro cliente MCP manualmente.") +
+    '<div class="card">' +
+      '<div id="ag-list">' + agents.map(a => {
+        const url = OB_AGENT_URLS[a.key] || "#";
+        const ic = OB_AGENT_ICONS[a.key] || "✦";
+        const badges = [
+          a.detected ? '<span class="pill ok">detectado</span>' : '<span class="pill muted">não detectado</span>',
+          a.mcp ? '<span class="pill ok">MCP conectado</span>' : "",
+          a.selected ? '<span class="pill info">ativo</span>' : "",
+        ].filter(Boolean).join(" ");
+        const desc = a.detected
+          ? esc(a.runner ? "instalado · runner: " + a.runner : "instalado · chat e canais")
+          : 'não encontrado no PATH — <a href="' + esc(url) + '" target="_blank" rel="noopener">como instalar</a>';
+        return '<div class="agentcard ' + (a.key === obPickedAgent ? "sel" : "") + '" data-ag="' + esc(a.key) + '">' +
+          '<div class="ai-ic">' + ic + "</div>" +
+          '<div class="meta"><b>' + esc(a.label) + "</b> " + badges + '<div class="d">' + desc + "</div></div>" +
+          '<span class="radio"></span>' +
+          "</div>";
+      }).join("") +
+      '<div class="agentcard ' + (isOther ? "sel" : "") + '" data-ag="other">' +
+        '<div class="ai-ic">✦</div>' +
+        '<div class="meta"><b>Outros harnesses</b> ' + (OBS.agent_mode === "manual" ? '<span class="pill info">manual</span>' : "") + '<div class="d">Qualquer cliente MCP (stdio) — copie os snippets JSON, TOML ou CLI</div></div>' +
+        '<span class="radio"></span>' +
+      "</div></div>" +
+      (isOther ? '<div id="ag-other" style="margin-top:12px">' +
+        '<p class="sub" style="margin-bottom:8px">Cole um dos blocos abaixo na configuração MCP do seu agente e marque como configurado manualmente.</p>' +
+        '<div class="slot"><div class="sh"><span>JSON (mcpServers)</span><span class="spacer"></span><button class="btn sm" type="button" data-copy="json">Copiar</button></div><pre style="' + preStyle + '">' + esc(sn.json || "") + "</pre></div>" +
+        '<div class="slot"><div class="sh"><span>TOML ([mcp_servers.brain])</span><span class="spacer"></span><button class="btn sm" type="button" data-copy="toml">Copiar</button></div><pre style="' + preStyle + '">' + esc(sn.toml || "") + "</pre></div>" +
+        '<div class="slot"><div class="sh"><span>Linha de comando (stdio)</span><span class="spacer"></span><button class="btn sm" type="button" data-copy="cli">Copiar</button></div><pre style="' + preStyle + '">' + esc(sn.cli || "") + "</pre></div>" +
+      "</div>" : "") +
+      '<div class="slot ' + (obAgentHint ? "" : "hidden") + '" id="ag-hint">' +
+        '<div class="sh"><span>Receita manual para concluir</span><span class="spacer"></span><button class="btn sm" type="button" id="ag-copy-hint">Copiar comando</button></div>' +
+        '<pre id="ag-hint-txt" style="' + preStyle + '">' + esc(obAgentHint || "") + "</pre>" +
+      "</div>" +
+      '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px">' +
+        (isOther
+          ? '<button class="btn pri" type="button" id="ag-manual">Marcar como configurado manualmente</button>'
+          : '<button class="btn pri" type="button" id="ag-connect">Conectar o Brain ao ' + esc((currentObj() || {}).label || "agente") + "</button>") +
+        '<button class="btn" type="button" id="ag-later">Fazer depois</button>' +
+      "</div>" +
+      '<div class="log" id="ag-log"></div>' +
+      '<div class="msg" id="m"></div>' +
+    "</div>" +
+    obNav({main: anyConnected ? "Continuar" : "Seguir sem conectar", hideMain: !anyConnected}));
+
+  obAll("#ag-list .agentcard[data-ag]").forEach(card => {
+    card.onclick = e => {
+      if (e.target && e.target.closest && e.target.closest("a")) return;
+      obPickedAgent = card.dataset.ag;
+      obAgentChosen = true;
+      obAgentHint = null;
+      OBV.agente();
+    };
+  });
+
+  obAll("#ag-other [data-copy]").forEach(b => {
+    b.onclick = () => obCopyText(sn[b.dataset.copy] || "", b);
+  });
+
+  if ($("#ag-copy-hint")) {
+    $("#ag-copy-hint").onclick = () => obCopyText(obExtractCmd(obAgentHint), $("#ag-copy-hint"));
+  }
+
+  const doLater = async btn => {
+    obBusy(btn, true, "Criando tarefa…");
+    try {
+      const r = await obAct("agent_later", obAgentChosen && obPickedAgent !== "other" ? {agent: obPickedAgent} : {});
+      await obRefresh();
+      obMsg($("#m"), "ok", "✓ Tarefa " + r.id + " criada — ficou no seu TODO.");
+      setTimeout(obNext, 1100);
+    } catch (e) { obMsg($("#m"), "err", e.message); } finally { if (btn.isConnected) obBusy(btn, false); }
+  };
+  $("#ag-later").onclick = () => doLater($("#ag-later"));
+
+  if ($("#ag-manual")) {
+    $("#ag-manual").onclick = async () => {
+      const btn = $("#ag-manual");
+      obBusy(btn, true, "Salvando…");
+      try {
+        await obAct("agent_connect", {agent: "other"});
+        await obRefresh();
+        obRenderSteps();
+        OBV.agente();
+        obMsg($("#m"), "ok", "✓ Marcado como configurado manualmente.");
+      } catch (e) { obMsg($("#m"), "err", e.message); } finally { if (btn.isConnected) obBusy(btn, false); }
+    };
+  }
+
+  if ($("#ag-connect")) {
+    $("#ag-connect").onclick = async () => {
+      const obj = currentObj();
+      if (!obj) return;
+      obAgentChosen = true;               // o botão nomeia o agente: conectar é escolher
+      obAgentHint = null;
+      const btn = $("#ag-connect"), log = $("#ag-log");
+      obBusy(btn, true, "Conectando…");
+      try {
+        const r = await obAct("agent_connect", {agent: obj.key});
+        let res = r;
+        if (r.job) {
+          const j = await obJob(r.job, jj => obTickLog(log, jj));
+          if (j.status === "error") {
+            obMsg($("#m"), "err", (j.result && j.result.error) || "não consegui conectar o agente");
+            return;
+          }
+          res = j.result || {};
+        }
+        await obRefresh();
+        obRenderSteps();
+        if (!res.mcp && res.hint) {
+          obAgentHint = res.hint;
+          OBV.agente();
+          obMsg($("#m"), "warn", "Configuração automática indisponível — copie a receita acima para concluir no terminal.");
+          return;
+        }
+        btn.textContent = "✓ " + obj.label + " conectado";
+        obMsg($("#m"), "ok", "✓ " + obj.label + " conectado.");
+        setTimeout(obNext, 700);
+      } catch (e) { obMsg($("#m"), "err", e.message); } finally { if (btn.isConnected) obBusy(btn, false); }
+    };
+  }
+  obBindNav(() => obNext());
+};
+
+// 5. Conectores e fontes
+const OB_ST_LABEL = {connected: ["ok", "Conectado"], auth: ["warn", "Precisa autorizar"], missing: ["muted", "Não adicionado"], error: ["bad", "Com erro"], unknown: ["muted", "Verificando…"]};
+OBV.conectores = () => {
+  const noClaude = !OBS.claude_installed;
+  let scanRes = null;
+  obSet(obHead("Conexões", "Conectores e fontes", "Conector é o aplicativo (Slack, Gmail…). Fonte é o recorte que o Brain observa no <span class=\"kbd\">watch.toml</span> — só para <b>leitura</b>.") +
+    (noClaude ? "" : '<div class="card soft"><h2>Como conectar (uma vez só)</h2>' +
+      '<ol class="howto">' +
+        '<li>Abra <a href="https://claude.ai/settings/connectors" target="_blank" rel="noopener">claude.ai → Configurações → Conectores</a>.</li>' +
+        "<li>Adicione os que você usa: <b>Slack</b>, <b>Gmail</b>, <b>Google Calendar</b>, <b>Google Drive</b>, <b>Granola</b>, <b>Atlassian</b>.</li>" +
+        "<li>Clique em <b>Conectar</b> em cada um e autorize com a sua conta de trabalho.</li>" +
+        "<li>Volte aqui e clique em <b>Verificar de novo</b>.</li>" +
+      "</ol></div>") +
+    '<div class="card">' +
+      '<div style="display:flex;align-items:center;gap:12px;margin-bottom:4px"><h2 style="margin:0">Aplicativos</h2><span class="spacer"></span><button class="btn sm" type="button" id="scan">↻ Verificar de novo</button></div>' +
+      '<div id="conns"></div>' +
+      '<div class="log" id="scanlog"></div>' +
+      '<div id="extra" class="hidden" style="margin-top:14px">' +
+        '<div class="grid2">' +
+          '<label class="f" id="fslack" style="margin-bottom:0"><span>Canais do Slack para acompanhar</span><input type="text" id="slack" placeholder="#meu-time, #projeto-x"><small>Separados por vírgula. Dá para mudar depois.</small></label>' +
+          '<label class="f" id="fdrive" style="margin-bottom:0"><span>Pasta do Drive (link)</span><input type="text" id="drive" placeholder="https://drive.google.com/drive/folders/…"><small>Opcional: o Brain acompanha os documentos dela.</small></label>' +
+        "</div>" +
+      "</div>" +
+      '<div class="msg" id="m"></div>' +
+    "</div>" +
+    '<div class="card">' +
+      '<div style="display:flex;align-items:center;gap:12px;margin-bottom:4px">' +
+        '<div><h2 style="margin:0">Fontes observadas</h2><p class="sub" style="margin:2px 0 0">Fonte fora desta lista não é puxada — regra do <span class="kbd">watch.toml</span>.</p></div>' +
+        '<span class="spacer"></span>' +
+        '<button class="btn sm" type="button" id="show-add">+ Adicionar fonte</button>' +
+      "</div>" +
+      '<div class="twrap"><table class="src" id="srctable"></table></div>' +
+      '<div class="addform hidden" id="addform">' +
+        '<div class="grid3">' +
+          '<label class="f"><span>Tipo</span><select id="src-kind"></select></label>' +
+          '<label class="f"><span>Key (nome único)</span><input type="text" id="src-key" placeholder="ex.: slack-time"></label>' +
+          '<label class="f"><span>Janela</span><select id="src-win"><option value="1d">1d</option><option value="7d">7d</option><option value="14d" selected>14d</option><option value="auto">auto</option></select></label>' +
+        "</div>" +
+        '<label class="f" id="src-param-f"><span id="src-param-l">Parâmetro</span><input type="text" id="src-param" placeholder=""></label>' +
+        '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">' +
+          '<button class="btn pri sm" type="button" id="src-add">Adicionar</button>' +
+          '<button class="btn ghost sm" type="button" id="src-cancel">Fechar</button>' +
+          '<span style="font-size:12px;color:var(--muted)">Valida o <span class="kbd">watch.toml</span> na hora.</span>' +
+        "</div>" +
+      "</div>" +
+      '<div class="msg" id="srcmsg"></div>' +
+    "</div>" +
+    obNav({main: "Salvar e continuar", skip: "Fazer depois"}));
+
+  const drawConns = () => {
+    const src = (scanRes && scanRes.source) || OBS.connectors_source;
+    const hint = (scanRes && scanRes.hint) || OBS.connectors_hint;
+    if (src === "none") {
+      $("#conns").innerHTML = '<p style="color:var(--muted);margin:10px 0 0">' + esc(hint) + "</p>";
+      $("#extra").classList.add("hidden");
+      return;
+    }
+    $("#conns").innerHTML = OBS.connectors.map(c => {
+      const pair = OB_ST_LABEL[OBS.connectors_scanned ? c.status : "unknown"] || OB_ST_LABEL.unknown;
+      const can = c.status === "connected" || c.enabled;
+      return '<div class="conn"><div class="info"><b>' + esc(c.label) + "</b><p>" + esc(c.what) + '</p></div>' +
+        '<div class="right"><span class="pill ' + pair[0] + '">' + pair[1] + "</span>" +
+        '<label class="toggle" title="O Brain pode ler"><input type="checkbox" data-c="' + c.key + '" ' + (c.enabled || c.status === "connected" ? "checked" : "") + " " + (can ? "" : "disabled") + '><span></span></label></div></div>';
+    }).join("");
+    const sel = () => obAll("#conns input:checked").map(i => i.dataset.c);
+    const ex = () => {
+      const s = sel();
+      $("#extra").classList.toggle("hidden", !s.includes("slack") && !s.includes("drive"));
+      $("#fslack").classList.toggle("hidden", !s.includes("slack"));
+      $("#fdrive").classList.toggle("hidden", !s.includes("drive"));
+    };
+    obAll("#conns input").forEach(i => i.onchange = ex); ex();
+  };
+
+  const drawSources = () => {
+    const list = OBS.sources || [];
+    if (!list.length) {
+      $("#srctable").innerHTML = '<tr><td colspan="5" style="color:var(--muted);padding:12px 4px">Nenhuma fonte cadastrada ainda.</td></tr>';
+      return;
+    }
+    const detailOf = s => [
+      s.channel,
+      s.folder ? "pasta " + s.folder : "",
+      s.doc ? "doc " + s.doc : "",
+      s.jql,
+      s.path,
+      s.query,
+      s.note,
+    ].filter(Boolean).join(" · ") || "—";
+    $("#srctable").innerHTML = "<thead><tr><th>key</th><th>tipo</th><th>janela</th><th>detalhe</th><th></th></tr></thead><tbody>" +
+      list.map(s => "<tr>" +
+        '<td><span class="kbd">' + esc(s.key) + "</span></td>" +
+        "<td>" + esc(s.kind) + "</td>" +
+        "<td>" + esc(s.window || "auto") + "</td>" +
+        '<td><span class="d">' + esc(detailOf(s)) + "</span></td>" +
+        '<td style="text-align:right"><button class="x" type="button" data-rm-src="' + esc(s.key) + '" title="Remover fonte">×</button></td>' +
+      "</tr>").join("") + "</tbody>";
+    obAll("#srctable [data-rm-src]").forEach(btn => {
+      btn.onclick = async () => {
+        const key = btn.dataset.rmSrc;
+        btn.disabled = true;
+        try {
+          await obAct("source_remove", {key});
+          await obRefresh();
+          drawSources();
+          obMsg($("#srcmsg"), "ok", '✓ Fonte "' + key + '" removida.');
+        } catch (e) { obMsg($("#srcmsg"), "err", e.message); btn.disabled = false; }
+      };
+    });
+  };
+
+  const kinds = OBS.watch_kinds || [];
+  $("#src-kind").innerHTML = kinds.map(([k, l]) => '<option value="' + esc(k) + '">' + esc(l) + "</option>").join("");
+
+  const SRC_META = {
+    gmail:       {key: "gmail-hoje",      param: null},
+    gcal:        {key: "gcal-agenda",     param: null},
+    granola:     {key: "granola-reunioes", param: null},
+    slack:       {key: "slack-time",      field: "channel", label: "Canal ou pessoa",  ph: "#meu-time — ou @pessoa para DM", req: true},
+    drive:       {key: "drive-pasta",     field: "folder",  label: "Pasta do Drive",   ph: "cole a URL da pasta — o id é extraído na hora", req: true},
+    "drive-doc": {key: "drive-okr",       field: "doc",     label: "Documento do Drive", ph: "cole a URL do doc, planilha ou slides", req: true, noWindow: true},
+    jira:        {key: "jira-meus",       field: "jql",     label: "JQL",              ph: "assignee = currentUser() — os seus cards", req: true},
+    github:      {key: "github-repo",     field: "path",    label: "Caminho do clone local", ph: "~/projetos/meu-repo", req: true, noWindow: true},
+  };
+  const syncSrcForm = () => {
+    const m = SRC_META[$("#src-kind").value] || {};
+    $("#src-key").placeholder = "ex.: " + (m.key || "minha-fonte");
+    const f = $("#src-param-f");
+    if (m.param === null) { f.classList.add("hidden"); $("#src-param").value = ""; }
+    else {
+      f.classList.remove("hidden");
+      $("#src-param-l").textContent = m.label + (m.req ? " *" : "");
+      $("#src-param").placeholder = m.ph || "";
+    }
+    $("#src-win").closest("label").classList.toggle("hidden", !!m.noWindow);
+  };
+  $("#src-kind").onchange = syncSrcForm; syncSrcForm();
+  $("#show-add").onclick = () => $("#addform").classList.toggle("hidden");
+  $("#src-cancel").onclick = () => $("#addform").classList.add("hidden");
+  $("#src-add").onclick = async () => {
+    const b = $("#src-add");
+    const kind = $("#src-kind").value;
+    const meta = SRC_META[kind] || {};
+    const key = $("#src-key").value.trim();
+    const win = $("#src-win").value;
+    const param = $("#src-param").value.trim();
+    if (meta.req && !param)
+      return obMsg($("#srcmsg"), "err", 'Preencha o campo "' + meta.label + '" — ele diz ao Brain o que observar.');
+    const payload = {key, kind};
+    if (!meta.noWindow) payload.window = win;
+    if (param && meta.field) payload[meta.field] = param;
+    obBusy(b, true, "Adicionando…");
+    try {
+      await obAct("source_add", payload);
+      $("#src-key").value = "";
+      $("#src-param").value = "";
+      await obRefresh();
+      drawSources();
+      obMsg($("#srcmsg"), "ok", '✓ Fonte "' + key + '" adicionada.');
+    } catch (e) { obMsg($("#srcmsg"), "err", e.message); } finally { obBusy(b, false); }
+  };
+
+  drawConns();
+  drawSources();
+
+  const scan = async force => {
+    const b = $("#scan"), log = $("#scanlog");
+    obBusy(b, true, "Verificando…");
+    try {
+      const r = await obAct("connectors_scan", {force});
+      if (r.job) {
+        const j = await obJob(r.job, jj => obTickLog(log, jj));
+        if (j.status === "error") obMsg($("#m"), "err", (j.result && j.result.error) || "não consegui verificar");
+        scanRes = j.result || null;
+      } else {
+        scanRes = r;
+      }
+      await obRefresh(); drawConns();
+    } catch (e) { obMsg($("#m"), "err", e.message); } finally { obBusy(b, false); }
+  };
+  $("#scan").onclick = () => scan(true);
+  if (!OBS.connectors_scanned) scan(false);
+  obBindNav(async btn => {
+    const keys = obAll("#conns input:checked").map(i => i.dataset.c);
+    if (!keys.length) return obSkip(obCur);
+    obBusy(btn, true);
+    try {
+      await obAct("connectors_enable", {
+        connectors: keys,
+        slack_channels: $("#slack") ? $("#slack").value : "",
+        drive_folder: $("#drive") ? $("#drive").value : "",
+      });
+      await obRefresh(); obNext();
+    } catch (e) { obMsg($("#m"), "err", e.message); } finally { obBusy(btn, false); }
+  });
+};
+
+// 6. Memória
+OBV.memoria = () => {
+  const m = OBS.memory || {};
+  const normMode = m.mode === "lite" ? "embed" : (m.mode || "none");
+  let sel = normMode === "full" ? "full" : "embed";
+
+  const providers = (m.providers && (m.providers.llm || m.providers.embeddings || m.providers.reranker))
+    ? m.providers
+    : {
+        llm: [
+          {key: "anthropic", label: "Anthropic", recommended: true, cloud: true, key_set: !!m.llm_key},
+          {key: "fireworks", label: "Fireworks", recommended: false, cloud: true, key_set: !!m.llm_key},
+          {key: "openai", label: "OpenAI", recommended: false, cloud: true, key_set: !!m.llm_key},
+          {key: "zai", label: "Z.ai (GLM, plano coding)", recommended: false, cloud: true, key_set: !!m.llm_key},
+          {key: "lmstudio", label: "LM Studio (local, sem chave)", recommended: false, cloud: false, key_set: false},
+          {key: "custom", label: "Outro (OpenAI-compatível)", recommended: false, cloud: true, key_set: !!m.llm_key},
+        ],
+        embeddings: [
+          {key: "local", label: "Local — LM Studio bge-m3 (zero egress)", recommended: true, cloud: false, key_set: false},
+          {key: "fireworks", label: "Fireworks — Qwen3-Embedding-8B", recommended: false, cloud: true, key_set: !!m.emb_key},
+          {key: "openai", label: "OpenAI — text-embedding-3-small", recommended: false, cloud: true, key_set: !!m.emb_key},
+          {key: "cohere", label: "Cohere — embed-multilingual-v3.0", recommended: false, cloud: true, key_set: !!m.emb_key},
+          {key: "custom", label: "Outro (OpenAI-compatível)", recommended: false, cloud: true, key_set: !!m.emb_key},
+        ],
+        reranker: [
+          {key: "off", label: "Desligado — fusão RRF", recommended: true, cloud: false, key_set: false},
+          {key: "fireworks", label: "Fireworks — Qwen3-Reranker-8B", recommended: false, cloud: true, key_set: !!m.rer_key},
+          {key: "cohere", label: "Cohere — rerank-v3.5", recommended: false, cloud: true, key_set: !!m.rer_key},
+          {key: "zeroentropy", label: "ZeroEntropy — zerank-2", recommended: false, cloud: true, key_set: !!m.rer_key},
+          {key: "openrouter", label: "OpenRouter — rerank-v3.5", recommended: false, cloud: true, key_set: !!m.rer_key},
+          {key: "custom", label: "Outro (compatível com /rerank)", recommended: false, cloud: true, key_set: !!m.rer_key},
+        ],
+      };
+
+  const stack = m.stack || {};
+  const stackDefault = slot => {
+    const raw = stack[slot];
+    if (raw && typeof raw === "object") return raw.provider || "";
+    if (typeof raw === "string" && raw) return raw;
+    if (slot === "llm") return m.llm_provider || "";
+    if (slot === "embeddings") return m.emb_provider || "";
+    if (slot === "reranker") return m.rer_provider || "";
+    return "";
+  };
+  const listFor = slot => providers[slot] || [];
+  const chosen = {llm: "", embeddings: "", reranker: ""};
+  ["llm", "embeddings", "reranker"].forEach(slot => {
+    const list = listFor(slot);
+    const curVal = stackDefault(slot);
+    const found = list.find(p => p.key === curVal) || list.find(p => p.recommended) || list[0];
+    chosen[slot] = found ? found.key : "";
+  });
+  const getProv = (slot, key) => listFor(slot).find(p => p.key === key) || null;
+
+  const pre = (on, t, link) => '<div style="display:flex;align-items:center;gap:8px;margin-top:4px">' + (on ? '<span class="pill ok">pronto</span>' : '<span class="pill warn">falta</span>') + " <span>" + t + (!on && link ? ' — <a href="' + link + '" target="_blank" rel="noopener">baixar</a>' : "") + "</span></div>";
+
+  obSet(obHead("Conexões · memória de IA", "Memória", "A memória deixa o Brain responder perguntas pelo <b>significado</b>. Sem ela, o Brain continua funcionando inteiro com busca por palavras.") +
+    '<div class="grid3">' +
+      '<div class="opt" data-m="none"><span class="pill off">Sem servidor · grátis</span><h3>Apenas livro-razão</h3><p>O cérebro funciona inteiro; ligar depois é 2 min e vira tarefa no seu TODO.</p></div>' +
+      '<div class="opt" data-m="embed"><span class="pill rec">✓ recomendado pra começar</span><h3>Embed</h3><p>Busca por significado, 100% local e grátis. Chunks do vault, zero LLM, nada sai da máquina.</p></div>' +
+      '<div class="opt" data-m="full"><span class="pill warn">Usa a sua chave · custo por uso</span><h3>Full</h3><p>Extrai fatos e liga assuntos entre reuniões. O texto vai para a IA com a sua chave.</p></div>' +
+    "</div>" +
+    '<div class="card" id="det" style="margin-top:14px"></div>' +
+    '<div class="log" id="log"></div>' +
+    '<div class="msg" id="m"></div>' +
+    obNav({main: "Ativar", skip: "Fazer depois"}));
+
+  const renderSlot = (slot, title) => {
+    const list = listFor(slot);
+    const curKey = chosen[slot];
+    const p = getProv(slot, curKey) || {};
+    const needModelUrl = curKey === "custom" || (slot === "llm" && curKey === "openai");
+    return '<div class="slot" data-slot="' + slot + '">' +
+      '<div class="sh"><span>' + esc(title) + "</span>" + (p.recommended ? '<span class="pill rec">✓ recomendado</span>' : "") + "</div>" +
+      '<select id="prov-' + slot + '">' +
+        list.map(it => '<option value="' + esc(it.key) + '" ' + (it.key === curKey ? "selected" : "") + ">" + esc(it.label) + (it.recommended ? " — ✓ recomendado" : "") + "</option>").join("") +
+      "</select>" +
+      (p.cloud ? '<div style="margin-top:10px">' +
+        '<label class="f" style="margin-bottom:' + (needModelUrl ? "10px" : "0") + '">' +
+          "<span>API key " + (p.key_set ? '<span class="pill ok" style="margin-left:6px">chave já salva</span>' : "") + "</span>" +
+          '<input type="password" id="key-' + slot + '" placeholder="' + (p.key_set ? "deixe vazio para manter a atual" : "cole a chave aqui") + '" autocomplete="off">' +
+          '<small>Vai direto para <span class="kbd">config/.env</span> (0600) e nunca volta para a tela.</small>' +
+        "</label>" +
+      "</div>" : "") +
+      (needModelUrl ? '<div class="grid2" style="margin-top:8px">' +
+        '<label class="f" style="margin-bottom:0"><span>Modelo</span><input type="text" id="model-' + slot + '" placeholder="ex.: gpt-4o-mini"></label>' +
+        (curKey === "custom" ? '<label class="f" style="margin-bottom:0"><span>Base URL</span><input type="text" id="url-' + slot + '" placeholder="https://…/v1"></label>' : "<div></div>") +
+      "</div>" : "") +
+    "</div>";
+  };
+
+  const drawDetails = () => {
+    obAll("#view .opt").forEach(o => o.classList.toggle("sel", o.dataset.m === sel));
+    if (sel === "none") {
+      $("#det").innerHTML = '<h2>Apenas livro-razão</h2><p class="sub" style="margin:0">O Brain usa o índice local de palavras. Você pode ativar o Embed ou o Full depois (a tarefa fica registrada se escolher "Fazer depois").</p>';
+      return;
+    }
+    const visibleSlots = sel === "full" ? ["llm", "embeddings", "reranker"] : ["embeddings", "reranker"];
+    const anyCloud = visibleSlots.some(sl => (getProv(sl, chosen[sl]) || {}).cloud);
+    const usesLocal = visibleSlots.some(sl => ["local", "lmstudio"].includes((getProv(sl, chosen[sl]) || {}).key));
+    const prereqs = '<div class="rowline" style="margin-top:12px;padding-bottom:0;border-top:1px solid var(--line2)">' +
+      '<div class="info"><b>Servidor e modelos locais</b>' +
+        pre(m.docker, "<b>OrbStack</b> — roda o servidor de memória (precisa em qualquer modo)", "https://orbstack.dev") +
+        (usesLocal ? pre(m.lmstudio, "<b>LM Studio</b> — modelo local escolhido acima", "https://lmstudio.ai") : "") +
+      "</div></div>";
+    $("#det").innerHTML = "<h2>Motores</h2>" +
+      '<p class="sub">Escolha os provedores por slot — os itens recomendados já vêm selecionados.</p>' +
+      (sel === "full" ? renderSlot("llm", "LLM — extração de fatos") : "") +
+      renderSlot("embeddings", "Embeddings") +
+      renderSlot("reranker", "Reranker") +
+      (anyCloud ? '<div class="egress">⚠ Provedor em nuvem: texto do vault sai da máquina — o doctor narra enquanto estiver ativo.</div>' : "") +
+      prereqs +
+      (sel === "full" ? '<label class="check"><input type="checkbox" id="consent"> Entendo que trechos das minhas reuniões, mensagens e documentos serão enviados à API do provedor, com a minha chave, e que isso tem custo por uso.</label>' : "");
+
+    visibleSlots.forEach(slot => {
+      const sEl = $("#prov-" + slot);
+      if (sEl) sEl.onchange = () => { chosen[slot] = sEl.value; drawDetails(); };
+    });
+  };
+
+  obAll("#view .opt").forEach(o => o.onclick = () => { sel = o.dataset.m; drawDetails(); });
+  drawDetails();
+
+  const readSlot = slot => {
+    const sEl = $("#prov-" + slot);
+    if (!sEl) return undefined;
+    const obj = {provider: sEl.value};
+    const kEl = $("#key-" + slot), mEl = $("#model-" + slot), uEl = $("#url-" + slot);
+    if (kEl && kEl.value.trim()) obj.key = kEl.value.trim();
+    if (mEl && mEl.value.trim()) obj.model = mEl.value.trim();
+    if (uEl && uEl.value.trim()) obj.base_url = uEl.value.trim();
+    return obj;
+  };
+
+  obBindNav(async btn => {
+    const body = {mode: sel};
+    if (sel === "embed" || sel === "full") {
+      body.embeddings = readSlot("embeddings");
+      body.reranker = readSlot("reranker");
+    }
+    if (sel === "full") {
+      body.llm = readSlot("llm");
+      body.consent = !!($("#consent") && $("#consent").checked);
+      if (!body.consent) return obMsg($("#m"), "err", "Para o modo Full, marque o aceite de envio à API.");
+    }
+    const checkSlots = sel === "full" ? [["llm", "LLM"], ["embeddings", "Embeddings"], ["reranker", "Reranker"]]
+      : (sel === "embed" ? [["embeddings", "Embeddings"], ["reranker", "Reranker"]] : []);
+    for (const pair of checkSlots) {
+      const p = getProv(pair[0], body[pair[0]].provider);
+      if (p && p.cloud && !p.key_set && !body[pair[0]].key) {
+        return obMsg($("#m"), "err", 'Cole a API key de ' + pair[1] + " (" + p.label + ') — ou escolha "Fazer depois".');
+      }
+    }
+    obBusy(btn, true, "Ativando…");
+    const log = $("#log");
+    try {
+      const r = await obAct("memory", body);
+      obAll("#det input[type=password]").forEach(i => { i.value = ""; });
+      if (r.job) {
+        const j = await obJob(r.job, jj => obTickLog(log, jj));
+        if (j.status === "error") {
+          obMsg($("#m"), "err", (j.result && j.result.error) || "não consegui ligar a memória");
+          return;
+        }
+      }
+      await obRefresh(); obMsg($("#m"), "ok", "✓ Memória configurada."); setTimeout(obNext, 700);
+    } catch (e) { obMsg($("#m"), "err", e.message); } finally { obBusy(btn, false); }
+  }, async skipBtn => {
+    obBusy(skipBtn, true, "Salvando…");
+    try { await obAct("memory", {mode: sel, later: true}); await obRefresh(); obNext(); }
+    catch (e) { obMsg($("#m"), "err", e.message); } finally { obBusy(skipBtn, false); }
+  });
+};
+
+// 7. Chaves e portas
+OBV.chaves = () => {
+  const k = OBS.keys || {GITHUB_TOKEN: {set: false}};
+  obSet(obHead("Conexões", "Chaves e portas", "Nada aqui é obrigatório. As chaves ficam só no seu computador e nunca aparecem de novo na tela.") +
+    '<div class="card">' +
+      "<h2>Sugestões e bugs do Brain " + (k.GITHUB_TOKEN.set ? '<span class="pill ok" style="margin-left:6px">configurado</span>' : "") + "</h2>" +
+      '<p class="sub">Com um token do GitHub, as sugestões que você mandar pelo Brain viram issues públicas no repositório do projeto.</p>' +
+      '<ol class="howto" style="margin:4px 0 12px;padding-left:20px;color:var(--muted)">' +
+        '<li>Abra <a href="https://github.com/settings/tokens/new?scopes=public_repo&description=Brain%20%E2%80%94%20sugest%C3%B5es%20e%20bugs" target="_blank" rel="noopener">a página de criação do GitHub</a> — o escopo <b>public_repo</b> já vem marcado (é o único necessário: este token só abre e lê issues em repositórios públicos).</li>' +
+        "<li>Em <b>Expiration</b>, escolha <b>No expiration</b> — sem validade, pra não parar de funcionar num mês (o risco é mínimo: issues em repos públicos, nada mais).</li>" +
+        "<li>Role até o fim e clique em <b>Generate token</b>; depois cole o valor abaixo.</li>" +
+      "</ol>" +
+      '<label class="f" style="margin:0"><span>Token do GitHub (GITHUB_TOKEN)</span><input type="password" id="gh" placeholder="' + (k.GITHUB_TOKEN.set ? "deixe vazio para manter o atual" : "ghp_… (clássico, escopo public_repo)") + '" autocomplete="off"></label>' +
+    "</div>" +
+    '<div class="card">' +
+      "<h2>Google — foco na agenda e backup no Drive " + ((k.GOOGLE_REFRESH_TOKEN && k.GOOGLE_REFRESH_TOKEN.set) ? '<span class="pill ok" style="margin-left:6px">conectado</span>' : "") + "</h2>" +
+      '<p class="sub">Blocos de foco aprovados entram direto no Google Calendar, e o backup semanal sobe pro Drive. Escopo mínimo: só eventos que o Brain cria + os próprios zips de backup.</p>' +
+      '<ol class="howto" style="margin:4px 0 12px;padding-left:20px;color:var(--muted)">' +
+        '<li>No <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">Google Cloud Console</a>, crie um <b>ID do cliente OAuth</b> do tipo <b>App desktop</b> (ative a Calendar API e a Drive API se o console pedir).</li>' +
+        "<li>Copie o <b>Client ID</b> e o <b>Client Secret</b> para os campos abaixo.</li>" +
+        "<li>Clique em <b>Conectar Google</b> — o navegador abre na autorização; aceite e volte.</li>" +
+      "</ol>" +
+      '<div class="grid2">' +
+        '<label class="f"><span>Client ID ' + (k.GOOGLE_CLIENT_ID && k.GOOGLE_CLIENT_ID.set ? '<span class="pill ok">já salvo</span>' : "") + '</span><input type="text" id="gcid" placeholder="' + (k.GOOGLE_CLIENT_ID && k.GOOGLE_CLIENT_ID.set ? "deixe vazio para manter o atual" : "…apps.googleusercontent.com") + '" autocomplete="off"></label>' +
+        '<label class="f" style="margin-bottom:0"><span>Client Secret ' + (k.GOOGLE_CLIENT_SECRET && k.GOOGLE_CLIENT_SECRET.set ? '<span class="pill ok">já salvo</span>' : "") + '</span><input type="password" id="gsec" placeholder="' + (k.GOOGLE_CLIENT_SECRET && k.GOOGLE_CLIENT_SECRET.set ? "deixe vazio para manter o atual" : "GOCSPX-…") + '" autocomplete="off"></label>' +
+      "</div>" +
+      '<div class="actions" style="margin-top:14px"><button class="btn pri sm" type="button" id="gcon">Conectar Google</button>' +
+        '<span style="font-size:12px;color:var(--muted)">O navegador vai abrir pra você autorizar — o token fica no seu computador.</span></div>' +
+      '<div class="log" id="glog"></div>' +
+    "</div>" +
+    '<div class="msg" id="m"></div>' +
+    obNav({skip: "Pular"}));
+  obBindNav(async btn => {
+    const v = $("#gh").value.trim();
+    if (!v) { await obSkip(obCur); return; }
+    obBusy(btn, true);
+    try { await obAct("keys", {GITHUB_TOKEN: v}); $("#gh").value = ""; await obRefresh(); obNext(); }
+    catch (e) { obMsg($("#m"), "err", e.message); } finally { obBusy(btn, false); }
+  });
+
+  $("#gcon").onclick = async () => {
+    const b = $("#gcon"), log = $("#glog");
+    obBusy(b, true, "Conectando…");
+    try {
+      const r = await obAct("foco_google", {client_id: $("#gcid").value, client_secret: $("#gsec").value});
+      if (r.job) {
+        log.classList.add("show");
+        const j = await obJob(r.job, jj => { log.textContent = (jj.log || []).join("\n"); log.scrollTop = 1e9; });
+        if (j.status === "error") throw new Error((j.result && j.result.error) || "não consegui conectar o Google");
+      }
+      $("#gsec").value = "";
+      await obRefresh();
+      obMsg($("#m"), "ok", "✓ Google conectado — foco na agenda e backup no Drive ativos.");
+    } catch (e) { obMsg($("#m"), "err", e.message); } finally { obBusy(b, false); }
+  };
+};
+
+// 8. A máquina
+const OB_MQ_PILL = {done: ["ok", "✓ pronto"], pending: ["warn", "pendente"], warn: ["warn", "atenção"], off: ["off", "desligado"]};
+OBV.maquina = () => {
+  const mq = OBS.maquina || {};
+  const pill = st => {
+    const pair = OB_MQ_PILL[st] || OB_MQ_PILL.pending;
+    return '<span class="pill ' + pair[0] + '">' + pair[1] + "</span>";
+  };
+  obSet(obHead("O cérebro", "A máquina", "Cinco ajustes para o Brain rodar sozinho no seu computador, com defaults prontos. Confira e clique em Configurar.") +
+    '<div class="card">' +
+      '<div class="rowline">' +
+        '<div class="info"><b>Sincronização automática</b><p>O "noturno": reler fontes, renderizar o painel, sincronizar memória e backup semanal — sem você fazer nada.</p></div>' +
+        '<div class="right">' + pill(mq.noturno) +
+          '<label class="toggle" title="Agendar sincronização"><input type="checkbox" id="mq-agendar" checked><span></span></label>' +
+          '<input type="time" id="mq-time" value="05:00" style="width:104px" title="Horário da sincronização (HH:MM)">' +
+        "</div>" +
+      "</div>" +
+      '<div class="rowline">' +
+        '<div class="info"><b>Comando <span class="kbd">brain</span> no PATH</b><p>Usar o cérebro de qualquer pasta no terminal.</p></div>' +
+        '<div class="right">' + pill(mq.comando) +
+          '<label class="toggle" title="Instalar comando brain no PATH"><input type="checkbox" id="mq-comando" checked><span></span></label>' +
+        "</div>" +
+      "</div>" +
+      '<div class="rowline">' +
+        '<div class="info"><b>' + (mq.platform === "darwin" ? "Ícone no Dock" : "Atalho na área de trabalho") + "</b><p>O Brain a um clique, como qualquer app — e a aba do painel se reaproveita em vez de abrir nova toda hora.</p></div>" +
+        '<div class="right">' + pill(mq.icon) +
+          '<label class="toggle" title="Pregar o atalho do Brain"><input type="checkbox" id="mq-icon" checked><span></span></label>' +
+        "</div>" +
+      "</div>" +
+      '<div class="rowline">' +
+        '<div class="info"><b>TUI</b><p>Cockpit de terminal (opcional, ~40 MB): Execução · Portfólio · Configurações.</p></div>' +
+        '<div class="right">' + pill(mq.tui) +
+          '<label class="toggle" title="Instalar TUI"><input type="checkbox" id="mq-tui" checked><span></span></label>' +
+        "</div>" +
+      "</div>" +
+      '<div class="rowline">' +
+        '<div class="info"><b>Agenda — Google Calendar</b><p>Blocos de foco aprovados entram direto na sua agenda (e o backup semanal vai pro Drive).</p></div>' +
+        '<div class="right">' + ((OBS.keys && OBS.keys.GOOGLE_REFRESH_TOKEN && OBS.keys.GOOGLE_REFRESH_TOKEN.set)
+          ? '<span class="pill ok">✓ Google conectado</span>'
+          : '<span class="pill warn">conectar em Chaves e portas</span> <button class="btn sm" type="button" id="mq-goto-keys">ir lá</button>') + "</div>" +
+      "</div>" +
+      '<div class="rowline">' +
+        '<div class="info"><b>Atualização do framework</b><p>Novidades do projeto chegam até você: o comando <span class="kbd">update</span> busca as melhorias mais recentes e aplica no seu Brain.</p></div>' +
+        '<div class="right">' + pill(mq.framework) +
+          '<label class="toggle" title="Configurar atualização do framework"><input type="checkbox" id="mq-framework" checked><span></span></label>' +
+        "</div>" +
+      "</div>" +
+      '<div class="log" id="log"></div>' +
+      '<div class="msg" id="m"></div>' +
+    "</div>" +
+    obNav({main: "Configurar", skip: "Fazer depois"}));
+
+  const gk = $("#mq-goto-keys");
+  if (gk) gk.onclick = () => obGo("chaves");
+
+  obBindNav(async btn => {
+    const payload = {
+      noturno: $("#mq-agendar").checked ? $("#mq-time").value : "",
+      comando: $("#mq-comando").checked,
+      icon: $("#mq-icon").checked,
+      tui: $("#mq-tui").checked,
+      framework: $("#mq-framework").checked,
+    };
+    const log = $("#log");
+    obBusy(btn, true, "Configurando…");
+    try {
+      const r = await obAct("maquina", payload);
+      if (r.job) {
+        const j = await obJob(r.job, jj => obTickLog(log, jj));
+        if (j.status === "error") {
+          obMsg($("#m"), "err", (j.result && j.result.error) || "não consegui configurar a máquina");
+          return;
+        }
+      }
+      await obRefresh();
+      obMsg($("#m"), "ok", "✓ Máquina configurada.");
+      setTimeout(obNext, 700);
+    } catch (e) { obMsg($("#m"), "err", e.message); } finally { obBusy(btn, false); }
+  });
+};
+
+// 9. Goals e projetos
+const obEmptyGoal = () => ({title: "", horizon: "", why: "", projects: [{title: "", deliverables: [{title: "", due: ""}]}]});
+OBV.planejamento = () => {
+  if (OBS.planning.proposal && !obPlan.goals.length) { obPlan = JSON.parse(JSON.stringify(OBS.planning.proposal)); obPlanTab = "revisar"; }
+  const hasGoals = OBS.planning.goals > 0;
+  obSet(obHead("Começando", "Goals e projetos", "É o mapa do que você quer alcançar. O Brain liga cada tarefa e decisão a um projeto, e mostra o progresso.") +
+    '<div class="hier"><span class="g">Goal — objetivo grande</span>→<span class="p">Projeto — como chegar lá</span>→<span>Entregável — o que sai pronto</span></div>' +
+    (hasGoals ? '<div class="msg info show">Você já tem ' + OBS.planning.goals + " goal(s). O que criar aqui é somado a eles.</div>" : "") +
+    '<div style="margin-top:16px" class="tabs"><button type="button" data-t="escrever">Escrever ou enviar documento</button><button type="button" data-t="revisar">Revisar e montar</button></div>' +
+    '<div id="tab"></div><div class="msg" id="m"></div>' +
+    obNav({main: "Aprovar e criar", skip: "Fazer depois"}));
+  obAll("#view .tabs button").forEach(b => { b.classList.toggle("on", b.dataset.t === obPlanTab); b.onclick = () => { obPlanTab = b.dataset.t; OBV.planejamento(); }; });
+  const mainBtn = $('[data-a="main"]');
+  if (obPlanTab === "escrever") {
+    mainBtn.classList.add("hidden");
+    $("#tab").innerHTML = '<div class="card">' +
+      '<label class="f"><span>Explique com as suas palavras</span><textarea id="ptext" style="min-height:150px" placeholder="Ex.: Neste semestre quero lançar o novo app de pagamentos até junho. Para isso, preciso fechar a pesquisa com clientes em março e o MVP em maio. Também quero estruturar o time de dados…"></textarea></label>' +
+      '<div class="drop" id="drop"><b>Arraste documentos aqui</b> ou clique para escolher<br><small style="color:var(--muted)">Planejamento, OKRs, apresentação… (PDF, Word, PowerPoint, texto — até 25 MB)</small><input type="file" id="file" multiple class="hidden"></div>' +
+      '<ul class="files" id="files">' + obUploads.map(u => "<li><span>" + esc(u.name) + "</span><span>✓ recebido</span></li>").join("") + "</ul>" +
+      '<div class="actions" style="margin-top:16px"><span class="spacer"></span><button class="btn" type="button" id="manual">Montar à mão</button><button class="btn pri" type="button" id="gen" ' + (OBS.agent ? "" : "disabled") + '>✦ Gerar proposta com IA</button></div>' +
+      (OBS.agent ? "" : '<p style="color:var(--muted);font-size:12.5px;margin:10px 0 0">A proposta automática precisa de um agente headless instalado ou configurado em [runner]. Você pode montar à mão.</p>') +
+      '<div class="log" id="log"></div></div>';
+    const drop = $("#drop"), file = $("#file");
+    drop.onclick = () => file.click();
+    drop.ondragover = e => { e.preventDefault(); drop.classList.add("over"); };
+    drop.ondragleave = () => drop.classList.remove("over");
+    drop.ondrop = e => { e.preventDefault(); drop.classList.remove("over"); send(e.dataTransfer.files); };
+    file.onchange = () => send(file.files);
+    async function send(list) {
+      for (const f of Array.from(list)) {
+        const li = document.createElement("li"); li.innerHTML = "<span>" + esc(f.name) + "</span><span><i class='spin'></i></span>"; $("#files").appendChild(li);
+        try {
+          const r = await fetch("/api/onboard/upload", {method: "POST", headers: {"X-Brain-Token": TOK, "X-File-Name": encodeURIComponent(f.name)}, body: f});
+          const j = await r.json(); if (!r.ok || !j.ok) throw new Error(j.error || "falhou");
+          obUploads.push({name: j.name}); li.lastChild.textContent = "✓ recebido";
+        } catch (e) { li.lastChild.textContent = "✗ " + e.message; }
+      }
+    }
+    $("#manual").onclick = () => { if (!obPlan.goals.length) obPlan.goals.push(obEmptyGoal()); obPlanTab = "revisar"; OBV.planejamento(); };
+    $("#gen").onclick = async () => {
+      const b = $("#gen"), log = $("#log");
+      const t = $("#ptext").value.trim();
+      if (!t && !obUploads.length) return obMsg($("#m"), "err", "Escreva algo ou envie um documento primeiro.");
+      obBusy(b, true, "Lendo…");
+      try {
+        if (t) await obAct("planning_note", {text: t});
+        const r = await obAct("planning_draft");
+        log.classList.add("show"); log.textContent = "O Brain está lendo o que você mandou. Isso leva de 1 a 3 minutos…";
+        const j = await obJob(r.job, jj => { if (jj.log && jj.log.length) obTickLog(log, jj); });
+        if (j.status === "error") throw new Error((j.result && j.result.error) || "não consegui gerar a proposta");
+        obPlan = j.result.proposal; obPlanTab = "revisar"; await obRefresh(); OBV.planejamento();
+      } catch (e) { obMsg($("#m"), "err", e.message); } finally { obBusy(b, false); }
+    };
+  } else {
+    obDrawTree();
+  }
+  obBindNav(async btn => {
+    obCollectTree();
+    const goals = obPlan.goals.filter(g => g.title.trim());
+    if (!goals.length) return obMsg($("#m"), "err", 'Adicione pelo menos um goal — ou escolha "Fazer depois".');
+    if (!$("#approve").checked) return obMsg($("#m"), "err", "Marque a confirmação para criar os goals.");
+    obBusy(btn, true, "Criando…");
+    try { await obAct("planning_apply", {proposal: {goals}, approved: true}); obPlan = {goals: []}; await obRefresh(); obNext(); }
+    catch (e) { obMsg($("#m"), "err", e.message); } finally { obBusy(btn, false); }
+  });
+};
+function obDrawTree() {
+  if (!obPlan.goals.length) obPlan.goals.push(obEmptyGoal());
+  $("#tab").innerHTML = (obPlan.summary ? '<div class="msg info show" style="margin:0 0 14px">✦ ' + esc(obPlan.summary) + "</div>" : "") +
+    '<div class="tree" id="tree">' + obPlan.goals.map((g, gi) => '<div class="goal" data-g="' + gi + '">' +
+      '<div class="row"><span class="lvl g">Goal</span><input type="text" data-f="title" value="' + esc(g.title) + '" placeholder="Ex.: Lançar o app de pagamentos"><button class="x" type="button" data-rm="g" title="Remover">×</button></div>' +
+      '<div class="row"><span class="lvl d">Por quê</span><input type="text" data-f="why" value="' + esc(g.why) + '" placeholder="o que isto destrava (opcional)"><input type="date" data-f="horizon" value="' + esc(g.horizon) + '" style="max-width:170px" title="Prazo do goal"></div>' +
+      g.projects.map((p, pi) => '<div class="proj" data-p="' + pi + '">' +
+        '<div class="row"><span class="lvl p">Projeto</span><input type="text" data-f="title" value="' + esc(p.title) + '" placeholder="Ex.: Pesquisa com clientes"><button class="x" type="button" data-rm="p">×</button></div>' +
+        p.deliverables.map((d, di) => '<div class="row del" data-d="' + di + '"><span class="lvl d">Entregável</span><input type="text" data-f="title" value="' + esc(d.title) + '" placeholder="Ex.: Relatório de entrevistas"><input type="date" data-f="due" value="' + esc(d.due) + '" style="max-width:170px" title="Prazo"><button class="x" type="button" data-rm="d">×</button></div>').join("") +
+        '<button class="add del" type="button" data-add="d">+ entregável</button></div>').join("") +
+      '<button class="add" type="button" data-add="p" style="margin-left:18px">+ projeto</button></div>').join("") + "</div>" +
+    '<button class="btn sm" type="button" data-add="g">+ goal</button>' +
+    '<label class="check" style="margin-top:16px"><input type="checkbox" id="approve"> Aprovo: pode criar estes goals, projetos e entregáveis no meu Brain.</label>';
+  obAll("#tab [data-add]").forEach(b => b.onclick = () => {
+    obCollectTree();
+    const gEl = b.closest("[data-g]"), pEl = b.closest("[data-p]");
+    if (b.dataset.add === "g") obPlan.goals.push(obEmptyGoal());
+    if (b.dataset.add === "p") obPlan.goals[+gEl.dataset.g].projects.push({title: "", deliverables: [{title: "", due: ""}]});
+    if (b.dataset.add === "d") obPlan.goals[+gEl.dataset.g].projects[+pEl.dataset.p].deliverables.push({title: "", due: ""});
+    obDrawTree();
+  });
+  obAll("#tab [data-rm]").forEach(b => b.onclick = () => {
+    obCollectTree();
+    const gi = +b.closest("[data-g]").dataset.g, pEl = b.closest("[data-p]"), dEl = b.closest("[data-d]");
+    if (b.dataset.rm === "g") obPlan.goals.splice(gi, 1);
+    if (b.dataset.rm === "p") obPlan.goals[gi].projects.splice(+pEl.dataset.p, 1);
+    if (b.dataset.rm === "d") obPlan.goals[gi].projects[+pEl.dataset.p].deliverables.splice(+dEl.dataset.d, 1);
+    obDrawTree();
+  });
+}
+function obCollectTree() {
+  if (!$("#tree")) return;
+  const val = (el, f) => { const x = el.querySelector(":scope > .row [data-f=\"" + f + "\"]"); return x ? x.value.trim() : ""; };
+  obPlan.goals = obAll("#tree .goal").map(gEl => ({
+    title: val(gEl, "title"), why: val(gEl, "why"), horizon: val(gEl, "horizon"),
+    projects: obAll(":scope > .proj", gEl).map(pEl => ({
+      title: val(pEl, "title"),
+      deliverables: obAll(":scope > .del[data-d]", pEl).map(dEl => ({
+        title: (dEl.querySelector("[data-f=\"title\"]") || {value: ""}).value.trim(),
+        due: (dEl.querySelector("[data-f=\"due\"]") || {value: ""}).value || "",
+      })).filter(d => d.title),
+    })).filter(p => p.title),
+  }));
+}
+
+// 10. A conversa
+OBV.conversa = () => {
+  obSet(obHead("Começando", "A conversa", "O formulário acabou; a entrevista não. Responda aqui mesmo — ou pule e o Brain anota no seu TODO.") +
+    '<div class="card">' +
+      "<h2>Uma pergunta aberta para o agente</h2>" +
+      '<p class="sub">O que o Brain ainda quer saber para fechar o seu mapa:</p>' +
+      '<div class="msgline"><b>Pessoas recorrentes</b> — quem mais aparece no seu dia, para criar fichas sem duplicar ninguém.</div>' +
+      '<div class="msgline"><b>Fontes que valem observar</b> — canais, pastas ou projetos que faltaram nas conexões.</div>' +
+      '<label class="f"><span>Pessoas recorrentes <i style="font-weight:400">(uma por linha: Nome — apelido, e-mail)</i></span>' +
+        '<textarea id="cv-people" rows="4" placeholder="Marina Silva — Mari, marina@exemplo.com&#10;Heitor Costa"></textarea></label>' +
+      '<label class="f"><span>Fontes que valem observar <i style="font-weight:400">(uma por linha: canal, pasta, projeto)</i></span>' +
+        '<textarea id="cv-sources" rows="3" placeholder="#time-dados&#10;pasta do Drive &quot;Clientes&quot;"></textarea></label>' +
+      '<p class="sub" style="margin:2px 0 0">As pessoas viram fichas agora; as fontes entram como proposta para você aprovar depois.</p>' +
+    "</div>" +
+    '<div class="card soft">' +
+      '<div class="rowline" style="padding:0">' +
+        '<div class="info"><b>Se preferir conversar depois</b><p>Pule — o Brain cria uma tarefa no seu TODO e retoma a pergunta quando você abrir o chat (ou o <span class="kbd">⚡</span> na TUI).</p></div>' +
+        '<span class="pill ok">não se perde</span>' +
+      "</div>" +
+    "</div>" +
+    obNav({main: "Enviar respostas", skip: "Pular"}));
+  obBindNav(async btn => {
+    obBusy(btn, true);
+    try { await obAct("entrevista", {people: $("#cv-people").value, sources: $("#cv-sources").value}); obNext(); }
+    catch (e) { obMsg($("#m"), "err", e.message); } finally { obBusy(btn, false); }
+  });
+};
+
+// 11. Pronto
+OBV.pronto = () => {
+  const d = obDoneSet();
+  const agents = OBS.agents || [];
+  const connAg = agents.find(a => a.detected && (a.mcp || a.selected)) || agents.find(a => a.mcp || a.selected);
+  const agLabel = connAg ? connAg.label : (OBS.agent || "");
+  const agDetail = connAg ? [connAg.mcp ? "MCP" : "", connAg.selected ? "selecionado" : ""].filter(Boolean).join(" · ") : "";
+
+  const enabledConns = (OBS.connectors || []).filter(c => c.enabled).map(c => c.label);
+  const nSources = (OBS.sources || []).length;
+  const connExtra = [enabledConns.join(", "), nSources ? nSources + " fonte(s)" : ""].filter(Boolean).join(" · ");
+
+  const memLabel = {none: "apenas livro-razão", lite: "embed", embed: "embed", full: "full"}[(OBS.memory || {}).mode] || "apenas livro-razão";
+
+  const mq = OBS.maquina || {};
+  const mqFmt = (name, st) => name + ": " + ({done: "pronto", pending: "pendente", warn: "atenção", off: "desligado"}[st] || st || "—");
+  const mqExtra = [mqFmt("sincronização", mq.noturno), mqFmt("comando", mq.comando), mqFmt("TUI", mq.tui)].join(" · ");
+  const mqDone = mq.noturno === "done" && mq.comando === "done";
+
+  const nGoals = (OBS.planning || {}).goals || 0;
+  const row = (ok, title, extra) => "<li>" + (ok ? '<span class="pill ok">pronto</span>' : '<span class="pill off">depois</span>') + " <b>" + esc(title) + "</b>" + (extra ? '<span class="extra">— ' + esc(extra) + "</span>" : "") + "</li>";
+
+  obSet(obHead("Começando", "Pronto — seu Brain está de pé", "Daqui para frente, abra o Brain pelo ícone e comece o dia por ele.") +
+    '<div class="card"><ul class="summary">' +
+      row(!!connAg, "Agente", agLabel ? (agDetail ? agLabel + " (" + agDetail + ")" : agLabel) : "nenhum conectado") +
+      row(enabledConns.length > 0 || nSources > 0, "Conectores e fontes", connExtra || "nenhum") +
+      row((OBS.memory || {}).mode && OBS.memory.mode !== "none", "Memória", memLabel) +
+      row(mqDone || d.has("maquina"), "Máquina", mqExtra) +
+      row(nGoals > 0, "Goals e projetos", nGoals ? nGoals + " goal(s)" : "nenhum ainda") +
+    "</ul></div>" +
+    '<div class="msg info show" style="margin:0 0 14px">O que ficou pra depois virou tarefa com nome no seu TODO.</div>' +
+    '<div class="card soft"><h2>Primeiros passos</h2><ol class="howto">' +
+      "<li>No chat com o seu agente, nesta pasta, digite <b>/brief</b> para ver o seu dia.</li>" +
+      "<li>Jogue arquivos (atas, PDFs, prints) na caixa de entrada do Brain e digite <b>/dump</b> — ele organiza tudo.</li>" +
+      "<li>Para puxar as novidades do Slack, Gmail e agenda: <b>/update</b>.</li></ol>" +
+      (OBS.inbox ? '<p style="color:var(--muted);margin:10px 0 0;font-size:13px">Você tem ' + OBS.inbox + " item(ns) na caixa de entrada esperando um <b>/dump</b>.</p>" : "") + "</div>" +
+    '<div class="msg" id="m"></div>' +
+    obNav({main: "Abrir meu Brain"}));
+  obBindNav(async btn => {
+    obBusy(btn, true, "Preparando o painel…");
+    try {
+      await obAct("finish");
+      try { localStorage.removeItem("brain-onboarding-step"); } catch (e) {}
+      obBusy(btn, false);
+      await exitOnboarding();          // F8: mesma página — o painel aparece sem recarregar
+    }
+    catch (e) { obMsg($("#m"), "err", e.message); obBusy(btn, false); }
+  });
+};
+
+function obRender() { obRenderSteps(); (OBV[obCur] || OBV.inicio)(); }
+
+async function enterOnboarding() {
+  if (OB_ACTIVE) return;
+  OB_ACTIVE = true;
+  document.body.classList.add("obmode");
+  if (!LIVE) {
+    obSet('<section class="card"><h2>A configuração guiada precisa do app</h2><p class="sub">Este painel foi aberto como arquivo (retrato). Abra o <b>Brain</b> pelos Aplicativos, Launchpad ou Spotlight — enquanto a configuração não termina, o app abre aqui sozinho.</p></section>');
+    return;
+  }
+  obSet('<section class="card"><p class="sub">carregando a configuração…</p></section>');
+  try { await obRefresh(); }
+  catch (e) { obSet('<section class="card"><p class="late">Não consegui falar com o Brain: ' + esc(e.message) + "</p></section>"); return; }
+  const side = document.getElementById("side");
+  if (side && !document.getElementById("obnav")) {
+    const nav = document.createElement("div");
+    nav.className = "obnav"; nav.id = "obnav";
+    nav.innerHTML = '<ol class="steps" id="ob-steps"></ol><p class="obnote">Tudo fica no seu computador. Você pode voltar a qualquer passo e mudar depois.</p>';
+    side.insertBefore(nav, document.getElementById("tabs"));
+  }
+  obRender();
+}
+async function exitOnboarding() {
+  OB_ACTIVE = false; window.__obDone = true;
+  const teardown = () => {
+    document.body.classList.remove("obmode");
+    const n = document.getElementById("obnav"); if (n) n.remove();
+  };
+  try {
+    const d = await api("/api/data");
+    if (d && d.model && window.BRAIN && window.BRAIN.refresh) { teardown(); window.BRAIN.refresh(d.model); return; }
+  } catch (e) { /* views regeneram no próximo brain render */ }
+  teardown();
+  location.hash = "home";
+}
+window.enterOnboarding = enterOnboarding;
+window.exitOnboarding = exitOnboarding;
 
 })();

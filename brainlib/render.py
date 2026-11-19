@@ -85,6 +85,8 @@ def view_model(brain) -> dict:
     """O view model completo (o que o render injeta no painel e o serve devolve em /api/data):
     modelo + checagens de saúde + notas do agente — mesmas chaves nos dois caminhos."""
     m = model.build(brain)
+    from . import onboard
+    m["onboarding"] = {"needed": onboard.needed(brain)}          # F8: primeira vez abre o wizard na própria página
     m["health"] = [{**c, "fix": doctor.fix_for(c)} for c in doctor.checks(brain)]
     m["freshness"] = doctor.freshness(brain)
     m["sources"] = _sources(brain)
@@ -197,13 +199,16 @@ def ensure_bridge(brain, port: int = 8787, wait_s: float = 3.0) -> str | None:
 
 
 def open_onboarding(brain) -> bool:
-    """Abre o onboarding no navegador (precisa da ponte: é ela que grava). False se a ponte não subiu."""
+    """Abre o onboarding no navegador (precisa da ponte: é ela que grava). False se a ponte não subiu.
+    F8: o wizard é um modo do painel — o hash `onboarding` entra no modo sem trocar de página."""
     live = ensure_bridge(brain, wait_s=15.0)                # primeira subida pode ser lenta (máquina recém-instalada)
     if not live:
         return False
     base, _, frag = live.partition("#")
+    tok = frag.split("=", 1)[1] if frag.startswith("t=") else ""
+    hash_ = "onboarding" + ("&t=" + tok if tok else "")     # extra.js lê t= no hash ([#&]t=…)
     print("✓ abrindo a configuração guiada do Brain")
-    util.open_url(base.rstrip("/") + "/onboarding" + (f"#{frag}" if frag else ""))
+    util.open_url(base.rstrip("/") + "/#" + hash_)
     return True
 
 

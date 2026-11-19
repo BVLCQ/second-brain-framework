@@ -20,6 +20,7 @@ function normalizeBrain(m){
   m.projects = m.projects || []; m.decisions = m.decisions || [];
   m.artifacts = m.artifacts || []; m.shares = m.shares || []; m.notes = m.notes || [];
   m.agent_ok = !!m.agent_ok;
+  m.onboarding = m.onboarding || {needed: false};   // F8: primeira vez entra no wizard da própria página
   if (m.portfolio) m.portfolio.ice_rubric = m.portfolio.ice_rubric || {success_measures: [], principles: [], axes: {}};   // instância antiga: metodologia some, painel sobe
   // publicações (porta 3) vêm dos shares reais do ledger (Share: solicitada|aprovada|publicada|cancelada)
   if (!m.publishes.length && m.shares.length)
@@ -941,6 +942,15 @@ function route(){
     const last = localStorage.getItem("mock-face-" + f);
     const entry = FACES.find(x => x[0] === f) || FACES[0];
     location.hash = last || entry[2][0][0];      // default = primeira aba da própria face (carrossel: toda face é alcançável)
+    return;
+  }
+  if (path === "onboarding") {                   // F8: o wizard é um modo do painel, não uma página
+    if (!document.body.classList.contains("obmode") && typeof window.enterOnboarding === "function") window.enterOnboarding();
+    return;
+  }
+  if ((path === "home" || path === "") && M.onboarding && M.onboarding.needed && !window.__obDone
+      && typeof window.enterOnboarding === "function" && !document.body.classList.contains("obmode")) {
+    location.hash = "onboarding";                // primeira vez: o painel abre na configuração sozinho
     return;
   }
   if (seg[0] === "portfolio") seg = ["pf", "visao"];          // link antigo
