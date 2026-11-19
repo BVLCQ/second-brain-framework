@@ -469,6 +469,11 @@ body.con-open .clidot{display:none}
   background:color-mix(in srgb,var(--bg) 82%,transparent);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
 .inbox-drop-ov[hidden]{display:none}
 .pal-foot{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;padding:10px 14px;border-top:1px solid var(--line)}
+.duprow{display:flex;gap:10px;align-items:baseline;padding:7px 8px;border-radius:8px;cursor:pointer;font-size:12.5px}
+.duprow:hover{background:color-mix(in srgb,var(--accent) 8%,var(--panel))}
+.duprow input{accent-color:var(--accent)}
+.duppath{font:11.5px ui-monospace,monospace;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
+.dupmeta{font-size:10.5px;color:var(--muted);white-space:nowrap}
 .inbox-drop-zone{flex:1;display:flex;align-items:center;justify-content:center;border:2px dashed var(--line);
   border-radius:18px;background:color-mix(in srgb,var(--panel) 88%,transparent);
   transition:border-color .12s ease,background .12s ease,transform .12s ease;pointer-events:none}

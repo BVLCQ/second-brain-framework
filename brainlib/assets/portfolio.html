@@ -476,6 +476,11 @@ body.con-open .clidot{display:none}
   background:color-mix(in srgb,var(--bg) 82%,transparent);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
 .inbox-drop-ov[hidden]{display:none}
 .pal-foot{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;padding:10px 14px;border-top:1px solid var(--line)}
+.duprow{display:flex;gap:10px;align-items:baseline;padding:7px 8px;border-radius:8px;cursor:pointer;font-size:12.5px}
+.duprow:hover{background:color-mix(in srgb,var(--accent) 8%,var(--panel))}
+.duprow input{accent-color:var(--accent)}
+.duppath{font:11.5px ui-monospace,monospace;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
+.dupmeta{font-size:10.5px;color:var(--muted);white-space:nowrap}
 .inbox-drop-zone{flex:1;display:flex;align-items:center;justify-content:center;border:2px dashed var(--line);
   border-radius:18px;background:color-mix(in srgb,var(--panel) 88%,transparent);
   transition:border-color .12s ease,background .12s ease,transform .12s ease;pointer-events:none}
@@ -2798,12 +2803,12 @@ const INBOX_SKIP = new Set([".DS_Store", ".keep.md"]);
 let inboxDragDepth = 0;
 
 // Pasta de origem (File System Access API): o navegador não entrega o caminho de um arquivo
-// arrastado nem deixa a página apagar nada fora de uma pasta concedida explicitamente pelo dono.
-// Concedida a pasta (readwrite, lembrada no IndexedDB — a ponte vive em porta fixa, a origem não
-// muda entre sessões), o modo Mover apaga o original DEPOIS de enviar, só quando
-// nome+tamanho+horário batem com o arquivo que caiu. Sem pasta (ou navegador sem suporte): cópia.
-let inboxOrigin = null;                    // {handle,name} | {none:true} | null (ainda não carregado)
-const INBOX_ORIGIN_DB = "brain-panel", INBOX_ORIGIN_STORE = "handles", INBOX_ORIGIN_KEY = "inbox-origin";
+// arrastado. A ponte já procura o original no disco e apaga (byte a byte conferido); as pastas
+// concedidas aqui são o COMPLEMENTO — cobrem pastas fora de HOME ou instâncias com a busca
+// desligada ([serve].move_search = false). Várias pastas; lembradas no IndexedDB (porta fixa).
+let inboxOrigins = null;                   // [{handle,name}] | null (ainda não carregado)
+const INBOX_ORIGIN_DB = "brain-panel", INBOX_ORIGIN_STORE = "handles",
+      INBOX_ORIGIN_KEY = "inbox-origins", INBOX_ORIGIN_LEGACY = "inbox-origin";
 function inboxIdb(){
   return new Promise((res, rej) => {
     const q = indexedDB.open(INBOX_ORIGIN_DB, 1);
@@ -2812,54 +2817,75 @@ function inboxIdb(){
     q.onerror = () => rej(q.error);
   });
 }
-async function inboxOriginLoad(){
-  if (!("indexedDB" in window)) { inboxOrigin = {none: true}; return null; }
-  try {
-    const db = await inboxIdb();
-    const h = await new Promise((res, rej) => {
-      const rq = db.transaction(INBOX_ORIGIN_STORE, "readonly").objectStore(INBOX_ORIGIN_STORE).get(INBOX_ORIGIN_KEY);
+function inboxIdbGet(key){
+  return new Promise(async (res, rej) => {
+    try {
+      const db = await inboxIdb();
+      const rq = db.transaction(INBOX_ORIGIN_STORE, "readonly").objectStore(INBOX_ORIGIN_STORE).get(key);
       rq.onsuccess = () => res(rq.result || null);
       rq.onerror = () => rej(rq.error);
-    });
-    inboxOrigin = h && h.kind === "directory" ? {handle: h, name: h.name} : {none: true};
-  } catch (e) { inboxOrigin = {none: true}; }
-  updateInboxDropHint();
-  return inboxOrigin.handle || null;
+    } catch (e) { res(null); }
+  });
 }
-async function inboxOriginSave(h){
-  inboxOrigin = h ? {handle: h, name: h.name} : {none: true};
-  try {
-    const db = await inboxIdb();
-    const st = db.transaction(INBOX_ORIGIN_STORE, "readwrite").objectStore(INBOX_ORIGIN_STORE);
-    if (h) st.put(h, INBOX_ORIGIN_KEY); else st.delete(INBOX_ORIGIN_KEY);
-  } catch (e) { /* sem IndexedDB: a pasta vale só para esta sessão */ }
+function inboxIdbPut(key, val){
+  return new Promise(async (res, rej) => {
+    try {
+      const db = await inboxIdb();
+      const tx = db.transaction(INBOX_ORIGIN_STORE, "readwrite");
+      if (val === null) tx.objectStore(INBOX_ORIGIN_STORE).delete(key);
+      else tx.objectStore(INBOX_ORIGIN_STORE).put(val, key);
+      tx.oncomplete = () => res();
+      tx.onerror = () => rej(tx.error);
+    } catch (e) { res(); }
+  });
+}
+async function inboxOriginsLoad(){
+  if (!("indexedDB" in window)) { inboxOrigins = []; return inboxOrigins; }
+  let list = await inboxIdbGet(INBOX_ORIGIN_KEY);
+  if (!list) {                                     // migração: chave única da 1ª versão
+    const single = await inboxIdbGet(INBOX_ORIGIN_LEGACY);
+    list = single && single.kind === "directory" ? [single] : [];
+    if (list.length) { await inboxIdbPut(INBOX_ORIGIN_KEY, list); await inboxIdbPut(INBOX_ORIGIN_LEGACY, null); }
+  }
+  inboxOrigins = Array.isArray(list) ? list.filter(h => h && h.kind === "directory").map(h => ({handle: h, name: h.name})) : [];
+  updateInboxDropHint();
+  return inboxOrigins;
+}
+async function inboxOriginsSave(list){
+  inboxOrigins = list.slice();
+  await inboxIdbPut(INBOX_ORIGIN_KEY, list.map(o => o.handle));
   updateInboxDropHint();
 }
-async function inboxOriginWritable(){
+async function inboxOriginsWritable(){
   // Chamada no instante do drop: requestPermission({mode:"readwrite"}) exige ativação de
   // usuário fresca — nunca depois dos envios, que podem demorar mais que a janela de ativação.
-  if (!(inboxOrigin && inboxOrigin.handle)) await inboxOriginLoad();
-  const h = inboxOrigin && inboxOrigin.handle;
-  if (!h) return null;
-  try {
-    if (await h.queryPermission({mode: "readwrite"}) === "granted") return h;
-    return await h.requestPermission({mode: "readwrite"}) === "granted" ? h : null;
-  } catch (e) { return null; }
+  if (!inboxOrigins) await inboxOriginsLoad();
+  const out = [];
+  for (const o of inboxOrigins) {
+    try {
+      if (await o.handle.queryPermission({mode: "readwrite"}) === "granted") { out.push(o.handle); continue; }
+      if (await o.handle.requestPermission({mode: "readwrite"}) === "granted") out.push(o.handle);
+    } catch (e) { /* sem ativação ou negado: fica para a busca da ponte */ }
+  }
+  return out;
 }
-async function inboxOriginRemove(handle, relPath, file){
+async function inboxOriginRemove(handles, relPath, file){
   // Apaga APENAS sob nome+tamanho+horário idênticos ao que caiu — nunca por nome puro:
-  // homônimo na pasta de origem com outro conteúdo é cópia mantida, não original apagado.
-  try {
-    const parts = relPath.split("/").filter(Boolean), name = parts.pop();
-    let dir = handle;
-    for (const seg of parts) dir = await dir.getDirectoryHandle(seg);
-    const g = await (await dir.getFileHandle(name)).getFile();
-    if (g.size !== file.size || g.lastModified !== file.lastModified) return false;
-    await dir.removeEntry(name);
-    return true;
-  } catch (e) { return false; }
+  // homônimo na pasta concedida com outro conteúdo é cópia mantida, não original apagado.
+  for (const handle of handles) {
+    try {
+      const parts = relPath.split("/").filter(Boolean), name = parts.pop();
+      let dir = handle;
+      for (const seg of parts) dir = await dir.getDirectoryHandle(seg);
+      const g = await (await dir.getFileHandle(name)).getFile();
+      if (g.size !== file.size || g.lastModified !== file.lastModified) continue;
+      await dir.removeEntry(name);
+      return handle.name;
+    } catch (e) { /* tenta a próxima pasta */ }
+  }
+  return null;
 }
-if (LIVE) inboxOriginLoad();
+if (LIVE) inboxOriginsLoad();
 
 function isFileDrag(e){
   if (dragId) return false;
@@ -2900,14 +2926,15 @@ function hideInboxDropOverlay(){
   ov.querySelectorAll(".active").forEach(el => el.classList.remove("active"));
 }
 function updateInboxDropHint(){
-  // Estado vivo da zona Mover ANTES do dono soltar: com pasta de origem concedida, o
-  // arraste apaga o original (o navegador pode pedir a permissão no momento do drop).
+  // Estado vivo da zona Mover ANTES do dono soltar: a busca da ponte cobre o disco;
+  // pastas concedidas somam (fora de HOME ou busca desligada).
   const el = document.getElementById("inbox-origin-hint");
   if (!el) return;
-  const o = inboxOrigin && inboxOrigin.handle ? inboxOrigin : null;
-  el.textContent = o
-    ? "origem: " + o.name + " — apaga o original após enviar (o navegador pode pedir permissão)"
-    : "o original é apagado quando você define a pasta de origem (o 1º arraste pergunta)";
+  const names = (inboxOrigins || []).map(o => o.name);
+  const extra = names.length > 2 ? " +" + (names.length - 2) : "";
+  el.textContent = names.length
+    ? "apaga o original após enviar · busca no disco + pastas: " + names.slice(0, 2).join(", ") + extra
+    : "apaga o original após enviar — a ponte acha o arquivo no disco (duplicado, ela pergunta)";
 }
 function inboxDropModeAt(e, ov){
   const r = ov.getBoundingClientRect();
@@ -2972,10 +2999,10 @@ async function handleInboxDrop(mode, entries, fallbackFiles, rejected){
   }
   conOpen();
   conLine('<span class="dim">$</span> inbox (' + esc(mode) + ") · " + collected.length + " arquivo(s)");
-  // Permissão da pasta de origem ANTES dos envios: requestPermission quer ativação fresca do drop.
-  const originHandle = mode === "move" ? await inboxOriginWritable() : null;
-  const uploaded = [], failed = [], stillFallback = [];
-  let originRemoved = 0;
+  // Permissão das pastas concedidas ANTES dos envios: requestPermission quer ativação fresca do drop.
+  const originHandles = mode === "move" ? await inboxOriginsWritable() : [];
+  const uploaded = [], failed = [], stillFallback = [], dupeGroups = [];
+  let searchIncomplete = false, searchRan = false;
   for (const item of collected) {
     const fd = new FormData();
     fd.append("mode", mode);
@@ -2997,14 +3024,18 @@ async function handleInboxDrop(mode, entries, fallbackFiles, rejected){
     }
     if (r.ok && j && j.ok) {
       uploaded.push(j);
-      let movedNote = j.moved ? " (original removido)" : "";
-      if (j.fallback_copy && originHandle) {
-        // a ponte não soube o caminho (navegador não entrega); com a pasta de origem
-        // concedida, a página apaga o original ela mesma — nome+tamanho+horário conferidos
-        if (await inboxOriginRemove(originHandle, item.relPath, item.file)) {
-          originRemoved++;
-          movedNote = " (original removido de " + originHandle.name + ")";
-        } else stillFallback.push(item);
+      if (j.search) searchRan = true;
+      if (j.search && !j.search_complete) searchIncomplete = true;
+      let movedNote = j.moved ? " (original removido: " + (j.moved_from || "") + ")" : "";
+      if (j.candidates && j.candidates.length) {
+        movedNote = " (" + j.candidates.length + " cópias idênticas no disco — escolha quais apagar)";
+        dupeGroups.push({file: item.file, inboxName: j.name, candidates: j.candidates});
+      } else if (j.fallback_copy && originHandles.length) {
+        // a busca da ponte não achou (arquivo fora de HOME ou busca desligada):
+        // as pastas concedidas no navegador cobrem o resto, nome+tamanho+horário conferidos
+        const originName = await inboxOriginRemove(originHandles, item.relPath, item.file);
+        if (originName) movedNote = " (original removido de " + originName + ")";
+        else stillFallback.push(item);
       } else if (j.fallback_copy) stillFallback.push(item);
       const renamed = j.name !== j.original ? " → " + j.name : "";
       conLine('<span class="ok">✓ ' + esc(j.original) + esc(renamed) + esc(movedNote) + "</span>");
@@ -3018,17 +3049,24 @@ async function handleInboxDrop(mode, entries, fallbackFiles, rejected){
     (rejected.length ? " · ignorados: " + rejected.join(", ") : "") +
     (failed.length ? " · falhas: " + failed.join(", ") : "");
   conLine('<span class="' + (uploaded.length ? "ok" : "late") + '">' + esc(summary) + "</span>");
+  if (searchIncomplete)
+    conLine('<span class="dim">busca no disco incompleta (muitos arquivos) — conferia e apagava só o que achou</span>');
   if (mode === "move" && stillFallback.length && uploaded.length) {
-    const note = "Sem pasta de origem com permissão, o navegador só deixa copiar — " +
-      stillFallback.length + " original(is) ficaram onde estão.";
+    const note = searchRan
+      ? "Original(is) não achado(s) no disco (nome ou conteúdo não batem) — ficaram onde estão."
+      : "Sem busca no disco nem pasta concedida, o navegador só deixa copiar — " +
+        stillFallback.length + " original(is) ficaram onde estão.";
     conLine('<span class="dim">' + esc(note) + "</span>");
     toast(summary + " — " + note, 5500);
-    inboxOriginDialog(stillFallback);          // oferece a pasta de origem (1× por sessão)
-  } else if (originRemoved) {
-    toast(summary + " — original(is) removido(s) de " + originHandle.name, 4500);
+    // pastas concedidas cobrem o que a busca não alcança (fora de HOME, busca desligada);
+    // não empilha sobre o diálogo de duplicatas — o dono já está respondendo uma pergunta
+    if (!dupeGroups.length) inboxOriginDialog(stillFallback);
+  } else if (dupeGroups.length) {
+    toast(summary + " — originais duplicados: escolha quais apagar", 4500);
   } else {
     toast(summary, 3800);
   }
+  if (dupeGroups.length) inboxDupesDialog(dupeGroups);
   if (uploaded.length) {
     try {
       const d = await api("/api/data");
@@ -3038,58 +3076,131 @@ async function handleInboxDrop(mode, entries, fallbackFiles, rejected){
 }
 
 function inboxOriginDialog(pending){
-  // Oferece a pasta de origem quando um Mover virou cópia (1× por sessão; cancelar o seletor
-  // do sistema libera a pergunta de novo). pending: itens deste drop que ficaram como cópia.
+  // Gestão das pastas concedidas (complemento da busca da ponte: cobre pastas fora de HOME
+  // ou instâncias com a busca desligada). Abre sozinho 1× por sessão quando um Mover
+  // virou cópia SEM busca no disco; cancelar o seletor do sistema libera a pergunta de novo.
   if (document.getElementById("inbox-origin-dlg")) return;
   try { if (sessionStorage.getItem("inboxOriginAsked")) return; } catch (e) {}
   try { sessionStorage.setItem("inboxOriginAsked", "1"); } catch (e) {}
   const supported = typeof window.showDirectoryPicker === "function";
-  const cur = inboxOrigin && inboxOrigin.handle ? inboxOrigin.name : "";
   const ov = document.createElement("div");
   ov.className = "pal-back open";
   ov.id = "inbox-origin-dlg";
-  ov.innerHTML = '<div class="palette"><div class="pin"><b>Mover de verdade</b><span class="hint">Esc fecha</span></div>' +
-    '<div class="pal-scroll">' +
-    '<p class="note-s">Num arraste, o navegador não entrega o caminho do arquivo nem deixa a página apagar nada fora de uma pasta que você conceda. Escolha uma vez a <b>pasta de onde você arrasta</b> (ex.: Downloads): soltar na zona <b>Mover</b> passa a enviar para a inbox e apagar o original — só o arquivo com o mesmo nome, tamanho e horário do que caiu.</p>' +
-    (cur ? '<p class="note-s">Pasta de origem atual: <b>' + esc(cur) + '</b> — o que caiu e não foi achado nela fica onde está.</p>' : "") +
-    (pending && pending.length ? '<p class="note-s">O que caiu agora ainda dá para mover: ao escolher a pasta, o original é apagado na hora (mesma conferência de nome/tamanho/horário).</p>' : "") +
-    (supported ? "" : '<p class="note-s"><b>Este navegador não suporta conceder pastas</b> (File System Access API) — o arraste em Mover fica como cópia; apague o original à mão.</p>') +
-    '</div><div class="pal-foot">' +
-    (supported ? '<button class="btn" data-inbox-origin-pick>' + (cur ? "Trocar pasta de origem" : "Definir pasta de origem") + "</button>" : "") +
-    '<button class="btn ghost" data-inbox-origin-close>Manter como cópia</button></div></div>';
-  document.body.appendChild(ov);
+  const originsHTML = () => (inboxOrigins || []).map((o, i) =>
+    '<p class="note-s"><b>' + esc(o.name) + '</b> <button class="btn tiny" data-inbox-origin-del="' + i + '">remover</button></p>'
+  ).join("");
+  const render = () => {
+    ov.innerHTML = '<div class="palette"><div class="pin"><b>Pastas concedidas</b><span class="hint">Esc fecha</span></div>' +
+      '<div class="pal-scroll">' +
+      '<p class="note-s">A ponte já <b>procura o original no disco</b> e apaga após a cópia (conteúdo idêntico, byte a byte; duplicata, ela pergunta). Conceder pastas aqui é para o resto: arquivos <b>fora da sua pasta pessoal</b> ou instâncias com a busca desligada — aí o Mover apaga direto na pasta concedida, conferindo nome+tamanho+horário.</p>' +
+      (originsHTML() || '<p class="note-s dim">nenhuma pasta concedida</p>') +
+      (supported ? "" : '<p class="note-s"><b>Este navegador não suporta conceder pastas</b> (File System Access) — a busca no disco segue cobrindo sua pasta pessoal.</p>') +
+      '</div><div class="pal-foot">' +
+      (supported ? '<button class="btn" data-inbox-origin-pick>+ Adicionar pasta</button>' : "") +
+      '<button class="btn ghost" data-inbox-origin-close>Pronto</button></div></div>';
+    ov.querySelectorAll("[data-inbox-origin-del]").forEach(b => b.addEventListener("click", async () => {
+      const idx = +b.dataset.inboxOriginDel;
+      const list = (inboxOrigins || []).slice();
+      list.splice(idx, 1);
+      await inboxOriginsSave(list);
+      render();
+    }));
+    const pick = ov.querySelector("[data-inbox-origin-pick]");
+    if (pick) pick.addEventListener("click", async () => {
+      let dir = null;
+      try {
+        dir = await window.showDirectoryPicker({mode: "readwrite", id: "brain-inbox-origin"});
+      } catch (err) { return; }                     // cancelou o seletor: segue no diálogo
+      const list = (inboxOrigins || []).filter(o => o.name !== dir.name);
+      list.push({handle: dir, name: dir.name});
+      await inboxOriginsSave(list);
+      render();
+      if (pending && pending.length) {              // tenta mover na hora o que caiu
+        conOpen();
+        for (const it of pending) {
+          const from = await inboxOriginRemove([dir], it.relPath, it.file);
+          conLine(from
+            ? '<span class="ok">✓ original removido: ' + esc(it.file.name) + " (" + esc(from) + ")</span>"
+            : '<span class="late">✗ ' + esc(it.file.name) + " não achado em " + esc(dir.name) + "</span>");
+        }
+      }
+    });
+    ov.querySelector("[data-inbox-origin-close]").addEventListener("click", close);
+  };
   const close = () => { ov.remove(); document.removeEventListener("keydown", onKey, true); };
   const onKey = ev => { if (ev.key === "Escape") { ev.preventDefault(); ev.stopPropagation(); close(); } };
   document.addEventListener("keydown", onKey, true);
+  ov.addEventListener("click", e => { if (e.target === ov) close(); });
+  document.body.appendChild(ov);
+  render();
+}
+
+function fmtSize(n){
+  if (n >= 1048576) return (n / 1048576).toFixed(1) + " MB";
+  if (n >= 1024) return Math.round(n / 1024) + " KB";
+  return n + " B";
+}
+function inboxDupesDialog(groups){
+  // A busca da ponte achou o MESMO arquivo em mais de um lugar: nada foi apagado —
+  // o dono escolhe (checkboxes) quais cópias sumem. A ponte revalida byte a byte na hora.
+  if (document.getElementById("inbox-dupes-dlg")) return;
+  const ov = document.createElement("div");
+  ov.className = "pal-back open";
+  ov.id = "inbox-dupes-dlg";
+  const body = groups.map((g, gi) =>
+    '<h3 style="margin:12px 0 4px">' + esc(g.file.name) + '</h3>' +
+    g.candidates.map((c, ci) =>
+      '<label class="duprow"><input type="checkbox" checked data-dup="' + gi + ":" + ci + '">' +
+      '<span class="duppath">' + esc(c.path) + "</span>" +
+      '<span class="dupmeta">' + esc(new Date(c.mtime * 1000).toLocaleString("pt-BR")) + " · " + fmtSize(c.size) + "</span></label>"
+    ).join("")
+  ).join("");
+  ov.innerHTML = '<div class="palette"><div class="pin"><b>Achei cópias idênticas</b><span class="hint">Esc fecha</span></div>' +
+    '<div class="pal-scroll"><p class="note-s">O arquivo já está na inbox. Essas cópias no disco são idênticas byte a byte — marque as que devem sumir (a ponte confere de novo antes de apagar).</p>' +
+    body + "</div>" +
+    '<div class="pal-foot"><button class="btn" data-dupes-apply disabled>Apagar selecionado(s)</button>' +
+    '<button class="btn ghost" data-dupes-close>Manter todas</button></div></div>';
+  document.body.appendChild(ov);
+  const apply = ov.querySelector("[data-dupes-apply]");
+  const close = () => { ov.remove(); document.removeEventListener("keydown", onKey, true); };
+  const onKey = ev => { if (ev.key === "Escape") { ev.preventDefault(); ev.stopPropagation(); close(); } };
+  document.addEventListener("keydown", onKey, true);
+  const recount = () => {
+    const n = ov.querySelectorAll("input[data-dup]:checked").length;
+    apply.disabled = !n;
+    apply.textContent = "Apagar " + n + " selecionado(s)";
+  };
+  ov.querySelectorAll("input[data-dup]").forEach(cb => cb.addEventListener("change", recount));
+  recount();
   ov.addEventListener("click", e => {
-    if (e.target === ov || e.target.closest("[data-inbox-origin-close]")) close();
+    if (e.target === ov || e.target.closest("[data-dupes-close]")) close();
   });
-  const pick = ov.querySelector("[data-inbox-origin-pick]");
-  if (!pick) return;
-  pick.addEventListener("click", async () => {
-    let dir = null;
-    try {
-      dir = await window.showDirectoryPicker({mode: "readwrite", id: "brain-inbox-origin"});
-    } catch (err) {                                   // cancelou o seletor do sistema: pode perguntar de novo
-      try { sessionStorage.removeItem("inboxOriginAsked"); } catch (e) {}
-      close();
-      return;
-    }
-    await inboxOriginSave(dir);
-    close();
+  apply.addEventListener("click", async () => {
+    apply.disabled = true;
+    const picked = {};
+    ov.querySelectorAll("input[data-dup]:checked").forEach(cb => {
+      const [gi, ci] = cb.dataset.dup.split(":").map(Number);
+      (picked[gi] = picked[gi] || []).push(groups[gi].candidates[ci].path);
+    });
     conOpen();
-    let removed = 0;
-    for (const it of (pending || [])) {
-      if (await inboxOriginRemove(dir, it.relPath, it.file)) {
-        removed++;
-        conLine('<span class="ok">✓ original removido: ' + esc(it.file.name) + " (" + esc(dir.name) + ")</span>");
+    let removedN = 0;
+    for (const gi of Object.keys(picked)) {
+      const g = groups[+gi];
+      let r, j = null;
+      try {
+        r = await fetch("/api/inbox/remove", {method: "POST", headers: {"X-Brain-Token": TOK, "Content-Type": "application/json"},
+          body: JSON.stringify({inbox_name: g.inboxName, paths: picked[gi]})});
+        try { j = await r.json(); } catch (e) {}
+      } catch (err) { conLine('<span class="late">✗ ' + esc(g.file.name) + ": ponte fora do ar</span>"); continue; }
+      if (r.ok && j && j.ok) {
+        (j.removed || []).forEach(p => { removedN++; conLine('<span class="ok">✓ apagado: ' + esc(p) + "</span>"); });
+        (j.refused || []).forEach(x => conLine('<span class="late">✗ ' + esc(x.path) + ": " + esc(x.reason) + "</span>"));
       } else {
-        conLine('<span class="late">✗ ' + esc(it.file.name) + " não achado em " + esc(dir.name) + " (nome/tamanho/horário não batem)</span>");
+        conLine('<span class="late">✗ ' + esc(g.file.name) + ": " + esc((j && j.error) || ("erro " + r.status)) + "</span>");
       }
     }
-    toast(removed
-      ? removed + " original(is) removido(s) de " + dir.name + " — os próximos arrastes em Mover apagam sozinhos"
-      : "pasta de origem: " + dir.name + " — os próximos arrastes em Mover apagam o original", 5200);
+    toast(removedN ? removedN + " original(is) apagado(s) do disco" : "nada apagado — cópias mantidas", 4200);
+    close();
   });
 }
 

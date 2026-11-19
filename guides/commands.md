@@ -318,6 +318,14 @@ brain serve --open     # já abre o navegador com o token na URL
 brain serve --port 8791
 ```
 
+O arraste de arquivos usa duas rotas da ponte: `POST /api/inbox` (grava em `vault/RAW/inbox/`; no modo
+**Mover** procura o original no disco e o apaga só sob conteúdo idêntico byte a byte — duplicata vira
+lista de escolha) e `POST /api/inbox/remove` (apaga as cópias marcadas, revalidando cada caminho na
+hora contra a cópia da inbox). A busca do Mover é configurável em `[serve].move_search` no
+`brain.toml`: `true` (padrão — índice do sistema no macOS, varredura podada fora dele), `false`
+(desliga; resta a pasta concedida no navegador) ou uma lista de raízes (`["Projetos"]`). O noturno
+nunca recebe arquivo nem remove originais.
+
 No terminal, `brain <TAB>` completa os dois níveis de subcomando (e as opções na folha) se o
 seu shell estiver apontado para `brain --completions` — no zsh, um `_brain` em `~/.zsh/completions`
 resolve; a lista vem do próprio argparse, então nunca desencontra do CLI.

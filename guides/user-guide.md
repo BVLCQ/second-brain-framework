@@ -708,13 +708,16 @@ arquivo** que funciona em qualquer navegador, com dois modos:
   aprova com `--approval`/`--quote painel`, `--by owner`). A allowlist é fechada; `update`,
   `migrate`, `backup` e cia. seguem no terminal. Com a ponte no ar, **arrastar um arquivo
   ou pasta** para qualquer tela do painel entrega os itens em `vault/RAW/inbox/` — duas
-  zonas sobrepostas decidem entre **Mover** e **Copiar**. No navegador, a página não apaga
-  um arquivo arrastado fora de uma pasta que você conceda: no primeiro **Mover** o painel
-  oferece definir a **pasta de origem** uma vez (ex.: Downloads); daí em diante soltar em
-  Mover envia para a inbox e apaga o original sozinho — só o arquivo com o mesmo nome,
-  tamanho e horário do que caiu (homônimo diferente fica). Sem a pasta, ou em navegador
-  sem suporte (File System Access), Mover vira cópia e o painel avisa. Pasta entra arquivo
-  por arquivo, nome repetido ganha sufixo `-2` e o resultado aparece no console do painel.
+  zonas sobrepostas decidem entre **Mover** e **Copiar**. No **Mover**, a ponte procura o
+  original no disco (índice do sistema no macOS, varredura podada fora dele) e o apaga
+  depois de copiar — só quando o conteúdo é idêntico byte a byte ao que caiu. Achou o
+  mesmo arquivo em mais de um lugar? Nada é apagado sozinho: o painel lista as cópias
+  (caminho, data, tamanho) e você marca as que devem sumir; a ponte reconfere na hora de
+  apagar. O que a busca não alcança — arquivo fora da sua pasta pessoal, ou busca
+  desligada (`[serve].move_search = false` no `brain.toml`) — é coberto por **pastas
+  concedidas** no navegador (Chrome/Edge; o Safari não concede pastas), gerenciadas no
+  diálogo que aparece quando um Mover fica como cópia. Pasta entra arquivo por arquivo,
+  nome repetido ganha sufixo `-2` e o resultado aparece no console do painel.
 
 O painel tem três **faces** (como o TUI): **Execução**, **Portfólio** e **Configurações** —
 `Tab`/`Shift+Tab` troca, e cada face lembra onde você estava. A barra

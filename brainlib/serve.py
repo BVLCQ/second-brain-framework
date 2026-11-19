@@ -180,6 +180,224 @@ def _try_move_source(source_path: str, inst) -> bool:
         return False
 
 
+# Mover por busca: quando o navegador não entrega o caminho do arrastado (nunca entrega),
+# a ponte procura o original NO DISCO e apaga após a cópia — só sob conteúdo idêntico byte
+# a byte. Localizar por nome usa o índice do sistema quando existe (Spotlight/mdfind no
+# macOS — a HOME de uma máquina de dev tem milhões de arquivos; varrer tudo levaria minutos)
+# e cai numa varredura podada (sem ocultos/Library, com teto) quando não existe.
+# `[serve].move_search` no brain.toml: true (padrão) | false (desliga; fica a pasta concedida
+# no navegador) | ["Pasta", …] (varre só essas raízes, podadas).
+MOVE_SEARCH_MAX_ENTRIES = 250_000        # teto da varredura; além disso a busca volta "incompleta"
+MOVE_SEARCH_PRUNE = {"Library"}          # sob HOME: nunca entra (dado de app, nunca fonte de arraste)
+MOVE_SEARCH_FALLBACK_DIRS = ("Desktop", "Downloads", "Documents")   # topo da varredura quando o índice falha
+MDFIND_TIMEOUT = 10                       # segundos; índice travado não segura o drop
+
+
+def _mdfind_candidates(name: str) -> list[str]:
+    """Caminhos com esse NOME EXATO dentro de HOME, pelo índice do sistema (macOS).
+    mdfind -name casa por substring — filtra basename idêntico. Sem mdfind: []."""
+    import subprocess
+
+    mdf = shutil.which("mdfind")
+    if not mdf:
+        return []
+    try:
+        out = subprocess.run([mdf, "-0", "-name", name], capture_output=True,
+                             timeout=MDFIND_TIMEOUT).stdout
+    except (OSError, subprocess.SubprocessError):
+        return []
+    sep = "\0" if b"\0" in out else "\n"
+    paths = out.decode("utf-8", errors="replace").split(sep)
+    home = Path.home().resolve()
+    hits: list[str] = []
+    seen: set[Path] = set()
+    for raw in paths:
+        p = Path(raw)
+        try:
+            rp = p.resolve()
+        except OSError:
+            continue
+        if rp in seen or p.name != name:
+            continue
+        seen.add(rp)
+        try:
+            if not rp.is_relative_to(home):
+                continue
+        except OSError:
+            continue
+        hits.append(str(rp))
+        if len(hits) >= 500:
+            break
+    return hits
+
+
+def _move_search_roots(inst) -> list[Path]:
+    """Raízes da busca de originais. Toda raiz resolve DENTRO de HOME e fora da instância."""
+    raw = inst.cfg.get("serve", {}).get("move_search", True)
+    if raw is False:
+        return []
+    home = Path.home().resolve()
+    if raw is True:
+        roots = [home]
+    elif isinstance(raw, list):
+        roots = []
+        for entry in raw:
+            if not isinstance(entry, str) or not entry.strip():
+                continue
+            p = Path(entry).expanduser()
+            p = p if p.is_absolute() else home / p
+            try:
+                rp = p.resolve()
+            except OSError:
+                continue
+            if rp != home and rp.is_relative_to(home) and rp.is_dir():
+                roots.append(rp)
+    else:
+        roots = [home]
+    out: list[Path] = []
+    for rp in roots:
+        try:
+            if rp.is_relative_to(inst.root.resolve()) or rp.is_relative_to(inst.vault.resolve()):
+                continue
+        except OSError:
+            continue
+        if rp not in out:
+            out.append(rp)
+    return out
+
+
+def _verify_candidates(paths: list[str], name: str, data: bytes, inst) -> list[dict]:
+    """Filtra candidatos por nome: arquivo regular, não-symlink, fora da instância,
+    tamanho igual e conteúdo IDÊNTICO byte a byte ao que caiu."""
+    home = Path.home().resolve()
+    hits: list[dict] = []
+    seen: set[Path] = set()
+    for raw in paths:
+        p = Path(raw)
+        try:
+            rp = p.resolve()
+        except OSError:
+            continue
+        if rp in seen or p.name != name:
+            continue
+        seen.add(rp)
+        try:
+            in_inst = rp.is_relative_to(inst.root.resolve()) or rp.is_relative_to(inst.vault.resolve())
+            if in_inst or not rp.is_relative_to(home) or p.is_symlink() or not rp.is_file():
+                continue
+            if rp.stat().st_size != len(data) or rp.read_bytes() != data:
+                continue        # homônimo com outro conteúdo não é o original
+            hits.append({"path": str(rp), "mtime": int(rp.stat().st_mtime),
+                         "size": rp.stat().st_size})
+        except OSError:
+            continue
+    hits.sort(key=lambda h: h["path"])
+    return hits[:20]
+
+
+def _walk_roots(roots: list[Path], name: str, data: bytes, inst) -> tuple[list[dict], bool]:
+    """Varredura podada de raízes dadas. Não desce em ocultos nem em Library;
+    pula a árvore da instância; teto de entradas (além dele, volta incompleta)."""
+    import os
+
+    home = Path.home().resolve()
+    names: list[str] = []
+    skip_trees = []
+    try:
+        skip_trees.append(str(inst.root.resolve()))
+    except OSError:
+        pass
+    visited = 0
+    complete = True
+    stack: list[str] = [str(r) for r in roots]
+    while stack:
+        d = stack.pop()
+        if any(d.startswith(s) for s in skip_trees):
+            continue
+        try:
+            entries = list(os.scandir(d))
+        except OSError:
+            continue
+        for e in entries:
+            if e.name.startswith("."):
+                continue
+            visited += 1
+            if visited > MOVE_SEARCH_MAX_ENTRIES:
+                complete = False
+                stack.clear()
+                break
+            try:
+                if e.is_dir(follow_symlinks=False):
+                    if Path(d).resolve() == home and e.name in MOVE_SEARCH_PRUNE:
+                        continue
+                    stack.append(e.path)
+                elif e.is_file(follow_symlinks=False) and e.name == name:
+                    names.append(e.path)
+            except OSError:
+                continue
+    return _verify_candidates(names, name, data, inst), complete
+
+
+def _walk_candidates(name: str, data: bytes, inst) -> tuple[list[dict], bool]:
+    return _walk_roots(_move_search_roots(inst), name, data, inst)
+
+
+def _find_originals(name: str, data: bytes, inst) -> tuple[list[dict], bool, bool]:
+    """Candidatos de original: primeiro pelo índice do sistema (instantâneo, HOME toda);
+    índice vazio ou fresco demais → varredura de topo nas pastas de uso (rápida) no modo
+    padrão, ou das raízes escolhidas em `[serve].move_search = [...]`. Todo candidato
+    passa pela conferência de conteúdo — nome igual não basta.
+    Retorna (candidatos, busca_completa, busca_executada)."""
+    raw = inst.cfg.get("serve", {}).get("move_search", True)
+    if raw is False:
+        return [], True, False
+    if raw is True:
+        hits = _verify_candidates(_mdfind_candidates(name), name, data, inst)
+        if hits:
+            return hits, True, True
+        home = Path.home().resolve()
+        roots = [home / d for d in MOVE_SEARCH_FALLBACK_DIRS if (home / d).is_dir()]
+        hits, complete = _walk_roots(roots, name, data, inst)
+        return hits, complete, True
+    hits, complete = _walk_candidates(name, data, inst)
+    return hits, complete, True
+
+
+def _inbox_copy_bytes(inst, inbox_name: str) -> bytes | None:
+    """Bytes da cópia que acabou de entrar na inbox — régua para qualquer remoção."""
+    p = inst.inbox / inbox_name
+    try:
+        if not _valid_inbox_filename(inbox_name) or not p.is_file():
+            return None
+        return p.read_bytes()
+    except OSError:
+        return None
+
+
+def _delete_original_paths(paths: list[str], data: bytes, inst) -> tuple[list[str], list[dict]]:
+    """Apaga originais escolhidos no painel — cada caminho revalidado NA HORA:
+    arquivo regular, não-symlink, dentro de HOME, fora da instância/vault e com
+    conteúdo idêntico byte a byte à cópia da inbox. Devolve (apagados, recusas)."""
+    home = Path.home().resolve()
+    removed, refused = [], []
+    for raw in paths:
+        p = Path(raw)
+        try:
+            rp = p.resolve()
+            in_inst = rp.is_relative_to(inst.root.resolve()) or rp.is_relative_to(inst.vault.resolve())
+            if not p.is_absolute() or p.is_symlink() or not rp.is_relative_to(home) or in_inst:
+                refused.append({"path": raw, "reason": "fora do permitido"})
+                continue
+            if not rp.is_file() or rp.read_bytes() != data:
+                refused.append({"path": raw, "reason": "conteúdo não bate com a cópia da inbox"})
+                continue
+            rp.unlink()
+            removed.append(str(rp))
+        except OSError:
+            refused.append({"path": raw, "reason": "erro de acesso"})
+    return removed, refused
+
+
 class _Handler(BaseHTTPRequestHandler):
     state: _State = None                                # type: ignore[assignment]
     timeout = 60                                        # socket: pedido travado não segura a thread p/ sempre
@@ -338,6 +556,9 @@ class _Handler(BaseHTTPRequestHandler):
             if path == "/api/agent":
                 self._agent_post()
                 return
+            if path == "/api/inbox/remove":
+                self._inbox_remove_post()
+                return
             if path == "/api/inbox":
                 self._inbox_post()
                 return
@@ -420,13 +641,61 @@ class _Handler(BaseHTTPRequestHandler):
                 return
             if mode == "move":
                 moved = _try_move_source(source_path, inst)
+                moved_from = source_path if moved else None
+                candidates: list[dict] = []
+                search = False
+                search_complete = True
+                if not moved:
+                    # navegador não entrega o caminho: procura o original no disco.
+                    # Único candidato idêntico → apaga; mais de um → o painel pergunta.
+                    hits, search_complete, search = _find_originals(raw_filename, file_bytes, inst)
+                    if len(hits) == 1:
+                        removed, _refused = _delete_original_paths([hits[0]["path"]], file_bytes, inst)
+                        moved = bool(removed)
+                        moved_from = hits[0]["path"] if moved else None
+                    elif len(hits) > 1:
+                        candidates = hits
                 fallback_copy = not moved
             else:
                 moved = False
+                moved_from = None
+                candidates = []
+                search = False
+                search_complete = True
                 fallback_copy = False
         print(f"[serve] inbox: {saved_path.name} ({mode})", flush=True)
         self._json(200, {"ok": True, "name": saved_path.name, "original": raw_filename,
-                         "moved": moved, "fallback_copy": fallback_copy})
+                         "moved": moved, "moved_from": moved_from, "fallback_copy": fallback_copy,
+                         "candidates": candidates, "search": search, "search_complete": search_complete})
+
+    def _inbox_remove_post(self):
+        """Apaga originais escolhidos no diálogo de duplicados — cada caminho é
+        revalidado na hora (bytes idênticos à cópia da inbox, dentro de HOME, fora
+        da instância). O noturno nunca apaga; sem token, 401 (guard do do_POST)."""
+        if os.environ.get("BRAIN_NIGHTLY"):
+            self._deny(403, "o noturno nunca remove originais pelo painel")
+            return
+        req = self._read_json_body()
+        if req is None:
+            return
+        inbox_name = req.get("inbox_name")
+        paths = req.get("paths")
+        if not isinstance(inbox_name, str) or not _valid_inbox_filename(inbox_name):
+            self._deny(400, "inbox_name inválido")
+            return
+        if not isinstance(paths, list) or not paths or len(paths) > 20 or \
+                any(not isinstance(p, str) or not p for p in paths):
+            self._deny(400, "paths deve ser uma lista de 1 a 20 caminhos")
+            return
+        with self.state.lock:
+            inst = self._brain().inst
+            data = _inbox_copy_bytes(inst, inbox_name)
+            if data is None:
+                self._deny(404, "cópia da inbox não encontrada — arraste de novo")
+                return
+            removed, refused = _delete_original_paths(paths, data, inst)
+        print(f"[serve] inbox/remove: {len(removed)} apagado(s), {len(refused)} recusado(s)", flush=True)
+        self._json(200, {"ok": True, "removed": removed, "refused": refused})
 
     def _agent_post(self):
         """Executa uma ação ⚡ do agente (store.SYS_OPS) pelo mesmo caminho da TUI (`tui/bridge`)."""
