@@ -481,3 +481,8 @@ main.col{padding-bottom:120px}
   background:var(--panel);color:var(--ink);text-align:center;box-shadow:var(--shadow-lg);pointer-events:none}
 .inbox-drop-offline strong{display:block;font-size:15px;margin-bottom:6px;color:var(--warn)}
 .inbox-drop-offline span{display:block;font-size:13px;color:var(--muted)}
+
+/* ── #54 chip motivo do goal ── */
+.chip.h-reason{background:var(--chip);color:var(--ink);border:1px solid var(--line);text-decoration:none;max-width:100%;overflow:hidden;text-overflow:ellipsis;margin-left:6px}
+.chip.h-reason:hover{border-color:var(--accent);color:var(--accent);text-decoration:none}
+.projcard.just-moved{animation:justmoved 1.2s ease}

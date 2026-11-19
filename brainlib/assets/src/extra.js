@@ -13,6 +13,8 @@ D0.agent_ok = !!D0.agent_ok;
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const norm = s => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+const IS_MAC = typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent || "");
+const KMOD = IS_MAC ? "⌘K" : "Ctrl K";
 
 // ── sidebar: dono + data ────────────────────────────────────────────────
 $("#ownername").textContent = D0.owner.name;
@@ -917,6 +919,7 @@ window.afterRoute = function(view){
 
 // ── teclado: mesmas teclas da TUI, nos mesmos contextos ─────────────────
 // hardening do botão ⌘K (mouse e teclado) + burger (janela estreita)
+const kbtn = $("#openpal b"); if (kbtn) kbtn.textContent = KMOD;
 $("#openpal").addEventListener("click", () => openPal());
 const burger = $("#burger");
 if (burger) burger.onclick = () => { burger.classList.toggle("open"); $("#side").classList.toggle("open"); };
@@ -952,7 +955,7 @@ function lfApply(){
   const cands = lfCands();
   cands.forEach(el => el.classList.toggle("flt-off", !all.every(f => lfText(el).includes(f))));
   document.querySelectorAll("#view .col").forEach(col => {                                      // contador da coluna acompanha o corte
-    const n = col.querySelector("h3 .count"); if (!n) return;
+    const n = col.querySelector("h2 .count, h3 .count"); if (!n) return;
     if (n.dataset.n0 == null) n.dataset.n0 = n.textContent;
     n.textContent = all.length ? col.querySelectorAll(".card:not(.flt-off)").length : n.dataset.n0;
   });
@@ -1613,7 +1616,7 @@ function helpOverlay(){
     ["tab / shift+tab", "próxima / anterior face (Execução · Portfólio · Configurações)"],
     ["/", "filtrar a lista da página — de novo: refina o que sobrou (cascata)"],
     ["esc", "tira o último filtro, um por vez (dentro do campo: desfaz só aquele)"],
-    ["g : ctrl+k", "busca e comandos (paleta)"],
+    ["g : " + KMOD, "busca e comandos (paleta)"],
     ["N", "nota rápida na inbox"],
     ["j k ↑ ↓", "mover na lista · enter abre a ficha"],
     ["[ ] ← → (h l)", "aba anterior / próxima"],
@@ -1659,9 +1662,13 @@ function helpOverlay(){
   document.addEventListener("keydown", function h(ev){ if (ev.key === "Escape" || ev.key === "?") { ov.remove(); document.removeEventListener("keydown", h); } });
 }
 
-// handler único de teclado: paleta primeiro, depois teclas de página
+// handler único de teclado: captura global para Ctrl/⌘K, depois paleta e teclas de página
+window.addEventListener("keydown", e => {
+  if ((e.metaKey || e.ctrlKey) && !e.altKey && ((e.key && ["k", "p"].includes(e.key.toLowerCase())) || e.code === "KeyK")) {
+    e.preventDefault(); e.stopPropagation(); pal.open ? closePal() : openPal();
+  }
+}, true);
 document.addEventListener("keydown", e => {
-  if ((e.metaKey || e.ctrlKey) && ["k", "p"].includes(e.key.toLowerCase())) { e.preventDefault(); pal.open ? closePal() : openPal(); return; }
   if (pal.open) {
     if (e.key === "Escape") closePal();
     if (e.key === "ArrowDown") { e.preventDefault(); pal.sel = Math.min(pal.items.length - 1, pal.sel + 1); renderPal(); }
@@ -1793,7 +1800,7 @@ function renderKeyBar(){
   bar.innerHTML = '<div class="kctx">' + (ctx || '<span class="knone">sem teclas de contexto nesta página — j/k navega, enter abre</span>') + "</div>" +
     '<div class="kglobal">' + (lfLevels().length ? '<button class="kkey lfon" data-g="esc" title="tira o último filtro da lista"><kbd>esc</kbd>tira filtro (' + lfLevels().length + ')</button>' : "") +
     '<button class="kkey" data-g="/" title="filtrar a lista desta página; de novo refina o filtro"><kbd>/</kbd>' + (lfLevels().length ? "refinar" : "filtrar") + '</button>' +
-    '<button class="kkey" data-g="g" title="paleta de busca e comandos (⌘K)"><kbd>g</kbd>busca</button>' +
+    '<button class="kkey" data-g="g" title="paleta de busca e comandos (' + KMOD + ')"><kbd>g</kbd>busca</button>' +
     '<button class="kkey" data-g="tab" title="trocar de face"><kbd>tab</kbd>face</button>' +
     '<button class="kkey" data-g="?" title="mapa de teclas"><kbd>?</kbd>ajuda</button></div>';
   bar.querySelectorAll("[data-k]").forEach(b => b.onclick = () => ctxKeys(b.dataset.k));

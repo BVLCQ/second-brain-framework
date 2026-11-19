@@ -260,7 +260,8 @@ class ModelBuilder:
         for gid, g in plan.goals.items():
             declared = (st.progress.get(gid) or [None])[-1]
             ps = [proj_by_id[p.id] for p in g.projects]
-            worst = min((p["health"]["level"] for p in ps), key=HEALTH_ORDER.index, default="em-dia")
+            worst_proj = min(ps, key=lambda p: HEALTH_ORDER.index(p["health"]["level"])) if ps else None
+            worst = worst_proj["health"]["level"] if worst_proj else "em-dia"
             lasts = [p["last_activity"] for p in ps if p["last_activity"]]
             goals.append({
                 "id": gid, "title": g.title, "status": g.status, "horizon": g.horizon, "why": g.why,
@@ -268,6 +269,8 @@ class ModelBuilder:
                 "declared": {"pct": declared["pct"], "date": _iso(declared["date"]), "note": declared["note"]}
                 if declared else None,
                 "projects": [p["id"] for p in ps], "health": worst, "health_label": HEALTH_LABEL[worst],
+                "health_from": worst_proj["id"] if worst_proj else None,
+                "health_reason": worst_proj["health"]["reason"] if worst_proj else "",
                 "last_activity": max(lasts) if lasts else None,
             })
 
@@ -454,12 +457,12 @@ class ModelBuilder:
             for blk in blocks:
                 day = blk["start"][:10]
                 if self.today.isoformat() <= day <= horizon.isoformat():
-                    items.append({"date": day, "kind": "foco", "id": blk["action"],
+                    items.append({"date": day, "kind": "foco", "id": blk["action"], "start": blk["start"],
                                   "title": f"{blk['start'][11:16]}–{blk['end'][11:16]} · "
                                            f"{self.st.actions[blk['action']].title if blk['action'] in self.st.actions else blk['action']}",
                                   "project": None, "overdue_days": 0,
                                   "status": "aplicado" if f.status == "aplicado" else f.status})
-        return sorted(items, key=lambda i: (i["date"], i["kind"] != "foco", i["id"]))
+        return sorted(items, key=lambda i: (i["date"], i["kind"] != "foco", i.get("start") or "", i["id"]))
 
     def _focus(self) -> dict | None:
         if not self.st.focus_plans:

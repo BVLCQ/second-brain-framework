@@ -239,7 +239,8 @@ def html_payload(m: dict) -> dict:
         "generated_at": m["generated_at"], "today": m["today"], "owner": m["owner"], "portfolio": pf,
         "people": [{k: p[k] for k in ("id", "name", "aliases", "role", "relation", "is_owner")}
                    for p in m["people"] if p["id"] in people_ids],
-        "goals": [{k: g[k] for k in ("id", "title", "status", "horizon", "why", "progress", "health_label")}
+        "goals": [{k: g[k] for k in ("id", "title", "status", "horizon", "why", "progress",
+                                     "health", "health_label", "health_from", "health_reason")}
                   for g in m["goals"] if g["id"] in goal_ids],
         "projects": [{k: projects[p][k] for k in ("id", "title", "goal", "goal_title", "status", "owner", "progress",
                                                   "deliverables", "people", "health", "next_due")} for p in sorted(linked)],

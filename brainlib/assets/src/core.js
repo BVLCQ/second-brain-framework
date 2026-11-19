@@ -14,8 +14,10 @@ function normalizeBrain(m){
   m.actions = m.actions || []; m.publishes = m.publishes || []; m.focus = m.focus || null;
   m.deliverables_done = m.deliverables_done || [];
   m.timeline = m.timeline || {past: [], ahead: []}; m.people = m.people || [];
-  m.people = m.people.map(p => Object.assign({owes_me: [], i_owe: [], decisions: [], projects: [], artifacts: [], aliases: []}, p));
-  m.goals = m.goals || []; m.projects = m.projects || []; m.decisions = m.decisions || [];
+  m.people = m.people.map(p => Object.assign({aliases: []}, p));
+  m.goals = m.goals || [];
+  m.goals = m.goals.map(g => Object.assign({health_from: null, health_reason: ""}, g));
+  m.projects = m.projects || []; m.decisions = m.decisions || [];
   m.artifacts = m.artifacts || []; m.shares = m.shares || []; m.notes = m.notes || [];
   m.agent_ok = !!m.agent_ok;
   if (m.portfolio) m.portfolio.ice_rubric = m.portfolio.ice_rubric || {success_measures: [], principles: [], axes: {}};   // instância antiga: metodologia some, painel sobe
@@ -33,7 +35,7 @@ const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const WD = ["dom","seg","ter","qua","qui","sex","sáb"];
 const fmtD = iso => { if (!iso) return "—"; const p = iso.slice(0,10).split("-"); return p[2] + "/" + p[1]; };
-const fmtDL = iso => { if (!iso) return "—"; const p = iso.slice(0,10).split("-"); return p[2] + "/" + p[1] + "/" + p[0]; };
+const fmtDL = iso => { if (!iso) return "—"; const p = String(iso).slice(0,10).split("-"); return p.length === 3 ? p[2] + "/" + p[1] + "/" + p[0] : esc(iso); };
 const fmtDW = iso => { if (!iso) return "—"; const d = new Date(iso.slice(0,10) + "T12:00:00"); return WD[d.getDay()] + " " + fmtD(iso); };
 const dur = m => !m ? "—" : (Math.floor(m/60) ? Math.floor(m/60) + "h" + (m%60 ? String(m%60).padStart(2,"0") : "") : m + "min");
 const progTxt = p => {
@@ -52,6 +54,9 @@ const donut = (pct, size) => { size = size || 44; const r = (size - 6) / 2, c = 
     (c * (pct || 0) / 100).toFixed(1) + " " + c.toFixed(1) + '" transform="rotate(-90 ' + size/2 + " " + size/2 + ')"/>' +
     '<text x="50%" y="50%" dominant-baseline="central" text-anchor="middle">' + (pct == null ? "—" : pct) + "</text></svg>"; };
 const chip = (level, label) => '<span class="chip h-' + esc(level) + '">' + esc(label) + "</span>";
+const goalReasonChip = g => (g.health_from && g.health !== "em-dia" && g.health !== "concluido")
+  ? '<a class="chip h-reason" href="#projects?focus=' + esc(g.health_from) + '" data-proj-jump="' + esc(g.health_from) + '" title="' + esc(g.health_reason || g.health_from) + '">↳ ' + esc(g.health_from) + (g.health_reason ? " · " + esc(g.health_reason) : "") + "</a>"
+  : "";
 const idc = id => '<code class="idchip">' + esc(id) + "</code>";
 const aL = id => A[id] ? '<a href="#action/' + id + '">' + idc(id) + "</a>" : idc(id);
 const dL = id => D[id] ? '<a href="#decision/' + id + '">' + idc(id) + "</a>" : idc(id);
@@ -74,6 +79,17 @@ function dd(id0, opts, sel, ph){
     "</div></div>";
 }
 document.addEventListener("click", e => {
+  const pj = e.target.closest("a[data-proj-jump]");
+  if (pj && (location.hash.slice(1).split("?")[0] || "home") === "projects") {
+    const el = document.getElementById("proj-" + pj.dataset.projJump);
+    if (el) {
+      e.preventDefault();
+      if (typeof el.scrollIntoView === "function") el.scrollIntoView({behavior: "smooth", block: "center"});
+      el.classList.add("just-moved");
+      setTimeout(() => el.classList.remove("just-moved"), 1400);
+    }
+    return;
+  }
   const sortBtn = e.target.closest("[data-src-sort]");
   if (sortBtn) {
     e.preventDefault();
@@ -188,8 +204,8 @@ V.home = () => {
   h += "<h2 class=\"sec\">Goals</h2>";
   if (!M.goals.length) h += empty("Nenhum goal no PLANNING ainda — rode /init ou /goal.");
   h += '<div class="grid g2">' + M.goals.map(g => '<section class="panel goal"><div class="goal-head">' + donut(g.progress.pct, 48) +
-    '<div><b class="goal-title">' + g.id + " — " + esc(g.title) + "</b>" + chip(g.health, g.health_label) +
-    '<div class="muted small">' + (g.horizon ? "horizonte " + esc(g.horizon) + " · " : "") + progTxt(g.progress) + ' · <button class="btn ghost tiny" data-progress="' + esc(g.id) + '">⛏ declarar %</button>' +
+    '<div><b class="goal-title">' + g.id + " — " + esc(g.title) + "</b>" + chip(g.health, g.health_label) + goalReasonChip(g) +
+    '<div class="muted small">' + (g.horizon ? "horizonte " + fmtDL(g.horizon) + " · " : "") + progTxt(g.progress) + ' · <button class="btn ghost tiny" data-progress="' + esc(g.id) + '">⛏ declarar %</button>' +
     (g.declared ? " · declarado " + g.declared.pct + "% em " + fmtD(g.declared.date) : "") + "</div></div></div>" +
     g.projects.map(pid => { const p = P[pid]; return '<div class="proj"><div class="t">' + pL(pid, true) + "<small>" + esc(p.health.reason) +
       (p.next_due ? " · próximo: " + p.next_due.id + " " + fmtD(p.next_due.date) : "") + "</small></div>" + bar(p.progress.pct) + chip(p.health.level, p.health.label) + "</div>"; }).join("") +
@@ -197,6 +213,12 @@ V.home = () => {
   h += '<div class="grid g2" style="margin-top:14px">';
   const days = {};
   M.agenda.forEach(it => (days[it.date] = days[it.date] || []).push(it));
+  const fKey = x => { const s = x.start || x.title || ""; const i = s.indexOf("T"); return i > 0 ? s.slice(i + 1) : s; };
+  Object.values(days).forEach(arr => arr.sort((a, b) =>
+    (a.kind !== "foco") - (b.kind !== "foco") ||
+    (a.kind === "foco" ? fKey(a).localeCompare(fKey(b)) : 0) ||
+    (a.id || "").localeCompare(b.id || "")
+  ));
   h += panel("Hoje e próximos 7 dias", (Object.keys(days).length ? Object.keys(days).sort().map(d => "<h3 class=\"day\">" + fmtDW(d) + (d < M.today ? ' <span class="late">atrasado</span>' : d === M.today ? " · hoje" : "") + "</h3>" +
     '<ul class="feed">' + days[d].map(it => "<li>" + chip(it.kind === "foco" ? "info" : it.overdue_days ? "em-risco" : "atencao", it.kind) + " " +
       (it.id.startsWith("TASK-") ? aL(it.id) : "<b>" + esc(it.id) + "</b>") + " " + esc(it.title) + (it.project ? " · " + pL(it.project) : "") + "</li>").join("") + "</ul>").join("") : empty("Nada com data nos próximos 7 dias.")));
@@ -238,7 +260,7 @@ V.todo = (q) => {
     dd("fv", VIEWS, view, "todas as vistas") + dd("fo", [["prazo", "por prazo"], ["id", "por id"]], sortK, "por prazo") +
     '<label class="chk"><input type="checkbox" id="fa"' + (showAll ? " checked" : "") + "> todas (fechadas além de 14d)</label>" +
     '<label class="chk"><input type="checkbox" id="fw"' + (showWatch ? " checked" : "") + "> mostrar observando</label></div>";
-  h += '<div class="kanban">' + cols.map(([t, f, key]) => { const l = sortA(mine.filter(f)); return '<div class="col" data-col="' + key + '"><h3>' + t + ' <span class="count">' + l.length + "</span></h3>" + (l.map(card).join("") || empty("—")) + "</div>"; }).join("") + "</div>";
+  h += '<div class="kanban">' + cols.map(([t, f, key]) => { const l = sortA(mine.filter(f)); return '<div class="col" data-col="' + key + '"><h2>' + t + ' <span class="count">' + l.length + "</span></h2>" + (l.map(card).join("") || empty("—")) + "</div>"; }).join("") + "</div>";
   const waiting = M.actions.filter(a => a.open && a.list === "waiting" && (!proj || a.project === proj));
   h += panel("Aguardando de outros · " + waiting.length, actionTable(sortA(waiting).map(a => a.id), ["owner", "age", "project"]), ' style="margin-top:16px"');
   if (showWatch) {
@@ -259,17 +281,28 @@ V.todo = (q) => {
   });
   return h;
 };
-V.projects = () => {
+V.projects = (q) => {
   let h = '<div class="pagehead"><div><h1>Projetos</h1><p class="sub">A árvore de PLANNING, por goal.</p></div></div>';
   if (!M.projects.length) return h + empty("Nenhum projeto no PLANNING.");
   M.goals.forEach(g => {
-    h += '<h2 class="sec">' + g.id + " — " + esc(g.title) + " " + chip(g.health, g.health_label) + '</h2><div class="grid g3">' + g.projects.map(pid => { const p = P[pid];
-      return '<section class="panel projcard"><div class="projcard-head">' + donut(p.progress.pct, 44) + '<div><b>' + pL(pid, true) + "</b>" + chip(p.health.level, p.health.label) +
+    h += '<h2 class="sec">' + g.id + " — " + esc(g.title) + " " + chip(g.health, g.health_label) + goalReasonChip(g) + '</h2><div class="grid g3">' + g.projects.map(pid => { const p = P[pid];
+      return '<section class="panel projcard" id="proj-' + esc(p.id) + '"><div class="projcard-head">' + donut(p.progress.pct, 44) + '<div><b>' + pL(pid, true) + "</b>" + chip(p.health.level, p.health.label) +
         '<div class="muted small">' + progTxt(p.progress) + "</div></div></div>" +
         '<div class="muted small">' + esc(p.health.reason) + "</div>" +
         '<div class="foot small">' + p.actions.mine.length + " minhas · " + p.actions.waiting.length + " aguardando · " + p.decisions.length + " decisões" +
         (p.next_due ? " · próximo " + p.next_due.id + " " + fmtD(p.next_due.date) : "") + "</div></section>"; }).join("") + "</div>";
   });
+  const focusId = q && q.get("focus");
+  if (focusId) {
+    setTimeout(() => {
+      const el = document.getElementById("proj-" + focusId);
+      if (el) {
+        if (typeof el.scrollIntoView === "function") el.scrollIntoView({behavior: "smooth", block: "center"});
+        el.classList.add("just-moved");
+        setTimeout(() => el.classList.remove("just-moved"), 1400);
+      }
+    });
+  }
   return h;
 };
 V.project = (q, id) => {
@@ -299,7 +332,7 @@ V.decisions = (q) => {
   let h = '<div class="pagehead"><div><h1>Decisões</h1><p class="sub">Quem decidiu o quê, quando — e de onde veio. Substituídas ficam riscadas, nunca apagadas.</p></div></div>';
   h += '<div class="filters">' +
     dd("dp", M.projects.map(p => [p.id, p.id + " " + p.title]), proj, "todos os projetos") +
-    dd("dw", M.people.filter(p => p.decisions.length).map(p => [p.id, p.name]), who, "qualquer pessoa") +
+    dd("dw", M.people.filter(p => (p.decisions || []).length).map(p => [p.id, p.name]), who, "qualquer pessoa") +
     dd("ds", [["ativa", "ativas"], ["substituida", "substituídas"]], st, "qualquer estado") + "</div>";
   h += panel("", decisionTable(list));
   setTimeout(() => { const f = () => go("decisions", {p: ddVal("dp"), who: ddVal("dw"), s: ddVal("ds")});
@@ -329,10 +362,13 @@ V.wins = () => {
   });
   return h;
 };
-V.people = () => '<div class="pagehead"><div><h1>Pessoas</h1><p class="sub">Uma ficha por pessoa — nunca duas.</p></div></div>' +
-  panel("", '<div class="twrap"><table><tr><th>Pessoa</th><th>Papel</th><th>Última interação</th><th>Me deve</th><th>Devo</th><th>Decisões</th></tr>' +
-  (M.people || []).map(p => "<tr><td>" + peL(p.id) + (p.is_owner ? " " + chip("info", "você") : "") + "</td><td>" + esc(p.role || "—") + '</td><td class="muted">' + (p.last_interaction ? fmtD(p.last_interaction.date) + " " + esc(p.last_interaction.title) : "—") +
-    '</td><td class="num">' + (p.owes_me || []).length + '</td><td class="num">' + (p.i_owe || []).length + '</td><td class="num">' + (p.decisions || []).length + "</td></tr>").join("") + "</table></div>");
+V.people = () => {
+  const cnt = v => Array.isArray(v) ? v.length : "—";
+  return '<div class="pagehead"><div><h1>Pessoas</h1><p class="sub">Uma ficha por pessoa — nunca duas.</p></div></div>' +
+    panel("", '<div class="twrap"><table><tr><th>Pessoa</th><th>Papel</th><th>Última interação</th><th>Me deve</th><th>Devo</th><th>Decisões</th></tr>' +
+    (M.people || []).map(p => "<tr><td>" + peL(p.id) + (p.is_owner ? " " + chip("info", "você") : "") + "</td><td>" + esc(p.role || "—") + '</td><td class="muted">' + (p.last_interaction ? fmtD(p.last_interaction.date) + " " + esc(p.last_interaction.title) : "—") +
+      '</td><td class="num">' + cnt(p.owes_me) + '</td><td class="num">' + cnt(p.i_owe) + '</td><td class="num">' + cnt(p.decisions) + "</td></tr>").join("") + "</table></div>");
+};
 V.person = (q, id) => {
   const p = PE[decodeURIComponent(id)]; if (!p) return empty("Pessoa não encontrada");
   let h = '<p class="crumb muted"><a href="#people">← pessoas</a></p><div class="pagehead"><div><h1>' + esc(p.name) + "</h1>" +
@@ -392,13 +428,13 @@ V.focus = () => {
   h += '<div class="legend"><span><i style="background:var(--info)"></i>bloco de foco' + (f.status === "aplicado" ? "" : " (proposto)") + '</span>' +
     '<span><i style="background:var(--muted)"></i>calendário (ocupado)</span>' +
     '<span><i style="background:var(--risk)"></i>conflito com o calendário</span></div>';
-  h += '<div class="week" style="grid-template-columns:34px repeat(' + Math.max(1, days.length) + ',1fr)">' +
+  h += '<div class="week" style="grid-template-columns:34px repeat(' + Math.max(1, days.length) + ',minmax(108px,1fr))">' +
     '<div class="hcol"><div class="wslot" style="' + gridBg + '">' +
     hours.map(hourMark).join("") +
-    "</div></div>" + days.map(d => '<div class="wday"><h3>' + fmtDW(d) + '</h3><div class="wslot" style="' + gridBg + '">' +
-    busy.filter(e => e.start.startsWith(d)).map(e => { const top = (toMin(e.start) - minS) / span * 100, hgt = (toMin(e.end) - toMin(e.start)) / span * 100;
+    "</div></div>" + days.map(d => '<div class="wday"><h2>' + fmtDW(d) + '</h2><div class="wslot" style="' + gridBg + '">' +
+    busy.filter(e => e.start.startsWith(d)).sort((a, b) => (a.start || "").localeCompare(b.start || "")).map(e => { const top = (toMin(e.start) - minS) / span * 100, hgt = (toMin(e.end) - toMin(e.start)) / span * 100;
       return '<div class="blk busy' + (hgt < 4.5 ? " tiny" : "") + '" style="top:' + top + "%;height:" + hgt + '%"><b>' + e.start.slice(11, 16) + "–" + e.end.slice(11, 16) + "</b> " + esc(e.title || "ocupado") + "</div>"; }).join("") +
-    blocks.filter(b => b.start.startsWith(d)).map(b => { const top = (toMin(b.start) - minS) / span * 100, hgt = (toMin(b.end) - toMin(b.start)) / span * 100, a = A[b.action];
+    blocks.filter(b => b.start.startsWith(d)).sort((a, b) => (a.start || "").localeCompare(b.start || "")).map(b => { const top = (toMin(b.start) - minS) / span * 100, hgt = (toMin(b.end) - toMin(b.start)) / span * 100, a = A[b.action];
       const conflict = f.status !== "aplicado" && clash(b);
       const mins = toMin(b.end) - toMin(b.start);
       return '<div class="blk' + (f.status === "aplicado" || b.applied ? "" : " prop") + (conflict ? " conflict" : "") + (hgt < 4.5 ? " tiny" : "") +
@@ -752,7 +788,7 @@ V["pf/opps"] = (q) => {
     '<h3 class="card-title">' + esc(o.title) + "</h3>" +
     '<p class="card-meta">' + iceTxt(o) + " · " + esc(areaName(o.area)) + (o.quadrant ? " · " + esc(o.quadrant) : "") + (o.hours_saved ? " · " + hrs(o.hours_saved) : "") + "</p></article>";
   const colOf = s => { const l = rows.filter(o => o.status === s);
-    return '<div class="col pf-col' + (STAGES_LAT.includes(s) ? " lat" : "") + '" data-stage="' + s + '"><h3>' + s + ' <span class="count">' + l.length + "</span></h3>" +
+    return '<div class="col pf-col' + (STAGES_LAT.includes(s) ? " lat" : "") + '" data-stage="' + s + '"><h2>' + s + ' <span class="count">' + l.length + "</span></h2>" +
       (l.map(cardOf).join("") || empty("—")) + "</div>"; };
   h += '<div class="pf-kanban">' + STAGES_PIPE.map(colOf).join("") + "</div>";
   h += '<div class="pf-kanban lat-row">' + STAGES_LAT.map(colOf).join("") + "</div>";
@@ -766,7 +802,7 @@ V["pf/matrix"] = () => {
   const QUADS = [["ganho rápido", "impacto alto · facilidade alta"], ["aposta", "impacto alto · facilidade baixa"],
     ["preencher depois", "impacto baixo · facilidade alta"], ["evitar", "impacto baixo · facilidade baixa"]];
   return '<div class="pagehead"><div><h1>Matriz impacto × facilidade</h1><p class="sub">Notas ≥ 3 contam como altas. Fora da matriz: sem ICE.</p></div></div>' +
-    panel("", '<div class="grid mx">' + QUADS.map(([qn, d]) => '<div class="col"><h3>' + qn + ' <span class="muted">· ' + d + "</span></h3>" +
+    panel("", '<div class="grid mx">' + QUADS.map(([qn, d]) => '<div class="col"><h2>' + qn + ' <span class="muted">· ' + d + "</span></h2>" +
       ((PF.matrix[qn] || []).map(i => OPP[i]).filter(Boolean).sort((a, b) => (b.score ?? -1) - (a.score ?? -1)).map(o =>
         '<a class="card mini" href="#pf/opp/' + encodeURIComponent(o.id) + '"><span class="ids">' + esc(o.id) + '</span><div class="card-title">' + esc(o.title) + '</div><p class="card-meta">' +
         iceTxt(o) + " · " + esc(o.status) + " · " + esc(areaName(o.area)) + "</p></a>").join("") || empty("—")) + "</div>").join("") + "</div>");
@@ -976,7 +1012,7 @@ route();
     document.getElementById("newstitle").textContent = behind ? "Atualização disponível" : "Novidades da versão";
     document.getElementById("newshow").textContent = behind
       ? "v" + (u.version || "?") + " → v" + (u.remote_version || "?") + " · atualize com o comando `update`"
-      : "v" + (u.version || "?") + (u.checked_at ? " · verificado " + String(u.checked_at).slice(0, 10) : "");
+      : "v" + (u.version || "?") + (u.checked_at ? " · verificado " + fmtDL(u.checked_at) : "");
     document.getElementById("newsback").hidden = false;
   };
   b.textContent = "v" + (u.version || "?") + (behind ? " · atualização" : "");
