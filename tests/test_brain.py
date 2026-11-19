@@ -1021,6 +1021,7 @@ class DashboardAssetTests(unittest.TestCase):
         "memory supersede",                                    # supersessão explícita no recall (CLI/agente)
         "agent permissions",                                   # gera .claude/settings.local.json: terminal/update/init cuidam; o painel não abre sessão do Claude
         "review list", "review accept",                        # wave 1 (#61): núcleo/CLI da fila de revisão; painel entra na wave 2
+        "seed folder",                                         # backfill único via terminal
     }
     DYNAMIC = {"memory recall", "memory reflect"}       # formulário do TUI monta; o painel busca no índice
 

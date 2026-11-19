@@ -18,9 +18,10 @@ O estado de cada item mora em `snapshot:<chave>#<item>`; o doctor continua vendo
 """
 from __future__ import annotations
 
+import os
 import re
 import sys
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from . import rawsort, util
@@ -62,19 +63,37 @@ def unchanged(brain, key: str, rev: str, item: str | None = None) -> bool:
     return bool(rev and isinstance(prev, dict) and prev.get("rev") == rev)
 
 
+def _coerce_captured_at(value: datetime | str | None) -> datetime | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        try:
+            dt = util.parse_dt(value)
+        except ValueError as e:
+            raise util.BrainError(f"captured_at inválido: {value!r}", code=2) from e
+    elif isinstance(value, datetime):
+        dt = value
+    else:
+        raise util.BrainError(f"captured_at inválido: {value!r}", code=2)
+    return dt.astimezone(util.tz()) if dt.tzinfo else dt.replace(tzinfo=util.tz())
+
+
 def take(brain, key: str, content: str, prefix: str | None = None, ext: str = "md",
-         item: str | None = None, rev: str | None = None, name: str | None = None, with_key: bool = True) -> dict:
+         item: str | None = None, rev: str | None = None, name: str | None = None, with_key: bool = True,
+         captured_at: datetime | str | None = None) -> dict:
     inst = brain.inst
     if not EXT_RE.match(ext or ""):
         # a extensão entra crua no nome do arquivo: `md/../../x` escaparia da inbox
         raise util.BrainError(f"--ext inválida: {ext!r} (só letras e números, ex.: md, json, txt)", code=2)
     # .state.json é leitura-modificação-escrita: sob trava, para dois brain concorrentes não se pisarem
     with util.locked_state(inst.state_file):
-        return _take_locked(brain, key, content, prefix, ext, item, rev, name, with_key)
+        return _take_locked(brain, key, content, prefix, ext, item, rev, name, with_key, captured_at=captured_at)
 
 
 def _take_locked(brain, key: str, content: str, prefix: str | None, ext: str,
-                 item: str | None, rev: str | None, name: str | None, with_key: bool) -> dict:
+                 item: str | None, rev: str | None, name: str | None, with_key: bool,
+                 captured_at: datetime | str | None = None) -> dict:
+    cap = _coerce_captured_at(captured_at)
     inst = brain.inst
     state = util.read_json(inst.state_file, {})
     slot = _slot(key, item)
@@ -112,7 +131,7 @@ def _take_locked(brain, key: str, content: str, prefix: str | None, ext: str,
         parts.append(util.slugify(key, 40 if not item else 32))
     if item:
         parts.append(util.slugify(name or item, 24 if with_key else 48))
-    base = "-".join(parts) + f"-{stamp}"
+    base = f"{cap:%Y-%m-%d}-" + "-".join(parts) if cap is not None else "-".join(parts) + f"-{stamp}"
     path, n = inst.inbox / f"{base}.{ext}", 2
     body = content if content.endswith("\n") else content + "\n"
     while True:
@@ -123,9 +142,22 @@ def _take_locked(brain, key: str, content: str, prefix: str | None, ext: str,
             break
         except FileExistsError:
             path, n = inst.inbox / f"{base}-{n}.{ext}", n + 1
-    state[slot] = {"hash": h, "at": util.iso_now(), "path": inst.rel(path), **({"rev": rev} if rev else {})}
+    if cap is not None:
+        ts = cap.timestamp()
+        os.utime(path, (ts, ts))
+    cap_iso = cap.isoformat() if cap is not None else None
+    state[slot] = {
+        "hash": h,
+        "at": util.iso_now(),
+        "path": inst.rel(path),
+        **({"rev": rev} if rev else {}),
+        **({"captured_at": cap_iso} if cap_iso else {}),
+    }
     util.write_json(inst.state_file, state)
-    _pulled(brain, key, item, True, snapshot=inst.rel(path))
+    pulled_extra = {"snapshot": inst.rel(path)}
+    if cap_iso:
+        pulled_extra["captured_at"] = cap_iso
+    _pulled(brain, key, item, True, **pulled_extra)
     res = {"changed": True, "failed": False, "path": path}
     if warning:
         res["warning"] = warning

@@ -861,6 +861,11 @@ def cmd_raw(args, b: Brain) -> None:
     rawsort.cli(args, b)
 
 
+def cmd_seed(args, b: Brain) -> None:
+    from . import seed
+    seed.cli(args, b)
+
+
 def cmd_pdf(args, b: Brain) -> None:
     from . import pdf
     pdf.cli(args, b)
@@ -1513,6 +1518,16 @@ def build_parser() -> argparse.ArgumentParser:
     x = rs.add_parser("where", help="onde está hoje um caminho RAW/… guardado no ledger")
     x.add_argument("path")
     p.set_defaults(fn=cmd_raw)
+
+    p = sub.add_parser("seed", help="importa histórico de pastas locais para a inbox (backfill retomável)")
+    ss = p.add_subparsers(dest="scmd", required=True)
+    x = ss.add_parser("folder", help="importa .md, .txt, .docx e .pdf preservando a data original (mtime)")
+    x.add_argument("path", help="pasta local com os arquivos")
+    x.add_argument("--limit", type=int, default=30, help="máximo de arquivos novos por lote (0 = sem limite; padrão: 30)")
+    x.add_argument("--kind", choices=["nota", "documento"], default="documento",
+                   help="tipo no cabeçalho (padrão: documento)")
+    x.add_argument("--json", action="store_true")
+    p.set_defaults(fn=cmd_seed)
 
     p = sub.add_parser("doctor", help="saúde da instância")
     p.add_argument("--json", action="store_true")
