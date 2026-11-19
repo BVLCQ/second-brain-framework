@@ -458,6 +458,7 @@ main.col{padding-bottom:120px}
 .inbox-drop-ov{position:fixed;inset:0;z-index:100;display:flex;flex-direction:column;gap:14px;padding:24px;
   background:color-mix(in srgb,var(--bg) 82%,transparent);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
 .inbox-drop-ov[hidden]{display:none}
+.pal-foot{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;padding:10px 14px;border-top:1px solid var(--line)}
 .inbox-drop-zone{flex:1;display:flex;align-items:center;justify-content:center;border:2px dashed var(--line);
   border-radius:18px;background:color-mix(in srgb,var(--panel) 88%,transparent);
   transition:border-color .12s ease,background .12s ease,transform .12s ease;pointer-events:none}

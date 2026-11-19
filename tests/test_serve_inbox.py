@@ -378,8 +378,20 @@ class PanelDragDropAssetsTests(unittest.TestCase):
         self.assertIn(".DS_Store", extra)
         self.assertIn(".keep.md", extra)
         self.assertIn("Ponte CLI inativa — rode ./brain serve para arrastar arquivos para o painel, ou salve direto em vault/RAW/inbox/.", extra)
-        self.assertIn("Navegadores não permitem apagar o arquivo original no arraste", extra)
+        # mover de verdade: pasta de origem via File System Access (nome+tamanho+horário conferidos)
+        self.assertIn("showDirectoryPicker", extra)
+        self.assertIn("queryPermission", extra)
+        self.assertIn("requestPermission", extra)
+        self.assertIn("removeEntry", extra)
+        self.assertIn("g.size !== file.size || g.lastModified !== file.lastModified", extra)  # nunca apaga por nome puro
+        self.assertIn("Mover de verdade", extra)
+        self.assertIn("Definir pasta de origem", extra)
+        self.assertIn("Manter como cópia", extra)
+        self.assertIn("inboxOriginAsked", extra)               # a oferta é 1× por sessão
+        self.assertIn("inbox-origin-hint", extra)              # a zona Mover anuncia o estado antes do drop
+        self.assertIn("original removido de ", extra)
         self.assertIn(".inbox-drop-ov", css)
+        self.assertIn(".pal-foot", css)
 
         for name in ("dashboard.html", "portfolio.html"):
             html = (ROOT / "brainlib/assets" / name).read_text(encoding="utf-8")

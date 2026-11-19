@@ -708,9 +708,13 @@ arquivo** que funciona em qualquer navegador, com dois modos:
   aprova com `--approval`/`--quote painel`, `--by owner`). A allowlist é fechada; `update`,
   `migrate`, `backup` e cia. seguem no terminal. Com a ponte no ar, **arrastar um arquivo
   ou pasta** para qualquer tela do painel entrega os itens em `vault/RAW/inbox/` — duas
-  zonas sobrepostas decidem entre **Mover** (remove o original, quando o navegador
-  permite) e **Copiar**; pasta entra arquivo por arquivo, nome repetido ganha sufixo
-  `-2` e o resultado aparece no console do painel.
+  zonas sobrepostas decidem entre **Mover** e **Copiar**. No navegador, a página não apaga
+  um arquivo arrastado fora de uma pasta que você conceda: no primeiro **Mover** o painel
+  oferece definir a **pasta de origem** uma vez (ex.: Downloads); daí em diante soltar em
+  Mover envia para a inbox e apaga o original sozinho — só o arquivo com o mesmo nome,
+  tamanho e horário do que caiu (homônimo diferente fica). Sem a pasta, ou em navegador
+  sem suporte (File System Access), Mover vira cópia e o painel avisa. Pasta entra arquivo
+  por arquivo, nome repetido ganha sufixo `-2` e o resultado aparece no console do painel.
 
 O painel tem três **faces** (como o TUI): **Execução**, **Portfólio** e **Configurações** —
 `Tab`/`Shift+Tab` troca, e cada face lembra onde você estava. A barra
