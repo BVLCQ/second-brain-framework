@@ -5688,11 +5688,11 @@ function route(){
     return;
   }
   if (path === "onboarding") {                   // F8: o wizard é um modo do painel, não uma página
-    if (!document.body.classList.contains("obmode") && typeof window.enterOnboarding === "function") window.enterOnboarding();
+    if (!(document.body && document.body.classList.contains("obmode")) && typeof window.enterOnboarding === "function") window.enterOnboarding();
     return;
   }
   if ((path === "home" || path === "") && M.onboarding && M.onboarding.needed && !window.__obDone
-      && typeof window.enterOnboarding === "function" && !document.body.classList.contains("obmode")) {
+      && typeof window.enterOnboarding === "function" && !(document.body && document.body.classList.contains("obmode"))) {
     location.hash = "onboarding";                // primeira vez: o painel abre na configuração sozinho
     return;
   }

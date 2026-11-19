@@ -175,7 +175,7 @@ class PanelSourcesGroupingAndToggleTest(unittest.TestCase):
 const fs = require("fs");
 const model = JSON.parse(process.argv[1]);
 const dummyEl = {
-  innerHTML: "", textContent: "",
+  innerHTML: "", textContent: "", dataset: {},
   classList: {toggle: () => {}, add: () => {}, remove: () => {}, contains: () => false},
   addEventListener: () => {}
 };
