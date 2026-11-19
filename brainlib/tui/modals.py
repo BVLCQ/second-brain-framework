@@ -10,6 +10,7 @@ from rich.text import Text
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.css.query import NoMatches
 from textual.screen import ModalScreen
 from textual.widgets import Input, Label, OptionList, Select, Static, TextArea
 from textual.widgets._select import SelectOverlay
@@ -109,6 +110,7 @@ class FormModal(ModalScreen):
         self._sug_items: dict[str, list[dict[str, str]]] = {}
         self._sug_active: str | None = None
         self._sug_navigated: bool = False
+        self._res_timer = None
 
     def compose(self) -> ComposeResult:
         s = self.spec
@@ -154,6 +156,14 @@ class FormModal(ModalScreen):
         first = self.query("Input, Select, TextArea")
         if first:
             first.first().focus()
+
+    def on_unmount(self) -> None:
+        self._cancel_res_timer()
+
+    def _cancel_res_timer(self) -> None:
+        if self._res_timer is not None:
+            self._res_timer.stop()
+            self._res_timer = None
 
     @staticmethod
     def _sug_token(val: str) -> str:
@@ -226,11 +236,11 @@ class FormModal(ModalScreen):
 
     def _raw(self) -> dict:
         out = {}
-        null = getattr(Select, "NULL", object())       # textual ≥8: valor sem escolha é sentinela, não ""
+        null = getattr(Select, "NULL", Select.BLANK)   # textual ≥8: valor sem escolha é sentinela, não ""
         for f in self.spec.fields:
             w = self.query_one(f"#f_{f.id}")
             v = w.text if isinstance(w, TextArea) else w.value
-            out[f.id] = "" if v is Select.BLANK or v is null else str(v).strip()
+            out[f.id] = "" if v is null else str(v).strip()
         return out
 
     def _hidden(self, raw: dict) -> set[str]:
@@ -241,12 +251,28 @@ class FormModal(ModalScreen):
         hidden = self._hidden(raw)
         return {k: ("" if k in hidden else v) for k, v in raw.items()}
 
-    def _update(self) -> None:
+    def _run_res(self, v: dict | None = None) -> None:
+        self._cancel_res_timer()
+        if v is None:
+            v = self.vals()
+        for f in self.spec.fields:
+            self.query_one(f"#r_{f.id}", Static).update(Text(_call(f.res, v[f.id], v), "dim") if f.res and v[f.id] else "")
+
+    def _flush_res(self) -> None:
+        self._res_timer = None
+        if not self.is_mounted:
+            return
+        try:
+            self._run_res()
+        except NoMatches:
+            pass
+
+    def _update(self, run_res: bool = True) -> None:
         v, hidden = self.vals(), self._hidden(self._raw())
         for f in self.spec.fields:
             self.query_one(f"#b_{f.id}").display = f.id not in hidden
-        for f in self.spec.fields:
-            self.query_one(f"#r_{f.id}", Static).update(Text(_call(f.res, v[f.id], v), "dim") if f.res and v[f.id] else "")
+        if run_res:
+            self._run_res(v)
         try:
             self.query_one("#cmdp", Static).update(preview(self.spec.build(v)))
         except Exception as e:  # noqa: BLE001 — o preview nunca derruba o formulário
@@ -258,7 +284,9 @@ class FormModal(ModalScreen):
         if fid in self._fields and e.value != self._last_vals.get(fid):
             self._last_vals[fid] = e.value
             self._refresh_sug(fid, e.value)
-        self._update()
+        self._update(run_res=False)
+        self._cancel_res_timer()
+        self._res_timer = self.set_timer(0.12, self._flush_res)
 
     def on_select_changed(self, e: Select.Changed) -> None:
         changed = (e.select.id or "")[2:]
@@ -343,6 +371,7 @@ class FormModal(ModalScreen):
 
     def action_submit(self) -> None:
         v, hidden = self.vals(), self._hidden(self._raw())
+        self._run_res(v)
         for f in [x for x in self.spec.fields if x.id not in hidden]:
             if f.req and not v[f.id]:
                 self.query_one("#err", Static).update(Text(f'Preencha "{f.label}".', "red"))

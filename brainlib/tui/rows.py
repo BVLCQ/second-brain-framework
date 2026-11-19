@@ -535,7 +535,7 @@ def d_action(store, it) -> Doc:
     a = it.data
     g, gs = GLYPH.get(a["status"], ("○", DIM))
     doc = Doc().h(Text(a["id"] + " · ", "bold"), (a["title"], "bold"))
-    bl = store.by_action.get(a["blocked_by"][0]) if a["blocked_by"] else None
+    bls = [store.by_action[x] for x in a["blocked_by"] if x in store.by_action and store.by_action[x]["open"]]
     un = [store.by_action.get(x) for x in a["unblocks"] if x in store.by_action]
     due = Text(a["due"] + f" · {wd_day(a['due'])} · ", PUR if a.get("due_suggested") else "") if a["due"] \
         else Text("sem prazo · o foco ignora esta ação", AMB)
@@ -549,7 +549,7 @@ def d_action(store, it) -> Doc:
             ("projeto", Text.assemble(link(a["project"], a["project"]), f" {a['project_title']}") if a["project"] else Text("—", DIM)),
             ("entregável", titled(store, a["deliverable"])) if a["deliverable"] else None,
             ("pessoas", Text(", ".join(store.first_name(p) for p in a["people"]) or "—")),
-            ("bloqueada por", Text.assemble(link("⊘ " + bl["id"], bl["id"], AMB), " " + bl["title"])) if bl and bl["open"] else None,
+            ("bloqueada por", Text.assemble(*[p for bl in bls for p in (link("⊘ " + bl["id"], bl["id"], AMB), " " + bl["title"] + "  ")])) if bls else None,
             ("destrava", Text.assemble(*[p for u in un for p in (link(u["id"], u["id"]), " " + u["title"] + "  ")])) if un else None,
             ("origem", Text.assemble(a["origin"] or "—", " ", prov(a["prov"]))),
             ("fonte", Text(a["source_label"], DIM))]

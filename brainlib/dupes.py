@@ -98,11 +98,12 @@ def judged(st) -> set[frozenset]:
     return out
 
 
-def similar(st, probe: dict, threshold: float = CANDIDATE, limit: int = 5, today: date | None = None) -> list[dict]:
+def similar(st, probe: dict, threshold: float = CANDIDATE, limit: int = 5, today: date | None = None,
+            idx: Index | None = None) -> list[dict]:
     """Ações parecidas com uma ação que ainda vai nascer: abertas e as fechadas há até 30 dias."""
     today = today or util.today()
     cutoff = today - timedelta(days=RECENT_CLOSED_DAYS)
-    idx = Index(st.actions.values())
+    idx = idx or Index(st.actions.values())
     skip = set(probe.get("not_dup") or [])
     hits = []
     for a in st.actions.values():

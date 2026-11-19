@@ -13,7 +13,7 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
-from .. import config, doctor, ids, model, notes as notes_mod, opener, rawsort, util, watch
+from .. import config, doctor, dupes, ids, model, notes as notes_mod, opener, rawsort, util, watch
 from ..core import Brain
 
 # Abas do painel Plano (Execução): 0 = árvore inteira; 1-4 = só goals/projetos naquele status.
@@ -186,7 +186,8 @@ class Item:
 class Store:
     def __init__(self, inst: config.Instance):
         self.inst = inst
-        self.brain: Brain = Brain(inst)
+        self.brain: Brain | None = None
+        self._dup_index: dupes.Index | None = None
         self.m: dict = {}
         self.health: list[dict] = []
         self.inbox = 0
@@ -208,6 +209,7 @@ class Store:
         if rs.get("rendered_at"):
             age = max(0.0, (util.now() - util.parse_dt(rs["rendered_at"])).total_seconds() / 3600)
         self.brain, self.m, self.health, self.inbox, self.rendered_age_h = brain, m, health, len(inbox), age
+        self._dup_index = None
         self.by_action = {a["id"]: a for a in m["actions"]}
         self.by_project = {p["id"]: p for p in m["projects"]}
         self.by_goal = {g["id"]: g for g in m["goals"]}
@@ -231,6 +233,11 @@ class Store:
         except util.BrainError as e:
             self.sources, self.watch_error = [], str(e)
         self.sig = self.signature()
+
+    def dup_index(self) -> dupes.Index:
+        if self._dup_index is None:
+            self._dup_index = dupes.Index(self.brain.state.actions.values())
+        return self._dup_index
 
     @property
     def _cfg_file(self):
@@ -606,7 +613,8 @@ class Store:
             elif tab == 3:
                 days = self.focus_days()
                 out = [Item(f"d:{d}", "fday", {"day": d, "blocks": bl}, q=d) for d, bl in days]
-                out.append(Item("f:warn", "fwarn", m["focus"], q="não cabe sem prazo"))
+                if (m["focus"] or {}).get("at_risk"):
+                    out.append(Item("f:warn", "fwarn", m["focus"], q="não cabe sem prazo"))
             elif tab == 4:
                 rows = [s for s in m["shares"] if show_all or s["status"] in ("solicitada", "aprovada")]
                 out = [Item(s["id"], "pub", s, q=f"{s['id']} {s['report']} {s['destination']}") for s in rows]
@@ -694,7 +702,8 @@ class Store:
                 out = grouped([(a["id"], {"label": a["name"], "sub": f"{a['processes']} processos · {a['opportunities']} oportunidades"},
                                 [opp_item(o) for o in ranked(opps) if o["area"] == a["id"]]) for a in pf["areas"]])
             else:
-                groups = [(g["id"], {"label": f"{g['id']} {g['title']}", "sub": f"{g['progress']['pct'] if g['progress']['pct'] is not None else '—'}%"},
+                groups = [(g["id"], {"label": f"{g['id']} {g['title']}",
+                                     "sub": f"{g['progress']['pct']}%" if g["progress"]["pct"] is not None else "—"},
                            [opp_item(o) for o in ranked(opps) if o["goal"] == g["id"]]) for g in self.m["goals"]]
                 none = [opp_item(o) for o in ranked(opps) if not o["goal"]]
                 groups.append(("none", {"label": "sem goal ainda", "sub": f"{len(none)}"}, none))

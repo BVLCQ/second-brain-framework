@@ -613,7 +613,7 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
             panel.border_subtitle = self._panel_subtitle(pid, n)
             panel.refresh(layout=True)
         cur = self.cur()
-        self.query_one("#detail", Static).update(rows.detail(self.store, cur if hasattr(cur, "kind") else None) if self.store else Text(""))
+        self.query_one("#detail", Static).update(rows.detail(self.store, cur) if self.store else Text(""))
         self.query_one("#detailwrap").scroll_home(animate=False)
         self.query_one("#detailwrap").border_subtitle = self._detail_subtitle()
         log, on = self.query_one("#log"), self.p == 6
@@ -825,7 +825,7 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
             if self.zoom:
                 self.zoom = False
                 self.redraw()
-            elif self.filt:                         # esc tira um filtro por vez: o último aplicado primeiro
+            elif self.filt and tuple(self.filt[:2]) == (self.p, self.tab[self.p]):  # esc tira um filtro por vez: o último aplicado primeiro
                 self.filt = (*self.filt[:-1],) if len(self.filt) > 3 else None
                 self.redraw()
         else:
@@ -1167,6 +1167,10 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
         if await asyncio.to_thread(self.store.signature) == self.store.sig:
             return
         async with self._lock:
+            if self.store is None or self.busy or len(self.screen_stack) > 1:
+                return
+            if await asyncio.to_thread(self.store.signature) == self.store.sig:
+                return
             await self._reload()
         self.log_line("↻ o vault mudou fora do TUI; releitura feita", "dim")
         self.redraw()
@@ -1214,7 +1218,8 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
         def dup_res(x, v, c, m) -> str:
             if len(x.strip()) < 8:
                 return ""
-            hits = dupes.similar(self.store.brain.state, {**dupes.profile_from_data({"title": x}), "people": []})
+            hits = dupes.similar(self.store.brain.state, {**dupes.profile_from_data({"title": x}), "people": []},
+                                 idx=self.store.dup_index())
             return f"parecida com {hits[0]['id']} · {hits[0]['title']} ({hits[0]['score']:.2f})" if hits else ""
 
         def promote_diff(x, v, c, m) -> str:
@@ -1678,7 +1683,6 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
             face, tab = loc
             if face != self.face:
                 self.face_to(face)
-                self.face = face
             self.p = 1
             self.tab[1] = tab
             self.set_sel(1, [o["id"] for o in SYS_OPS].index(fix["sys"]))
@@ -1937,9 +1941,16 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
                 from . import rows
                 self.push_screen(TextModal("Metodologia · ICE", rows.ice_methodology(min(100, self.size.width - 6))))
             return
-        self.face = face
-        self.p, self.tab[p] = p, t
+        self.face, self.p, self.tab[p] = face, p, t
         self.filt = None
+        if len(go) > 4 and go[4].startswith("sys:"):
+            self._items.pop((p, t), None)
+            ids = [it.id for it in self.items(p)]
+            if go[4] in ids:
+                self.set_sel(p, ids.index(go[4]))
+            self.redraw()
+            self.run_sys(go[4])
+            return
         if len(go) > 4:
             self.set_sel(p, [o["id"] for o in SYS_OPS].index(go[4]))
         self.redraw()
