@@ -71,6 +71,7 @@ DEFAULTS: dict = {
         "cloud_reranker": False,               # true = pergunta+candidatos vão a uma API externa
     },
     "runner": {"agent": "auto", "command": "", "prompt": "/update", "timeout_min": 45, "fallback": True,
+               "schedule": "09:00",           # horário padrão da rotina diária ("HH:MM" | "off" | "nao-agendar")
                "model": "claude-haiku-5-5",   # modelo do claude no noturno ("" = padrão do claude); só vale no preset claude
                "allow": []},              # ferramentas MCP de LEITURA do agente headless (noturno e TUI)
     "tui": {"agent_allow": [],             # ferramentas extras do agente nas ações ⚡ do TUI (ex.: MCP de escrita)

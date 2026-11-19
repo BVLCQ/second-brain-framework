@@ -1,12 +1,13 @@
 """Rotina noturna + agendamento — agnóstica de agente (Cursor, Claude, Codex, Antigravity, Gemini).
 
 Ordem: render (sempre, sem LLM) → agente headless roda /update (puxa fontes via MCP,
-/dump) → sync de foco → memória → backup semanal → render final. Cada passo isolado:
+/dump) → sync de foco → memória → backup semanal → brief → render final. Cada passo isolado:
 falha em um não derruba os outros. O agente roda com BRAIN_NIGHTLY=1: o ledger recusa
 qualquer evento "do dono", aprovação, envio ou publicação — não há dono presente.
 """
 from __future__ import annotations
 
+import argparse
 import hashlib
 import os
 import plistlib
@@ -243,6 +244,14 @@ def nightly(brain, skip_agent: bool = False) -> dict:
         from . import backup
         step("backup", lambda: backup.run(brain))
     brain.reload()
+    from . import notes as _notes
+
+    def _ensure_brief() -> str:
+        had_today = _notes.daily_brief(brain.inst.fresh)["is_today"]
+        _notes.ensure_daily_brief(brain)
+        return "ok" if had_today else "sem novidades"
+
+    step("brief", _ensure_brief)
     step("render final", lambda: render.summary(render.render_all(brain)).splitlines()[0])
     try:
         from . import upstream as _up
@@ -264,7 +273,7 @@ def _crontab(run=None) -> list[str]:
         res = (run or subprocess.run)(["crontab", "-l"], capture_output=True, text=True, check=False)
     except OSError:
         return []
-    return res.stdout.splitlines() if res.returncode == 0 else []
+    return (res.stdout or "").splitlines() if res.returncode == 0 else []
 
 
 def _cron_matches(line: str, root: Path) -> bool:
@@ -314,14 +323,35 @@ def _launchctl(*args: str, run=None) -> subprocess.CompletedProcess:
     return (run or subprocess.run)(["launchctl", *args], capture_output=True, text=True, check=False)
 
 
-def _launchd_remove(root: Path) -> None:
+DEFAULT_SCHEDULE = "09:00"
+OFF_SCHEDULES = {"off", "nao-agendar", "não-agendar"}
+
+
+def _configured_schedule(brain) -> str:
+    if brain is None:
+        return DEFAULT_SCHEDULE
+    raw = str((brain.inst.cfg.get("runner") or {}).get("schedule", DEFAULT_SCHEDULE) or DEFAULT_SCHEDULE).strip()
+    return raw or DEFAULT_SCHEDULE
+
+
+def _ctl_call(run, *args: str) -> subprocess.CompletedProcess:
+    return _launchctl(*args, run=run) if run is not None else _launchctl(*args)
+
+
+def _cron_call(run) -> list[str]:
+    if run is not None and getattr(_crontab, "__module__", "") == __name__:
+        return _crontab(run=run)
+    return _crontab()
+
+
+def _launchd_remove(root: Path, run=None) -> None:
     r = Path(root).resolve()
     plist = _launchd_plist(r)
-    _launchctl("bootout", f"gui/{os.getuid()}/{launchd_label(r)}")
+    _ctl_call(run, "bootout", f"gui/{os.getuid()}/{launchd_label(r)}")
     plist.unlink(missing_ok=True)
     legacy = _launchd_plist(None)
     if legacy != plist and legacy.exists() and plist_root(legacy) == r:
-        _launchctl("bootout", f"gui/{os.getuid()}/{LAUNCHD_LABEL}")
+        _ctl_call(run, "bootout", f"gui/{os.getuid()}/{LAUNCHD_LABEL}")
         legacy.unlink(missing_ok=True)
 
 
@@ -345,35 +375,37 @@ def foreign_schedule(root: Path) -> Path | None:
     return None
 
 
-def _schedule_launchd(args, brain, run=None) -> None:
+def _schedule_launchd(args, brain, run=None, msg: str | None = None) -> None:
     root = brain.inst.root
     label = launchd_label(root)
     plist = _launchd_plist(root)
     if args.action == "status":
         if plist.exists():
             spec = plistlib.loads(plist.read_bytes()).get("StartCalendarInterval", {})
-            loaded = _launchctl("print", f"gui/{os.getuid()}/{label}").returncode == 0
+            loaded = _ctl_call(run, "print", f"gui/{os.getuid()}/{label}").returncode == 0
             print(f"launchd: {label} às {spec.get('Hour', 0):02d}:{spec.get('Minute', 0):02d}"
                   + ("" if loaded else " (plist existe, mas não carregado)"))
         elif (legacy := _launchd_plist(None)).exists() and plist_root(legacy) == root.resolve():
             spec = plistlib.loads(legacy.read_bytes()).get("StartCalendarInterval", {})
-            loaded = _launchctl("print", f"gui/{os.getuid()}/{LAUNCHD_LABEL}").returncode == 0
+            loaded = _ctl_call(run, "print", f"gui/{os.getuid()}/{LAUNCHD_LABEL}").returncode == 0
             print(f"launchd: {LAUNCHD_LABEL} às {spec.get('Hour', 0):02d}:{spec.get('Minute', 0):02d}"
                   + ("" if loaded else " (plist existe, mas não carregado)"))
         else:
-            print("não agendado — `./brain schedule install --time 05:00`")
+            print(f"não agendado — `./brain schedule install --time {DEFAULT_SCHEDULE}`")
         return
-    old = _crontab()
+    old = _cron_call(run)
     if any(_cron_matches(ln, root) for ln in old):  # migra: tira a linha antiga do cron
         keep = [ln for ln in old if not _cron_matches(ln, root)]
         (run or subprocess.run)(["crontab", "-"], input="\n".join(keep) + ("\n" if keep else ""), text=True, check=True)
     if args.action == "remove":
-        _launchd_remove(root)
-        print("✓ agendamento removido")
+        _launchd_remove(root, run=run)
+        print(msg or "✓ agendamento removido")
         return
-    _launchctl("bootout", f"gui/{os.getuid()}/{label}")
+    raw_time = getattr(args, "time", None)
+    time_str = _check_time(raw_time if raw_time else _configured_schedule(brain))
+    _ctl_call(run, "bootout", f"gui/{os.getuid()}/{label}")
     plist.unlink(missing_ok=True)
-    hh, mm = args.time.split(":")
+    hh, mm = time_str.split(":")
     brain.inst.logs.mkdir(parents=True, exist_ok=True)
     plist.parent.mkdir(parents=True, exist_ok=True)
     plist.write_bytes(plistlib.dumps({
@@ -387,44 +419,66 @@ def _schedule_launchd(args, brain, run=None) -> None:
         "StandardErrorPath": str(brain.inst.logs / "cron.log"),
         "ProcessType": "Background",
     }))
-    res = _launchctl("bootstrap", f"gui/{os.getuid()}", str(plist))
+    res = _ctl_call(run, "bootstrap", f"gui/{os.getuid()}", str(plist))
     if res.returncode:
         raise util.BrainError(f"launchctl bootstrap falhou: {(res.stderr or res.stdout).strip()}", code=3)
     legacy = _launchd_plist(None)
     if legacy != plist and legacy.exists() and plist_root(legacy) == root.resolve():
-        _launchctl("bootout", f"gui/{os.getuid()}/{LAUNCHD_LABEL}")
+        _ctl_call(run, "bootout", f"gui/{os.getuid()}/{LAUNCHD_LABEL}")
         legacy.unlink(missing_ok=True)
         print("↻ agendamento antigo (rótulo único da máquina) migrado para o rótulo desta instância")
-    print(f"✓ noturno agendado às {args.time} (launchd: {label})")
+    print(f"✓ noturno agendado às {time_str} (launchd: {label})")
 
 
-def _check_time(value: str) -> None:
+def _check_time(value: str) -> str:
     m = re.fullmatch(r"(\d{1,2}):(\d{2})", (value or "").strip())
     if not m or int(m.group(1)) > 23 or int(m.group(2)) > 59:
         # launchd aceita Hour=25 calado (e nunca roda) — e o agendamento anterior já teria sido removido
-        raise util.BrainError(f"--time inválido: {value!r} (use HH:MM, ex.: 05:00)", code=2)
+        raise util.BrainError(f"--time inválido: {value!r} (use HH:MM, ex.: {DEFAULT_SCHEDULE})", code=2)
+    return f"{int(m.group(1)):02d}:{int(m.group(2)):02d}"
 
 
 def schedule_cli(args, brain, run=None) -> None:
+    raw_time = getattr(args, "time", None)
+    explicit_time = raw_time is not None and str(raw_time).strip() != ""
+    resolved_time = str(raw_time).strip() if explicit_time else _configured_schedule(brain)
     if args.action == "install":
-        _check_time(args.time)
+        if not explicit_time and resolved_time.lower() in OFF_SCHEDULES:
+            off_msg = f"✓ agendamento desligado (schedule = {resolved_time})"
+            if _use_launchd():
+                return _schedule_launchd(argparse.Namespace(action="remove", time=DEFAULT_SCHEDULE),
+                                         brain, run=run, msg=off_msg)
+            if not shutil.which("crontab"):
+                print(off_msg)
+                return
+            root = brain.inst.root
+            cron_list = _cron_call(run)
+            lines = [ln for ln in cron_list if not _cron_matches(ln, root)]
+            if len(lines) != len(cron_list):
+                (run or subprocess.run)(["crontab", "-"], input="\n".join(lines) + ("\n" if lines else ""),
+                                        text=True, check=True)
+            print(off_msg)
+            return
+        resolved_time = _check_time(resolved_time)
+    effective = argparse.Namespace(action=args.action, time=resolved_time)
     if _use_launchd():
-        return _schedule_launchd(args, brain, run=run)
+        return _schedule_launchd(effective, brain, run=run)
     if not shutil.which("crontab"):
         raise util.BrainError("crontab não encontrado — agende `./brain nightly` no agendador do seu sistema "
                               "(launchd no macOS: guides/user-guide.md §Noturno)", code=3)
     root = brain.inst.root
-    lines = [ln for ln in _crontab() if not _cron_matches(ln, root)]
+    cron_list = _cron_call(run)
+    lines = [ln for ln in cron_list if not _cron_matches(ln, root)]
     if args.action == "status":
-        mine = [ln for ln in _crontab() if _cron_matches(ln, root)]
-        print(mine[0] if mine else "não agendado — `./brain schedule install --time 05:00`")
+        mine = [ln for ln in cron_list if _cron_matches(ln, root)]
+        print(mine[0] if mine else f"não agendado — `./brain schedule install --time {DEFAULT_SCHEDULE}`")
         return
     if args.action == "install":
-        hh, mm = args.time.split(":")
+        hh, mm = resolved_time.split(":")
         qroot = shlex.quote(str(root))
         # cron roda com PATH mínimo (python do sistema, sem mise/agente) — fixa o PATH de quem instalou
         path = shlex.quote(os.environ.get("PATH", "/usr/bin:/bin"))
         lines.append(f"{int(mm)} {int(hh)} * * * cd {qroot} && PATH={path} ./brain nightly "
                      f">> vault/logs/cron.log 2>&1 {MARK}")
     (run or subprocess.run)(["crontab", "-"], input="\n".join(lines) + "\n", text=True, check=True)
-    print(f"✓ noturno agendado às {args.time} (crontab)" if args.action == "install" else "✓ agendamento removido")
+    print(f"✓ noturno agendado às {resolved_time} (crontab)" if args.action == "install" else "✓ agendamento removido")

@@ -1503,6 +1503,14 @@ def build_parser() -> argparse.ArgumentParser:
     x = ns.add_parser("list", help="notas na inbox e no RAW")
     x.add_argument("--link")
     x.add_argument("--json", action="store_true")
+    x = ns.add_parser("write", help="grava narrativa derivada em FRESH/notes/<slug>.md (vale no noturno)")
+    x.add_argument("slug", help="nome do arquivo em FRESH/notes/ (ex.: brief, semana)")
+    x.add_argument("--kind", default="brief", choices=["brief", "week", "nota"],
+                   help="tipo da nota derivada (padrão: brief)")
+    x.add_argument("--text", help="conteúdo da nota")
+    x.add_argument("--file", help="arquivo com o texto (use - para stdin)")
+    x.add_argument("--empty", action="store_true", help="marca a nota como sem novidades")
+    x.add_argument("--json", action="store_true")
     p.set_defaults(fn=cmd_note)
 
     p = sub.add_parser("raw", help="RAW organizado por tipo: RAW/<ano>/<mês>/<tipo>/ (slack, meetings, documents, …, misc)")
@@ -1644,7 +1652,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("schedule", help="agenda o noturno (launchd no macOS, crontab nos demais)")
     p.add_argument("action", choices=["install", "remove", "status"])
-    p.add_argument("--time", default="05:00")
+    p.add_argument("--time", default=None, help="horário HH:MM (padrão: [runner].schedule no brain.toml, 09:00)")
     p.set_defaults(fn=cmd_schedule)
 
     p = sub.add_parser("backup", help="zip do vault → Drive (porta do backup)")

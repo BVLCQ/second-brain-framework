@@ -1022,6 +1022,7 @@ class DashboardAssetTests(unittest.TestCase):
         "agent permissions",                                   # gera .claude/settings.local.json: terminal/update/init cuidam; o painel não abre sessão do Claude
         "review list", "review accept",                        # wave 1 (#61): núcleo/CLI da fila de revisão; painel entra na wave 2
         "seed folder",                                         # backfill único via terminal
+        "note write",                                          # wave 1 (#60): narrativa derivada gravada pelo /update e runner (FRESH/notes/)
     }
     DYNAMIC = {"memory recall", "memory reflect"}       # formulário do TUI monta; o painel busca no índice
 

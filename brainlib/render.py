@@ -19,11 +19,16 @@ MANAGED_DIRS = ("projects", "people", "records/actions", "records/decisions",
 
 
 def _notes(fresh: Path) -> list[dict]:
-    """Narrativas do agente (FRESH/notes/*.md: brief, semana) entram no painel como estão."""
+    """Narrativas do agente (FRESH/notes/*.md: brief, semana) entram no painel com metadados opcionais."""
+    from . import notes
     out = []
     for p in sorted((fresh / "notes").glob("*.md")) if (fresh / "notes").exists() else []:
-        text = p.read_text(encoding="utf-8")
-        out.append({"name": p.stem, "text": text[:20000]})
+        parsed = notes.parse_note(p)
+        out.append({
+            **parsed,
+            "body": parsed["body"][:20000],
+            "text": parsed["text"][:20000],
+        })
     return out
 
 
@@ -38,11 +43,14 @@ def render_html(m: dict, asset: Path = ASSET) -> str:
 
 def _cleanup(fresh: Path, keep: set[Path]) -> list[str]:
     removed = []
+    notes_dir = (fresh / "notes").resolve()
     for sub in MANAGED_DIRS:
         d = fresh / sub
-        if not d.exists():
+        if not d.exists() or d.resolve() == notes_dir:
             continue
         for p in d.glob("*.md"):
+            if p.resolve().parent == notes_dir:
+                continue
             if p not in keep:
                 p.unlink()
                 removed.append(str(p.relative_to(fresh)))
@@ -85,6 +93,8 @@ def view_model(brain) -> dict:
     m["forms"] = forms.export()                                 # formulários: a MESMA especificação da TUI
     m["form_static"] = forms.static(brain)
     m["notes"] = _notes(brain.inst.fresh)
+    from . import notes as _notes_mod
+    m["daily_brief"] = _notes_mod.daily_brief(brain.inst.fresh)
     from . import review
     m["review"] = review.summary(brain)
     from . import upstream as _up                              # versão + aviso de atualização (cache, sem rede)

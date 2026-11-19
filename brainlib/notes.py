@@ -12,7 +12,7 @@ import os
 import re
 import sys
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 from . import ids, util
@@ -192,7 +192,132 @@ def scan(inst) -> list[Note]:
     return out
 
 
+_FRESH_HEADER_KEYS = {"generated-at", "date", "kind", "empty"}
+
+
+def write_note(brain, slug: str, text: str, *, kind: str = "brief",
+               note_date: str | None = None, empty: bool = False) -> Path:
+    """Grava narrativa derivada em `FRESH/notes/<slug>.md` (sem evento no ledger; vale no noturno)."""
+    raw_slug = (slug or "").strip()
+    if (not raw_slug or "/" in raw_slug or "\\" in raw_slug or ".." in raw_slug
+            or Path(raw_slug).name != raw_slug or not re.search(r"[a-z0-9]", util.fold(raw_slug))):
+        raise util.BrainError(f"slug inválido para nota derivada: {slug!r}", code=3)
+    safe_slug = util.slugify(raw_slug)
+    body = (text or "").strip()
+    if not body:
+        raise util.BrainError("a nota está vazia", code=3)
+    day = util.parse_date(note_date).isoformat() if note_date is not None else util.today().isoformat()
+    kind_val = (kind or "brief").strip() or "brief"
+    notes_dir = brain.inst.fresh / "notes"
+    notes_dir.mkdir(parents=True, exist_ok=True)
+    target = notes_dir / f"{safe_slug}.md"
+    if target.resolve().parent != notes_dir.resolve():
+        raise util.BrainError(f"slug inválido para nota derivada: {slug!r}", code=3)
+    content = (
+        f"generated-at: {util.iso_now()}\n"
+        f"date: {day}\n"
+        f"kind: {kind_val}\n"
+        f"empty: {'true' if empty else 'false'}\n\n"
+        f"{body}\n"
+    )
+    util.atomic_write(target, content)
+    return target
+
+
+def parse_note(path: Path, *, today: date | None = None) -> dict:
+    """Lê arquivo `.md` de `FRESH/notes/`, tolerando notas antigas sem cabeçalho estruturado."""
+    ref_today = today or util.today()
+    raw = path.read_text(encoding="utf-8")
+    meta: dict[str, str] = {}
+    body_raw = raw
+    if raw.startswith("---\n"):
+        end = raw.find("\n---", 4)
+        if end != -1:
+            for ln in raw[4:end].splitlines():
+                k, sep, v = ln.partition(":")
+                if sep:
+                    meta[k.strip().lower()] = v.strip()
+            body_raw = raw[end + 4:].lstrip("\n")
+    else:
+        lines = raw.splitlines()
+        blank_idx = next((i for i, ln in enumerate(lines) if not ln.strip()), len(lines))
+        head_lines = lines[:blank_idx]
+        if head_lines and all(":" in ln and ln.partition(":")[0].strip().lower() in _FRESH_HEADER_KEYS
+                              for ln in head_lines):
+            for ln in head_lines:
+                k, _, v = ln.partition(":")
+                meta[k.strip().lower()] = v.strip()
+            body_raw = "\n".join(lines[blank_idx + 1:]) if blank_idx < len(lines) else ""
+    slug = path.stem
+    generated_at = meta.get("generated-at") or None
+    raw_date = (meta.get("date") or "").strip()
+    note_date = raw_date[:10] if re.fullmatch(r"\d{4}-\d{2}-\d{2}.*", raw_date) else None
+    if not note_date and generated_at and re.fullmatch(r"\d{4}-\d{2}-\d{2}.*", generated_at):
+        note_date = generated_at[:10]
+    kind = (meta.get("kind") or ("brief" if slug == "brief" else ("week" if slug in ("week", "semana") else "nota"))).strip()
+    empty = meta.get("empty", "").strip().lower() in {"true", "1", "yes", "sim"}
+    body = body_raw.strip()
+    return {
+        "slug": slug,
+        "name": slug,
+        "path": str(path),
+        "kind": kind,
+        "date": note_date,
+        "generated_at": generated_at,
+        "empty": empty,
+        "is_today": bool(note_date and note_date == ref_today.isoformat()),
+        "body": body,
+        "text": body,
+    }
+
+
+def daily_brief(fresh: Path, *, today: date | None = None) -> dict:
+    """Devolve estado e conteúdo de `FRESH/notes/brief.md` para o view-model e fallback noturno."""
+    p = fresh / "notes" / "brief.md"
+    if not p.is_file():
+        return {"exists": False, "is_today": False, "date": None, "generated_at": None, "empty": False, "text": ""}
+    parsed = parse_note(p, today=today)
+    return {
+        "exists": True,
+        "is_today": parsed["is_today"],
+        "date": parsed["date"],
+        "generated_at": parsed["generated_at"],
+        "empty": parsed["empty"],
+        "text": parsed["body"],
+    }
+
+
+def ensure_daily_brief(brain, *, quiet_text: str = "Sem novidades desde a última atualização.") -> Path:
+    """Garante `FRESH/notes/brief.md` de hoje sem sobrescrever brief já gerado pelo agente."""
+    info = daily_brief(brain.inst.fresh)
+    if info["exists"] and info["is_today"]:
+        return brain.inst.fresh / "notes" / "brief.md"
+    return write_note(brain, "brief", quiet_text, kind="brief", empty=True)
+
+
 def cli(args, brain) -> None:
+    if args.ncmd == "write":
+        if args.text is not None and args.file is not None:
+            raise util.BrainError("use apenas um entre --text e --file", code=2)
+        if args.file is not None:
+            if args.file == "-":
+                text = sys.stdin.read()
+            else:
+                try:
+                    text = Path(args.file).read_text(encoding="utf-8")
+                except (OSError, UnicodeDecodeError) as e:
+                    raise util.BrainError(f"note write: não consegui ler {args.file}: {e}", code=1) from e
+        elif args.text is not None:
+            text = args.text
+        else:
+            text = sys.stdin.read()
+        path = write_note(brain, args.slug, text, kind=args.kind, empty=args.empty)
+        rel = brain.inst.rel(path)
+        if args.json:
+            print(json.dumps({**parse_note(path), "path": rel}, ensure_ascii=False))
+        else:
+            print(f"✓ nota derivada → {rel}")
+        return
     if args.ncmd == "add":
         text = args.text if args.text is not None else sys.stdin.read()
         path = create(brain, text, args.link or "")

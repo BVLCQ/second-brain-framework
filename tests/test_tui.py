@@ -2580,7 +2580,8 @@ class CoverageTest(unittest.TestCase):
                   "index rebuild", "index update", "index status", "route", "memory dossier", "memory eval",
                   "memory supersede",
                   "memory models list", "memory models show", "memory models sync", "memory models refresh",
-                  "review list", "review accept", "seed folder"}   # query/index/route/dossier = ferramenta do agente + doctor   # migração única no terminal; serve é a ponte do painel HTML; custo = doctor/CLI; models = CLI do dono/agente (full-only); review = wave 1 (#61), TUI na wave 2; seed = backfill único no terminal
+                  "review list", "review accept", "seed folder",
+                  "note write"}   # query/index/route/dossier = ferramenta do agente + doctor   # migração única no terminal; serve é a ponte do painel HTML; custo = doctor/CLI; models = CLI do dono/agente (full-only); review = wave 1 (#61), TUI na wave 2; seed = backfill único no terminal; note write = /update e runner (#60)
     # setup e memory harness SAÍRAM daqui: a face Configurações emite ambos (wizard interativo via terminal suspenso; install/verify dos harnesses)
     DYNAMIC = {"memory recall", "memory reflect"}      # o formulário "Memória: perguntar" monta o subcomando
 
