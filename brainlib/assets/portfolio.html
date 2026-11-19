@@ -4390,7 +4390,7 @@ OBV.planejamento = () => {
       '<label class="f"><span>Explique com as suas palavras</span><textarea id="ptext" style="min-height:150px" placeholder="Ex.: Neste semestre quero lançar o novo app de pagamentos até junho. Para isso, preciso fechar a pesquisa com clientes em março e o MVP em maio. Também quero estruturar o time de dados…"></textarea></label>' +
       '<div class="drop" id="drop"><b>Arraste documentos aqui</b> ou clique para escolher<br><small style="color:var(--muted)">Planejamento, OKRs, apresentação… (PDF, Word, PowerPoint, texto — até 25 MB)</small><input type="file" id="file" multiple class="hidden"></div>' +
       '<ul class="files" id="files">' + obUploads.map(u => "<li><span>" + esc(u.name) + "</span><span>✓ recebido</span></li>").join("") + "</ul>" +
-      '<div class="actions" style="margin-top:16px"><span class="spacer"></span><button class="btn" type="button" id="manual">Montar à mão</button><button class="btn pri" type="button" id="gen" ' + (OBS.agent ? "" : "disabled") + '>✦ Gerar proposta com IA</button></div>' +
+      '<div class="actions" style="margin-top:16px"><span class="spacer"></span><button class="btn" type="button" id="manual">Montar à mão</button><button class="btn pri" type="button" id="ob-gen" ' + (OBS.agent ? "" : "disabled") + '>✦ Gerar proposta com IA</button></div>' +
       (OBS.agent ? "" : '<p style="color:var(--muted);font-size:12.5px;margin:10px 0 0">A proposta automática precisa de um agente headless instalado ou configurado em [runner]. Você pode montar à mão.</p>') +
       '<div class="log" id="log"></div></div>';
     const drop = $("#drop"), file = $("#file");
@@ -4410,8 +4410,8 @@ OBV.planejamento = () => {
       }
     }
     $("#manual").onclick = () => { if (!obPlan.goals.length) obPlan.goals.push(obEmptyGoal()); obPlanTab = "revisar"; OBV.planejamento(); };
-    $("#gen").onclick = async () => {
-      const b = $("#gen"), log = $("#log");
+    $("#ob-gen").onclick = async () => {
+      const b = $("#ob-gen"), log = $("#log");
       const t = $("#ptext").value.trim();
       if (!t && !obUploads.length) return obMsg($("#m"), "err", "Escreva algo ou envie um documento primeiro.");
       obBusy(b, true, "Lendo…");
