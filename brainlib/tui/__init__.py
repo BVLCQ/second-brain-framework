@@ -17,6 +17,8 @@ from .. import util
 FRAMEWORK = Path(__file__).resolve().parents[2]
 VENV = ".venv-tui"
 REQS = "requirements-tui.txt"
+VENV_TIMEOUT_S = 120
+PIP_TIMEOUT_S = 600
 
 
 def _venv_python(root: Path) -> Path:
@@ -31,10 +33,16 @@ def setup(root: Path = FRAMEWORK) -> None:
     venv = root / VENV
     if not _venv_python(root).exists():
         print(f"→ criando {VENV}")
-        subprocess.run([sys.executable, "-m", "venv", str(venv)], check=True)
+        try:
+            subprocess.run([sys.executable, "-m", "venv", str(venv)], check=True, timeout=VENV_TIMEOUT_S)
+        except subprocess.TimeoutExpired:
+            raise util.BrainError(f"tempo esgotado ({VENV_TIMEOUT_S}s) ao criar venv", code=3)
     print("→ instalando dependências (versões e hashes travados)")
-    subprocess.run([str(_venv_python(root)), "-m", "pip", "install", "--quiet", "--disable-pip-version-check",
-                    "--require-hashes", "-r", str(reqs)], check=True)
+    try:
+        subprocess.run([str(_venv_python(root)), "-m", "pip", "install", "--quiet", "--disable-pip-version-check",
+                        "--require-hashes", "-r", str(reqs)], check=True, timeout=PIP_TIMEOUT_S)
+    except subprocess.TimeoutExpired:
+        raise util.BrainError(f"tempo esgotado ({PIP_TIMEOUT_S}s) ao rodar pip", code=3)
     print("✓ TUI pronta: ./brain tui")
 
 

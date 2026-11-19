@@ -19,6 +19,14 @@ from .swift import swift_tool as _swift_tool
 
 HINT = ("sem leitor de PDF — instale o poppler (`brew install poppler` · `apt install poppler-utils`) "
         "ou, no macOS, as Command Line Tools (`xcode-select --install`, dá o `swift`)")
+PDF_TIMEOUT_S = 120
+
+
+def _run_pdf(args: list[str], target: str) -> subprocess.CompletedProcess:
+    try:
+        return subprocess.run(args, capture_output=True, text=True, check=False, timeout=PDF_TIMEOUT_S)
+    except subprocess.TimeoutExpired:
+        raise util.BrainError(f"tempo esgotado ({PDF_TIMEOUT_S}s) ao rodar {args[0]} em {target}", code=3)
 
 SWIFT_TEXT = r'''
 import PDFKit
@@ -86,14 +94,13 @@ def text(path: str | Path, pages: list[int] | None = None) -> str:
         chunks = []
         if pages:
             for n in pages:
-                res = subprocess.run(["pdftotext", "-layout", "-f", str(n), "-l", str(n), p, "-"],
-                                     capture_output=True, text=True, check=False)
+                res = _run_pdf(["pdftotext", "-layout", "-f", str(n), "-l", str(n), p, "-"], p)
                 if res.returncode == 0:
                     chunks.append(f"=== PÁGINA {n} ===\n{res.stdout.rstrip()}")
         else:
             # Uma chamada só; o pdftotext separa páginas com \f. (Antes: um processo por página e, sem
             # `pdfinfo` no PATH, só a página 1 era lida — em silêncio.)
-            res = subprocess.run(["pdftotext", "-layout", p, "-"], capture_output=True, text=True, check=False)
+            res = _run_pdf(["pdftotext", "-layout", p, "-"], p)
             if res.returncode == 0:
                 parts = res.stdout.split("\f")
                 if len(parts) > 1 and not parts[-1].strip():
@@ -104,7 +111,7 @@ def text(path: str | Path, pages: list[int] | None = None) -> str:
     tool = _swift_tool(SWIFT_TEXT, "pdftext")
     if tool:
         args = [*tool, p] + ([",".join(map(str, pages))] if pages else [])
-        res = subprocess.run(args, capture_output=True, text=True, check=False)
+        res = _run_pdf(args, p)
         if res.returncode == 0 and res.stdout.strip():
             return res.stdout
     try:
@@ -130,21 +137,20 @@ def render(path: str | Path, pages: list[int] | None = None, out: str | Path | N
             got = []
             for n in pages:
                 out_png = dest / f"pagina-{n:03d}"
-                res = subprocess.run([*args, "-f", str(n), "-l", str(n), "-singlefile", p, str(out_png)],
-                                     capture_output=True, text=True, check=False)
+                res = _run_pdf([*args, "-f", str(n), "-l", str(n), "-singlefile", p, str(out_png)], p)
                 if res.returncode == 0 and out_png.with_suffix(".png").exists():
                     got.append(out_png.with_suffix(".png"))
             if got:
                 return got
         else:
-            res = subprocess.run([*args, p, str(dest / "pagina")], capture_output=True, text=True, check=False)
+            res = _run_pdf([*args, p, str(dest / "pagina")], p)
             if res.returncode == 0:
                 return sorted(dest.glob("pagina*.png"))
     tool = _swift_tool(SWIFT_RENDER, "pdfrender")
     if not tool:
         raise util.BrainError(HINT, code=3)
     args = [*tool, p, str(dest), str(dpi)] + ([",".join(map(str, pages))] if pages else [])
-    res = subprocess.run(args, capture_output=True, text=True, check=False)
+    res = _run_pdf(args, p)
     if res.returncode != 0:
         raise util.BrainError(f"não consegui renderizar o PDF: {res.stderr.strip() or 'erro do PDFKit'}", code=3)
     return [Path(line) for line in res.stdout.splitlines() if line.strip()]

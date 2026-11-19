@@ -315,7 +315,11 @@ def google_refresh_token(client_id: str, client_secret: str, open_browser: bool 
     if open_browser:
         opener = shutil.which("xdg-open") or shutil.which("open")
         if opener:
-            subprocess.run([opener, auth_url], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            try:
+                subprocess.run([opener, auth_url], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                               timeout=15)
+            except (OSError, subprocess.TimeoutExpired):
+                pass
     say(f"Abrindo o navegador para autorizar (escopos: calendar.events.owned + drive.file)…")
     say(f"Se não abrir: {auth_url}")
     server = HTTPServer(("127.0.0.1", OAUTH_PORT), _OAuthHandler)
