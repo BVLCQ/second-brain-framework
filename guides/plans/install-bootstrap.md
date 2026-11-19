@@ -12,12 +12,12 @@ do dono no repo, `./brain upstream scan` antes de propor o push.
 ## 1. O problema — o instalador verifica e desiste
 
 - `install.sh` hoje confere git/Python/mise e, se falta algo, **imprime a
-  receita manual e sai com erro** (linhas 37–46). No Mac de fábrica (sem brew,
-  sem CLT, só `/usr/bin/python3` 3.9), o duplo clique no `Abrir o
-  Brain.command` termina em parede de texto — o oposto de "uma ação".
-- O README lista como "requisitos que o instalador ainda não resolve
-  sozinho": **git**, **Python 3.11+** e **Claude Code**. Os dois primeiros são
-  bootstrap faltando; o terceiro está desatualizado — o produto é
+  receita manual e sai com erro**. No Mac de fábrica (sem brew, sem CLT, só
+  `/usr/bin/python3` 3.9), o duplo clique no `Abrir o Brain.command` termina
+  em parede de texto — o oposto de "uma ação".
+- O README listava como "requisitos que o instalador ainda não resolve
+  sozinho": **git**, **Python 3.11+** e **Claude Code**. Os dois primeiros
+  eram bootstrap faltando; o terceiro estava desatualizado — o produto é
   agnóstico desde a 2.27.0 (4 agentes + card Outros harnesses).
 - As três portas (`curl | sh` · `.command` · `./brain setup`) são uma espinha
   só; logo o bootstrap morre **uma vez**, no `install.sh`, e todas herdam.
@@ -27,17 +27,23 @@ do dono no repo, `./brain upstream scan` antes de propor o push.
 1. **Uma espinha.** O bootstrap é um estágio novo DO `install.sh`. O wizard
    não instala dependências de sistema (ele precisa de Python rodando —
    galinha e ovo); o `.command` e o `curl | sh` são lanços da mesma espinha.
-2. **Verificar → instalar só o que falta → reexecutar a si mesmo.** Cada
-   etapa anuncia o que vai fazer ANTES de fazer. Idempotente: a segunda
-   rodada é no-op.
-3. **Escopo fechado: git · mise · Python.** O instalador entrega o Brain
-   executável + app + wizard aberto. Memory stack (LM Studio, Hindsight)
-   continua no wizard e no `setup.md` — são escolhas, não pré-requisitos.
-4. **Portas do SO são do dono.** Dialog da Apple (CLT) e senha do brew nunca
-   são simuladas nem contornadas: o script espera com timeout e, ao falhar,
-   imprime a receita manual equivalente (que é o `setup.md` §0–§1).
-5. **doctor é a régua.** Ganha as checagens de git · python (versão e origem:
-   mise vs sistema) · mise, para a porta IA-assistida fechar o loop.
+2. **Silencioso nas perguntas NOSSAS; idempotente.** O script não pergunta
+   nada: verifica e instala só o que falta (ruling D1). Segunda rodada é
+   no-op. As portas que não são nossas — senha sudo da sessão e a janela da
+   Apple do CLT (pré-requisito transitivo do Homebrew) — não podem ser
+   silenciadas: espera honesta com timeout e, ao falhar, a receita manual
+   (`setup.md` §0–§1).
+3. **Escopo fechado: git · mise · Python 3.12 · Docker/OrbStack** (ruling
+   D3). O instalador entrega o Brain executável + app + wizard aberto, mais o
+   runtime de contêiner que a memória consome: **OrbStack** no macOS,
+   **Docker Engine** no Linux/WSL2. Hindsight e LM Studio são **config de
+   memória** — moram no wizard (`setup --only memoria`), não no instalador:
+   são escolhas, não pré-requisitos.
+4. **doctor é a régua.** Ganha as checagens de git · python (versão e
+   origem: mise vs sistema) · mise · docker — warn contextual, nunca error
+   (a saída do doctor gates o modal da TUI).
+5. **Falha parcial é honesta.** Contêiner ausente não impede o Brain (memória
+   é opcional): avisa e segue. Sem Python, para com a receita manual.
 
 ## 3. Fases
 
@@ -45,37 +51,51 @@ do dono no repo, `./brain upstream scan` antes de propor o push.
 
 Ordem dentro do `install.sh`, antes dos guards atuais:
 
-1. **git**: sem CLT (`xcode-select -p` falha) → `xcode-select --install`
-   (dialog da Apple) e espera com timeout; sem GUI (ssh) → cai no git do brew
-   (decisão D2).
-2. **Homebrew**: ausente → instalador oficial (decisão D1 define sozinho-com-aviso
-   vs ensinar-e-exigir).
-3. **mise**: `brew install mise` (Linux: installer oficial por curl).
-4. **Python**: `mise trust` + `mise install` na raiz — o pin **3.12 vem do
-   `mise.toml`**, nunca hardcoded no script.
-5. **Re-exec**: o script reexecuta a si mesmo; os guards que já existem
-   validam o resultado (mesma máquina, agora pronta).
+1. **CLT (Command Line Tools)**: pré-requisito do Homebrew — a janela da
+   Apple aparece uma vez; o script espera com timeout (~10 min). Não há como
+   silenciar a Apple.
+2. **Homebrew**: ausente → instalador oficial com `NONINTERACTIVE=1`
+   (silencioso; a senha sudo da sessão permanece) + `brew shellenv` no PATH
+   da sessão.
+3. **git**: `brew install git` (ruling D2 — binário do brew, sempre
+   atualizável com `brew upgrade`; o `/usr/bin/git` do CLT fica de reserva).
+4. **mise**: `brew install mise`.
+5. **Python**: `mise trust` + `mise install` na raiz — o pin **3.12 vem do
+   `mise.toml`**, nunca hardcoded. O guard de re-exec do próprio `./brain`
+   faz o resto.
+6. **OrbStack**: `brew install --cask orbstack` + primeiro lançamento
+   (`open -a OrbStack`), que completa o comando `docker` na CLI. Falha aqui =
+   aviso, não erro (ruling D3: memória é config).
 
 - **Aceite:** conta macOS limpa (sem brew/CLT, python 3.9) → duplo clique no
   `.command` termina com o wizard aberto no navegador e `./brain doctor`
   verde (máx. ⚠ normais), cada passo impresso; segunda rodada no-op; `curl |
   sh` idem.
 - **Rollback:** `git revert` do commit. Desinstalação manual documentada no
-  fim do script (`brew uninstall mise` etc.; CLT permanece — inofensivo).
+  fim do script (`brew uninstall git mise`, `brew uninstall --cask orbstack`,
+  `brew uninstall` do próprio Homebrew; CLT permanece — inofensivo).
 
 ### F2 — Linux/WSL2
 
-Mesmo estágio com detecção de gerenciador (apt/dnf): git e mise pelo pacote,
-Python pelo mise. Espelha a Fase 2 do plano de plataforma.
+Mesmo estágio: git pelo gerenciador (ou já presente), **mise pelo instalador
+oficial de curl** (sem brew), Python pelo `mise install`, **Docker Engine**
+pelo instalador oficial `get.docker.com` (cobre apt/dnf) + `usermod -aG
+docker` com aviso honesto de re-login. Espelha a Fase 2 do plano de
+plataforma.
 **Aceite:** container Ubuntu limpo → `curl | sh` termina no wizard.
 
 ### F3 — doctor, README, setup.md
 
-- `doctor`: checa git, versão do python e origem (mise vs sistema), mise.
-- README: some a lista de "requisitos não resolvidos" (fica só o que é
-  decisão: agente de IA, se quiser); derruba Claude Code como requisito.
+- `doctor`: checa git · versão do python · mise · docker (warn contextual:
+  modo de memória `nenhuma` + docker ausente = informativo; `embed`/`full` +
+  ausente = warn com o comando). O docker-probe de memória já existe — o que
+  falta é a checagem de máquina.
+- README: some a lista de "requisitos não resolvidos" (o instalador resolve);
+  **Claude Code fora** — o Brain é agnóstico (ruling D4), o passo "Seu
+  agente" do wizard conecta o canal de leitura de quem existir.
 - `setup.md` §0–§1 passa a ser O fallback manual que o script imprime ao
-  falhar (uma receita, dois usos).
+  falhar (uma receita, dois usos) — com nota de que o `install.sh` faz isto
+  sozinho.
 
 ### F4 — Aceite de ponta a ponta
 
@@ -85,24 +105,29 @@ Brain.app, registros MCP) vira o procedimento de aceite datado deste plano.
 
 ## 4. Riscos e armadilhas
 
-- **Dialog da Apple e senha sudo** são assíncronas: esperar com timeout e
-  falhar honesto, nunca fingir sucesso.
-- **Instalar Homebrew em máquina de estranho é invasivo** — announce antes,
-  com caminho de saída (D1).
-- **Suite não prova instalação real**: os testes cobrem os guards e as
-  mensagens (padrão `skipUnless(shutil.which(...))` para binários); o aceite
-  real é o F4, manual e datado.
-- **Re-exec infinito**: o re-exec é UMA vez, com flag de guarda (`_BRAIN_BOOTSTRAPPED`).
+- **A janela do CLT e a senha sudo são assíncronas e da Apple/do sistema** —
+  esperar com timeout e falhar honesto, nunca fingir sucesso. O "silêncio"
+  do ruling D1 é sobre as NOSSAS perguntas.
+- **OrbStack completa a CLI `docker` no primeiro lançamento** — se o usuário
+  nunca abrir, o doctor avisa; o wizard de memória aponta o caminho.
+- **Grupo docker no Linux pede re-login** — avisar, não fingir pronto.
+- **Suite não prova instalação real**: os testes cobrem os guards do doctor e
+  as mensagens (padrão `skipUnless(shutil.which(...))` para binários); o
+  aceite real é o F4, manual e datado.
+- **Homebrew novo não edita o perfil do shell do usuário** — o script exporta
+  o `shellenv` na própria sessão e o doctor avisa se o mise não estiver no
+  PATH do usuário depois.
 
-## 5. Decisões do dono (não re-litigar)
+## 5. Decisões do dono (perguntas originais — respostas registradas abaixo)
 
-1. **Homebrew ausente:** (a) instalar sozinho com aviso e Enter [recomendo —
-   é o que completa o "clique uma vez"] ou (b) exigir e ensinar (menos
-   invasivo, quebra a promessa). ✓?
-2. **git no macOS:** (a) CLT pela dialog da Apple [recomendo — canônico,
-   cobre `git` e build tools] ou (b) git do brew (silencioso, duplica o que a
-   Apple fornece). ✓?
-3. **Escopo:** instalador entrega git+mise+Python 3.12 e PARA; memory stack
-   fica no wizard — confirmar. ✓?
-4. **README:** derrubar Claude Code da lista de requisitos (agnóstico desde
-   2.27.0)? ✓?
+Registradas em 2026-11-20:
+
+1. **Homebrew ausente → instalar silenciosamente** (instalador oficial,
+   `NONINTERACTIVE=1`), sem prompt nosso. ✓
+2. **git no macOS → brew git** (binário do Homebrew, sempre atualizável). O
+   CLT segue como pré-requisito transitório do próprio Homebrew — a janela da
+   Apple pode aparecer uma vez; nada de pergunta nossa. ✓
+3. **Escopo → git + mise + Python 3.12 + Docker/OrbStack** (OrbStack no
+   macOS, Docker Engine no Linux/WSL2). Hindsight e LM Studio são **config de
+   memória** (wizard), não instalação. ✓
+4. **README → Claude Code fora dos requisitos.** O Brain é agnóstico. ✓
