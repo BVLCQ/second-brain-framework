@@ -449,6 +449,34 @@ def cmd_proposal(args, b: Brain) -> None:
                                    for p in rows) or "(nenhuma aberta)")
 
 
+def cmd_review(args, b: Brain) -> int:
+    from . import review
+    if args.rvcmd == "list":
+        q = review.queue(b, kind=args.kind)
+        if getattr(args, "json", False):
+            _out(args, q, "")
+            return 0
+        lines = [f"Fila de revisão: {q['total']} pendente(s) "
+                 f"(em lote: {q['batch_acceptable']} · portas: {q['ports']})"]
+        for it in q["items"]:
+            tag = "porta — individual" if it["is_port"] else ("em lote" if it["batch_acceptable"] else "individual")
+            extra = f" · {it['diff']}" if it.get("diff") and it["diff"] != it["summary"] else ""
+            lines.append(f"{it['id']} · [{it['kind']}] · {it['summary']}{extra} ({tag})")
+        if not q["items"]:
+            lines.append("(fila de revisão vazia)")
+        print("\n".join(lines))
+        return 0
+    if args.rvcmd == "accept":
+        res = review.accept_batch(b, args.ids, quote=args.quote)
+        lines = [f"✓ {it['id']}: {it['effect']}" for it in res["accepted"]]
+        lines.extend(f"✗ {it['id']} ({it['status']}): {it['error']}" for it in res["failed"])
+        s = res["summary"]
+        lines.append(f"Resumo: {s['accepted']}/{s['requested']} aceito(s), {s['failed']} falhou(aram)")
+        _out(args, res, "\n".join(lines))
+        return 0 if s["accepted"] > 0 and s["failed"] == 0 else 2
+    return 0
+
+
 def cmd_plan(args, b: Brain) -> None:
     inst = b.inst
     if args.plcmd == "show":
@@ -1188,6 +1216,18 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--json", action="store_true")
     p.set_defaults(fn=cmd_proposal)
 
+    p = sub.add_parser("review", help="fila de revisão unificada (listagem derivada e aceite em lote)")
+    rvs = p.add_subparsers(dest="rvcmd", required=True)
+    x = rvs.add_parser("list", help="lista itens pendentes de revisão nas 6 fontes")
+    x.add_argument("--kind", choices=["proposal", "outbox", "publish", "ask", "focus", "dupe"],
+                   help="filtra por categoria da fila")
+    x.add_argument("--json", action="store_true")
+    x = rvs.add_parser("accept", help="aceita propostas PROP-#### em lote (portas e individuais são recusadas)")
+    x.add_argument("ids", nargs="+", help="IDs das propostas (ex.: PROP-0001 PROP-0002)")
+    x.add_argument("--quote", required=True, help="aprovação literal do dono")
+    x.add_argument("--json", action="store_true")
+    p.set_defaults(fn=cmd_review)
+
     p = sub.add_parser("plan", help="PLANNING: árvore, estado factual, log do gate")
     pls = p.add_subparsers(dest="plcmd", required=True)
     x = pls.add_parser("show")
@@ -1767,10 +1807,10 @@ def main(argv: list[str] | None = None) -> int:
     args = normalize_ids(build_parser().parse_args(argv))
     try:
         b = None if getattr(args, "no_brain", False) else Brain()
-        args.fn(args, b)
+        rc = args.fn(args, b)
     except util.BrainError as e:
         print(f"ERRO: {e}", file=sys.stderr)
         return e.code
     except BrokenPipeError:
         return 0
-    return 0
+    return rc if isinstance(rc, int) else 0

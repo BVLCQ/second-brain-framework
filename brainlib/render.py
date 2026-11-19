@@ -84,6 +84,8 @@ def view_model(brain) -> dict:
     m["forms"] = forms.export()                                 # formulários: a MESMA especificação da TUI
     m["form_static"] = forms.static(brain)
     m["notes"] = _notes(brain.inst.fresh)
+    from . import review
+    m["review"] = review.summary(brain)
     from . import upstream as _up                              # versão + aviso de atualização (cache, sem rede)
     from . import __version__ as _ver
     c = _up.read_check_cache(brain.inst)

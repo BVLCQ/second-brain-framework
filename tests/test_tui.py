@@ -2578,7 +2578,8 @@ class CoverageTest(unittest.TestCase):
                   "harness connect", "harness disconnect", "harness status",   # canal MCP: CLI do agente (2.25)
                   "query actions", "query decisions", "query person", "query entity", "query sql",
                   "index rebuild", "index update", "index status", "route", "memory dossier", "memory eval",
-                  "memory models list", "memory models show", "memory models sync", "memory models refresh"}   # query/index/route/dossier = ferramenta do agente + doctor   # migração única no terminal; serve é a ponte do painel HTML; custo = doctor/CLI; models = CLI do dono/agente (full-only)
+                  "memory models list", "memory models show", "memory models sync", "memory models refresh",
+                  "review list", "review accept"}   # query/index/route/dossier = ferramenta do agente + doctor   # migração única no terminal; serve é a ponte do painel HTML; custo = doctor/CLI; models = CLI do dono/agente (full-only); review = wave 1 (#61), TUI entra na wave 2
     # setup e memory harness SAÍRAM daqui: a face Configurações emite ambos (wizard interativo via terminal suspenso; install/verify dos harnesses)
     DYNAMIC = {"memory recall", "memory reflect"}      # o formulário "Memória: perguntar" monta o subcomando
 
