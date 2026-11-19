@@ -79,7 +79,7 @@ const document = {
         actions: [], decisions: [], projects: [], goals: [], artifacts: []
       })
     };
-    return { addEventListener() {}, innerHTML: "", dataset: {}, classList: { add() {}, remove() {}, contains() { return false; } } };
+    return { addEventListener() {}, innerHTML: "", dataset: {}, classList: { add() {}, remove() {}, toggle() {}, contains() { return false; } } };
   },
   querySelector(s) { return { addEventListener() {}, innerHTML: "", classList: { add() {}, remove() {}, toggle() {} } }; },
   querySelectorAll() { return []; },
