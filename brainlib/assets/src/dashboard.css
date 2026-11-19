@@ -506,3 +506,24 @@ html[data-live="1"] .only-portrait,html:not([data-live="1"]) .only-live{display:
 .chip.h-reason{background:var(--chip);color:var(--ink);border:1px solid var(--line);text-decoration:none;max-width:100%;overflow:hidden;text-overflow:ellipsis;margin-left:6px}
 .chip.h-reason:hover{border-color:var(--accent);color:var(--accent);text-decoration:none}
 .projcard.just-moved{animation:justmoved 1.2s ease}
+
+/* ── frescor (pílula no rodapé + faixa na home) e cartão 'Seu dia' (#57w2 #60w2) ── */
+.freshbadge{font-weight:600}
+.freshbadge.fresh-ok{border-color:color-mix(in srgb,var(--ok) 45%,var(--line));background:var(--okbg);color:var(--ok)}
+.freshbadge.fresh-ok::before{content:"●";font-size:10.5px}
+.freshbadge.fresh-warn{border-color:color-mix(in srgb,var(--warn) 55%,var(--line));background:var(--warnbg);color:var(--warn)}
+.freshbadge.fresh-warn::before{content:"⚠";font-size:11.5px}
+.fresh-banner{display:flex;align-items:center;justify-content:space-between;gap:10px 14px;flex-wrap:wrap;
+  margin:0 0 14px;padding:12px 14px;border-radius:var(--r);
+  border:1px solid color-mix(in srgb,var(--warn) 45%,var(--line));border-left:3px solid var(--warn);
+  background:color-mix(in srgb,var(--warnbg) 70%,var(--panel));color:var(--ink);box-shadow:var(--shadow)}
+.fresh-banner-text{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1 1 260px;font-size:14px}
+.fresh-banner-text strong{color:var(--warn);font-weight:650}
+.fresh-banner-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.brief-card{padding:14px 16px;margin:0 0 14px}
+.brief-card:hover{transform:none;box-shadow:var(--shadow)}
+.brief-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin:0 0 8px}
+.brief-head h2{margin:0;font-size:16px}
+.brief-body{white-space:pre-wrap;font-size:14px;line-height:1.5;color:var(--ink)}
+.brief-quiet{margin:0;font-size:14px;color:var(--muted)}
+.brief-card.is-quiet .brief-head{margin-bottom:4px}

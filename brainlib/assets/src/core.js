@@ -6,6 +6,20 @@
 // não ter todas as chaves. Nenhuma leitura do painel pode ver undefined (boot OU refresh do serve).
 function normalizeBrain(m){
   m.update = m.update || {}; m.update = Object.assign({version:"?", news:[], cli_cmd:"", checked_at:"", behind:0, ahead:0, remote_version:""}, m.update);
+  m.freshness = m.freshness || {};
+  m.freshness = Object.assign({
+    last_dump_at: null, last_dump_age_h: null,
+    last_render_at: null, last_render_age_h: null,
+    last_memory_sync_at: null, last_memory_sync_age_h: null,
+    inbox_backlog: 0, inbox_oldest_age_h: null,
+    stale: {}, thresholds: {},
+  }, m.freshness);
+  m.freshness.stale = Object.assign({dump: false, render: false, memory_sync: false, inbox: false}, m.freshness.stale || {});
+  m.freshness.thresholds = Object.assign({}, m.freshness.thresholds || {});
+  m.daily_brief = m.daily_brief || {};
+  m.daily_brief = Object.assign({
+    exists: false, is_today: false, date: null, generated_at: null, empty: false, text: "",
+  }, m.daily_brief);
   m.counts = m.counts || {}; m.questions = m.questions || []; m.proposals = m.proposals || [];
   m.outbox = m.outbox || []; m.health = m.health || []; m.deliveries = m.deliveries || [];
   m.feedback = m.feedback || [];
@@ -182,12 +196,109 @@ function timelineList(items, limit){
     (it.who ? ' <span class="muted">(' + esc(it.who) + ")</span>" : "") + (it.project && P[it.project] ? " · " + pL(it.project) : "") + "</div>").join("") + "</div>";
 }
 
+// ── frescor e resumo do dia (#57w2 + #60w2) ─────────────────────────────
+const FRESH_DISMISS_KEY = "brain.freshness.dismissed";
+function isFreshDismissed(todayStr){
+  if (!todayStr) return false;
+  try { return localStorage.getItem(FRESH_DISMISS_KEY) === String(todayStr); }
+  catch (e) { return false; }
+}
+function dismissFreshToday(todayStr){
+  if (!todayStr) return;
+  try { localStorage.setItem(FRESH_DISMISS_KEY, String(todayStr)); }
+  catch (e) {}
+}
+function freshnessSummary(f){
+  f = f || {};
+  const stale = f.stale || {};
+  const th = f.thresholds || {};
+  const anyStale = !!(stale.dump || stale.render || stale.memory_sync || stale.inbox);
+  const onlyInboxStale = !!stale.inbox && !stale.dump && !stale.render && !stale.memory_sync;
+  const ages = [f.last_dump_age_h, f.last_render_age_h].filter(x => typeof x === "number" && isFinite(x));
+  const ageH = ages.length ? Math.max(...ages) : null;
+  const ageDays = ageH == null ? null : Math.floor(ageH / 24);
+  let label;
+  if (onlyInboxStale) label = "dados desatualizados";
+  else if (ageH == null) label = anyStale ? "dados desatualizados" : "dados de hoje";
+  else if (ageH < 24) label = anyStale ? ("há " + Math.max(1, Math.floor(ageH)) + "h") : "dados de hoje";
+  else if (ageDays < 2) label = "dados de ontem";
+  else label = "há " + ageDays + " dias";
+
+  const tone = anyStale ? "fresh-warn" : "fresh-ok";
+  const fmtAge = h => h == null ? "sem registro" : (h < 24 ? Math.round(h) + "h" : Math.floor(h / 24) + "d");
+  const parts = [
+    "dump: " + fmtAge(f.last_dump_age_h) + (th.dump_warn_h != null ? " (limite " + th.dump_warn_h + "h)" : ""),
+    "render: " + fmtAge(f.last_render_age_h) + (th.render_warn_h != null ? " (limite " + th.render_warn_h + "h)" : ""),
+  ];
+  if (f.last_memory_sync_age_h != null || stale.memory_sync) {
+    parts.push("memória: " + fmtAge(f.last_memory_sync_age_h) + (th.memory_sync_warn_h != null ? " (limite " + th.memory_sync_warn_h + "h)" : ""));
+  }
+  if (f.inbox_backlog || stale.inbox) {
+    const cntLim = th.inbox_warn_count != null ? "≥" + th.inbox_warn_count : "";
+    const ageLim = th.inbox_oldest_warn_h != null ? th.inbox_oldest_warn_h + "h" : "";
+    const lim = [cntLim, ageLim].filter(Boolean).join(" / ");
+    parts.push("inbox: " + (f.inbox_backlog || 0) + (f.inbox_oldest_age_h != null ? " (" + fmtAge(f.inbox_oldest_age_h) + ")" : "") + (lim ? " (limite " + lim + ")" : ""));
+  }
+  const banner = (ageDays != null && ageDays >= 2 && !onlyInboxStale)
+    ? "Última atualização há " + ageDays + " dias — 'não consta' pode ser falso negativo."
+    : "Dados desatualizados — 'não consta' pode ser falso negativo.";
+  return {anyStale, onlyInboxStale, ageH, ageDays, label, tone, tooltip: parts.join(" · "), banner};
+}
+function renderFreshBanner(f, sum){
+  const stale = (f && f.stale) || {};
+  const reasons = [];
+  if (stale.dump) reasons.push("dump");
+  if (stale.render) reasons.push("render");
+  if (stale.memory_sync) reasons.push("memória");
+  if (stale.inbox) reasons.push("inbox (" + (f.inbox_backlog || 0) + ")");
+  const detail = reasons.length ? "Pendente: " + reasons.join(", ") + "." : "";
+  return '<section class="fresh-banner" id="freshbanner" role="status">' +
+    '<div class="fresh-banner-text"><strong>⚠ ' + esc(sum.banner) + "</strong>" +
+    (detail ? '<span class="muted small">' + esc(detail) + "</span>" : "") + "</div>" +
+    '<div class="fresh-banner-actions">' +
+    '<button type="button" class="btn primary" data-brain-update="1"><span class="only-live">Atualizar agora</span><span class="only-portrait">Copiar comando</span></button>' +
+    '<button type="button" class="btn" id="fresh-health-btn">Ver saúde</button>' +
+    '<button type="button" class="btn ghost" id="fresh-dismiss-btn" aria-label="Dispensar por hoje">Dispensar hoje</button>' +
+    "</div></section>";
+}
+function renderDailyBrief(br){
+  br = br || {};
+  const txt = String(br.text || "").trim();
+  const isToday = !!br.is_today;
+  const meta = isToday && br.date ? '<span class="muted small">' + fmtD(br.date) + "</span>" : "";
+  let body;
+  if (isToday && !br.empty && txt) {
+    body = '<div class="brief-body">' + esc(txt) + "</div>";
+  } else if (isToday) {
+    body = '<p class="brief-quiet">' + esc(txt || "Sem novidades desde a última atualização.") + "</p>";
+  } else {
+    const last = br.exists && br.date ? " Último resumo: " + fmtDL(br.date) + "." : "";
+    body = '<p class="brief-quiet">' + esc("Sem novidades ainda hoje — o resumo do dia aparece após a rotina." + last) + "</p>";
+  }
+  return '<section class="card brief-card' + (isToday && !br.empty && txt ? "" : " is-quiet") + '" id="daily-brief">' +
+    '<header class="brief-head"><h2>Seu dia</h2>' + meta + "</header>" + body + "</section>";
+}
+function syncFreshBadge(){
+  const b = document.getElementById("freshbadge");
+  if (!b) return;
+  if (window.PF_ONLY) { b.hidden = true; return; }
+  const sum = freshnessSummary(M.freshness);
+  b.hidden = false;
+  b.textContent = sum.label;
+  b.classList.remove("fresh-ok", "fresh-warn");
+  b.classList.add(sum.tone);
+  b.title = sum.tooltip + " — clique para abrir Saúde";
+}
+
 // ── views ───────────────────────────────────────────────────────────────
 const V = Object.create(null);
 V.home = () => {
   const c = M.counts;
+  const freshSum = freshnessSummary(M.freshness);
   let h = '<div class="pagehead"><div><h1>☀ ' + fmtDW(M.today) + "</h1>" +
     '<p class="sub">' + esc(M.owner.name) + " · " + c.mine_open + " ações abertas" + (c.mine_overdue ? ' · <b class="late">' + c.mine_overdue + " atrasadas</b>" : "") + "</p></div></div>";
+  if (freshSum.anyStale && !isFreshDismissed(M.today)) h += renderFreshBanner(M.freshness, freshSum);
+  h += renderDailyBrief(M.daily_brief);
   h += '<div class="kpis">' + [
     ["Minhas abertas", c.mine_open, ""], ["Atrasadas", c.mine_overdue, c.mine_overdue ? "risk" : "ok"],
     ["Vencem em 7 dias", c.mine_due_7d, ""], ["Bloqueadas", c.mine_blocked, c.mine_blocked ? "risk" : ""],
@@ -236,6 +347,16 @@ V.home = () => {
     l.map(a => aL(a.id) + " " + esc(a.title) + ' <span class="muted">(' + a.aging_days + "d)</span>").join("; ") + "</li>").join("") + "</ul>" : empty("Ninguém te devendo nada registrado.")));
   h += "</div>";
   (M.notes || []).forEach(n => { h += '<details class="panel note"><summary><b>Nota do agente · ' + esc(n.name) + '</b> <span class="muted">(FRESH/notes/' + esc(n.name) + ".md)</span></summary><div class=\"msg\">" + esc(n.text) + "</div></details>"; });
+  setTimeout(() => {
+    const hb = $("#fresh-health-btn");
+    if (hb) hb.onclick = () => go("cfg/saude");
+    const db = $("#fresh-dismiss-btn");
+    if (db) db.onclick = () => {
+      dismissFreshToday(M.today);
+      const b = $("#freshbanner");
+      if (b) b.remove();
+    };
+  });
   return h;
 };
 V.todo = (q) => {
@@ -980,6 +1101,7 @@ window.BRAIN = {M, A, D, P, G, PE, OPP, PROC, AREA, docUrl, go, route, chip, aL,
     PF = M.portfolio; AREA = idx(PF.areas); OPP = idx(PF.opportunities); PROC = idx(PF.processes);
     BRAIN.A = A; BRAIN.D = D; BRAIN.P = P; BRAIN.G = G; BRAIN.PE = PE;   // re-exporta: quem lê
     BRAIN.OPP = OPP; BRAIN.PROC = PROC; BRAIN.AREA = AREA;              // window.BRAIN não pode ficar congelado no boot
+    syncFreshBadge();
     route();
   }};
 
@@ -1067,5 +1189,12 @@ route();
   if (closeBtn) closeBtn.addEventListener("click", closeNews);
   if (back) back.addEventListener("click", e => { if (e.target === back) closeNews(); });
   document.addEventListener("keydown", e => { if (e.key === "Escape" && back && back.classList.contains("open")) closeNews(); });
+})();
+
+(function(){
+  const b = document.getElementById("freshbadge");
+  if (!b) return;
+  syncFreshBadge();
+  b.addEventListener("click", () => go("cfg/saude"));
 })();
 })();
