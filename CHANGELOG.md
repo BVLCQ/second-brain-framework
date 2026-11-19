@@ -1,3 +1,33 @@
+## 2.31.0 — versão no rodapé, atualização pela ponte e frescor à vista
+
+- **A versão mora no rodapé da barra lateral** (#62): no lugar da linha "gerado
+  <data>", o rodapé mostra `vX.Y.Z · em dia` quieto — e, quando há atualização,
+  `vX.Y.Z → vX.Y.W · N commits atrás` com destaque. O clique abre as Novidades
+  (que enfim abrem: o modal nunca aparecia em tema nenhum — faltava a classe
+  `open`), agora com a transição de versão, a contagem e a data da verificação.
+- **Atualizar sem sair do painel** (#62): no painel vivo, o botão **Atualizar
+  agora** roda o `update` como job da ponte (`/api/update`), com o log ao vivo
+  (pull, templates semeados, doctor); no sucesso a ponte se reinicia sozinha
+  **preservando o token da aba** e o painel recarrega já "em dia". Divergência
+  (commits locais à frente) mostra o texto do próprio CLI com o caminho manual
+  (`update --rebase`). No retrato aberto por arquivo, o botão vira "copiar
+  comando". O `update` continua fora da allowlist do `/api/cmd`.
+- **Frescor visível** (#57, parte 2): pílula no rodapé da barra lateral sempre
+  mostra a idade dos dados ("dados de hoje" em verde; "há N dias" em âmbar) e o
+  clique abre a Saúde. Passado o limiar (dump > 48h, render > 26h — limiares da
+  própria telemetria, nunca constantes no JS), a home ganha faixa âmbar
+  dispensável-por-hoje: "Última atualização há N dias — 'não consta' pode ser
+  falso negativo", com [Atualizar agora] e [Ver saúde]. Instância podre não
+  passa mais por saudável.
+- **"Seu dia" na home** (#60, parte 2): o brief que a rotina diária deixa pronto
+  em `FRESH/notes` aparece no topo da página inicial — chegar e já saber tudo,
+  sem pedir nada. Sem novidades, uma linha honesta (nunca silêncio parecido com
+  "não rodou"); sem brief de hoje, o aviso de que ele nasce após a rotina.
+- **Suíte verde em qualquer ordem** (#63): o congelamento de relógio dos testes
+  virou uniforme (todo módulo usa a data canônica) e um guard recusa regressão —
+  quem precisar de outra data usa override por teste. Rodar a suíte em ordem
+  não-alfabética não derruba mais testes irmãos.
+
 ## 2.30.0 — o wizard mora no painel: configuração e uso são o mesmo aplicativo (F8)
 
 - **Primeira vez, mesma página.** O painel bootou em modo wizard: sem faces, sem ⌘K —
