@@ -1,3 +1,27 @@
+## 2.29.0 — bootstrap do instalador: uma ação, a máquina inteira pronta
+
+- **O `install.sh` deixou de verificar e desistir.** Máquina nova sem nada
+  (sem git, sem Homebrew, só o Python 3.9 do sistema): o script instala o
+  que faltar, silencioso e idempotente — git (Homebrew no macOS, gerenciador
+  de pacotes no Linux) · mise · Python (o pin do `mise.toml`, nunca
+  hardcoded) · runtime de contêiner (**OrbStack** no macOS, **Docker
+  Engine** no Linux/WSL2). Segunda rodada é no-op. As portas do SO — senha
+  sudo da sessão e a janela da Apple das Command Line Tools — continuam do
+  sistema, com espera honesta; ao falhar, o script imprime a receita manual
+  (`setup.md` §0–§1).
+- **Contêiner é instalação; memória é configuração.** OrbStack/Docker entra
+  pelo instalador; Hindsight e LM Studio continuam no passo Memória do
+  wizard — são escolhas, não pré-requisitos. Falha no contêiner não bloqueia
+  o Brain.
+- **`doctor` ganha checagens de máquina** (git · mise · contêiner) — sempre
+  aviso, nunca erro: docker ausente com memória ligada vem com o comando que
+  resolve; com memória desligada, é só informativo.
+- **README agnóstico de verdade:** some a lista de "requisitos que o
+  instalador não resolve"; Claude Code deixa de ser requisito — qualquer
+  agente (ou nenhum) serve, e o passo "Seu agente" conecta quem existir na
+  máquina. O modo de memória "lite" virou "embed" no texto. Plano:
+  `guides/plans/install-bootstrap.md`.
+
 ## 2.28.0 — o lote das issues #56–#61 (ativação, fila de revisão, assinaturas e rotina da manhã)
 
 - **Importar histórico na primeira sessão (#56):** novo `brain seed folder <pasta>` — varre

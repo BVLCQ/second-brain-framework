@@ -5,7 +5,7 @@
 > pare e resolva antes de continuar — não declare sucesso sem a verificação.
 > Tudo aqui é local: nenhuma chave de API externa é necessária.
 
-> **2.28:** o `install.sh` agora instala sozinho o que as seções 0–1 ensinam
+> **2.29:** o `install.sh` agora instala sozinho o que as seções 0–1 ensinam
 > (git · Homebrew · mise · Python 3.12 · OrbStack/Docker) — silencioso e
 > idempotente (plano `guides/plans/install-bootstrap.md`). Estas seções
 > continuam valendo como **receita manual**: é o que o script imprime quando
