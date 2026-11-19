@@ -3,10 +3,13 @@ from __future__ import annotations
 
 import inspect
 import json
+import os
 import re
 import shutil
 import subprocess
 import urllib.request
+from datetime import datetime
+from pathlib import Path
 
 from . import config, people, upstream, util
 
@@ -15,6 +18,21 @@ LMSTUDIO_MODELS_URL = "http://127.0.0.1:1234/v1/models"
 BOOT_GRACE_S = 180
 _STD_WHICH = shutil.which
 _STD_RUN = subprocess.run
+
+FRESHNESS_THRESHOLDS = {
+    "dump_warn_h": 48,
+    "render_warn_h": 26,
+    "memory_sync_warn_h": 26,
+    "inbox_warn_count": 1,
+    "inbox_oldest_warn_h": 48,
+}
+
+AUTO_FIXABLE = (
+    "orphan_bridge_pid",
+    "fts_stale",
+    "views_stale",
+    "memory_unsynced",
+)
 
 
 def _c(level: str, title: str, detail: str) -> dict:
@@ -369,15 +387,541 @@ def checks(brain, online: bool = False, probe_agent: bool = False, docker_probe=
     return out
 
 
+def _coerce_now(now: datetime | None) -> datetime:
+    if now is None:
+        return util.now()
+    return now.astimezone(util.tz()) if now.tzinfo else now.replace(tzinfo=util.tz())
+
+
+def _parse_dt_safe(value) -> datetime | None:
+    if not value or not isinstance(value, str):
+        return None
+    try:
+        return util.parse_dt(value).astimezone(util.tz())
+    except (ValueError, TypeError):
+        return None
+
+
+def _memory_state_info(brain) -> tuple[Path | None, datetime | None]:
+    """Localiza `.memory-state.json` (raiz da instância ou config/) e extrai timestamp de sync."""
+    inst = brain.inst
+    candidates = [inst.root / ".memory-state.json", inst.config_dir / ".memory-state.json"]
+    existing = [p for p in candidates if p.exists()]
+    if not existing:
+        return None, None
+    best_path: Path | None = None
+    best_dt: datetime | None = None
+    for p in existing:
+        dt: datetime | None = None
+        data = util.read_json(p, None)
+        if isinstance(data, dict):
+            for key in ("synced_at", "last_sync_at", "last_sync", "ts", "updated_at"):
+                dt = _parse_dt_safe(data.get(key))
+                if dt is not None:
+                    break
+            if dt is None and isinstance(data.get("_ops"), dict):
+                op_dts = []
+                for bank_ops in data["_ops"].values():
+                    if not isinstance(bank_ops, dict):
+                        continue
+                    for info in bank_ops.values():
+                        if isinstance(info, dict):
+                            odt = _parse_dt_safe(info.get("ts"))
+                            if odt is not None:
+                                op_dts.append(odt)
+                if op_dts:
+                    dt = max(op_dts)
+        if dt is None:
+            try:
+                dt = datetime.fromtimestamp(p.stat().st_mtime, tz=util.tz())
+            except OSError:
+                dt = None
+        if best_path is None or (dt is not None and (best_dt is None or dt > best_dt)):
+            best_path, best_dt = p, dt
+    return best_path, best_dt
+
+
+def freshness(brain, *, now: datetime | None = None) -> dict:
+    """Telemetria de frescor da instância (dump, render, sync da memória e backlog da inbox)."""
+    cur = _coerce_now(now)
+    inst = brain.inst
+    cfg = inst.cfg
+    th = dict(FRESHNESS_THRESHOLDS)
+
+    # Último /dump (maior ts de artifact.added no ledger)
+    last_dump_dt: datetime | None = None
+    try:
+        events = brain.state.events
+    except util.BrainError:
+        events = []
+    for ev in events:
+        if ev.get("type") == "artifact.added":
+            dt = _parse_dt_safe(ev.get("ts"))
+            if dt is not None and (last_dump_dt is None or dt > last_dump_dt):
+                last_dump_dt = dt
+    if last_dump_dt is not None:
+        last_dump_at: str | None = last_dump_dt.isoformat(timespec="seconds")
+        raw_dump_age_h: float | None = max((cur - last_dump_dt).total_seconds() / 3600, 0.0)
+        last_dump_age_h: float | None = round(raw_dump_age_h, 2)
+    else:
+        last_dump_at = None
+        raw_dump_age_h = None
+        last_dump_age_h = None
+
+    # Último render (FRESH/.render-state.json)
+    rs = util.read_json(inst.fresh / ".render-state.json", {})
+    last_render_at: str | None = None
+    raw_render_age_h: float | None = None
+    last_render_age_h: float | None = None
+    if isinstance(rs, dict) and rs.get("rendered_at"):
+        rdt = _parse_dt_safe(str(rs["rendered_at"]))
+        if rdt is not None:
+            last_render_at = str(rs["rendered_at"])
+            raw_render_age_h = max((cur - rdt).total_seconds() / 3600, 0.0)
+            last_render_age_h = round(raw_render_age_h, 2)
+
+    # Último sync da memória (apenas quando Hindsight ativo)
+    mem_enabled = cfg["memory"]["engine"] == "hindsight"
+    last_memory_sync_at: str | None = None
+    raw_mem_age_h: float | None = None
+    last_memory_sync_age_h: float | None = None
+    if mem_enabled:
+        _, mem_dt = _memory_state_info(brain)
+        if mem_dt is not None:
+            last_memory_sync_at = mem_dt.isoformat(timespec="seconds")
+            raw_mem_age_h = max((cur - mem_dt).total_seconds() / 3600, 0.0)
+            last_memory_sync_age_h = round(raw_mem_age_h, 2)
+
+    # Backlog da inbox
+    inbox_files = (
+        [p for p in inst.inbox.glob("*") if p.is_file() and p.name != ".keep.md" and not p.name.startswith(".")]
+        if inst.inbox.exists() else []
+    )
+    inbox_backlog = len(inbox_files)
+    if inbox_files:
+        oldest_mtime = min(p.stat().st_mtime for p in inbox_files)
+        raw_inbox_oldest_h: float | None = max((cur.timestamp() - oldest_mtime) / 3600, 0.0)
+        inbox_oldest_age_h: float | None = round(raw_inbox_oldest_h, 2)
+    else:
+        raw_inbox_oldest_h = None
+        inbox_oldest_age_h = None
+
+    stale = {
+        "dump": raw_dump_age_h is not None and raw_dump_age_h >= th["dump_warn_h"],
+        "render": raw_render_age_h is None or raw_render_age_h >= th["render_warn_h"],
+        "memory_sync": mem_enabled and (raw_mem_age_h is None or raw_mem_age_h >= th["memory_sync_warn_h"]),
+        "inbox": (inbox_backlog >= th["inbox_warn_count"]
+                  and raw_inbox_oldest_h is not None
+                  and raw_inbox_oldest_h >= th["inbox_oldest_warn_h"]),
+    }
+
+    return {
+        "last_dump_at": last_dump_at,
+        "last_dump_age_h": last_dump_age_h,
+        "last_render_at": last_render_at,
+        "last_render_age_h": last_render_age_h,
+        "last_memory_sync_at": last_memory_sync_at,
+        "last_memory_sync_age_h": last_memory_sync_age_h,
+        "inbox_backlog": inbox_backlog,
+        "inbox_oldest_age_h": inbox_oldest_age_h,
+        "stale": stale,
+        "thresholds": th,
+    }
+
+
+def _default_pid_alive(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except (OSError, ValueError, TypeError):
+        return False
+
+
+def _suggestion_command(c: dict) -> str:
+    t = c["title"]
+    detail = c.get("detail", "")
+    if t == "mensagens":
+        return "./brain outbox list"
+    if t == "foco":
+        return "./brain focus show"
+    if t == "propostas":
+        return "./brain proposal list"
+    if t == "perguntas":
+        return "./brain ask list --open"
+    if t == "feedback":
+        if "retrat" in detail:
+            return "./brain feedback retract"
+        if "GITHUB_TOKEN" in detail:
+            return "./brain setup --only portas"
+        return "./brain feedback list"
+    if t == "PLANNING":
+        return "./brain plan show"
+    if t == "calendário":
+        return "./brain setup --only portas"
+    if t == "inbox":
+        return "/dump"
+    if t == "noturno":
+        if "nunca rodou" in detail or "não tem noturno" in detail:
+            return "./brain setup --only noturno"
+        return "./brain doctor --online"
+    if t == "runner":
+        return "./brain agent allow" if "MCP" in detail else "./brain doctor --online"
+    if t.startswith("fonte "):
+        return f"/connect {t.split(' ', 1)[1]}"
+    if t == "config":
+        return "./brain setup"
+    if t == "vault":
+        return "./brain init"
+    if t == "dono":
+        return "./brain person add"
+    if t == "ledger":
+        return "./brain validate"
+    if t == "watch":
+        return "./brain watch list"
+    if t == "identidades":
+        return "./brain person list"
+    if t == "ações sem prazo":
+        return "./brain action list --list mine"
+    if t == "memória":
+        if "rebuild" in detail:
+            return "./brain memory rebuild"
+        if "providers" in detail or "chave de LLM" in detail:
+            return "./brain memory providers show"
+        return "./brain memory status"
+    if t.startswith("memória · "):
+        return "./brain memory providers show"
+    if t == "comando":
+        return "./brain setup --only comando"
+    if t == "tui":
+        return "./brain setup --only tui"
+    if t == "permissões":
+        return "./brain agent permissions" if "agent permissions" in detail else "./brain update"
+    if t == "framework":
+        return "./brain upstream scan" if ("upstream scan" in detail or "melhorias locais" in detail) else "./brain update"
+    if t == "git fetch":
+        return "./brain setup --only framework"
+    if t == "hook pre-push":
+        return "./brain upstream hook install"
+    m = re.search(r"`(\.?/?brain [^`]+)`", detail)
+    if m:
+        cmd = m.group(1)
+        return cmd if cmd.startswith("./") else f"./{cmd}"
+    return "./brain doctor"
+
+
+def _suggestion_for(c: dict) -> dict:
+    return {
+        "title": c["title"],
+        "level": c["level"],
+        "command": _suggestion_command(c),
+        "reason": c["detail"],
+        "gate": True,
+        "fix": fix_for(c),
+    }
+
+
+def plan_fix(brain, *, pid_alive=None, now: datetime | None = None) -> dict:
+    """Planeja auto-correções seguras (allowlist fechada) e lista achados com gate em suggestions."""
+    inst = brain.inst
+    cur_now = _coerce_now(now)
+    alive_fn = pid_alive or _default_pid_alive
+    actions: list[dict] = []
+
+    # 1. orphan_bridge_pid
+    from . import serve
+    pid_file = serve.live_url_file(inst)
+    if pid_file.exists():
+        orphan_reason: str | None = None
+        try:
+            row = json.loads(pid_file.read_text(encoding="utf-8"))
+            pid = int(row["pid"])
+            if not alive_fn(pid):
+                orphan_reason = f"PID {pid} inativo para {inst.rel(pid_file)}"
+        except (OSError, ValueError, TypeError, KeyError):
+            orphan_reason = f"registro ilegível da ponte em {inst.rel(pid_file)}"
+        if orphan_reason:
+            rel_pid = inst.rel(pid_file)
+            actions.append({
+                "kind": "orphan_bridge_pid",
+                "title": "pidfile órfão da ponte",
+                "reason": orphan_reason,
+                "command": f"rm {rel_pid}",
+                "targets": [rel_pid],
+                "status": "planned",
+            })
+
+    # 2. fts_stale
+    from . import index as _index
+    db = _index.db_path(inst)
+    fts_reason: str | None = None
+    if not db.exists():
+        fts_reason = "índice SQLite ausente"
+    elif brain.ledger_path.exists() and db.stat().st_mtime < brain.ledger_path.stat().st_mtime:
+        fts_reason = "índice SQLite mais antigo que o ledger"
+    else:
+        try:
+            idx = _index.status(brain)
+            if not idx.get("ok"):
+                fts_reason = "índice SQLite desatualizado em relação ao ledger"
+        except util.BrainError:
+            fts_reason = None
+    if fts_reason:
+        actions.append({
+            "kind": "fts_stale",
+            "title": "índice SQLite desatualizado",
+            "reason": fts_reason,
+            "command": "./brain index rebuild",
+            "targets": [inst.rel(db)],
+            "status": "planned",
+        })
+
+    # 3. views_stale
+    rs_path = inst.fresh / ".render-state.json"
+    fresh_m = freshness(brain, now=cur_now)
+    views_reason: str | None = None
+    if not rs_path.exists():
+        views_reason = "views ainda não geradas"
+    else:
+        rs = util.read_json(rs_path, {})
+        rendered_at = rs.get("rendered_at") if isinstance(rs, dict) else None
+        rdt = _parse_dt_safe(str(rendered_at)) if rendered_at else None
+        if rdt is None:
+            views_reason = "estado de renderização inválido ou sem rendered_at"
+        else:
+            rs_mtime = rs_path.stat().st_mtime
+            for src in (brain.ledger_path, inst.planning_file):
+                if not src.exists():
+                    continue
+                src_mtime = src.stat().st_mtime
+                if src_mtime > rs_mtime or (src_mtime <= cur_now.timestamp() + 5 and int(src_mtime) > int(rdt.timestamp())):
+                    views_reason = f"views mais antigas que {inst.rel(src)}"
+                    break
+            if not views_reason and fresh_m["stale"]["render"]:
+                views_reason = f"views sem render recente (>= {FRESHNESS_THRESHOLDS['render_warn_h']}h)"
+    if views_reason:
+        actions.append({
+            "kind": "views_stale",
+            "title": "views desatualizadas",
+            "reason": views_reason,
+            "command": "./brain render",
+            "targets": ["FRESH/"],
+            "status": "planned",
+        })
+
+    # 4. memory_unsynced
+    if inst.cfg["memory"]["engine"] == "hindsight":
+        from . import memory as _memory
+        state_path, _ = _memory_state_info(brain)
+        mem_reason: str | None = None
+        if state_path is None:
+            mem_reason = ".memory-state.json ausente"
+        else:
+            try:
+                pend = _memory.pending(brain)
+            except util.BrainError:
+                pend = []
+            if pend:
+                mem_reason = f"{len(pend)} documento(s) pendente(s) de sync"
+            elif brain.ledger_path.exists() and state_path.stat().st_mtime < brain.ledger_path.stat().st_mtime:
+                mem_reason = ".memory-state.json mais antigo que o ledger"
+        if mem_reason:
+            target = util.relpath(state_path, inst.root) if state_path else "config/.memory-state.json"
+            actions.append({
+                "kind": "memory_unsynced",
+                "title": "memória dessincronizada",
+                "reason": mem_reason,
+                "command": "./brain memory sync",
+                "targets": [target],
+                "status": "planned",
+            })
+
+    # Achados não auto-corrigíveis (sempre gate=True, nunca em actions)
+    planned_kinds = {a["kind"] for a in actions}
+    suggestions: list[dict] = []
+    for c in checks(brain):
+        if c["level"] == "ok":
+            continue
+        t = c["title"]
+        if t == "views" and "views_stale" in planned_kinds:
+            continue
+        if t == "índice" and "fts_stale" in planned_kinds:
+            continue
+        if (t == "memória" and "memory_unsynced" in planned_kinds
+                and "documentos do vault ainda não enviados" in c["detail"]
+                and "fora do ar" not in c["detail"]
+                and "erro" not in c["detail"].lower()):
+            continue
+        suggestions.append(_suggestion_for(c))
+
+    try:
+        pending_pub = [s for s in brain.state.shares.values() if s.status in ("solicitada", "aprovada")]
+    except util.BrainError:
+        pending_pub = []
+    if pending_pub:
+        ids_str = ", ".join(sorted(s.id for s in pending_pub))
+        suggestions.append({
+            "title": "publicação",
+            "level": "warn",
+            "command": "./brain publish list",
+            "reason": f"{len(pending_pub)} publicação(ões) aguardando aprovação/envio ({ids_str})",
+            "gate": True,
+            "fix": None,
+        })
+
+    return {"mode": "dry-run", "actions": actions, "suggestions": suggestions}
+
+
+def format_fix_diff(plan: dict) -> str:
+    """Formata o plano do `--fix` de forma determinística (sem timestamps voláteis)."""
+    lines = []
+    for a in plan.get("actions", []):
+        targets = ", ".join(a.get("targets") or []) or "-"
+        lines.append(f"+ [{a['kind']}] {a['command']} -> {targets} ({a['reason']})")
+    for s in plan.get("suggestions", []):
+        lines.append(f"! [{s['title']}] {s['command']} ({s['reason']})")
+    return "\n".join(lines) if lines else "✓ nada a corrigir"
+
+
+def _call_fix_handler(fn, brain, action: dict):
+    try:
+        params = list(inspect.signature(fn).parameters.values())
+    except (ValueError, TypeError):
+        return fn(brain)
+    has_var = any(p.kind == inspect.Parameter.VAR_POSITIONAL for p in params)
+    pos = [p for p in params if p.kind in (inspect.Parameter.POSITIONAL_ONLY,
+                                           inspect.Parameter.POSITIONAL_OR_KEYWORD)]
+    req = [p for p in pos if p.default is inspect.Parameter.empty]
+    if not pos and not has_var:
+        return fn()
+    if len(req) >= 2:
+        return fn(brain, action)
+    return fn(brain)
+
+
+def _default_fix_handlers() -> dict:
+    from . import index as _index, memory as _memory, render as _render, serve as _serve
+    return {
+        "orphan_bridge_pid": lambda b: _serve.live_url_file(b.inst).unlink(missing_ok=True),
+        "fts_stale": lambda b: _index.rebuild(b),
+        "views_stale": lambda b: _render.render_all(b),
+        "memory_unsynced": lambda b: _memory.sync(b),
+    }
+
+
+def apply_fix(brain, plan: dict | None = None, *, pid_alive=None, handlers: dict | None = None) -> dict:
+    """Executa as ações seguras planejadas na ordem da allowlist e grava `vault/logs/doctor-fix.log`."""
+    if plan is None:
+        plan = plan_fix(brain, pid_alive=pid_alive)
+    order = {kind: idx for idx, kind in enumerate(AUTO_FIXABLE)}
+    raw_actions = sorted(
+        plan.get("actions", []),
+        key=lambda a: order.get(a.get("kind", ""), len(AUTO_FIXABLE)),
+    )
+    suggestions = [dict(s) for s in plan.get("suggestions", [])]
+    defaults = _default_fix_handlers()
+    executed: list[dict] = []
+
+    for act in raw_actions:
+        item = dict(act)
+        kind = item.get("kind", "")
+        if kind not in order:
+            item["status"] = "failed"
+            item["error"] = f"classe fora da allowlist: {kind!r}"
+            executed.append(item)
+            continue
+        fn = handlers[kind] if handlers and kind in handlers else defaults[kind]
+        try:
+            res = _call_fix_handler(fn, brain, item)
+            if kind == "memory_unsynced" and isinstance(res, dict) and res.get("errors"):
+                item["status"] = "failed"
+                item["error"] = "; ".join(str(e) for e in res["errors"])
+            else:
+                item["status"] = "applied"
+        except Exception as e:  # noqa: BLE001 — isolamento por ação
+            item["status"] = "failed"
+            item["error"] = str(e)
+        executed.append(item)
+
+    log_path = brain.inst.logs / "doctor-fix.log"
+    brain.inst.logs.mkdir(parents=True, exist_ok=True)
+    entry = {
+        "ts": util.iso_now(),
+        "mode": "apply",
+        "applied": sum(1 for a in executed if a["status"] == "applied"),
+        "failed": sum(1 for a in executed if a["status"] == "failed"),
+        "actions": [
+            {
+                "kind": a["kind"],
+                "command": a["command"],
+                "targets": a.get("targets", []),
+                "status": a["status"],
+                **({"error": a["error"]} if "error" in a else {}),
+            }
+            for a in executed
+        ],
+        "suggestions": len(suggestions),
+    }
+    with open(log_path, "a", encoding="utf-8") as fh:
+        fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+    return {
+        "mode": "apply",
+        "actions": executed,
+        "suggestions": suggestions,
+        "log": brain.inst.rel(log_path),
+    }
+
+
 def cli(args, brain) -> None:
-    res = checks(brain, online=args.online, probe_agent=args.online)
+    dry_run = bool(getattr(args, "dry_run", False))
+    apply = bool(getattr(args, "apply", False))
+    fix = bool(getattr(args, "fix", False))
+    if dry_run and apply:
+        raise util.BrainError("use --dry-run ou --apply, não os dois juntos", code=4)
+    if not fix:
+        if dry_run or apply:
+            raise util.BrainError("--dry-run e --apply exigem --fix", code=4)
+        res = checks(brain, online=args.online, probe_agent=args.online)
+        if args.json:
+            print(json.dumps(res, ensure_ascii=False, indent=2))
+            return
+        icon = {"ok": "✓", "warn": "⚠", "error": "✗"}
+        for c in res:
+            print(f"{icon[c['level']]} {c['title']}: {c['detail']}")
+        if any(c["level"] == "error" for c in res):
+            raise SystemExit(1)
+        return
+
+    if not apply:
+        plan = plan_fix(brain)
+        if args.json:
+            print(json.dumps(plan, ensure_ascii=False, indent=2))
+        else:
+            print(format_fix_diff(plan))
+        return
+
+    res = apply_fix(brain)
     if args.json:
         print(json.dumps(res, ensure_ascii=False, indent=2))
-        return
-    icon = {"ok": "✓", "warn": "⚠", "error": "✗"}
-    for c in res:
-        print(f"{icon[c['level']]} {c['title']}: {c['detail']}")
-    if any(c["level"] == "error" for c in res):
+    else:
+        if not res["actions"] and not res["suggestions"]:
+            print("✓ nada a corrigir")
+        else:
+            for a in res["actions"]:
+                targets = ", ".join(a.get("targets") or []) or "-"
+                if a["status"] == "applied":
+                    print(f"✓ [{a['kind']}] {a['command']} -> {targets}")
+                else:
+                    print(f"✗ [{a['kind']}] {a['command']} -> {targets}: {a.get('error', 'falhou')}")
+            for s in res["suggestions"]:
+                print(f"! [{s['title']}] {s['command']} ({s['reason']})")
+    if any(a["status"] == "failed" for a in res["actions"]):
         raise SystemExit(1)
 
 

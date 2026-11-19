@@ -1532,6 +1532,9 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("doctor", help="saúde da instância")
     p.add_argument("--json", action="store_true")
     p.add_argument("--online", action="store_true", help="testa também o servidor de memória, se estiver ligado")
+    p.add_argument("--fix", action="store_true", help="corrige achados seguros (dry-run por padrão; --apply executa)")
+    p.add_argument("--dry-run", action="store_true", help="com --fix, mostra o diff sem alterar nada (padrão)")
+    p.add_argument("--apply", action="store_true", help="com --fix, aplica as auto-correções seguras")
     p.set_defaults(fn=cmd_doctor)
 
     p = sub.add_parser("memory", help="camada de memória (Hindsight), alimentada pelo vault")

@@ -78,6 +78,7 @@ def view_model(brain) -> dict:
     modelo + checagens de saúde + notas do agente — mesmas chaves nos dois caminhos."""
     m = model.build(brain)
     m["health"] = [{**c, "fix": doctor.fix_for(c)} for c in doctor.checks(brain)]
+    m["freshness"] = doctor.freshness(brain)
     m["sources"] = _sources(brain)
     m["source_kinds"] = [list(k) for k in watch.KINDS]
     m["doc_kinds"] = sorted(schema.DOC_KINDS)
