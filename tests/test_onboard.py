@@ -327,7 +327,7 @@ class OpenTests(unittest.TestCase):
                 mock.patch.object(util, "open_url", side_effect=opened.append), \
                 contextlib.redirect_stdout(io.StringIO()):
             self._open()
-        self.assertEqual(opened, ["http://127.0.0.1:8787/onboarding#t=abc"])
+        self.assertEqual(opened, ["http://127.0.0.1:8787/#onboarding&t=abc"])   # F8: wizard é modo do painel (hash `onboarding`, token como t=)
 
     def test_configured_instance_opens_the_panel(self):
         from unittest import mock
@@ -421,13 +421,11 @@ class BridgeTests(unittest.TestCase):
             return e.code, e.read().decode("utf-8")
 
     def test_page_boots_without_token_but_api_requires_it(self):
-        code, html = self._req("/onboarding", token=False)
-        self.assertEqual(code, 200)
-        self.assertIn("Vamos montar o seu Brain", html)
+        code, html = self._req("/onboarding", token=False)      # F8: 302 → o painel em modo wizard
+        self.assertEqual(code, 200)                             # urllib segue o redirect: cai na shell do painel
+        self.assertIn("enterOnboarding", html)                  # o wizard é um MODO do painel (hash `onboarding`)
         for icon in ("/brain.svg", "/brain-mark.svg", "/brain-hero.svg"):    # ícone do app, marca ≤32 px, arte detalhada (rota mantida)
             self.assertEqual(self._req(icon, token=False)[0], 200)
-        self.assertIn('src="/brain.svg"', html)                 # boas-vindas mostra o ÍCONE DO APP, não a arte navy
-        self.assertNotIn('src="/brain-hero.svg"', html)
         self.assertEqual(self._req("/api/onboard/state", token=False)[0], 401)
         self.assertEqual(self._req("/api/onboard/about", {"name": "X"}, token=False)[0], 401)
 
