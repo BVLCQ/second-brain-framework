@@ -26,9 +26,10 @@ import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from . import config, model, util
+from . import config, model, recall_rank, util
 
 STATE_NAME = ".memory-state.json"
+SUPERSEDES_NAME = ".memory-supersedes.json"
 OPS_KEY = "_ops"          # no state: {bank: {doc_id: {ids, sha, ts, tries, failed}}} — rastro dos retains assíncronos
 MAX_TRIES = 3             # depois disso o documento deixa de ser reenviado sozinho (o doctor segue avisando)
 STUCK_HOURS = 2           # operação em `processing` sem andar há mais que isso é suspeita
@@ -986,11 +987,141 @@ def models_sync(brain, hs: Hindsight | None = None) -> dict:
     return {"created": created, "kept": skipped, "removed": removed, "catalog": len(catalog)}
 
 
+def _supersedes_path(inst) -> Path:
+    return inst.root / SUPERSEDES_NAME
+
+
+def _load_supersedes(inst) -> dict[str, str]:
+    """Mapa `{alvo_antigo: corretor_novo}` persistido em `.memory-supersedes.json`."""
+    raw = util.read_json(_supersedes_path(inst), {})
+    if not isinstance(raw, dict):
+        return {}
+    links = raw.get("links") if isinstance(raw.get("links"), dict) else raw
+    out: dict[str, str] = {}
+    for old_ref, entry in links.items():
+        if not isinstance(old_ref, str) or not old_ref.strip():
+            continue
+        if isinstance(entry, dict) and isinstance(entry.get("by"), str) and entry["by"].strip():
+            out[old_ref.strip()] = entry["by"].strip()
+        elif isinstance(entry, str) and entry.strip():
+            out[old_ref.strip()] = entry.strip()
+    return out
+
+
+def record_supersede(brain, new_ref: str, old_ref: str, reason: str = "") -> dict:
+    """Registra supersessão explícita client-side (`old_ref` supercedado por `new_ref`)."""
+    new_s = (new_ref or "").strip()
+    old_s = (old_ref or "").strip()
+    if not new_s or not old_s:
+        raise util.BrainError("informe a referência nova e a antiga para registrar supersessão", code=4)
+    if new_s == old_s:
+        raise util.BrainError("a referência nova e a antiga não podem ser iguais", code=4)
+    path = _supersedes_path(brain.inst)
+    with util.locked_state(path):
+        data = util.read_json(path, {})
+        if not isinstance(data, dict):
+            data = {}
+        links = data.setdefault("links", {})
+        if not isinstance(links, dict):
+            links = {}
+            data["links"] = links
+        links[old_s] = {"by": new_s, "reason": (reason or "").strip(), "ts": util.iso_now()}
+        util.write_json(path, data)
+    return {"old": old_s, "new": new_s, "reason": (reason or "").strip()}
+
+
+def retain_correction(
+    brain,
+    text: str,
+    supersedes: str,
+    *,
+    fact_class: str = "estado",
+    prov: str = "declarado",
+    fact_date: str | None = None,
+    hs: Hindsight | None = None,
+) -> dict:
+    """Registra correção explícita (`supersedes`) localmente e no Hindsight quando ativo."""
+    body = (text or "").strip()
+    target = (supersedes or "").strip()
+    if not body or not target:
+        raise util.BrainError("texto da correção e referência supercedada são obrigatórios", code=4)
+    d = fact_date or util.today().isoformat()
+    doc_id = f"ledger/correction-{util.sha(f'{target}:{body}:{d}', 12)}"
+    record_supersede(brain, doc_id, target, reason=body[:120])
+
+    mem = brain.inst.cfg["memory"]
+    out: dict = {"document_id": doc_id, "supersedes": target, "date": d, "retained": False}
+    if hs is None and mode(mem) == "none":
+        return out
+
+    item = {
+        "content": body,
+        "context": f"Correção explícita de {target}",
+        "document_id": doc_id,
+        "timestamp": f"{d}T12:00:00",
+        "tags": [f"prov:{prov}", f"classe:{fact_class}", "tipo:correcao"],
+        "metadata": {
+            "supersedes": target,
+            "fact_class": fact_class,
+            "prov": prov,
+            "date": d,
+        },
+    }
+    explicit_hs = hs is not None
+    try:
+        cli_hs = hs or client(brain)
+        out["response"] = cli_hs.retain(mem["bank"], [item])
+        out["retained"] = True
+    except util.BrainError as e:
+        if explicit_hs or "fora do ar" not in str(e):
+            raise
+        out["error"] = str(e)
+    return out
+
+
+def recall(
+    brain,
+    query: str,
+    tags: list[str] | None = None,
+    budget: str = "mid",
+    hs: Hindsight | None = None,
+    today=None,
+) -> dict:
+    """Recall de alto nível com decaimento temporal, contradições e supersessões client-side."""
+    mem = brain.inst.cfg["memory"]
+    cli_hs = hs or client(brain)
+    res = cli_hs.recall(mem["bank"], query, tags=tags, budget=budget)
+    results = list(res.get("results") or [])
+    facts = res.get("source_facts") or {}
+    if isinstance(facts, dict) and facts:
+        for r in results:
+            if not r.get("document_id"):
+                docs = {(facts.get(i) or {}).get("document_id") for i in (r.get("source_fact_ids") or [])}
+                doc = ", ".join(sorted(d for d in docs if d))
+                if doc:
+                    r["document_id"] = doc
+    ranked = recall_rank.rerank(
+        results,
+        half_life_days=mem.get("recall_half_life_days", 45),
+        today=today or util.today(),
+        explicit_supersedes=_load_supersedes(brain.inst),
+    )
+    out = dict(res)
+    out["results"] = ranked
+    return out
+
+
+def format_recall_lines(res: dict | list[dict], limit: int = 15) -> list[str]:
+    """Formata resultados do recall usando `[memória · as of ...]` / `[pista · sem âncora]`."""
+    items = res.get("results", []) if isinstance(res, dict) else list(res)
+    return [recall_rank.format_line(r) for r in items[:limit]]
+
+
 def cli(args, brain) -> None:
     c = args.mcmd
     mem = brain.inst.cfg["memory"]
     # --mode é justamente o que liga o engine: setup com --mode passa mesmo com engine = "none"
-    if mem["engine"] != "hindsight" and c not in ("status", "cost", "dossier", "eval", "providers") \
+    if mem["engine"] != "hindsight" and c not in ("status", "cost", "dossier", "eval", "providers", "supersede") \
             and not (c == "setup" and getattr(args, "mode", None)):
         raise util.BrainError("memória desligada: ponha [memory] engine = \"hindsight\" no config/brain.toml "
                               "depois de subir o servidor (guides/memory.md)", code=1)
@@ -1084,16 +1215,27 @@ def cli(args, brain) -> None:
         if s.get("queue_text"):
             print("  " + s["queue_text"])
     elif c in ("recall", "reflect"):
-        hs = client(brain)
         bank = mem["bank"]   # banco único (decisão 8) — --bank é legado, aceito e ignorado
         tags = util.split_csv(args.tags) or None
-        res = (hs.recall if c == "recall" else hs.reflect)(bank, args.query, tags)
-        if args.json:
-            print(json.dumps(res, ensure_ascii=False, indent=2))
-        elif c == "recall":
-            for r in res.get("results", [])[:15]:
-                print(f"- {r.get('text', '')}  ⟶ {r.get('document_id') or '?'} ({(r.get('occurred_start') or r.get('mentioned_at') or '')[:10]})")
-            if not res.get("results"):
-                print("não consta")
+        if c == "recall":
+            res = recall(brain, args.query, tags=tags)
+            if args.json:
+                print(json.dumps(res, ensure_ascii=False, indent=2))
+            else:
+                lines = format_recall_lines(res, limit=15)
+                for ln in lines:
+                    print(f"- {ln}")
+                if not lines:
+                    print("não consta")
         else:
-            print(res.get("text") or res.get("answer") or json.dumps(res, ensure_ascii=False)[:2000])
+            res = client(brain).reflect(bank, args.query, tags)
+            if args.json:
+                print(json.dumps(res, ensure_ascii=False, indent=2))
+            else:
+                print(res.get("text") or res.get("answer") or json.dumps(res, ensure_ascii=False)[:2000])
+    elif c == "supersede":
+        res = record_supersede(brain, args.novo, args.antigo, reason=getattr(args, "reason", "") or "")
+        if getattr(args, "json", False):
+            print(json.dumps(res, ensure_ascii=False, indent=2))
+        else:
+            print(f"✓ {args.antigo} supercedado por {args.novo}")

@@ -1586,6 +1586,11 @@ def build_parser() -> argparse.ArgumentParser:
                        help="legado: banco único desde a decisão 8 — aceito e ignorado")
         x.add_argument("--tags")
         x.add_argument("--json", action="store_true")
+    x = ms.add_parser("supersede", help="marca um fato/documento antigo como supercedado por um novo")
+    x.add_argument("novo", help="ID ou referência do fato/documento corretor")
+    x.add_argument("antigo", help="ID ou referência do fato/documento supercedado")
+    x.add_argument("--reason", default="", help="motivo da substituição")
+    x.add_argument("--json", action="store_true")
     p.set_defaults(fn=cmd_memory)
 
     p = sub.add_parser("route", help="roteia uma pergunta: classificação + perna ledger (mesma lógica do hook e do /ask)")

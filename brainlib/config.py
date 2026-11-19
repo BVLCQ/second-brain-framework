@@ -46,6 +46,7 @@ DEFAULTS: dict = {
         "recall_hook": False,              # hook de recall no Claude Code (true quando `brain harness connect claude-code` roda)
         "max_file_mb": 25,
         "timeout_s": 120,
+        "recall_half_life_days": 45,       # meia-vida (dias) do decaimento temporal no recall (0 = desliga)
         # modos (guides/memory.md): embed = dois bancos de chunks, zero LLM, zero egress.
         # full = banco único com extração de fatos, observações e (futuro) mental models.
         "extract": False,                  # full: extração de fatos do RAW com contexto do ledger

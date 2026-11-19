@@ -79,6 +79,7 @@ recall_hook = false  # hook de recall no Claude Code (true quando `brain harness
 # raw_bank/mem_bank (brain-raw/brain-mem) são legados dos dois bancos antigos do embed:
 # nada lê — `brain memory rebuild` os apaga do servidor ao consolidar no `bank`
 max_file_mb = 25
+recall_half_life_days = 45      # meia-vida (dias) do decaimento temporal no recall (0 = desliga)
 extract = false                 # full: extração de fatos do RAW com contexto do ledger
 cloud_llm = false               # true = o dono ativou o envio à própria API (plano da memória §4.3)
 mental_models = false           # Fase 8 do plano — ainda não aterrissado
