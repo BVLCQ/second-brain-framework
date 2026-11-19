@@ -17,6 +17,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
+      - name: Identidade do git (testes criam repos falsos e commitam)
+        run: |
+          git config --global user.email "ci@example.invalid"
+          git config --global user.name "CI"
       - name: TUI opcional (hashes travados) — ativa os testes do cockpit
         run: pip install -r requirements-tui.txt
       - name: unittest discover (todos os arquivos de tests/, sem rede)
