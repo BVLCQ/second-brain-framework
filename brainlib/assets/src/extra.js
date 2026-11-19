@@ -539,7 +539,7 @@ async function stBusy(btn, label, fn){
   const was = btn.innerHTML; btn.disabled = true; btn.textContent = label || "salvando…";
   try { return await fn(); } finally { btn.disabled = false; btn.innerHTML = was; }
 }
-const stStatus = ok => ok ? '<span class="chip h-em-dia">feito</span>' : '<span class="stlater">depois</span>';
+const stStatus = ok => ok === "manual" ? '<span class="chip h-info">manual</span>' : (ok ? '<span class="chip h-em-dia">feito</span>' : '<span class="stlater">depois</span>');
 const fld = (label, input, hint) => '<label class="fld"><span>' + label + "</span>" + input + (hint ? "<small>" + hint + "</small>" : "") + "</label>";
 const sec = (title, body, right) => '<section class="panel stsec"><div class="sthead"><h2>' + title + "</h2>" + (right || "") + "</div>" + body + "</section>";
 
@@ -565,7 +565,9 @@ SETUP.inicio = box => {
   const detail = {
     perfil: [SS.owner.name, SS.owner.nickname].filter(Boolean).join(" · ") || "nome, apelido, sobre você",
     rotina: SS.routine.start && SS.routine.end ? SS.routine.start + "–" + SS.routine.end + " · " + SS.routine.timezone : "fuso e expediente",
-    agente: ((SS.agents || []).filter(a => a.detected && (a.mcp || a.selected)).map(a => a.label).join(", ")) || "Claude Code · Hermes · Cursor · Codex",
+    agente: st.agente === "manual" ? "Outro harness (MCP manual)"
+      : (((SS.agents || []).filter(a => a.mcp || a.selected).map(a => a.label).join(", "))
+        || ((SS.agents || []).map(a => a.label).join(" · ")) || "Outros harnesses"),
     conectores: conns.length ? conns.join(", ") : "Slack, Gmail, Agenda…",
     memoria: st.memoria ? MEM_LABEL[SS.memory.mode] || SS.memory.mode : "nenhuma · embed · full",
     integracoes: SS.keys.GITHUB_TOKEN && SS.keys.GITHUB_TOKEN.set ? "GitHub configurado" : "token do GitHub",
@@ -767,31 +769,68 @@ SETUP.memoria = box => {
   draw();
 };
 SETUP.agente = box => {
-  const detected = (SS.agents || []).filter(a => a.detected);
-  let picked = (detected.find(a => a.selected) || detected.find(a => a.mcp) || detected[0] || {}).key || null;
+  const agents = SS.agents || [];
+  const sn = SS.mcp_snippets || {};
+  let picked = (agents.find(a => a.selected) || agents.find(a => a.mcp)
+    || (SS.agent_mode === "manual" ? {key: "other"} : null)
+    || agents.find(a => a.detected) || agents[0] || {key: "other"}).key;
+  let manualHint = "";
+  const extractCmd = h => { const m = String(h || "").match(/`([^`]+)`/); return m ? m[1] : String(h || ""); };
   const draw = () => {
-    box.innerHTML = sec("Agentes de IA detectados",
+    const isOther = picked === "other";
+    const stAg = (SS.setup && "agente" in SS.setup) ? SS.setup.agente : agents.some(a => a.mcp);
+    const cards = agents.map(a =>
+      '<button class="stopt' + (a.key === picked ? " sel" : "") + '" data-ag="' + esc(a.key) + '"><b>' + esc(a.label) +
+      (a.detected ? ' <span class="chip h-em-dia">detectado</span>' : ' <span class="chip">não detectado</span>') +
+      (a.mcp ? ' <span class="chip h-em-dia">conectado</span>' : "") + (a.selected ? ' <span class="chip h-info">ativo</span>' : "") +
+      '</b><span>' + (a.detected ? (a.runner ? "instalado · runner: " + esc(a.runner) : "instalado · chat e canais") : "não encontrado no PATH") + "</span></button>"
+    ).join("") +
+      '<button class="stopt' + (isOther ? " sel" : "") + '" data-ag="other"><b>Outros harnesses' +
+      (SS.agent_mode === "manual" ? ' <span class="chip h-info">manual</span>' : "") +
+      '</b><span>Qualquer cliente MCP (stdio): JSON, TOML ou CLI</span></button>';
+    const bodyOther =
+      '<p class="small">Cole um dos snippets abaixo na configuração MCP do seu harness e marque como configurado manualmente.</p>' +
+      '<div><b>JSON (mcpServers)</b> <button class="btn" type="button" data-copy="json">Copiar</button><pre>' + esc(sn.json || "") + "</pre></div>" +
+      '<div><b>TOML ([mcp_servers.brain])</b> <button class="btn" type="button" data-copy="toml">Copiar</button><pre>' + esc(sn.toml || "") + "</pre></div>" +
+      '<div><b>Linha de comando (stdio)</b> <button class="btn" type="button" data-copy="cli">Copiar</button><pre>' + esc(sn.cli || "") + "</pre></div>" +
+      '<div class="stactions"><span class="stmsg" id="ag-m"></span><button class="btn primary" id="ag-manual">Marcar como configurado manualmente</button></div>';
+    const bodyAgent =
+      (manualHint ? '<div id="ag-hint"><b>Receita manual para concluir</b> <button class="btn" type="button" id="ag-copy-hint">Copiar comando</button><pre>' + esc(manualHint) + "</pre></div>" : "") +
+      '<pre class="stlog" id="ag-log" hidden></pre>' +
+      '<div class="stactions"><span class="stmsg" id="ag-m"></span><button class="btn primary" id="ag-go">Conectar o canal de leitura</button></div>';
+    box.innerHTML = sec("Seu agente de IA",
       '<p class="small">O cérebro funciona com um agente para ler suas fontes e ajudar nas rotinas. Conectar cria o canal de leitura (MCP somente-leitura) — o agente consulta, nunca escreve.</p>' +
-      (detected.length
-        ? '<div class="stopts">' + detected.map(a =>
-            '<button class="stopt' + (a.key === picked ? " sel" : "") + '" data-ag="' + esc(a.key) + '"><b>' + esc(a.label) +
-            (a.mcp ? ' <span class="chip h-em-dia">conectado</span>' : "") + (a.selected ? ' <span class="chip h-info">ativo</span>' : "") +
-            '</b><span>' + (a.runner ? "instalado · runner: " + esc(a.runner) : "instalado · chat e canais") + "</span></button>").join("") + "</div>" +
-          '<pre class="stlog" id="ag-log" hidden></pre>' +
-          '<div class="stactions"><span class="stmsg" id="ag-m"></span><button class="btn primary" id="ag-go">Conectar o canal de leitura</button></div>'
-        : '<p class="late">Nenhum agente encontrado nesta máquina. Instale um (Hermes, Claude Code, Cursor ou Codex) e volte aqui.</p>'),
-      stStatus(detected.some(a => a.mcp)).replace("feito", "conectado"));
+      '<div class="stopts">' + cards + "</div>" + (isOther ? bodyOther : bodyAgent),
+      stStatus(stAg).replace("feito", "conectado"));
     const q = s => box.querySelector(s);
-    box.querySelectorAll("[data-ag]").forEach(b => b.onclick = () => { picked = b.dataset.ag; draw(); });
+    box.querySelectorAll("[data-ag]").forEach(b => b.onclick = () => { picked = b.dataset.ag; manualHint = ""; draw(); });
+    box.querySelectorAll("[data-copy]").forEach(b => b.onclick = () => { copyCmd(sn[b.dataset.copy] || ""); toast("snippet copiado"); });
+    if (q("#ag-copy-hint")) q("#ag-copy-hint").onclick = () => { copyCmd(extractCmd(manualHint)); toast("comando copiado"); };
+    const manualBtn = q("#ag-manual");
+    if (manualBtn) manualBtn.onclick = e => stBusy(e.currentTarget, "salvando…", async () => {
+      try {
+        await obAct("agent_connect", {agent: "other"});
+        await obState(); toast("agente marcado como manual"); SETUP.agente(box);
+      } catch (err) { stMsg(q("#ag-m"), "late", err.message); }
+    });
     const goBtn = q("#ag-go");
     if (goBtn) goBtn.onclick = e => stBusy(e.currentTarget, "conectando…", async () => {
-      if (!picked) return stMsg(q("#ag-m"), "late", "escolha um agente acima");
+      if (!picked || picked === "other") return stMsg(q("#ag-m"), "late", "escolha um agente acima");
       try {
         const r = await obAct("agent_connect", {agent: picked});
+        let res = r;
         if (r.job) { const log = q("#ag-log"); log.hidden = false;
           const j = await obJob(r.job, jj => { log.textContent = (jj.log || []).join("\n"); log.scrollTop = 1e9; });
-          if (j.status === "error") return stMsg(q("#ag-m"), "late", (j.result && j.result.error) || "não consegui conectar"); }
-        await obState(); toast("canal de leitura conectado"); SETUP.agente(box);
+          if (j.status === "error") return stMsg(q("#ag-m"), "late", (j.result && j.result.error) || "não consegui conectar");
+          res = j.result || {}; }
+        await obState();
+        if (!res.mcp && res.hint) {
+          manualHint = res.hint;
+          draw();
+          stMsg(q("#ag-m"), "late", "MCP não registrado automaticamente — siga a receita acima.");
+          return;
+        }
+        toast("canal de leitura conectado"); SETUP.agente(box);
       } catch (err) { stMsg(q("#ag-m"), "late", err.message); }
     });
   };

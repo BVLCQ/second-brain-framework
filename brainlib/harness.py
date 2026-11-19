@@ -48,6 +48,24 @@ def mcp_spec(inst) -> dict:
     return {"command": str(FRAMEWORK / "brain"), "args": ["mcp"], "env": {"BRAIN_HOME": str(inst.root)}}
 
 
+def mcp_snippets(inst) -> dict:
+    """Snippets MCP prontos (JSON, TOML e CLI) para outros harnesses."""
+    spec = mcp_spec(inst)
+    toml = (
+        f"[mcp_servers.{MCP_NAME}]\n"
+        f"command = {json.dumps(spec['command'])}\n"
+        f"args = {json.dumps(spec['args'])}\n"
+        f"env = {{ BRAIN_HOME = {json.dumps(spec['env']['BRAIN_HOME'])} }}"
+    )
+    return {
+        "command": spec["command"],
+        "brain_home": spec["env"]["BRAIN_HOME"],
+        "json": json.dumps({"mcpServers": {MCP_NAME: spec}}, ensure_ascii=False, indent=2),
+        "toml": toml,
+        "cli": f"BRAIN_HOME={spec['env']['BRAIN_HOME']} {spec['command']} mcp",
+    }
+
+
 def _strip_marked_block(text: str) -> str:
     if MARK_BEGIN not in text or MARK_END not in text:
         return text

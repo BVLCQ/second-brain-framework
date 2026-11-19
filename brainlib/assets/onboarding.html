@@ -519,42 +519,80 @@ const AGENT_URLS = {
 const AGENT_ICONS = {"claude-code": "⌘", "hermes": "✳", "cursor-cli": "▷", "codex": "◇"};
 let pickedAgent = null;   // destaque (sugestão de detecção conta)
 let agentChosen = false;  // mas só o clique do dono é escolha — é o que nomeia a TASK do "Fazer depois"
+let agentHint = null;     // receita manual quando wire_mcp devolve mcp=false + hint
+function copyText(text, btn) {
+  const done = () => {
+    if (!btn) return;
+    const old = btn.textContent;
+    btn.textContent = "✓ Copiado";
+    setTimeout(() => { if (btn.isConnected) btn.textContent = old; }, 1400);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(done).catch(() => {});
+    return;
+  }
+  const ta = document.createElement("textarea");
+  ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand("copy"); done(); } catch (e) {}
+  ta.remove();
+}
+function extractCmd(hint) {
+  const m = String(hint || "").match(/`([^`]+)`/);
+  return m ? m[1] : String(hint || "");
+}
 V.agente = () => {
   const agents = S.agents || [];
-  const detected = agents.filter(a => a.detected);
-  if (!pickedAgent || !detected.some(a => a.key === pickedAgent)) {
-    const pre = detected.find(a => a.selected) || detected.find(a => a.mcp) || detected[0];
-    pickedAgent = pre ? pre.key : null;
+  const sn = S.mcp_snippets || {};
+  if (!pickedAgent || (pickedAgent !== "other" && !agents.some(a => a.key === pickedAgent))) {
+    const pre = agents.find(a => a.selected) || agents.find(a => a.mcp)
+      || (S.agent_mode === "manual" ? {key: "other"} : null)
+      || agents.find(a => a.detected) || agents[0];
+    pickedAgent = pre ? pre.key : "other";
     agentChosen = false;               // destaque é sugestão; escolha é clique (ruling)
   }
-  if (!detected.some(a => a.key === pickedAgent)) agentChosen = false;
-  const currentObj = () => detected.find(a => a.key === pickedAgent) || null;
-  const anyConnected = agents.some(a => a.detected && (a.mcp || a.selected));
-  $("#view").innerHTML = `${head("Conexões · primeiro o agente", "Seu agente", "O cérebro funciona com um agente de IA para ler suas fontes e ajudar nas rotinas. Escolha o principal detectado na máquina.")}
+  const isOther = pickedAgent === "other";
+  const currentObj = () => agents.find(a => a.key === pickedAgent) || null;
+  const anyConnected = agents.some(a => a.mcp || a.selected) || S.agent_mode === "manual" || Boolean(agentHint);
+  const preStyle = "margin:0;font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;word-break:break-all;overflow-x:auto";
+  $("#view").innerHTML = `${head("Conexões · primeiro o agente", "Seu agente", "O cérebro funciona com um agente de IA para ler suas fontes e ajudar nas rotinas. Escolha o seu agente principal ou configure outro cliente MCP manualmente.")}
     <div class="card">
-      ${detected.length === 0 ? `<div class="msg warn show" style="margin:0 0 14px">Nenhum agente foi encontrado nesta máquina. Instale um agente e volte — ou siga sem e conecte depois.</div>` : ""}
       <div id="ag-list">${agents.map(a => {
         const url = AGENT_URLS[a.key] || "#";
         const ic = AGENT_ICONS[a.key] || "✦";
-        if (a.detected) {
-          const badges = [
-            a.mcp ? '<span class="pill ok">MCP conectado</span>' : "",
-            a.selected ? '<span class="pill info">ativo</span>' : "",
-          ].filter(Boolean).join(" ");
-          const desc = a.runner ? `instalado · runner: ${a.runner}` : "instalado · chat e canais";
-          return `<div class="agentcard ${a.key === pickedAgent ? "sel" : ""}" data-ag="${esc(a.key)}">
-            <div class="ai-ic">${ic}</div>
-            <div class="meta"><b>${esc(a.label)}</b> ${badges}<div class="d">${esc(desc)}</div></div>
-            <span class="radio"></span>
-          </div>`;
-        }
-        return `<div class="agentcard dim">
+        const badges = [
+          a.detected ? '<span class="pill ok">detectado</span>' : '<span class="pill muted">não detectado</span>',
+          a.mcp ? '<span class="pill ok">MCP conectado</span>' : "",
+          a.selected ? '<span class="pill info">ativo</span>' : "",
+        ].filter(Boolean).join(" ");
+        const desc = a.detected
+          ? esc(a.runner ? `instalado · runner: ${a.runner}` : "instalado · chat e canais")
+          : `não encontrado no PATH — <a href="${esc(url)}" target="_blank" rel="noopener">como instalar</a>`;
+        return `<div class="agentcard ${a.key === pickedAgent ? "sel" : ""}" data-ag="${esc(a.key)}">
           <div class="ai-ic">${ic}</div>
-          <div class="meta"><b>${esc(a.label)}</b><div class="d">não encontrado — <a href="${esc(url)}" target="_blank" rel="noopener">como instalar</a></div></div>
+          <div class="meta"><b>${esc(a.label)}</b> ${badges}<div class="d">${desc}</div></div>
+          <span class="radio"></span>
         </div>`;
-      }).join("")}</div>
+      }).join("")}
+      <div class="agentcard ${isOther ? "sel" : ""}" data-ag="other">
+        <div class="ai-ic">✦</div>
+        <div class="meta"><b>Outros harnesses</b> ${S.agent_mode === "manual" ? '<span class="pill info">manual</span>' : ""}<div class="d">Qualquer cliente MCP (stdio) — copie os snippets JSON, TOML ou CLI</div></div>
+        <span class="radio"></span>
+      </div></div>
+      ${isOther ? `<div id="ag-other" style="margin-top:12px">
+        <p class="sub" style="margin-bottom:8px">Cole um dos blocos abaixo na configuração MCP do seu agente e marque como configurado manualmente.</p>
+        <div class="slot"><div class="sh"><span>JSON (mcpServers)</span><span class="spacer"></span><button class="btn sm" type="button" data-copy="json">Copiar</button></div><pre style="${preStyle}">${esc(sn.json || "")}</pre></div>
+        <div class="slot"><div class="sh"><span>TOML ([mcp_servers.brain])</span><span class="spacer"></span><button class="btn sm" type="button" data-copy="toml">Copiar</button></div><pre style="${preStyle}">${esc(sn.toml || "")}</pre></div>
+        <div class="slot"><div class="sh"><span>Linha de comando (stdio)</span><span class="spacer"></span><button class="btn sm" type="button" data-copy="cli">Copiar</button></div><pre style="${preStyle}">${esc(sn.cli || "")}</pre></div>
+      </div>` : ""}
+      <div class="slot ${agentHint ? "" : "hidden"}" id="ag-hint">
+        <div class="sh"><span>Receita manual para concluir</span><span class="spacer"></span><button class="btn sm" type="button" id="ag-copy-hint">Copiar comando</button></div>
+        <pre id="ag-hint-txt" style="${preStyle}">${esc(agentHint || "")}</pre>
+      </div>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px">
-        ${detected.length ? `<button class="btn pri" type="button" id="ag-connect">Conectar o Brain ao ${esc((currentObj() || {}).label || "agente")}</button>` : ""}
+        ${isOther
+          ? `<button class="btn pri" type="button" id="ag-manual">Marcar como configurado manualmente</button>`
+          : `<button class="btn pri" type="button" id="ag-connect">Conectar o Brain ao ${esc((currentObj() || {}).label || "agente")}</button>`}
         <button class="btn" type="button" id="ag-later">Fazer depois</button>
       </div>
       <div class="log" id="ag-log"></div>
@@ -562,51 +600,80 @@ V.agente = () => {
     </div>
     ${nav({main: anyConnected ? "Continuar" : "Seguir sem conectar", hideMain: !anyConnected})}`;
 
-  const updateConnectLabel = () => {
-    const b = $("#ag-connect"), obj = currentObj();
-    if (b && obj) b.textContent = "Conectar o Brain ao " + obj.label;
-  };
   $$("#ag-list .agentcard[data-ag]").forEach(card => {
-    card.onclick = () => {
+    card.onclick = e => {
+      if (e.target && e.target.closest && e.target.closest("a")) return;
       pickedAgent = card.dataset.ag;
       agentChosen = true;
-      $$("#ag-list .agentcard[data-ag]").forEach(c => c.classList.toggle("sel", c.dataset.ag === pickedAgent));
-      updateConnectLabel();
+      agentHint = null;
+      V.agente();
     };
   });
+
+  $$("#ag-other [data-copy]").forEach(b => {
+    b.onclick = () => copyText(sn[b.dataset.copy] || "", b);
+  });
+
+  if ($("#ag-copy-hint")) {
+    $("#ag-copy-hint").onclick = () => copyText(extractCmd(agentHint), $("#ag-copy-hint"));
+  }
 
   const doLater = async btn => {
     busy(btn, true, "Criando tarefa…");
     try {
-      const r = await act("agent_later", agentChosen ? {agent: pickedAgent} : {});
+      const r = await act("agent_later", agentChosen && pickedAgent !== "other" ? {agent: pickedAgent} : {});
       await refresh();
       msg($("#m"), "ok", `✓ Tarefa ${r.id} criada — ficou no seu TODO.`);
       setTimeout(next, 1100);
-    } catch (e) { msg($("#m"), "err", e.message); } finally { busy(btn, false); }
+    } catch (e) { msg($("#m"), "err", e.message); } finally { if (btn.isConnected) busy(btn, false); }
   };
   $("#ag-later").onclick = () => doLater($("#ag-later"));
+
+  if ($("#ag-manual")) {
+    $("#ag-manual").onclick = async () => {
+      const btn = $("#ag-manual");
+      busy(btn, true, "Salvando…");
+      try {
+        await act("agent_connect", {agent: "other"});
+        await refresh();
+        renderSteps();
+        V.agente();
+        msg($("#m"), "ok", "✓ Marcado como configurado manualmente.");
+      } catch (e) { msg($("#m"), "err", e.message); } finally { if (btn.isConnected) busy(btn, false); }
+    };
+  }
 
   if ($("#ag-connect")) {
     $("#ag-connect").onclick = async () => {
       const obj = currentObj();
       if (!obj) return;
       agentChosen = true;               // o botão nomeia o agente: conectar é escolher
+      agentHint = null;
       const btn = $("#ag-connect"), log = $("#ag-log");
       busy(btn, true, "Conectando…");
       try {
         const r = await act("agent_connect", {agent: obj.key});
+        let res = r;
         if (r.job) {
           const j = await waitJob(r.job, jj => tickLog(log, jj));
           if (j.status === "error") {
             msg($("#m"), "err", (j.result && j.result.error) || "não consegui conectar o agente");
             return;
           }
+          res = j.result || {};
         }
         await refresh();
+        renderSteps();
+        if (!res.mcp && res.hint) {
+          agentHint = res.hint;
+          V.agente();
+          msg($("#m"), "warn", "Configuração automática indisponível — copie a receita acima para concluir no terminal.");
+          return;
+        }
         btn.textContent = `✓ ${obj.label} conectado`;
         msg($("#m"), "ok", `✓ ${obj.label} conectado.`);
         setTimeout(next, 700);
-      } catch (e) { msg($("#m"), "err", e.message); } finally { busy(btn, false); }
+      } catch (e) { msg($("#m"), "err", e.message); } finally { if (btn.isConnected) busy(btn, false); }
     };
   }
   bindNav(() => next());

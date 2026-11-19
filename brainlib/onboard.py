@@ -34,7 +34,7 @@ import threading
 import time
 from pathlib import Path
 
-from . import config, runner, setup, util
+from . import config, harness, runner, setup, util
 
 STEPS = tuple(s[0] for s in setup.WEB_STEPS)      # registro único (setup.WEB_STEPS): ids que o navegador grava
 WEB_STEPS = setup.WEB_STEPS                       # (id, título, grupo) — a barra lateral agrupa por grupo
@@ -345,6 +345,8 @@ def state(brain) -> dict:
                     "lunch": cfg["work"].get("lunch", "")},
         "agent": _agent_name(runner.agent_command(cfg)),
         "agents": agents_state(brain),
+        "mcp_snippets": harness.mcp_snippets(brain.inst),
+        "agent_mode": progress(inst).get("agent_mode", ""),
         "claude_installed": bool(shutil.which("claude")),
         "connectors": connector_status(_MCP_CACHE["servers"], cfg, {s["key"] for s in sources if s.get("key")}),
         "connectors_scanned": _MCP_CACHE["servers"] is not None,
@@ -389,6 +391,8 @@ def setup_status(st: dict) -> dict:
     return {
         "perfil": st["owner"]["registered"] and not st["profile"]["template"],
         "rotina": bool(st["routine"]["timezone"] and st["routine"]["start"] and st["routine"]["end"]),
+        "agente": (True if any(a.get("mcp") for a in st["agents"])
+                   else ("manual" if st["progress"].get("agent_mode") == "manual" else False)),
         "conectores": any(c.get("enabled") for c in st["connectors"]),
         "memoria": st["memory"]["mode"] != "none",
         "integracoes": any(k["set"] for k in st["keys"].values()),
@@ -612,12 +616,11 @@ def apply_memory(brain, data: dict) -> dict:
 
 
 # ── passo "Seu agente" (plano F3): harness antes dos conectores ───────────────
-AGENT_KEYS = ("claude-code", "hermes", "cursor-cli", "codex")
+AGENT_KEYS = tuple(harness._DETECT)
 _RUNNER_OF = {"claude-code": "claude", "cursor-cli": "cursor", "codex": "codex"}
 
 
 def _agent_label(key: str) -> str:
-    from . import harness
     return harness.AGENTS.get(key, "Hermes")
 
 
@@ -633,18 +636,15 @@ def _chosen_agent_label(brain) -> str | None:
 
 def agents_state(brain) -> list[dict]:
     """Detectados na máquina + canal MCP do cérebro já registrado? (mesma detecção do `brain harness status`)."""
-    from . import harness
     det = harness.detect()
     cur = brain.inst.cfg["runner"].get("agent", "") or ""
     out = []
     for key in AGENT_KEYS:
         detected = bool(det.get(key))
-        mcp = False
-        if detected:
-            try:
-                mcp = harness.mcp_present(brain.inst, key)
-            except Exception:                                  # noqa: BLE001 — status é informativo
-                mcp = False
+        try:
+            mcp = bool(harness.mcp_present(brain.inst, key))
+        except Exception:                                      # noqa: BLE001 — status é informativo
+            mcp = False
         preset = _RUNNER_OF.get(key, "")
         out.append({"key": key, "label": _agent_label(key), "detected": detected, "mcp": mcp,
                     "runner": preset, "selected": bool(preset) and cur == preset})
@@ -654,14 +654,15 @@ def agents_state(brain) -> list[dict]:
 def connect_agent(brain, data: dict) -> dict:
     """Conecta o agente escolhido (job visível): [runner].agent + MCP somente-leitura + permissões
     (claude). Hermes é chat, não runner headless — os canais conectam, o runner segue no automático."""
-    from . import harness
     if os.environ.get("BRAIN_NIGHTLY") == "1":
         raise util.BrainError("conectar agente é decisão do dono presente — nunca no noturno", code=4)
     key = str(data.get("agent") or "")
+    if key == "other":
+        _save_progress(brain.inst, agent_mode="manual")
+        _mark(brain.inst, "agente")
+        return {"mode": "manual"}
     if key not in AGENT_KEYS:
         raise util.BrainError(f"agente desconhecido: {key!r}", code=4)
-    if not harness.detect().get(key):
-        raise util.BrainError(f"{_agent_label(key)} não foi encontrado nesta máquina", code=4)
     inst0 = brain.inst
 
     def run(j: _Job) -> dict:
@@ -678,6 +679,7 @@ def connect_agent(brain, data: dict) -> dict:
             j.say("• Hermes é o seu chat: o runner headless segue no automático (cursor/claude/codex/agy/gemini)")
         res = harness.wire_mcp(b.inst, key)
         if res.get("ok"):
+            _save_progress(b.inst, agent_mode="")
             j.say(f"✓ servidor MCP somente-leitura do cérebro registrado no {_agent_label(key)} ({res.get('how')})")
         else:
             j.say(f"⚠ MCP não registrado — {res.get('hint')}")
@@ -685,7 +687,8 @@ def connect_agent(brain, data: dict) -> dict:
             perms.sync(b.inst)
             j.say("✓ permissões do Claude nesta pasta liberadas (leitura + comandos do brain; segredo e ledger seguem trancados)")
         _mark(b.inst, "agente")
-        return {"mcp": bool(res.get("ok")), "runner": preset or ""}
+        return {"mcp": bool(res.get("ok")), "runner": preset or "",
+                "how": res.get("how", ""), "hint": res.get("hint", "")}
     return {"job": _start("agent", run).id}
 
 

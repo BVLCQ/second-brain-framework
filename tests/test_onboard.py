@@ -611,8 +611,12 @@ class AgentStepTests(unittest.TestCase):
     def test_agent_connect_validates(self):
         with self.assertRaises(util.BrainError):
             onboard.connect_agent(self.b, {"agent": "gemini"})
-        with self.assertRaises(util.BrainError):
-            onboard.connect_agent(self.b, {"agent": "codex"})          # não detectado
+        r = onboard.connect_agent(self.b, {"agent": "codex"})          # não detectado não bloqueia mais
+        j = _wait_job(r["job"])
+        self.assertEqual(j["status"], "done", j["log"])
+        self.assertIn("how", j["result"])
+        self.assertIn("hint", j["result"])
+        self.assertTrue(j["result"]["mcp"], j["log"])
 
     def test_agent_later_creates_a_real_task(self):
         onboard.save_about(self.b, {"name": "Marina Demo"})          # passo Você: dono registrado
