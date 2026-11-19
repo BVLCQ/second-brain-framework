@@ -210,5 +210,44 @@ class WatchdogShTests(unittest.TestCase):
         self.assertIn("start_period: 120s", compose)
 
 
+class MachineChecksTests(unittest.TestCase):
+    """Dependências de máquina no doctor (plano guides/plans/install-bootstrap.md, F3)."""
+
+    @staticmethod
+    def _cks(engine: str, which_map: dict, exists=None) -> list[dict]:
+        cfg = {"memory": {"engine": engine}}
+        return doctor._machine_checks(cfg, which=lambda c: which_map.get(c), exists=exists)
+
+    def test_tudo_presente_e_ok(self):
+        cks = self._cks("hindsight", {"git": "/usr/bin/git", "mise": "/opt/homebrew/bin/mise",
+                                      "docker": "/usr/local/bin/docker"})
+        self.assertEqual([c["level"] for c in cks], ["ok", "ok", "ok"])
+
+    def test_git_e_mise_ausentes_viram_warn(self):
+        cks = self._cks("none", {})
+        warns = [c["detail"] for c in cks if c["level"] == "warn"]
+        self.assertTrue(any("git ausente" in d for d in warns))
+        self.assertTrue(any("mise ausente" in d for d in warns))
+        # memória desligada: docker ausente é informativo (ok), nunca warn
+        self.assertFalse(any("docker ausente" in d for d in warns))
+
+    def test_docker_ausente_com_memoria_ligada_vira_warn_com_comando(self):
+        cks = self._cks("hindsight", {"git": "/usr/bin/git", "mise": "/x/mise"})
+        dw = [c for c in cks if c["level"] == "warn" and "docker ausente" in c["detail"]]
+        self.assertEqual(len(dw), 1)
+        self.assertIn("orbstack", dw[0]["detail"].lower())
+
+    def test_docker_do_orbstack_conta_como_presente(self):
+        cks = self._cks("hindsight", {"git": "/usr/bin/git", "mise": "/x/mise"},
+                        exists=lambda p: p == doctor.ORBSTACK_DOCKER)
+        self.assertTrue(all(c["level"] == "ok" for c in cks))
+
+    def test_nunca_emite_error(self):
+        for engine in ("hindsight", "none"):
+            for wm in ({}, {"git": "/g", "mise": "/m", "docker": "/d"}):
+                for ex in (None, (lambda p: False)):
+                    self.assertFalse([c for c in self._cks(engine, wm, ex) if c["level"] == "error"])
+
+
 if __name__ == "__main__":
     unittest.main()

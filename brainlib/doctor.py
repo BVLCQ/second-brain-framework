@@ -7,6 +7,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import urllib.request
 from datetime import datetime
 from pathlib import Path
@@ -37,6 +38,37 @@ AUTO_FIXABLE = (
 
 def _c(level: str, title: str, detail: str) -> dict:
     return {"level": level, "title": title, "detail": detail}
+
+
+def _machine_checks(cfg: dict, which=shutil.which, exists=None) -> list[dict]:
+    """Dependências de máquina que o install.sh bootstrapa (plano
+    guides/plans/install-bootstrap.md): git · mise · contêiner. Sempre
+    `ok`/`warn` — nunca `error`: a saída do doctor gateia o modal da TUI."""
+    out = []
+    if which("git"):
+        out.append(_c("ok", "máquina", "git presente"))
+    else:
+        out.append(_c("warn", "máquina", "git ausente — o instalador resolve:  sh install.sh"))
+    if which("mise"):
+        out.append(_c("ok", "máquina", "mise presente"))
+    else:
+        out.append(_c("warn", "máquina", "mise ausente — brew install mise (macOS) ou o instalador oficial (linux) e mise install"))
+    mem = cfg.get("memory") if isinstance(cfg, dict) else None
+    hindsight = isinstance(mem, dict) and mem.get("engine") == "hindsight"
+    docker = which("docker")
+    if not docker:
+        if exists is not None:
+            docker = ORBSTACK_DOCKER if exists(ORBSTACK_DOCKER) else None
+        else:
+            docker = which(ORBSTACK_DOCKER)
+    if hindsight:
+        out.append(_c("ok", "máquina", "runtime de contêiner presente") if docker else _c(
+            "warn", "máquina",
+            "docker ausente com memória ligada — OrbStack no macOS (brew install --cask orbstack) "
+            "ou Docker Engine no Linux (curl -fsSL https://get.docker.com | sh)"))
+    elif not docker:
+        out.append(_c("ok", "máquina", "docker ausente — só é preciso ao ligar a memória (embed/full)"))
+    return out
 
 
 def _lms_reachable(http_get=None) -> bool:
@@ -100,6 +132,7 @@ def checks(brain, online: bool = False, probe_agent: bool = False, docker_probe=
     cfg = inst.cfg
     if not (inst.config_dir / "brain.toml").exists():
         out.append(_c("warn", "config", "config/brain.toml ausente — rode `./brain setup`"))
+    out.extend(_machine_checks(cfg))
     for zone in ("PROFILE", "PLANNING", "RAW/inbox", "PROCESSED", "FRESH"):
         if not (inst.vault / zone).exists():
             out.append(_c("error", "vault", f"zona ausente: vault/{zone} — rode `./brain init`"))

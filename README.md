@@ -38,16 +38,18 @@ A constituição é `AGENTS.md`. O guia de uso A a Z — cada comando, cada cone
 
 ## Requisitos
 
-- **Python 3.11+** — só biblioteca padrão, sem `pip install`. O repo usa
-  [mise](https://mise.jdx.dev/) (`mise.toml`): `mise install` resolve a
-  versão certa.
-- Um agente com ferramentas MCP de leitura — **Claude Code** é o alvo de
-  referência (comandos `/` em `.claude/commands/`); Cursor, Codex e outros
-  funcionam lendo `commands/*/SKILL.md`.
+- **Nada pré-instalado é exigido** — o instalador cuida do que faltar: git,
+  Homebrew, mise, **Python 3.12** (pin do `mise.toml`) e o runtime de
+  contêiner (OrbStack no macOS, Docker Engine no Linux/WSL2) — silencioso e
+  idempotente. O CLI em si usa só biblioteca padrão, sem `pip install`.
+- **Agente de IA: qualquer um — ou nenhum.** O Brain é agnóstico: Claude
+  Code, Hermes, Cursor e Codex leem `commands/*/SKILL.md`, e o passo "Seu
+  agente" da configuração conecta o canal de leitura de quem existir na
+  máquina.
 - Opcional: **LM Studio** (embeddings `bge-m3`), **Hindsight**
-  (memória semântica), OAuth Google (foco no calendário / backup no Drive).
-  O `setup.md` instala tudo — inclusive em máquina nova, executado por
-  agente.
+  (memória semântica), OAuth Google (foco no calendário / backup no Drive) —
+  configuração do wizard, não pré-requisito. O `setup.md` é a receita
+  completa para agentes.
 
 ## Instalação
 
@@ -60,10 +62,11 @@ curl -fsSL https://raw.githubusercontent.com/BVLCQ/second-brain-framework/main/i
 ou, dentro do clone, `sh install.sh`.
 
 Sem terminal: clonar (ou **Code → Download ZIP** no GitHub), abrir a pasta e
-**duplo clique em `Abrir o Brain.command`** — ele confere o Python, cria o app
+**duplo clique em `Abrir o Brain.command`** — ele instala o que faltar na
+máquina (git · Homebrew · mise · Python · contêiner), cria o app
 Brain e abre a configuração guiada; ZIP vira repositório automaticamente.
 
-O instalador clona o repo, confere o Python, cria o app **Brain**
+O instalador clona o repo, instala o que faltar na máquina, cria o app **Brain**
 na pasta Aplicativos e abre a **configuração guiada no navegador**:
 
 1. **Você** — nome completo, apelido, cargo e e-mail (o id interno sai do nome; ninguém escolhe id).
@@ -72,7 +75,7 @@ na pasta Aplicativos e abre a **configuração guiada no navegador**:
 4. **Conectores** — Slack, Gmail, Calendar, Drive, Granola e Jira, conectados uma vez no claude.ai; o Brain
    detecta o que já está ligado e libera só as ferramentas de **leitura**.
 5. **Permissões** — pré-autoriza o Claude Code nesta pasta, para ele não pedir licença a cada comando.
-6. **Memória** — nenhuma, **lite** (busca por significado, 100% local, grátis) ou **full** (extrai fatos e liga
+6. **Memória** — nenhuma, **embed** (busca por significado, 100% local, grátis) ou **full** (extrai fatos e liga
    assuntos; usa a sua API key, com custo por uso). Sem chave, fica para depois.
 7. **Integrações** — token do GitHub (sugestões e bugs), opcional.
 8. **Goals e projetos** — escreva com as suas palavras ou envie um documento; a IA propõe a árvore, você
@@ -81,8 +84,10 @@ na pasta Aplicativos e abre a **configuração guiada no navegador**:
 Depois, é só abrir o **Brain** pelo ícone (Aplicativos, Launchpad, Spotlight ou Dock). Enquanto a configuração
 não termina, o ícone volta a ela; depois, abre o painel. Para refazer: `./brain open --setup`.
 
-Requisitos que o instalador ainda não resolve sozinho: **git**, **Python 3.11+** (o macOS traz só o 3.9 —
-`brew install mise && mise install` resolve) e o **Claude Code** instalado e logado.
+O que continua sendo seu: a senha da sessão (sudo) e, na primeira vez num
+macOS sem Command Line Tools, o botão *Instalar* da janela da Apple — o resto
+o instalador resolve sozinho. Sem internet, ele para com a receita manual
+(`setup.md` §0–§1).
 
 Terminal e IAs: o wizard `./brain setup` continua (`--yes` + `./brain doctor` em loop; receita em `setup.md`).
 Guias: `guides/setup.md` (wizard) · `guides/memory.md` (memória). Modo script, sem perguntas:

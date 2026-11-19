@@ -15,7 +15,7 @@ seu agente — o wizard termina oferecendo-a.
 
 | Caminho | Como | Para quem |
 |---|---|---|
-| `install.sh` | `curl -fsSL …/install.sh \| sh -` (ou `sh install.sh` no clone) | máquina nova, 30 segundos até o wizard |
+| `install.sh` | `curl -fsSL …/install.sh \| sh -` (ou `sh install.sh` no clone) | máquina nova — instala o que faltar (git · Homebrew · mise · Python · contêiner) e abre o wizard |
 | `./brain setup` | wizard interativo, no terminal | o dono, sempre re-executável |
 | IA assistida | `./brain setup --yes --only …` + `./brain doctor` em loop (receita completa: `setup.md` na raiz) | agente conduzindo; o doctor é a régua |
 
