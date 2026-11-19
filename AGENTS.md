@@ -216,6 +216,11 @@ O agente **propõe** fechar ação com evidência (`brain proposal add --kind fe
 não fecha só porque um e-mail "parece" resolver. Fecho é do dono (`/done` ou
 checkbox em `FRESH/todo.md` / `status:` na ficha da ação — colhido no próximo render).
 
+**Aceite em lote (`brain review accept`):** confirmar a fila de revisão no painel/TUI com os
+diffs abertos é a aprovação (a interface preenche a `--quote`); o ledger grava **um evento por
+item** — falha em um não derruba o lote. Portas (mensagem, publicação, foco) **nunca** entram em
+lote: revisam-se na fila, aprovam-se por item com o texto exato. Silêncio e timeout nunca aprovam.
+
 **Prazo sugerido:** ação nova sem prazo dito recebe do agente uma data **sugerida**
 (`due_suggested`, com `due_reason`): só o agente sugere; aparece em roxo até o dono
 definir uma data (qualquer `--due` dele a torna firme) ou confirmar (`--confirm-due`).
