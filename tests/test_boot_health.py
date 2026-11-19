@@ -186,6 +186,7 @@ class DoctorBootTransientTests(unittest.TestCase):
 class WatchdogShTests(unittest.TestCase):
     """Critério (5): sintaxe zsh -n e verificação das ramificações de log e guarda [[ -x "$LMS" ]]."""
 
+    @unittest.skipUnless(shutil.which("zsh"), "zsh ausente (CI roda em Ubuntu sem zsh) — checagem de sintaxe é local/macOS")
     def test_5_watchdog_zsh_syntax_and_honest_logging_branches(self):
         self.assertTrue(WATCHDOG_SH.is_file(), "services/watchdog.sh deve existir")
         res = subprocess.run(["zsh", "-n", str(WATCHDOG_SH)], capture_output=True, text=True)
