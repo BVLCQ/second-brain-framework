@@ -16,10 +16,9 @@ const norm = s => String(s || "").toLowerCase().normalize("NFD").replace(/[\u030
 const IS_MAC = typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent || "");
 const KMOD = IS_MAC ? "⌘K" : "Ctrl K";
 
-// ── sidebar: dono + data ────────────────────────────────────────────────
+// ── sidebar: dono ───────────────────────────────────────────────────────
 $("#ownername").textContent = D0.owner.name;
 $("#avatar").textContent = D0.owner.name.trim().slice(0, 1).toUpperCase();
-$("#gen2").textContent = "gerado " + D0.generated_at.slice(0, 10);
 
 window.renderTabs = function(view, TABS, PARENT){
   document.getElementById("tabs").innerHTML = TABS.map(function(t){
@@ -82,6 +81,7 @@ if (SERVE) {
   else { try { TOK = localStorage.getItem("brain-serve-token"); } catch (e) {} }
 }
 let LIVE = SERVE && !!TOK;
+document.documentElement.dataset.live = LIVE ? "1" : "0";
 // o ícone do app reaproveita esta aba (util.focus_open_tab) apontando-a para `/#t=<token>`: se a ponte foi reiniciada
 // o token mudou — guarda o novo, devolve a URL ao que era (a rota fica) e recarrega; token igual, só devolve a URL
 if (SERVE) window.addEventListener("hashchange", e => {
@@ -1718,7 +1718,10 @@ document.addEventListener("keydown", e => {
   }
   const openOv = document.querySelector(".pal-back.open");             // form/dialog aberto: só Esc fecha
   if (openOv) {
-    if (e.key === "Escape") openOv.remove();
+    if (e.key === "Escape") {
+      if (openOv.id === "newsback") { openOv.classList.remove("open"); openOv.hidden = true; }
+      else openOv.remove();
+    }
     return;
   }
   if (document.querySelector(".dd.open")) return;                      // dropdown de filtro cuida de si
@@ -3407,5 +3410,146 @@ async function exitOnboarding() {
 }
 window.enterOnboarding = enterOnboarding;
 window.exitOnboarding = exitOnboarding;
+
+// ── atualização via ponte (/api/update) + cópia no retrato ──────────────
+(function(){
+  let updatePoll = null;
+  function setUpdateTriggersDisabled(disabled){
+    document.querySelectorAll("[data-brain-update]").forEach(el => { el.disabled = !!disabled; });
+  }
+  function renderUpdateLog(lines, status, diverged){
+    const log = document.getElementById("newslog");
+    if (!log) return;
+    log.hidden = false;
+    const rows = (lines || []).map(ln => {
+      const cls = ln.startsWith("✓") ? "ok" : (ln.startsWith("✗") || ln.startsWith("⚠") ? "err" : "dim");
+      const pref = (ln.startsWith("✓") || ln.startsWith("✗") || ln.startsWith("⚠"))
+        ? ""
+        : (status === "error" ? "✗ " : (status === "done" ? "✓ " : "… "));
+      return '<div class="news-log-line ' + cls + '">' + esc(pref + ln) + "</div>";
+    });
+    if (status === "error" && diverged) {
+      rows.push('<div class="news-log-line err">✗ Dica: rode o comando `update --rebase` no terminal.</div>');
+    }
+    log.innerHTML = rows.join("");
+    log.scrollTop = log.scrollHeight;
+  }
+  function copyUpdateCmd(){
+    const back = document.getElementById("newsback");
+    const cmd = (back && back.dataset.cliCmd) || "";
+    const fb = document.getElementById("newsfb");
+    const done = () => {
+      if (fb) fb.textContent = "Comando copiado";
+      toast("Comando copiado");
+    };
+    if (!cmd) return;
+    if (typeof navigator !== "undefined" && navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+      navigator.clipboard.writeText(cmd).then(done, () => { copyCmd(cmd); done(); });
+    } else {
+      copyCmd(cmd);
+      done();
+    }
+  }
+  function waitBridgeAndReload(){
+    const log = document.getElementById("newslog");
+    if (log) {
+      log.innerHTML += '<div class="news-log-line dim">… Reiniciando ponte…</div>';
+      log.scrollTop = log.scrollHeight;
+    }
+    const started = Date.now();
+    let delay = 500;
+    const step = async () => {
+      if (Date.now() - started > 20000) {
+        setUpdateTriggersDisabled(false);
+        const fb = document.getElementById("newsfb");
+        if (fb) fb.textContent = "Ponte demorou para voltar — recarregue a página.";
+        return;
+      }
+      try {
+        const r = await fetch("/api/data", {headers: {"X-Brain-Token": TOK}});
+        if (r.ok) { location.reload(); return; }
+      } catch (e) {}
+      delay = Math.min(2000, Math.round(delay * 1.4));
+      setTimeout(step, delay);
+    };
+    setTimeout(step, delay);
+  }
+  function pollUpdateJob(jid){
+    if (updatePoll) { clearTimeout(updatePoll); updatePoll = null; }
+    const tick = async () => {
+      let jr;
+      try {
+        jr = await api("/api/update/job/" + encodeURIComponent(jid));
+      } catch (e) {
+        renderUpdateLog(["perdeu contato com a ponte durante a atualização"], "error", false);
+        setUpdateTriggersDisabled(false);
+        return;
+      }
+      const j = (jr && jr.job) ? jr.job : jr;
+      if (!j || (jr && jr.ok === false)) {
+        renderUpdateLog(["execução de atualização não encontrada"], "error", false);
+        setUpdateTriggersDisabled(false);
+        return;
+      }
+      renderUpdateLog(j.lines || [], j.status, !!j.diverged);
+      if (j.status === "running") {
+        updatePoll = setTimeout(tick, 500);
+        return;
+      }
+      if (j.status === "done" && j.restarting) {
+        waitBridgeAndReload();
+        return;
+      }
+      setUpdateTriggersDisabled(false);
+    };
+    updatePoll = setTimeout(tick, 500);
+  }
+  document.addEventListener("click", async e => {
+    const trg = e.target.closest("[data-brain-update]");
+    if (!trg) return;
+    e.preventDefault();
+    if (!LIVE) {
+      copyUpdateCmd();
+      return;
+    }
+    const back = document.getElementById("newsback");
+    if (back) {
+      back.hidden = false;
+      back.classList.add("open");
+    }
+    const fb = document.getElementById("newsfb");
+    if (fb) fb.textContent = "";
+    const log = document.getElementById("newslog");
+    if (log) { log.innerHTML = ""; log.hidden = false; }
+    setUpdateTriggersDisabled(true);
+    let res = null;
+    try {
+      const r = await fetch("/api/update", {
+        method: "POST",
+        headers: {"X-Brain-Token": TOK, "Content-Type": "application/json"},
+        body: "{}",
+      });
+      if (r.status === 401) {
+        toast("token inválido — rode ./brain serve e abra a URL impressa");
+        setUpdateTriggersDisabled(false);
+        return;
+      }
+      try { res = await r.json(); } catch (err) {}
+      if (r.status === 409 && res && res.job) {
+        pollUpdateJob(res.job);
+        return;
+      }
+      if (!r.ok || !res || !res.ok || !res.job) {
+        renderUpdateLog([(res && res.error) || ("erro " + r.status)], "error", false);
+        setUpdateTriggersDisabled(false);
+        return;
+      }
+      pollUpdateJob(res.job);
+    } catch (err) {
+      renderUpdateLog(["ponte fora do ar"], "error", false);
+      setUpdateTriggersDisabled(false);
+    }
+  });
+})();
 
 })();

@@ -5,7 +5,7 @@
 // normalização: o portfolio.html injeta só o recorte do portfólio — e instâncias antigas podem
 // não ter todas as chaves. Nenhuma leitura do painel pode ver undefined (boot OU refresh do serve).
 function normalizeBrain(m){
-  m.update = m.update || {version:"?", news:[]};
+  m.update = m.update || {}; m.update = Object.assign({version:"?", news:[], cli_cmd:"", checked_at:"", behind:0, ahead:0, remote_version:""}, m.update);
   m.counts = m.counts || {}; m.questions = m.questions || []; m.proposals = m.proposals || [];
   m.outbox = m.outbox || []; m.health = m.health || []; m.deliveries = m.deliveries || [];
   m.feedback = m.feedback || [];
@@ -1005,13 +1005,28 @@ window.addEventListener("hashchange", route);
 route();
 
 
-// ── versão + atualização (canto inferior direito; dados vêm do cache do render) ──
-// (dentro do MESMO IIFE do core: o M e o $ daqui não existem fora dele — badge morto desde que o core virou IIFE)
+// ── versão + atualização (rodapé da barra lateral; dados vêm do cache do render) ──
+// (dentro do MESMO IIFE do core: o M e o $ daqui não existem fora dele)
 (function(){
   const u = M.update || {};
   const b = document.getElementById("verbadge");
-  if(!b) return;
+  if (!b) return;
+  const back = document.getElementById("newsback");
+  const meta = document.getElementById("newsmeta");
+  const act = document.getElementById("newsact");
+  const log = document.getElementById("newslog");
+  const fb = document.getElementById("newsfb");
   const behind = (u.behind || 0) > 0;
+  const commitsTxt = u.behind + (u.behind === 1 ? " commit atrás" : " commits atrás");
+  const verTxt = "v" + (u.version || "?");
+  const transTxt = verTxt + " → v" + (u.remote_version || "?");
+  if (back) {
+    back.dataset.behind = String(u.behind || 0);
+    back.dataset.ahead = String(u.ahead || 0);
+    back.dataset.version = u.version || "";
+    back.dataset.remoteVersion = u.remote_version || "";
+    back.dataset.cliCmd = u.cli_cmd || "";
+  }
   const semNovidade = () => u.checked
     ? ["Tudo em dia por aqui. A lista completa mora no CHANGELOG.md do repositório."]
     : ["Ainda não verificamos se há atualizações — o noturno ou o comando `update --check` fazem isso."];
@@ -1020,19 +1035,37 @@ route();
     document.getElementById("newslist").innerHTML =
       news.map(n => '<div class="ni">' + esc(n) + "</div>").join("");
     document.getElementById("newstitle").textContent = behind ? "Atualização disponível" : "Novidades da versão";
+    if (meta) {
+      meta.textContent = behind
+        ? transTxt + " · " + commitsTxt + (u.checked_at ? " · verificado " + fmtDL(u.checked_at) : "")
+        : verTxt + (u.checked ? " · em dia" : "") + (u.checked_at ? " · verificado " + fmtDL(u.checked_at) : "");
+    }
     document.getElementById("newshow").textContent = behind
-      ? "v" + (u.version || "?") + " → v" + (u.remote_version || "?") + " · atualize com o comando `update`"
-      : "v" + (u.version || "?") + (u.checked_at ? " · verificado " + fmtDL(u.checked_at) : "");
-    document.getElementById("newsback").hidden = false;
+      ? "No terminal, use o comando `update`."
+      : "Instalação em dia." + (u.checked_at ? " · verificado " + fmtDL(u.checked_at) : "");
+    if (act) act.hidden = !behind;
+    if (log && !log.textContent) log.hidden = true;
+    if (fb) fb.textContent = "";
+    if (back) {
+      back.hidden = false;
+      back.classList.add("open");
+    }
   };
-  b.textContent = "v" + (u.version || "?") + (behind ? " · atualização" : "");
-  if(behind) b.classList.add("hasupd");
-  b.title = behind ? "atualização disponível (" + u.behind + " commits) — comando `update`"
-                   : "Segundo Cérebro v" + (u.version || "?") + " — em dia";
+  const closeNews = () => {
+    if (!back) return;
+    back.classList.remove("open");
+    back.hidden = true;
+  };
+  b.textContent = behind
+    ? transTxt + " · " + commitsTxt
+    : (u.checked ? verTxt + " · em dia" : verTxt);
+  b.classList.toggle("behind", behind);
+  b.title = behind ? "atualização disponível (" + commitsTxt + ") — comando `update`"
+                   : "Segundo Cérebro " + verTxt + (u.checked ? " — em dia" : "");
   b.addEventListener("click", openNews);
-  document.getElementById("newsclose").addEventListener("click", () => document.getElementById("newsback").hidden = true);
-  const back = document.getElementById("newsback");
-  back.addEventListener("click", e => { if(e.target === back) back.hidden = true; });
-  document.addEventListener("keydown", e => { if(e.key === "Escape") back.hidden = true; });
+  const closeBtn = document.getElementById("newsclose");
+  if (closeBtn) closeBtn.addEventListener("click", closeNews);
+  if (back) back.addEventListener("click", e => { if (e.target === back) closeNews(); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && back && back.classList.contains("open")) closeNews(); });
 })();
 })();

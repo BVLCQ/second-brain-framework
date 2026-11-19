@@ -404,18 +404,32 @@ body.con-open .clidot{display:none}
 }
 
 
-/* versão + atualização — canto inferior direito */
-.verbadge{position:fixed;right:14px;bottom:12px;z-index:60;border:1px solid var(--line);
-  background:var(--panel);color:var(--muted);border-radius:999px;padding:4px 12px;font-size:12.5px;
-  cursor:pointer;opacity:.85}
-.verbadge:hover{opacity:1;border-color:var(--ink)}
-.verbadge.hasupd{border-color:var(--accent);color:var(--accent);opacity:1;font-weight:600}
-.verbadge.hasupd::before{content:"⚡ ";font-weight:700}
+/* versão + atualização — rodapé da barra lateral */
+.sb-status{display:flex;flex-direction:column;gap:4px;padding:2px 6px 6px}
+.sb-stat-row{display:flex;align-items:center;gap:6px;width:100%;min-height:26px;padding:5px 8px;
+  border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--muted);
+  font-size:11.5px;text-align:left;cursor:pointer;line-height:1.3}
+.sb-stat-row:hover{border-color:var(--accent);color:var(--ink)}
+.sb-stat-row[hidden]{display:none}
+.verbadge{font-weight:500}
+.verbadge.behind{border-color:var(--accent);color:var(--accent);font-weight:600}
+.verbadge.behind::before{content:"⚡";font-weight:700}
 #newsback .palette{max-width:520px}
+.news-meta{margin:0;padding:8px 14px 4px;font-size:12.5px;color:var(--muted)}
+.news-meta:empty{display:none}
 #newslist{overflow:auto;padding:4px 14px}
 #newslist .ni{padding:8px 2px;border-bottom:1px solid var(--line);font-size:14px;line-height:1.45}
 #newslist .ni:last-child{border-bottom:none}
 #newslist .nv{color:var(--accent);font-weight:700;margin-right:6px}
+.news-log{margin:6px 14px 4px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;
+  background:var(--bg);font:12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;max-height:220px;overflow-y:auto;
+  white-space:pre-wrap;word-break:break-word}
+.news-log[hidden]{display:none}
+.news-log-line.ok{color:var(--ok)}
+.news-log-line.err{color:var(--risk)}
+.news-log-line.dim{color:var(--muted)}
+.news-fb{font-size:12.5px;color:var(--ok)}
+html[data-live="1"] .only-portrait,html:not([data-live="1"]) .only-live{display:none}
 
 /* ── metodologia ICE (rubric): overlay empilhável + tabela larga ────────── */
 .pal-scroll{max-height:70vh;overflow:auto;padding:12px 16px 16px}
@@ -731,9 +745,13 @@ body.obmode #faces, body.obmode #tabs, body.obmode #openpal { display: none; }
     <button class="kbtn" id="openpal">Comandos e busca<span><b>⌘K</b></span></button>
     <div class="spacer"></div>
     <div class="foot-row">
-      <div class="ownerchip"><span class="avatar" id="avatar">V</span><span><b class="own-name" id="ownername">—</b><small id="gen2"></small></span></div>
+      <div class="ownerchip"><span class="avatar" id="avatar">V</span><span><b class="own-name" id="ownername">—</b></span></div>
       <div class="spacer"></div>
       <button class="iconbtn" id="theme" title="alternar tema">☀</button>
+    </div>
+    <div class="sb-status" id="sb-status">
+      <button type="button" class="verbadge sb-stat-row" id="verbadge" aria-haspopup="dialog" title="versão e novidades">v?</button>
+      <button type="button" class="freshbadge sb-stat-row" id="freshbadge" hidden></button>
     </div>
   </aside>
   <main class="col">
@@ -767,14 +785,17 @@ body.obmode #faces, body.obmode #tabs, body.obmode #openpal { display: none; }
 </div>
 <div class="toast" id="toast"></div>
 
-<button class="verbadge" id="verbadge" title="versão e novidades">v?</button>
 <div class="pal-back" id="newsback" hidden>
   <div class="palette" role="dialog" aria-label="Novidades da versão">
     <div class="pin"><b id="newstitle">Novidades</b><span class="hint">esc fecha</span></div>
+    <p class="news-meta" id="newsmeta"></p>
     <div class="pal-list" id="newslist" style="position:static;max-height:60vh"></div>
+    <div class="news-log" id="newslog" hidden></div>
     <div class="row" style="padding:10px 14px;gap:8px">
       <span class="note-s" id="newshow"></span>
       <span class="spacer"></span>
+      <span class="news-fb" id="newsfb" aria-live="polite"></span>
+      <button type="button" class="btn primary" id="newsact" data-brain-update="1" hidden><span class="only-live">Atualizar agora</span><span class="only-portrait">Copiar comando</span></button>
       <button class="btn ghost" id="newsclose">fechar</button>
     </div>
   </div>
@@ -1182,10 +1203,9 @@ const norm = s => String(s || "").toLowerCase().normalize("NFD").replace(/[\u030
 const IS_MAC = typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent || "");
 const KMOD = IS_MAC ? "⌘K" : "Ctrl K";
 
-// ── sidebar: dono + data ────────────────────────────────────────────────
+// ── sidebar: dono ───────────────────────────────────────────────────────
 $("#ownername").textContent = D0.owner.name;
 $("#avatar").textContent = D0.owner.name.trim().slice(0, 1).toUpperCase();
-$("#gen2").textContent = "gerado " + D0.generated_at.slice(0, 10);
 
 window.renderTabs = function(view, TABS, PARENT){
   document.getElementById("tabs").innerHTML = TABS.map(function(t){
@@ -1248,6 +1268,7 @@ if (SERVE) {
   else { try { TOK = localStorage.getItem("brain-serve-token"); } catch (e) {} }
 }
 let LIVE = SERVE && !!TOK;
+document.documentElement.dataset.live = LIVE ? "1" : "0";
 // o ícone do app reaproveita esta aba (util.focus_open_tab) apontando-a para `/#t=<token>`: se a ponte foi reiniciada
 // o token mudou — guarda o novo, devolve a URL ao que era (a rota fica) e recarrega; token igual, só devolve a URL
 if (SERVE) window.addEventListener("hashchange", e => {
@@ -2884,7 +2905,10 @@ document.addEventListener("keydown", e => {
   }
   const openOv = document.querySelector(".pal-back.open");             // form/dialog aberto: só Esc fecha
   if (openOv) {
-    if (e.key === "Escape") openOv.remove();
+    if (e.key === "Escape") {
+      if (openOv.id === "newsback") { openOv.classList.remove("open"); openOv.hidden = true; }
+      else openOv.remove();
+    }
     return;
   }
   if (document.querySelector(".dd.open")) return;                      // dropdown de filtro cuida de si
@@ -4574,6 +4598,147 @@ async function exitOnboarding() {
 window.enterOnboarding = enterOnboarding;
 window.exitOnboarding = exitOnboarding;
 
+// ── atualização via ponte (/api/update) + cópia no retrato ──────────────
+(function(){
+  let updatePoll = null;
+  function setUpdateTriggersDisabled(disabled){
+    document.querySelectorAll("[data-brain-update]").forEach(el => { el.disabled = !!disabled; });
+  }
+  function renderUpdateLog(lines, status, diverged){
+    const log = document.getElementById("newslog");
+    if (!log) return;
+    log.hidden = false;
+    const rows = (lines || []).map(ln => {
+      const cls = ln.startsWith("✓") ? "ok" : (ln.startsWith("✗") || ln.startsWith("⚠") ? "err" : "dim");
+      const pref = (ln.startsWith("✓") || ln.startsWith("✗") || ln.startsWith("⚠"))
+        ? ""
+        : (status === "error" ? "✗ " : (status === "done" ? "✓ " : "… "));
+      return '<div class="news-log-line ' + cls + '">' + esc(pref + ln) + "</div>";
+    });
+    if (status === "error" && diverged) {
+      rows.push('<div class="news-log-line err">✗ Dica: rode o comando `update --rebase` no terminal.</div>');
+    }
+    log.innerHTML = rows.join("");
+    log.scrollTop = log.scrollHeight;
+  }
+  function copyUpdateCmd(){
+    const back = document.getElementById("newsback");
+    const cmd = (back && back.dataset.cliCmd) || "";
+    const fb = document.getElementById("newsfb");
+    const done = () => {
+      if (fb) fb.textContent = "Comando copiado";
+      toast("Comando copiado");
+    };
+    if (!cmd) return;
+    if (typeof navigator !== "undefined" && navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+      navigator.clipboard.writeText(cmd).then(done, () => { copyCmd(cmd); done(); });
+    } else {
+      copyCmd(cmd);
+      done();
+    }
+  }
+  function waitBridgeAndReload(){
+    const log = document.getElementById("newslog");
+    if (log) {
+      log.innerHTML += '<div class="news-log-line dim">… Reiniciando ponte…</div>';
+      log.scrollTop = log.scrollHeight;
+    }
+    const started = Date.now();
+    let delay = 500;
+    const step = async () => {
+      if (Date.now() - started > 20000) {
+        setUpdateTriggersDisabled(false);
+        const fb = document.getElementById("newsfb");
+        if (fb) fb.textContent = "Ponte demorou para voltar — recarregue a página.";
+        return;
+      }
+      try {
+        const r = await fetch("/api/data", {headers: {"X-Brain-Token": TOK}});
+        if (r.ok) { location.reload(); return; }
+      } catch (e) {}
+      delay = Math.min(2000, Math.round(delay * 1.4));
+      setTimeout(step, delay);
+    };
+    setTimeout(step, delay);
+  }
+  function pollUpdateJob(jid){
+    if (updatePoll) { clearTimeout(updatePoll); updatePoll = null; }
+    const tick = async () => {
+      let jr;
+      try {
+        jr = await api("/api/update/job/" + encodeURIComponent(jid));
+      } catch (e) {
+        renderUpdateLog(["perdeu contato com a ponte durante a atualização"], "error", false);
+        setUpdateTriggersDisabled(false);
+        return;
+      }
+      const j = (jr && jr.job) ? jr.job : jr;
+      if (!j || (jr && jr.ok === false)) {
+        renderUpdateLog(["execução de atualização não encontrada"], "error", false);
+        setUpdateTriggersDisabled(false);
+        return;
+      }
+      renderUpdateLog(j.lines || [], j.status, !!j.diverged);
+      if (j.status === "running") {
+        updatePoll = setTimeout(tick, 500);
+        return;
+      }
+      if (j.status === "done" && j.restarting) {
+        waitBridgeAndReload();
+        return;
+      }
+      setUpdateTriggersDisabled(false);
+    };
+    updatePoll = setTimeout(tick, 500);
+  }
+  document.addEventListener("click", async e => {
+    const trg = e.target.closest("[data-brain-update]");
+    if (!trg) return;
+    e.preventDefault();
+    if (!LIVE) {
+      copyUpdateCmd();
+      return;
+    }
+    const back = document.getElementById("newsback");
+    if (back) {
+      back.hidden = false;
+      back.classList.add("open");
+    }
+    const fb = document.getElementById("newsfb");
+    if (fb) fb.textContent = "";
+    const log = document.getElementById("newslog");
+    if (log) { log.innerHTML = ""; log.hidden = false; }
+    setUpdateTriggersDisabled(true);
+    let res = null;
+    try {
+      const r = await fetch("/api/update", {
+        method: "POST",
+        headers: {"X-Brain-Token": TOK, "Content-Type": "application/json"},
+        body: "{}",
+      });
+      if (r.status === 401) {
+        toast("token inválido — rode ./brain serve e abra a URL impressa");
+        setUpdateTriggersDisabled(false);
+        return;
+      }
+      try { res = await r.json(); } catch (err) {}
+      if (r.status === 409 && res && res.job) {
+        pollUpdateJob(res.job);
+        return;
+      }
+      if (!r.ok || !res || !res.ok || !res.job) {
+        renderUpdateLog([(res && res.error) || ("erro " + r.status)], "error", false);
+        setUpdateTriggersDisabled(false);
+        return;
+      }
+      pollUpdateJob(res.job);
+    } catch (err) {
+      renderUpdateLog(["ponte fora do ar"], "error", false);
+      setUpdateTriggersDisabled(false);
+    }
+  });
+})();
+
 })();
 
 /* núcleo compartilhado das 3 variantes — mesmas views, dados reais do demo.
@@ -4583,7 +4748,7 @@ window.exitOnboarding = exitOnboarding;
 // normalização: o portfolio.html injeta só o recorte do portfólio — e instâncias antigas podem
 // não ter todas as chaves. Nenhuma leitura do painel pode ver undefined (boot OU refresh do serve).
 function normalizeBrain(m){
-  m.update = m.update || {version:"?", news:[]};
+  m.update = m.update || {}; m.update = Object.assign({version:"?", news:[], cli_cmd:"", checked_at:"", behind:0, ahead:0, remote_version:""}, m.update);
   m.counts = m.counts || {}; m.questions = m.questions || []; m.proposals = m.proposals || [];
   m.outbox = m.outbox || []; m.health = m.health || []; m.deliveries = m.deliveries || [];
   m.feedback = m.feedback || [];
@@ -5583,13 +5748,28 @@ window.addEventListener("hashchange", route);
 route();
 
 
-// ── versão + atualização (canto inferior direito; dados vêm do cache do render) ──
-// (dentro do MESMO IIFE do core: o M e o $ daqui não existem fora dele — badge morto desde que o core virou IIFE)
+// ── versão + atualização (rodapé da barra lateral; dados vêm do cache do render) ──
+// (dentro do MESMO IIFE do core: o M e o $ daqui não existem fora dele)
 (function(){
   const u = M.update || {};
   const b = document.getElementById("verbadge");
-  if(!b) return;
+  if (!b) return;
+  const back = document.getElementById("newsback");
+  const meta = document.getElementById("newsmeta");
+  const act = document.getElementById("newsact");
+  const log = document.getElementById("newslog");
+  const fb = document.getElementById("newsfb");
   const behind = (u.behind || 0) > 0;
+  const commitsTxt = u.behind + (u.behind === 1 ? " commit atrás" : " commits atrás");
+  const verTxt = "v" + (u.version || "?");
+  const transTxt = verTxt + " → v" + (u.remote_version || "?");
+  if (back) {
+    back.dataset.behind = String(u.behind || 0);
+    back.dataset.ahead = String(u.ahead || 0);
+    back.dataset.version = u.version || "";
+    back.dataset.remoteVersion = u.remote_version || "";
+    back.dataset.cliCmd = u.cli_cmd || "";
+  }
   const semNovidade = () => u.checked
     ? ["Tudo em dia por aqui. A lista completa mora no CHANGELOG.md do repositório."]
     : ["Ainda não verificamos se há atualizações — o noturno ou o comando `update --check` fazem isso."];
@@ -5598,20 +5778,38 @@ route();
     document.getElementById("newslist").innerHTML =
       news.map(n => '<div class="ni">' + esc(n) + "</div>").join("");
     document.getElementById("newstitle").textContent = behind ? "Atualização disponível" : "Novidades da versão";
+    if (meta) {
+      meta.textContent = behind
+        ? transTxt + " · " + commitsTxt + (u.checked_at ? " · verificado " + fmtDL(u.checked_at) : "")
+        : verTxt + (u.checked ? " · em dia" : "") + (u.checked_at ? " · verificado " + fmtDL(u.checked_at) : "");
+    }
     document.getElementById("newshow").textContent = behind
-      ? "v" + (u.version || "?") + " → v" + (u.remote_version || "?") + " · atualize com o comando `update`"
-      : "v" + (u.version || "?") + (u.checked_at ? " · verificado " + fmtDL(u.checked_at) : "");
-    document.getElementById("newsback").hidden = false;
+      ? "No terminal, use o comando `update`."
+      : "Instalação em dia." + (u.checked_at ? " · verificado " + fmtDL(u.checked_at) : "");
+    if (act) act.hidden = !behind;
+    if (log && !log.textContent) log.hidden = true;
+    if (fb) fb.textContent = "";
+    if (back) {
+      back.hidden = false;
+      back.classList.add("open");
+    }
   };
-  b.textContent = "v" + (u.version || "?") + (behind ? " · atualização" : "");
-  if(behind) b.classList.add("hasupd");
-  b.title = behind ? "atualização disponível (" + u.behind + " commits) — comando `update`"
-                   : "Segundo Cérebro v" + (u.version || "?") + " — em dia";
+  const closeNews = () => {
+    if (!back) return;
+    back.classList.remove("open");
+    back.hidden = true;
+  };
+  b.textContent = behind
+    ? transTxt + " · " + commitsTxt
+    : (u.checked ? verTxt + " · em dia" : verTxt);
+  b.classList.toggle("behind", behind);
+  b.title = behind ? "atualização disponível (" + commitsTxt + ") — comando `update`"
+                   : "Segundo Cérebro " + verTxt + (u.checked ? " — em dia" : "");
   b.addEventListener("click", openNews);
-  document.getElementById("newsclose").addEventListener("click", () => document.getElementById("newsback").hidden = true);
-  const back = document.getElementById("newsback");
-  back.addEventListener("click", e => { if(e.target === back) back.hidden = true; });
-  document.addEventListener("keydown", e => { if(e.key === "Escape") back.hidden = true; });
+  const closeBtn = document.getElementById("newsclose");
+  if (closeBtn) closeBtn.addEventListener("click", closeNews);
+  if (back) back.addEventListener("click", e => { if (e.target === back) closeNews(); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && back && back.classList.contains("open")) closeNews(); });
 })();
 })();
 </script>

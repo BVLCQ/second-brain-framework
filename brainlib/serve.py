@@ -18,6 +18,8 @@ import os
 import secrets
 import shlex
 import shutil
+import subprocess
+import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -57,14 +59,65 @@ ALLOWED: dict[str, set[str] | None] = {
 DENY_HINT = "fora da allowlist da ponte — rode no terminal se for o caso"
 
 
+def _default_update_cmd(inst, on_line) -> int:
+    from .tui.bridge import FRAMEWORK
+    env = {**os.environ, "BRAIN_HOME": str(inst.root)}
+    proc = subprocess.Popen(
+        [sys.executable, str(FRAMEWORK / "brain"), "update"],
+        cwd=str(inst.root),
+        env=env,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        bufsize=1,
+    )
+    assert proc.stdout is not None
+    for raw_line in proc.stdout:
+        on_line(raw_line.rstrip("\r\n"))
+    return proc.wait()
+
+
+def _default_restart(state: _State) -> None:
+    from .tui.bridge import FRAMEWORK
+    port = state.port or (state.httpd.server_address[1] if state.httpd is not None else 8787)
+    env = {**os.environ, "BRAIN_HOME": str(state.inst.root), "BRAIN_SERVE_TOKEN": state.token}
+    if state.httpd is not None:
+        try:
+            state.httpd.shutdown()
+        finally:
+            state.httpd.server_close()
+    unregister(state.inst)
+    log = state.inst.logs / "serve.log"
+    state.inst.logs.mkdir(parents=True, exist_ok=True)
+    with open(log, "ab") as fh:
+        subprocess.Popen(
+            [sys.executable, str(FRAMEWORK / "brain"), "serve", "--port", str(port)],
+            cwd=str(state.inst.root),
+            env=env,
+            stdin=subprocess.DEVNULL,
+            stdout=fh,
+            stderr=fh,
+            start_new_session=True,
+        )
+
+
 class _State:
-    def __init__(self, inst, token: str, port: int = 0):
+    def __init__(self, inst, token: str, port: int = 0, update_cmd_fn=None, restart_fn=None):
         self.inst = inst
         self.token = token
         self.port = port
+        self.httpd = None
         self.lock = threading.Lock()                    # comandos serializados: ledger é append-only, não concorrente
         self.agent_lock = threading.Lock()              # estado das rodadas do agente (1 por vez)
         self.agent_jobs: dict[str, dict] = {}
+        self.update_lock = threading.Lock()             # atualização do framework via ponte (1 por vez)
+        self.update_jobs: dict[str, dict] = {}
+        self.update_active: str | None = None
+        self.update_cmd_fn = update_cmd_fn or _default_update_cmd
+        self.restart_fn = restart_fn or (lambda: _default_restart(self))
 
 
 ICON_ROUTES = {"/brain.svg": "ICON_SVG", "/brain-mark.svg": "ICON_MARK", "/brain-hero.svg": "ICON_HERO"}
@@ -517,6 +570,22 @@ class _Handler(BaseHTTPRequestHandler):
                     raw = self.state.agent_jobs.get(jid)
                     j = {k: (list(v) if k == "lines" else v) for k, v in raw.items() if not k.startswith("_")} if raw else None
                 self._json(200 if j else 404, {"ok": bool(j), "job": j})
+            elif path.startswith("/api/update/job/"):
+                jid = path.rsplit("/", 1)[1]
+                with self.state.update_lock:
+                    raw = self.state.update_jobs.get(jid)
+                    snap = {
+                        "ok": True,
+                        "id": raw["id"],
+                        "status": raw["status"],
+                        "lines": list(raw["lines"]),
+                        "exit_code": raw["exit_code"],
+                        "restarting": raw["restarting"],
+                        "diverged": raw["diverged"],
+                        "version_before": raw["version_before"],
+                        "version_after": raw["version_after"],
+                    } if raw else None
+                self._json(200 if snap else 404, snap or {"ok": False, "error": "atualização não encontrada"})
             elif path == "/api/data":
                 from . import render
                 with self.state.lock:
@@ -560,6 +629,9 @@ class _Handler(BaseHTTPRequestHandler):
                 return
             if path == "/api/agent":
                 self._agent_post()
+                return
+            if path == "/api/update":
+                self._update_post()
                 return
             if path == "/api/inbox/remove":
                 self._inbox_remove_post()
@@ -810,6 +882,70 @@ class _Handler(BaseHTTPRequestHandler):
         print(f"[serve] ⚡ {prompt} → job={job_id}", flush=True)
         self._json(200, {"ok": True, "id": job_id, "action": action_name, "status": "running"})
 
+    def _update_post(self):
+        # Sem bloqueio por BRAIN_NIGHTLY: `brain update` sincroniza só o código do framework
+        # (não grava eventos como dono nem toca o mundo exterior); serve já exige dono no boot.
+        from . import upstream
+        from .tui.bridge import FRAMEWORK
+        with self.state.lock:
+            inst = self._brain().inst
+        with self.state.update_lock:
+            active = self.state.update_active
+            if active and (self.state.update_jobs.get(active) or {}).get("status") == "running":
+                self._json(409, {"ok": False, "error": "atualização já em andamento", "job": active})
+                return
+            jid = secrets.token_urlsafe(12)
+            job = {
+                "id": jid,
+                "status": "running",
+                "lines": [],
+                "exit_code": None,
+                "restarting": False,
+                "diverged": False,
+                "version_before": upstream._version(FRAMEWORK),
+                "version_after": None,
+            }
+            self.state.update_jobs[jid] = job
+            self.state.update_active = jid
+            cmd_fn = self.state.update_cmd_fn or _default_update_cmd
+            restart_fn = self.state.restart_fn or (lambda: _default_restart(self.state))
+
+        def _worker():
+            def on_line(ln: str) -> None:
+                with self.state.update_lock:
+                    job["lines"].append(ln)
+                    if len(job["lines"]) > 400:
+                        del job["lines"][:-400]
+
+            rc = 1
+            try:
+                rc = int(cmd_fn(inst, on_line))
+            except Exception as e:  # noqa: BLE001
+                on_line(f"erro inesperado: {e}")
+                rc = 1
+            finally:
+                with self.state.update_lock:
+                    job["exit_code"] = rc
+                    if rc == 0:
+                        # Lê do disco: o módulo importado no daemon ainda carrega a versão pré-pull.
+                        job["version_after"] = upstream._version(FRAMEWORK)
+                        job["status"] = "done"
+                        job["restarting"] = True
+                    else:
+                        job["status"] = "error"
+                        job["diverged"] = (rc == 2)
+                        job["restarting"] = False
+                    if self.state.update_active == jid:
+                        self.state.update_active = None
+            if rc == 0:
+                t = threading.Timer(1.2, restart_fn)
+                t.daemon = True
+                t.start()
+
+        threading.Thread(target=_worker, daemon=True, name=f"serve-update-{jid}").start()
+        print(f"[serve] ↻ update → job={jid}", flush=True)
+        self._json(200, {"ok": True, "job": jid})
+
     def _onboard_post(self, action: str):
         """Passos do onboarding (brainlib/onboard.py). O corpo NUNCA vai para o log: carrega API keys."""
         from urllib.parse import unquote
@@ -950,12 +1086,18 @@ def unregister(inst) -> None:
 def serve(inst, port: int = 8787, open_browser: bool = False) -> int:
     if os.environ.get("BRAIN_NIGHTLY"):
         raise util.BrainError("o noturno nunca serve — a ponte CLI exige o dono presente", 3)
-    token = secrets.token_urlsafe(24)
-    _Handler.state = _State(inst, token, port)
-    url = f"http://127.0.0.1:{port}/#t={token}"
+    # a ponte que se substitui passa o token adiante — a página recarregada continua válida
+    token = (os.environ.pop("BRAIN_SERVE_TOKEN", "") or "").strip()
+    if len(token) < 16:
+        token = secrets.token_urlsafe(24)
     httpd = ThreadingHTTPServer(("127.0.0.1", port), _Handler)
     httpd.daemon_threads = True
-    registered = register(inst, url, port)
+    actual_port = httpd.server_address[1]
+    state = _State(inst, token, actual_port)
+    state.httpd = httpd
+    _Handler.state = state
+    url = f"http://127.0.0.1:{actual_port}/#t={token}"
+    registered = register(inst, url, actual_port)
     print(f"✓ ponte CLI no ar (Ctrl+C encerra)\n  {url}\n  file:// continua retrato: comandos só copiam")
     if not registered:
         print("  ⚠ outra ponte desta instância já está no ar: esta não vira a ponte do app (só esta URL)")
