@@ -790,5 +790,14 @@ def _score(o: Opportunity, data: dict, ev: dict) -> None:
 def build(events: list[dict]) -> State:
     st = State()
     for ev in events:
-        apply(st, ev)
+        try:
+            apply(st, ev)
+        except (KeyError, TypeError) as e:
+            seq = ev.get("seq", "?") if isinstance(ev, dict) else "?"
+            typ = ev.get("type", "?") if isinstance(ev, dict) else "?"
+            eid = ev.get("id", "?") if isinstance(ev, dict) else "?"
+            raise util.BrainError(
+                f"referência quebrada/evento inválido no ledger (seq {seq}, tipo {typ}, id {eid}): {e} — rode ./brain validate",
+                code=5,
+            ) from e
     return st

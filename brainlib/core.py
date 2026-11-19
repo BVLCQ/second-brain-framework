@@ -9,6 +9,7 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import sys
 from pathlib import Path
 
 from . import config, planning, proposals, schema, util
@@ -218,8 +219,14 @@ class Brain:
         try:
             from . import index
             index.update(self)
-        except Exception:                        # noqa: BLE001 — índice é acelerador, não verdade
-            pass
+        except Exception as e:                   # noqa: BLE001 — índice é acelerador, não verdade
+            try:
+                self.inst.logs.mkdir(parents=True, exist_ok=True)
+                with open(self.inst.logs / "index-errors.log", "a", encoding="utf-8") as fh:
+                    fh.write(f"{util.iso_now()} {type(e).__name__}: {e}\n")
+            except OSError:
+                pass
+            print(f"aviso: índice SQLite não atualizado ({e}) — rode ./brain index update", file=sys.stderr)
 
     def sweep_proposals(self) -> list[dict]:
         """Encerra (`proposal.superseded`, aceita/rejeitada) as propostas que o dono já resolveu por fora do painel."""

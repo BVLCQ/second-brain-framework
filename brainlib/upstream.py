@@ -233,10 +233,17 @@ def _version_at(root: Path, ref: str) -> str:
     return m.group(1) if m else "?"
 
 
+FRAMEWORK = Path(__file__).resolve().parents[1]
+
+
 # ── semeadura (compartilhada com `brain init`) ──────────────────────────────
 def seed_template(inst: config.Instance) -> list[str]:
     """Copia de template/ para o vault o que ainda não existe. Nunca sobrescreve."""
     tpl = inst.root / "template"
+    if not tpl.is_dir():
+        tpl = FRAMEWORK / "template"
+    if not tpl.is_dir():
+        return []
     created = []
     for src in sorted(tpl.rglob("*")):
         if src.is_dir():

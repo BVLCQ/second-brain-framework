@@ -81,6 +81,8 @@ def cmd_init(args, b: Brain) -> None:
     for name in ("brain.toml", "watch.toml", ".env"):
         dst = inst.config_dir / name
         src = inst.config_dir / f"{name}.example"
+        if not src.exists():
+            src = upstream.FRAMEWORK / "config" / f"{name}.example"
         if not dst.exists() and src.exists():
             text = src.read_text(encoding="utf-8")
             if name == "brain.toml" and owner_id:
@@ -104,7 +106,14 @@ def cmd_init(args, b: Brain) -> None:
             created.append(f"pessoa: {owner_id}")
     from . import perms
     perms.try_sync(config.load(inst.root))
-    print("✓ instância pronta" + (":\n  " + "\n  ".join(created) if created else " (nada a criar)"))
+    if not created and (not inst.planning_file.exists() or not (inst.config_dir / "brain.toml").exists()):
+        print(
+            f"⚠ nada semeado: arquivos essenciais ausentes "
+            f"(procurado em {upstream.FRAMEWORK / 'template'} e {upstream.FRAMEWORK / 'config'})",
+            file=sys.stderr,
+        )
+    else:
+        print("✓ instância pronta" + (":\n  " + "\n  ".join(created) if created else " (nada a criar)"))
 
 
 def cmd_person(args, b: Brain) -> None:
@@ -677,12 +686,11 @@ def cmd_validate(args, b: Brain) -> None:
         print(f"⚠ PLANNING: {w}")
     for p in problems:
         print(f"✗ {p}")
-    for alias, ids in people.alias_collisions(b.state):
-        print(f"⚠ alias ambíguo '{alias}': {', '.join(ids)}")
-    if not problems:
-        print(f"✓ ledger íntegro ({len(b.state.events)} eventos)")
     if problems:
         raise SystemExit(4)
+    for alias, ids in people.alias_collisions(b.state):
+        print(f"⚠ alias ambíguo '{alias}': {', '.join(ids)}")
+    print(f"✓ ledger íntegro ({len(b.state.events)} eventos)")
 
 
 def cmd_status(args, b: Brain) -> None:
