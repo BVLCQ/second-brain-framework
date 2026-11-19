@@ -12,6 +12,7 @@ import os
 import shlex
 import subprocess
 import sys
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
@@ -236,6 +237,8 @@ async def run_agent(inst, argv: list[str], on_line: Callable[[str], None], info:
         on_line(f"não consegui rodar {argv[0]}: {e}")
         return 127
 
+    deadline = time.monotonic() + timeout
+
     async def pump() -> None:
         assert proc.stdout is not None
         async for raw in proc.stdout:
@@ -244,7 +247,8 @@ async def run_agent(inst, argv: list[str], on_line: Callable[[str], None], info:
 
     try:
         await asyncio.wait_for(pump(), timeout=timeout)
-        info.rc = await proc.wait()
+        rem = max(1.0, deadline - time.monotonic())
+        info.rc = await asyncio.wait_for(proc.wait(), timeout=rem)
     except asyncio.TimeoutError:
         on_line(f"tempo esgotado ({timeout // 60} min)")
         info.rc = 124

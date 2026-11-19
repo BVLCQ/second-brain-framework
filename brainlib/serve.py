@@ -469,6 +469,24 @@ class _Handler(BaseHTTPRequestHandler):
         with self.state.lock:
             inst = self._brain().inst
         with self.state.agent_lock:
+            now = time.time()
+            for old in [k for k, j in self.state.agent_jobs.items()
+                        if j.get("status") != "running" and now - j.get("_started", 0) > 3600]:
+                self.state.agent_jobs.pop(old, None)
+
+            runner_cfg = inst.cfg.get("runner", {}) if isinstance(inst.cfg, dict) else {}
+            try:
+                timeout_min = int(runner_cfg.get("timeout_min", 10))
+            except (TypeError, ValueError):
+                timeout_min = 10
+            running_max_age = max(600, timeout_min * 60 + 300)
+
+            for j in self.state.agent_jobs.values():
+                if j.get("status") == "running" and now - j.get("_started", 0) > running_max_age:
+                    j["status"] = "error"
+                    j["rc"] = 124
+                    j.setdefault("lines", []).append("expirado: GC da ponte (job preso)")
+
             if any(j["status"] == "running" for j in self.state.agent_jobs.values()):
                 self._deny(409, "Já existe uma ação do agente em execução.")
                 return
@@ -477,8 +495,6 @@ class _Handler(BaseHTTPRequestHandler):
             if not argv or (inst.cfg["runner"].get("command") and not shutil.which(argv[0])):
                 self._deny(503, "Runner não configurado em [runner] no brain.toml.")
                 return
-            for old in [k for k, j in self.state.agent_jobs.items() if time.time() - j["_started"] > 3600]:
-                self.state.agent_jobs.pop(old, None)
             job_id = secrets.token_urlsafe(12)
             job = {
                 "id": job_id,
