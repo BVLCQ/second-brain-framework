@@ -12,7 +12,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-os.environ.setdefault("BRAIN_NOW", "2026-11-05T10:00:00-03:00")
+os.environ.setdefault("BRAIN_NOW", "2026-10-09T10:00:00-03:00")
 
 from brainlib import config, render, upstream, util                     # noqa: E402
 from brainlib.core import Brain                                        # noqa: E402

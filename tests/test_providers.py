@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-os.environ.setdefault("BRAIN_NOW", "2026-11-07T10:00:00-03:00")
+os.environ.setdefault("BRAIN_NOW", "2026-10-09T10:00:00-03:00")
 
 from brainlib import config, providers, util
 from brainlib.core import Brain
