@@ -1,3 +1,19 @@
+## 2.33.2 — o Brain instala e configura o LM Studio sozinho
+
+- **A detecção do LM Studio deixou de mentir.** Quem já tinha o app instalado via
+  "falta — baixar" só porque o servidor estava desligado — agora existem três
+  estados honestos (pronto · instalado · falta) na configuração guiada, no hub
+  "Seu Brain" e no doctor, cada um com a dica certa para o seu caso.
+- **Ativar o modo Embed traz o LM Studio ao estado do Brain, sozinho** (você fica
+  ciente, não executa): instala pelo instalador oficial quando não existe (no WSL
+  não instala — lá o LM Studio mora no host Windows), sobe o servidor :1234, baixa
+  o modelo bge-m3 (~635 MB, uma única vez — pelo espelho do Hugging Face quando o
+  catálogo do LM Studio não resolve o nome) e o carrega. Tudo narrado no log do
+  passo, ANTES de subir o servidor de memória — que valida as embeddings no boot
+  e antes podia morrer na primeira subida com o LM Studio fora do ar.
+- O guia de troubleshooting aponta `brain setup --only memoria` como o caminho
+  que resolve tudo sozinho quando o recall falha.
+
 ## 2.33.1 — passos do wizard sempre à vista (nota da correção)
 
 - **Correção de UI embarcada na leva 2.32.x**: a lista de passos da configuração
