@@ -1,3 +1,16 @@
+## 2.34.0 — o runtime de contêiner também pelo Brain: instala e sobe sozinho
+
+- **Mesma regra do LM Studio, agora para o OrbStack e o Docker** (ruling do dono):
+  ativar a memória em qualquer modo traz o runtime de contêiner ao estado que o Brain
+  precisa — no macOS instala o OrbStack pelo Homebrew (cask oficial) e sobe com
+  `orb start`; no Linux/WSL instala o Docker Engine pelo script oficial (get.docker.com,
+  baixado para arquivo antes de rodar) e sobe o daemon pelo systemd. Tudo narrado no
+  log do passo; sem Homebrew o Brain para com a receita honesta em vez de adivinhar.
+- **Três estados honestos para o OrbStack** na configuração guiada e no hub
+  "Seu Brain" (pronto · instalado, parado — ativar sobe · ausente — o Brain instala ao
+  ativar); instalado com o daemon parado nunca mais aparece como "falta — baixar".
+- O doctor aponta `brain setup --only memoria` como o caminho que instala e sobe.
+
 ## 2.33.2 — o Brain instala e configura o LM Studio sozinho
 
 - **A detecção do LM Studio deixou de mentir.** Quem já tinha o app instalado via

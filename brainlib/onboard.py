@@ -322,7 +322,10 @@ def _prereqs() -> dict:
     from . import setup
     if _PREREQ["value"] is None or time.time() - _PREREQ["at"] > 60:
         up = setup.lmstudio_up()
-        _PREREQ.update(at=time.time(), value={"docker": setup.docker_available(), "lmstudio": up,
+        dup = setup.docker_available()
+        _PREREQ.update(at=time.time(), value={"docker": dup,
+                                              "docker_state": setup.docker_state(up=dup),
+                                              "lmstudio": up,
                                               "lmstudio_state": setup.lmstudio_state(up=up)})
     return _PREREQ["value"]
 
@@ -370,7 +373,8 @@ def state(brain) -> dict:
         "watch_kinds": [list(k) for k in _watch.KINDS],
         "permissions": {"ok": perm.get("local") == "ok", "static": perm.get("static")},
         "memory": {"mode": {"embed": "lite"}.get(mem_mode, mem_mode),
-                   "docker": pre["docker"], "lmstudio": pre["lmstudio"],
+                   "docker": pre["docker"], "docker_state": pre["docker_state"],
+                   "lmstudio": pre["lmstudio"],
                    "lmstudio_state": pre["lmstudio_state"],
                    "llm_key": bool(env.get("HINDSIGHT_API_LLM_API_KEY")),
                    "llm_provider": cfg["memory"].get("llm_provider", ""),

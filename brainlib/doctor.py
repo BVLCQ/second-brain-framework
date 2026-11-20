@@ -64,8 +64,8 @@ def _machine_checks(cfg: dict, which=shutil.which, exists=None) -> list[dict]:
     if hindsight:
         out.append(_c("ok", "máquina", "runtime de contêiner presente") if docker else _c(
             "warn", "máquina",
-            "docker ausente com memória ligada — OrbStack no macOS (brew install --cask orbstack) "
-            "ou Docker Engine no Linux (curl -fsSL https://get.docker.com | sh)"))
+            "docker ausente com memória ligada — `brain setup --only memoria` instala e sobe "
+            "(OrbStack no macOS · Docker Engine no Linux/WSL)"))
         _lms_machine_check(cfg, out)
     elif not docker:
         out.append(_c("ok", "máquina", "docker ausente — só é preciso ao ligar a memória (embed/full)"))

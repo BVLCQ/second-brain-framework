@@ -312,12 +312,15 @@ class MoreStepTests(unittest.TestCase):
         from unittest import mock
         from brainlib import setup
         onboard._PREREQ.update(at=0.0, value=None)      # cache de 60 s vazaria o estado REAL da máquina
-        with mock.patch.object(setup, "docker_available", return_value=True), \
+        with mock.patch.object(setup, "docker_available", return_value=False), \
+                mock.patch.object(setup, "docker_state", return_value="installed"), \
                 mock.patch.object(setup, "lmstudio_up", return_value=False), \
                 mock.patch.object(setup, "lmstudio_state", return_value="installed"):
             st = onboard.state(self.b)
+        self.assertEqual(st["memory"]["docker_state"], "installed")
+        self.assertFalse(st["memory"]["docker"])
         self.assertEqual(st["memory"]["lmstudio_state"], "installed")
-        self.assertFalse(st["memory"]["lmstudio"])     # booleano segue (compat), estado diz o resto
+        self.assertFalse(st["memory"]["lmstudio"])     # booleanos seguem (compat), o estado diz o resto
 
 
 class OpenTests(unittest.TestCase):

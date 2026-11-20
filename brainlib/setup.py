@@ -192,6 +192,106 @@ def docker_available() -> bool:
     return _run(["docker", "version", "--format", "{{.Server.Version}}"], timeout=10)[0] == 0
 
 
+DOCKER_INSTALL_URL = "https://get.docker.com"            # Linux/WSL: script oficial do Docker Engine
+_ORB_APP = Path("/Applications/OrbStack.app")
+_ORB_XBIN_DOCKER = _ORB_APP / "Contents" / "MacOS" / "xbin" / "docker"
+
+
+def docker_installed(which=shutil.which, exists=None) -> bool:
+    """Existe um runtime de contêiner nesta máquina? (docker no PATH, xbin do OrbStack ou o app —
+    instalado ≠ daemon no ar; o app nunca aberto ainda não criou os symlinks do PATH.)"""
+    if which("docker"):
+        return True
+    for p in (_ORB_XBIN_DOCKER, _ORB_APP):
+        if exists is not None:
+            if exists(p):
+                return True
+        elif p.exists():
+            return True
+    return False
+
+
+def docker_state(up: bool | None = None, which=shutil.which, exists=None) -> str:
+    """`up` (daemon responde) · `installed` (existe, daemon parado) · `missing` (o Brain instala)."""
+    if up is None:
+        up = docker_available()
+    if up:
+        return "up"
+    return "installed" if docker_installed(which, exists) else "missing"
+
+
+def docker_ensure(ui, run=_run, which=shutil.which) -> bool:
+    """Traz o runtime de contêiner ao estado que o Brain precisa — instala se faltar e sobe o
+    daemon — narrando cada passo (mesma regra do LM Studio: o dono fica ciente, não executa).
+    macOS: OrbStack (cask oficial do Homebrew; `orb start` sobe). Linux/WSL: Docker Engine
+    (script oficial get.docker.com; systemd/service sobe o daemon). Outra plataforma: receita
+    honesta, nada executado."""
+    if docker_available():
+        return True
+    installed = docker_installed(which)
+    if util.on_macos():
+        if not installed:
+            brew = which("brew")
+            if not brew:
+                ui.say("✗ sem Homebrew para instalar o OrbStack — instale o Homebrew (brew.sh) "
+                       "ou o OrbStack (orbstack.dev) e rode `brain setup --only memoria` de novo")
+                return False
+            ui.say("instalando o OrbStack pelo Homebrew (cask oficial — baixa o app)…")
+            code, out = run([brew, "install", "--cask", "orbstack"], timeout=1800)
+            if code != 0:
+                ui.say(f"✗ instalação do OrbStack falhou: {out[:200]} — baixe em https://orbstack.dev")
+                return False
+            ui.say("✓ OrbStack instalado")
+        ui.say("subindo o OrbStack (a primeira abertura leva alguns segundos)…")
+        orb = which("orb") or (_ORB_APP / "Contents" / "MacOS" / "OrbStack")
+        code, out = run([str(orb), "start"], timeout=120)
+        if code != 0:
+            code, out = run(["open", "-a", "OrbStack"], timeout=60)
+        if code != 0 and not docker_available():
+            ui.say(f"✗ não consegui subir o OrbStack: {out[:200]} — abra o app uma vez e rode "
+                   "`brain setup --only memoria` de novo")
+            return False
+    elif util.on_linux():
+        if not installed:
+            ui.say("instalando o Docker Engine (script oficial get.docker.com — pode pedir a "
+                   "senha do sistema)…")
+            import tempfile
+            with tempfile.TemporaryDirectory() as td:
+                script = Path(td) / "get-docker.sh"
+                err = _fetch(DOCKER_INSTALL_URL, script, timeout=120)
+                if err:
+                    ui.say(f"✗ não consegui baixar o instalador do Docker ({err}) — manual: "
+                           "curl -fsSL https://get.docker.com | sh")
+                    return False
+                code, out = run(["sh", str(script)], timeout=1800)
+            if code != 0:
+                ui.say(f"✗ instalação do Docker falhou: {out[:200]} — manual: "
+                       "curl -fsSL https://get.docker.com | sh")
+                return False
+            ui.say("✓ Docker Engine instalado")
+        ui.say("subindo o daemon do Docker…")
+        code, out = run(["systemctl", "start", "docker"], timeout=60)
+        if code != 0:
+            code, out = run(["service", "docker", "start"], timeout=60)
+        if code != 0 and not docker_available():
+            ui.say(f"✗ daemon não subiu: {out[:200]} — `sudo systemctl start docker` (ou "
+                   "`sudo service docker start`) e rode `brain setup --only memoria` de novo")
+            return False
+    else:
+        ui.say("✗ plataforma sem runtime de contêiner suportado — no Windows, use o Brain "
+               "dentro do WSL2 (guides/plans/platform-support.md)")
+        return False
+    for _ in range(30):                                   # boot do daemon: até ~60 s
+        if docker_available():
+            break
+        time.sleep(2)
+    if not docker_available():
+        ui.say("✗ o runtime não respondeu ao `docker version` — veja o app/daemon no sistema")
+        return False
+    ui.say("✓ runtime de contêiner no ar")
+    return True
+
+
 def hindsight_health(url: str, timeout: int = 4) -> dict | None:
     try:
         with urllib.request.urlopen(f"{url.rstrip('/')}/health", timeout=timeout) as r:
@@ -894,10 +994,12 @@ def _run_memoria(brain, ui, mode_hint: str | None = None) -> None:
         memory._apply_mode(brain, "none")
         return
     if not docker_available() and hindsight_health(url) is None:
-        ui.say("⚠ Docker/OrbStack não encontrado e Hindsight fora do ar — instale o OrbStack "
-               "(orbstack.dev) e rode `brain setup --only memoria` de novo. Os demais passos seguem.")
-        if not ui.interactive:
-            return
+        ui.say("Docker/OrbStack — o Brain instala e sobe sozinho:")
+        if not docker_ensure(ui):
+            ui.say("⚠ runtime de contêiner indisponível e Hindsight fora do ar — o que faltou "
+                   "está narrado acima; `brain setup --only memoria` tenta de novo. Os demais passos seguem.")
+            if not ui.interactive:
+                return
     if mode == "full":
         gate = ui.ask('Modo full: texto do vault (reuniões, Slack, documentos) irá para a API de LLM '
                       'com a SUA chave (plano da memória §4.3). Digite "ok" para aceitar', "")

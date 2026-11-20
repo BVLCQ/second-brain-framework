@@ -298,8 +298,11 @@ o navegador; `.env` 0600.
   Studio sozinho no passo de memória (`setup.lmstudio_ensure`: instalador oficial,
   servidor :1234, `bge-m3` baixado e carregado, tudo narrado no job; WSL não instala —
   lá o LM Studio mora no host Windows). O dono fica ciente, não executa; instalado com
-  servidor desligado aparece como "instalado", nunca como "falta — baixar". A regra da
-  máquina nua segue valendo para o OrbStack e para o `up -d` manual.
+  servidor desligado aparece como "instalado", nunca como "falta — baixar". **Na
+  sequência o dono estendeu o ruling ao runtime de contêiner** (`setup.docker_ensure`:
+  OrbStack pelo Homebrew no macOS · Docker Engine pelo script oficial no Linux/WSL) —
+  a regra da máquina nua agora só vale para o `up -d` manual e para o que o instalador
+  do sistema não cobre (ex.: Homebrew ausente).
 - **Repo público:** mockups e exemplos usam os dados fictícios da padaria
 (`marina-demo`, `#seu-canal`); nenhum caminho de máquina em código/doc commitado.
 

@@ -607,5 +607,115 @@ class LmStudioTests(unittest.TestCase):
             self.assertTrue(any("LM Studio pronto para o Brain" in s for s in ui.said))
 
 
+class DockerEnsureTests(unittest.TestCase):
+    """docker_state + docker_ensure: OrbStack no macOS, Docker Engine no Linux/WSL — o Brain
+    instala e sobe sozinho (ruling do dono 2026-11-19, estendido na sequência)."""
+
+    def test_state_distingue_up_instalado_e_ausente(self):
+        from unittest import mock
+        xbin = Path("/Applications/OrbStack.app/Contents/MacOS/xbin/docker")
+        self.assertEqual(setup.docker_state(up=True), "up")
+        self.assertEqual(setup.docker_state(up=False, which=lambda c: "/usr/local/bin/docker"), "installed")
+        self.assertEqual(setup.docker_state(up=False, which=lambda c: None,
+                                            exists=lambda p: p == xbin), "installed")
+        with tempfile.TemporaryDirectory() as td:                # sem docker e sem OrbStack
+            with mock.patch.object(setup, "_ORB_APP", Path(td) / "OrbStack.app"), \
+                    mock.patch.object(setup, "_ORB_XBIN_DOCKER", Path(td) / "xbin" / "docker"):
+                self.assertEqual(setup.docker_state(up=False, which=lambda c: None), "missing")
+
+    def test_ensure_mac_instala_pelo_brew_e_sobe(self):
+        from unittest import mock
+        calls: list = []
+
+        def fake_run(cmd, cwd=None, timeout=120):
+            calls.append(cmd[:2])
+            return 0, "ok"
+
+        with tempfile.TemporaryDirectory() as td:
+            with mock.patch.object(setup, "_ORB_APP", Path(td) / "OrbStack.app"), \
+                    mock.patch.object(setup, "_ORB_XBIN_DOCKER", Path(td) / "xbin" / "docker"), \
+                    mock.patch.object(util, "on_macos", return_value=True), \
+                    mock.patch.object(setup, "docker_available",
+                                      side_effect=lambda: len(calls) > 1):    # sobe após o start
+                def which(c):
+                    return {"brew": "/opt/homebrew/bin/brew", "orb": "/usr/local/bin/orb"}.get(c)
+                ui = ScriptedUI([])
+                ok = setup.docker_ensure(ui, run=fake_run, which=which)
+        self.assertTrue(ok, ui.said)
+        self.assertIn(["/opt/homebrew/bin/brew", "install"], calls)
+        self.assertIn(["/usr/local/bin/orb", "start"], calls)
+        self.assertTrue(any("OrbStack instalado" in s for s in ui.said))
+        self.assertTrue(any("runtime de contêiner no ar" in s for s in ui.said))
+
+    def test_ensure_mac_sem_brew_da_receita_e_nada_executa(self):
+        from unittest import mock
+        calls: list = []
+
+        def no_run(cmd, cwd=None, timeout=120):
+            calls.append(cmd)
+            return 0, ""
+
+        with mock.patch.object(util, "on_macos", return_value=True), \
+                mock.patch.object(setup, "docker_available", return_value=False), \
+                mock.patch.object(setup, "_ORB_APP", Path("/nao/existe/OrbStack.app")), \
+                mock.patch.object(setup, "_ORB_XBIN_DOCKER", Path("/nao/existe/xbin/docker")):
+            ui = ScriptedUI([])
+            ok = setup.docker_ensure(ui, run=no_run, which=lambda c: None)
+        self.assertFalse(ok)
+        self.assertEqual(calls, [])                               # nada executa sem Homebrew
+        self.assertTrue(any("Homebrew" in s for s in ui.said))
+
+    def test_ensure_linux_instala_pelo_script_oficial_e_sobe(self):
+        from unittest import mock
+        calls: list = []
+
+        def fake_run(cmd, cwd=None, timeout=120):
+            calls.append(cmd[:2])
+            if cmd[0] == "sh":
+                return 0, "installed"
+            return 0, "ok"
+
+        with mock.patch.object(util, "on_macos", return_value=False), \
+                mock.patch.object(util, "on_linux", return_value=True), \
+                mock.patch.object(setup, "_ORB_APP", Path("/nao/existe/OrbStack.app")), \
+                mock.patch.object(setup, "_ORB_XBIN_DOCKER", Path("/nao/existe/xbin/docker")), \
+                mock.patch.object(setup, "_fetch",
+                                  side_effect=lambda url, dest, timeout=120:
+                                  (dest.write_text("#!/bin/sh\n", encoding="utf-8"), None)[1]), \
+                mock.patch.object(setup, "docker_available",
+                                  side_effect=lambda: len(calls) >= 2):   # sobe após o systemctl
+            ui = ScriptedUI([])
+            ok = setup.docker_ensure(ui, run=fake_run, which=lambda c: None)
+        self.assertTrue(ok, ui.said)
+        self.assertEqual(calls[0][0], "sh")                       # get-docker.sh baixado e executado do ARQUIVO
+        self.assertIn(["systemctl", "start"], calls)
+        self.assertTrue(any("Docker Engine instalado" in s for s in ui.said))
+        self.assertTrue(any("runtime de contêiner no ar" in s for s in ui.said))
+
+    def test_run_memoria_garante_docker_antes_do_compose(self):
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            order: list = []
+
+            def up() -> bool:
+                return "docker" in order                          # o ensure resolve; depois é True
+
+            with mock.patch.object(setup, "docker_available", side_effect=up), \
+                    mock.patch.object(setup, "hindsight_health", return_value=None), \
+                    mock.patch.object(setup, "docker_ensure",
+                                      side_effect=lambda ui_: order.append("docker") or True), \
+                    mock.patch.object(setup, "lmstudio_up", return_value=True), \
+                    mock.patch.object(setup, "compose_up",
+                                      side_effect=lambda *a, **k: order.append("compose") or True), \
+                    mock.patch.object(setup, "wait_hindsight", return_value=True), \
+                    mock.patch.object(setup, "_run", return_value=(0, "sync ok")), \
+                    mock.patch.object(memory, "setup", side_effect=lambda bb: ["brain"]):
+                ui = ScriptedUI([])
+                setup._run_memoria(b, ui, mode_hint="embed")
+            self.assertEqual(order[:2], ["docker", "compose"])
+            self.assertTrue(any("Brain instala e sobe sozinho" in s for s in ui.said))
+
+
 if __name__ == "__main__":
     unittest.main()

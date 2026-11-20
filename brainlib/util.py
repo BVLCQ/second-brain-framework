@@ -327,6 +327,16 @@ def _tab_prefix(url: str) -> str | None:
     return url.split("#", 1)[0] if url.startswith("file://") else None
 
 
+def on_macos() -> bool:
+    """True no macOS nativo. Seam de plataforma (ver in_wsl)."""
+    return sys.platform == "darwin"
+
+
+def on_linux() -> bool:
+    """True no Linux nativo ou WSL2. Seam de plataforma (ver in_wsl)."""
+    return sys.platform == "linux"
+
+
 def in_wsl() -> bool:
     """True dentro do WSL2 (Linux sob Windows). Seam de plataforma: no WSL o LM Studio
     mora no host Windows (plano platform-support) — instalar um segundo dentro do WSL
