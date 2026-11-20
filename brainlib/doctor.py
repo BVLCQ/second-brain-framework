@@ -401,6 +401,27 @@ def checks(brain, online: bool = False, probe_agent: bool = False, docker_probe=
             else:
                 out.append(_c("ok", "memória · reranker", f"{rer_s['label']} (chave presente no config/.env)"))
 
+        # Slot Decisão (opcional — off é o padrão de fábrica)
+        dec_s = st_prov["decision"]
+        dec_prov = dec_s["provider"]
+        dec_p = _prov.PROVIDERS["decision"].get(dec_prov)
+        if dec_prov in ("", "off"):
+            out.append(_c("ok", "memória · decisão",
+                          "desligado (padrão) — as operações usam só o LLM; ligar corta ~40% das chamadas"))
+        elif dec_p is None:
+            out.append(_c("error", "memória · decisão",
+                          f"provedor desconhecido ({dec_prov}) — `brain memory providers`"))
+        else:
+            kenv = dec_p.get("key_env", "")
+            if kenv and not env.get(kenv):
+                out.append(_c("error", "memória · decisão",
+                              f"decisão ({dec_prov}) sem a chave hsk_ no config/.env ({kenv}) — "
+                              f"`brain memory providers set decision --provider hindsight --key …` "
+                              "(ou volte a off)"))
+            else:
+                out.append(_c("ok", "memória · decisão",
+                              f"{dec_s['label']} (chave presente) — julga antes de chamar o LLM"))
+
         if mem_mode == "full" and llm_ok and online:
             try:
                 c = memory.cost(brain)

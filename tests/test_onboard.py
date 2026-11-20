@@ -719,8 +719,13 @@ class MemoryProvidersStateTests(unittest.TestCase):
         rer_by_key = {p["key"]: p for p in mem["providers"]["reranker"]}
         self.assertIn("off", rer_by_key)
         self.assertFalse(rer_by_key["off"]["cloud"])
+        dec_by_key = {p["key"]: p for p in mem["providers"]["decision"]}
+        self.assertEqual(set(dec_by_key), {"off", "hindsight"})
+        self.assertTrue(dec_by_key["off"]["recommended"])
+        self.assertFalse(dec_by_key["off"]["cloud"])
         self.assertIsInstance(mem["stack"], dict)
-        self.assertEqual(set(mem["stack"].keys()), {"llm", "embeddings", "reranker"})
+        self.assertEqual(set(mem["stack"].keys()), {"llm", "embeddings", "reranker", "decision"})
+        self.assertEqual(mem["dec_provider"], "off")
 
 
 class FinishAskTests(unittest.TestCase):

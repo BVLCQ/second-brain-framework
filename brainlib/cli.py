@@ -1589,12 +1589,13 @@ def build_parser() -> argparse.ArgumentParser:
     pw = ps.add_parser("show", help="o stack atual (chave: presença, nunca valor)")
     pw.add_argument("--json", action="store_true")
     pv = ps.add_parser("set", help="grava a escolha (config/.env + [memory]); recrie o container para aplicar")
-    pv.add_argument("slot", choices=["llm", "embeddings", "reranker"])
+    pv.add_argument("slot", choices=["llm", "embeddings", "reranker", "decision"])
     pv.add_argument("--provider", required=True,
                     help="llm (assinatura): claude-code|chatgpt|cursor|github-copilot|xai-oauth|nous · "
                          "llm (chave): anthropic|openai|fireworks|zai|gemini|minimax|custom · "
                          "embeddings: local|fireworks|openai|cohere|custom · "
-                         "reranker: off|fireworks|cohere|zeroentropy|openrouter|custom")
+                         "reranker: off|fireworks|cohere|zeroentropy|openrouter|custom · "
+                         "decision: off|hindsight (hs-decide-1-flash, US$ 0,02/1M — opcional)")
     pv.add_argument("--model", help="modelo (opcional em assinatura/anthropic; exigido em llm custom/openai/zai/gemini)")
     pv.add_argument("--models", help="llm por operação: retain=…,consolidation=…,mental_models=…,reflect=…,default=…")
     pv.add_argument("--base-url", help="endpoint (custom / openai-wire)")

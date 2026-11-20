@@ -1049,7 +1049,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual((app.face, app.p), (2, 1))
             self.assertIn("[Configurações]", self.text_of(app.query_one("#faces")))
             self.assertIn("Memória", str(app.query_one("#p1").border_title))
-            self.assertEqual([i.id for i in app.items(1)], ["prov:llm", "prov:embeddings", "prov:reranker"])
+            self.assertEqual([i.id for i in app.items(1)], ["prov:llm", "prov:embeddings", "prov:reranker", "prov:decision"])
             await pilot.press("tab")                                 # volta à Execução (carrossel)
             self.assertEqual((app.face, app.p, app.tab[2], app.cur().id), (0, 2, tab, sel))
             self.assertFalse(app.zoom)

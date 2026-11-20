@@ -61,8 +61,8 @@ class ProvidersTests(unittest.TestCase):
             self.assertNotIn("sk-1", toml)
             # stack() lê de volta com presença de chave
             st = providers.stack(b)
-            self.assertTrue(all(st[s]["key_present"] for s in providers.SLOTS))
-            self.assertTrue(all(st[s]["cloud"] for s in providers.SLOTS))
+            self.assertTrue(all(st[s]["key_present"] for s in providers.SLOTS if st[s]["key_env"]))
+            self.assertTrue(all(st[s]["cloud"] for s in providers.SLOTS if st[s]["key_env"]))
 
     def test_off_and_local_are_clean(self):
         with tempfile.TemporaryDirectory() as td:

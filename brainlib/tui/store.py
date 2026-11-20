@@ -778,7 +778,7 @@ class Store:
         out: list[Item] = []
         if panel == 1:
             from .. import providers as _prov
-            icons = {"llm": "LLM", "embeddings": "Embeddings", "reranker": "Reranker"}
+            icons = dict(_prov.SLOT_LABELS)
             st = _prov.stack(self.brain)
             for slot in _prov.SLOTS:
                 s = st[slot]

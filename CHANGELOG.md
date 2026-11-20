@@ -1,3 +1,20 @@
+## 2.35.0 — slot Decisão: o juiz rápido opcional que corta ~40% das chamadas do LLM
+
+- **Quarto motor, opcional, desligado de fábrica** (só no modo full): **Decisão — juiz
+  rápido**. Quem liga usa o `hs-decide-1-flash` da nuvem de inferência do Hindsight
+  (US$ 0,02/1M de entrada, chave `hsk_` por uso, sem assinatura): o modelo de 0,8B
+  treinado para os julgamentos internos (repete? muda? ajuda? é suficiente?) — o LLM só
+  é chamado quando algo precisa ser escrito. Na leaderboard oficial corta ~40% das
+  chamadas do LLM SUBINDO a qualidade (haiku-5.5: US$ 35→21 por 1k casos, 85.5→88.1).
+- **Pular é o caminho normal**: sem chave nenhuma, tudo funciona como sempre e cada um
+  paga só os tokens do próprio LLM — o padrão do wizard segue `Desligado`, com a chave
+  opcional para quem o dono cobrir (a dele e a da equipe). No wizard, na Configuração ›
+  Memória, no formulário da TUI e no CLI (`providers set decision --provider
+  hindsight --key hsk_…`).
+- O doctor fiscaliza: slot ligado sem chave = erro com o comando exato; desligado = ok
+  informativo. Se o decisor cai, as operações voltam ao caminho só-LLM (perde-se a
+  economia, nunca a operação) — e o recall segue com a fusão RRF de sempre.
+
 ## 2.34.0 — o runtime de contêiner também pelo Brain: instala e sobe sozinho
 
 - **Mesma regra do LM Studio, agora para o OrbStack e o Docker** (ruling do dono):

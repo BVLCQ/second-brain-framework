@@ -564,7 +564,9 @@ def _forms() -> list[Form]:
             why="o painel tem o passo Memória dedicado (Configurações), com o mesmo resultado"),
         Form("memory.provider", "Provedor da memória", ("memory", "providers", "set", "{slot}", "--provider", "{provider}"), (
             F("slot", "slot", choices=(("llm", "LLM — só vale no modo full"), ("embeddings", "embeddings"),
-                                       ("reranker", "reranker")), value="embeddings"),
+                                       ("reranker", "reranker"),
+                                       ("decision", "decisão — opcional (só full): juiz rápido que corta ~40% das chamadas")),
+              value="embeddings"),
             F("provider", "provedor", choices="@providers", depends="slot", init="@provider"),
             F("model", "modelo", ph="vazio = recomendado do provedor", hint="provider_model", arg="--model"),
             F("base_url", "base URL", ph="custom / openai-wire", show={"provider": ["custom"]}, arg="--base-url"),

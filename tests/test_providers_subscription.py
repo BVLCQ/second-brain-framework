@@ -196,7 +196,7 @@ class DoctorSlotAwareTests(unittest.TestCase):
             b.inst = config.load(b.inst.root)
             cks = self._checks(b)
             slot_cks = [c for c in cks if c["title"].startswith("memória · ")]
-            self.assertEqual(len(slot_cks), 3)
+            self.assertEqual(len(slot_cks), 4)                # llm · embeddings · reranker · decisão
             self.assertTrue(all(c["level"] == "ok" for c in slot_cks))
 
     def test_reranker_cohere_without_key_errors_only_on_reranker(self):
@@ -470,6 +470,92 @@ class ModelDefaultsTests(unittest.TestCase):
             env = config.load_env(b.inst)
             self.assertEqual(env.get("HINDSIGHT_API_RETAIN_LLM_MODEL"), "claude-haiku-5-5")   # tabela por operação
             self.assertEqual(env.get("HINDSIGHT_API_MENTAL_MODEL_REFRESH_LLM_MODEL"), "claude-haiku-5-5")
+
+
+class DecisionSlotTests(unittest.TestCase):
+    """Slot decisão (opcional): off de fábrica, hosted hindsight com chave hsk_, doctor fiscaliza."""
+
+    def test_registry_and_set_slot(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            self.assertIn("off", providers.PROVIDERS["decision"])
+            self.assertEqual(providers.PROVIDERS["decision"]["hindsight"]["model"], "hs-decide-1-flash")
+
+            providers.set_slot(b, "decision", "off")
+            env = config.load_env(b.inst)
+            self.assertEqual(env.get("HINDSIGHT_API_DECISION_MODEL_PROVIDER"), "none")
+            self.assertNotIn("HINDSIGHT_API_DECISION_MODEL_API_KEY", env)
+
+            providers.set_slot(b, "decision", "hindsight", key="hsk-demo-1")
+            env = config.load_env(b.inst)
+            self.assertEqual(env.get("HINDSIGHT_API_DECISION_MODEL_PROVIDER"), "hindsight")
+            self.assertEqual(env.get("HINDSIGHT_API_DECISION_MODEL_MODEL"), "hs-decide-1-flash")
+            self.assertEqual(env.get("HINDSIGHT_API_DECISION_MODEL_API_KEY"), "hsk-demo-1")
+            self.assertEqual(config.load(b.inst.root).cfg["memory"].get("decision_provider"), "hindsight")
+
+            st = providers.stack(b)["decision"]
+            self.assertEqual(st["provider"], "hindsight")
+            self.assertTrue(st["key_present"])
+
+    def test_doctor_off_ok_and_hindsight_needs_key(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            config.set_keys(b.inst, "memory", {
+                "engine": "hindsight", "extract": False, "cloud_llm": False,
+                "raw_awaiting_dump": "degraded", "embeddings_provider": "local",
+            })
+            b.inst = config.load(b.inst.root)
+            with mock.patch.object(setup, "brain_command_status", return_value="/usr/local/bin/brain"), \
+                    mock.patch.object(setup, "FRAMEWORK", Path("/nonexistent-fw")):
+                cks = doctor.checks(b)
+            dec = next(c for c in cks if c["title"] == "memória · decisão")
+            self.assertEqual(dec["level"], "ok")
+            self.assertIn("desligado", dec["detail"])
+
+            config.set_keys(b.inst, "memory", {"decision_provider": "hindsight"})
+            b.inst = config.load(b.inst.root)
+            with mock.patch.object(setup, "brain_command_status", return_value="/usr/local/bin/brain"), \
+                    mock.patch.object(setup, "FRAMEWORK", Path("/nonexistent-fw")):
+                cks = doctor.checks(b)
+            dec = next(c for c in cks if c["title"] == "memória · decisão")
+            self.assertEqual(dec["level"], "error")
+            self.assertIn("hsk_", dec["detail"])
+
+            b.inst.env_file.write_text("HINDSIGHT_API_DECISION_MODEL_API_KEY=hsk-demo-2\n", encoding="utf-8")
+            b.inst = config.load(b.inst.root)
+            with mock.patch.object(setup, "brain_command_status", return_value="/usr/local/bin/brain"), \
+                    mock.patch.object(setup, "FRAMEWORK", Path("/nonexistent-fw")):
+                cks = doctor.checks(b)
+            dec = next(c for c in cks if c["title"] == "memória · decisão")
+            self.assertEqual(dec["level"], "ok")
+
+    def test_validate_and_configure_fail_fast_without_key(self):
+        v = setup.validate_memory_setup({
+            "mode": "full", "consent": True,
+            "llm": {"provider": "claude-code"},
+            "embeddings": {"provider": "fireworks", "key": "fw-1"},
+            "decision": {"provider": "hindsight"},
+        })
+        self.assertEqual(v["dec"], "hindsight")
+        self.assertEqual(v["slots"]["decision"]["provider"], "hindsight")
+
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            with self.assertRaises(util.BrainError) as ctx:
+                setup.configure_memory(b, {
+                    "mode": "full", "consent": True,
+                    "llm": {"provider": "claude-code"},
+                    "embeddings": {"provider": "fireworks", "key": "fw-1"},
+                    "decision": {"provider": "hindsight"},     # sem chave e sem chave no .env
+                })
+            self.assertIn("HINDSIGHT_API_DECISION_MODEL_API_KEY", str(ctx.exception))
+
+    def test_off_is_the_default_and_skippable(self):
+        v = setup.validate_memory_setup({"mode": "full", "consent": True,
+                                         "llm": {"provider": "claude-code"},
+                                         "embeddings": {"provider": "fireworks", "key": "fw-1"}})
+        self.assertEqual(v["dec"], "off")                     # pular = só os tokens do próprio LLM
+        self.assertEqual(v["slots"]["decision"]["provider"], "off")
 
 
 if __name__ == "__main__":

@@ -383,6 +383,8 @@ def state(brain) -> dict:
                    "rer_provider": cfg["memory"].get("reranker_provider", ""),
                    "rer_key": bool(env.get("HINDSIGHT_API_RERANKER_LITELLM_SDK_API_KEY")
                                    or env.get("HINDSIGHT_API_RERANKER_COHERE_API_KEY")),
+                   "dec_provider": cfg["memory"].get("decision_provider", "") or "off",
+                   "dec_key": bool(env.get("HINDSIGHT_API_DECISION_MODEL_API_KEY")),
                    "providers": {slot: [{"key": k, "label": v["label"], "recommended": bool(v.get("recommended")),
                                          "cloud": not (v.get("local") or k == "off"),
                                          "subscription": slot == "llm" and v.get("family") == "subscription",
@@ -391,11 +393,12 @@ def state(brain) -> dict:
                                          "model": _providers.default_model(k) if slot == "llm" else "",
                                          "key_set": bool(v.get("key_env") and env.get(v["key_env"]))}
                                         for k, v in providers_registry[slot].items()]
-                                 for slot in ("llm", "embeddings", "reranker")},
+                                 for slot in ("llm", "embeddings", "reranker", "decision")},
                    "llm_auth": _llm_auth_state(brain, _providers),
                    "stack": {"llm": cfg["memory"].get("llm_provider", ""),
                              "embeddings": cfg["memory"].get("embeddings_provider", ""),
-                             "reranker": cfg["memory"].get("reranker_provider", "")}},
+                             "reranker": cfg["memory"].get("reranker_provider", ""),
+                             "decision": cfg["memory"].get("decision_provider", "") or "off"}},
         "keys": {k: {"label": v, "set": bool(env.get(k))} for k, v in KEY_NAMES.items()},
         "planning": {"goals": plan_goals, "proposal": progress(inst).get("proposal")},
         "maquina": maquina_state(brain),

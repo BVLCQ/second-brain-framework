@@ -19,7 +19,12 @@ import time
 
 from . import config, util
 
-SLOTS = ("llm", "embeddings", "reranker")
+SLOTS = ("llm", "embeddings", "reranker", "decision")
+
+# Rótulo curto de cada slot — fonte ÚNICA para TUI (store) e CLI (icons): lista que espelha
+# registro na mão vive do drift (o slot decisão enterrou o painel de provedores da TUI).
+SLOT_LABELS = {"llm": "LLM (extração/consolidação/mental models)", "embeddings": "Embeddings",
+               "reranker": "Reranker", "decision": "Decisão (System-1, opcional — corta ~40% das chamadas do LLM)"}
 
 # LLM por operação (cenário B do plano da memória): barato no alto volume, maior na síntese.
 LLM_OPS = (("retain", "RETAIN_LLM_MODEL"), ("consolidation", "CONSOLIDATION_LLM_MODEL"),
@@ -204,6 +209,19 @@ PROVIDERS: dict[str, dict[str, dict]] = {
         "custom": {"label": "Outro (endpoint compatível com Cohere /rerank — Jina, Voyage, BGE próprio…)",
                    "wire": "cohere", "key_env": _RER + "COHERE_API_KEY"},
     },
+    # Decisão (opcional, só vale no full): o juiz rápido System-1 de 0,8B do próprio
+    # Hindsight — responde julgamentos tipados (muda/novo/repete, ajuda?, é suficiente?)
+    # e corta ~40% das chamadas do LLM SUBINDO a qualidade (leaderboard: haiku-5.5
+    # $35→$21/1k casos, 85.5→88.1). Sem ele tudo funciona como sempre — quem pula paga
+    # só os tokens do próprio LLM. Off explícito = "none" no servidor pinado.
+    "decision": {
+        "off": {"label": "Desligado — só os tokens do próprio LLM (padrão)", "recommended": True},
+        "hindsight": {"label": "Hindsight — hs-decide-1-flash · US$ 0,02/1M de entrada (corta ~40% das chamadas do LLM)",
+                      "model": "hs-decide-1-flash", "recommended_cloud": True,
+                      "note": "Trechos pequenos de memória vão à nuvem de inferência do Hindsight para julgamento "
+                              "(hsk_ key em inference.hindsight.vectorize.io — por uso, sem assinatura).",
+                      "key_env": "HINDSIGHT_API_DECISION_MODEL_API_KEY"},
+    },
 }
 
 CLOUD_FLAGS = {"embeddings": "cloud_embeddings", "reranker": "cloud_reranker"}
@@ -273,6 +291,16 @@ def slot_env(slot: str, provider: str, *, model: str = "", models: dict | None =
         return env
     if slot == "embeddings":
         return _emb_env(p, model or p.get("model", ""), base_url, dimensions, key)
+    if slot == "decision":
+        # off explícito = "none" (valor de fábrica do servidor pinado) — trocar de lane limpa o estado
+        env = {"HINDSIGHT_API_DECISION_MODEL_PROVIDER": "none" if provider == "off" else "hindsight"}
+        if provider == "off":
+            return env
+        if model or p.get("model"):
+            env["HINDSIGHT_API_DECISION_MODEL_MODEL"] = model or p["model"]
+        if key and p.get("key_env"):
+            env[p["key_env"]] = key
+        return env
     return _rer_env(p, model or p.get("model", ""), base_url, candidates, key)
 
 
@@ -364,7 +392,7 @@ def stack(brain) -> dict:
     env = config.load_env(brain.inst)
     out: dict = {}
     for slot in SLOTS:
-        provider = mem.get(f"{slot}_provider", "") or ("off" if slot == "reranker" else
+        provider = mem.get(f"{slot}_provider", "") or ("off" if slot in ("reranker", "decision") else
                                                        "local" if slot == "embeddings" else "")
         p = PROVIDERS[slot].get(provider) or {}
         if slot == "llm":
@@ -481,8 +509,7 @@ def cli(args, brain) -> None:
     if getattr(args, "json", False):
         print(json.dumps(st, ensure_ascii=False, indent=2))
         return
-    icons = {"llm": "LLM (extração/consolidação/mental models)", "embeddings": "Embeddings",
-             "reranker": "Reranker"}
+    icons = dict(SLOT_LABELS)
     for slot in SLOTS:
         s = st[slot]
         if slot == "llm" and s.get("family") == "subscription":

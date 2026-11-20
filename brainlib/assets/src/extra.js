@@ -718,6 +718,10 @@ SETUP.memoria = box => {
         '<div id="s-ekey-wrap">' + fld("API key do embeddings" + keyChip(m.emb_key), keyInp("s-ekey"), "Fireworks ou OpenAI — conta própria do embeddings.") + "</div></div>" +
         '<div class="stgrid">' + fld("Reranking", selHTML(rerOpts, curRer(), "s-rer")) +
         '<div id="s-rkey-wrap">' + fld("API key do reranker" + keyChip(m.rer_key), keyInp("s-rkey"), "Fireworks ou Cohere.") + "</div></div>" +
+        '<div class="stgrid">' + fld("Decisão (opcional)", selHTML([["off", "Desligado — só os tokens do LLM (padrão)"],
+                                                                        ["hindsight", "Hindsight — hs-decide-1-flash · US$ 0,02/1M"]], (m.dec_provider || "off"), "s-dec")) +
+        '<div id="s-dkey-wrap" hidden>' + fld("Chave hsk_ (decisão)" + keyChip(m.dec_key), keyInp("s-dkey"),
+          "inference.hindsight.vectorize.io — por uso, sem assinatura. Pular = cada um paga só os tokens do próprio LLM.") + "</div></div>" +
         '<p class="small" id="s-samekey" hidden>LLM e embeddings no OpenAI: a mesma chave serve nos dois.</p>' +
         '<p class="small" id="s-rsame" hidden>Fireworks no embeddings e no reranker: a mesma chave serve nos dois.</p>' +
         '<label class="chk"><input type="checkbox" id="s-consent"> Entendo que trechos do vault vão à API dos provedores, com as minhas chaves, e que isso tem custo por uso.</label>' : "") +
@@ -748,11 +752,13 @@ SETUP.memoria = box => {
         const rsame = rer === "fireworks" && q("#s-emb").value === "fireworks";
         if (q("#s-rkey-wrap")) q("#s-rkey-wrap").hidden = rer === "off" || rsame;
         if (q("#s-rsame")) q("#s-rsame").hidden = !rsame;
+        if (q("#s-dkey-wrap")) q("#s-dkey-wrap").hidden = !q("#s-dec") || q("#s-dec").value !== "hindsight";
       }
     };
     if (q("#s-emb")) q("#s-emb").onchange = sync;
     if (q("#s-prov")) q("#s-prov").onchange = sync;
     if (q("#s-rer")) q("#s-rer").onchange = sync;
+    if (q("#s-dec")) q("#s-dec").onchange = sync;
     sync();
     q("#s-apply").onclick = e => stBusy(e.currentTarget, "aplicando…", async () => {
       const body = {mode: sel};
@@ -765,8 +771,13 @@ SETUP.memoria = box => {
         body.emb_key = q("#s-ekey") ? q("#s-ekey").value : "";
         body.reranker = q("#s-rer") ? q("#s-rer").value : "off";
         body.reranker_key = q("#s-rkey") ? q("#s-rkey").value : "";
+        body.decision = q("#s-dec")
+          ? {provider: q("#s-dec").value, key: q("#s-dkey") ? q("#s-dkey").value : ""}
+          : {provider: "off"};
         body.consent = q("#s-consent").checked;
         if (!body.consent) return stMsg(q("#s-m"), "late", "marque o aceite de envio à API");
+        if (body.decision.provider === "hindsight" && !body.decision.key && !m.dec_key)
+          return stMsg(q("#s-m"), "late", "cole a chave hsk_ da decisão — ou deixe Desligado (padrão)");
         const subscr = ["claude-code", "xai-oauth"].includes(body.provider);
         if (!subscr && !body.key && !m.llm_key) return stMsg(q("#s-m"), "late", "cole a API key do LLM");
         if (subscr && (m.llm_auth || {}).state === "pending" && (m.llm_auth || {}).provider === body.provider)
@@ -2949,6 +2960,10 @@ OBV.memoria = () => {
           {key: "openrouter", label: "OpenRouter — rerank-v3.5", recommended: false, cloud: true, key_set: !!m.rer_key},
           {key: "custom", label: "Outro (compatível com /rerank)", recommended: false, cloud: true, key_set: !!m.rer_key},
         ],
+        decision: [
+          {key: "off", label: "Desligado — só os tokens do próprio LLM (padrão)", recommended: true, cloud: false, key_set: false},
+          {key: "hindsight", label: "Hindsight — hs-decide-1-flash · US$ 0,02/1M de entrada (corta ~40% das chamadas do LLM)", recommended: false, cloud: true, key_set: !!m.dec_key},
+        ],
       };
 
   const stack = m.stack || {};
@@ -2959,11 +2974,12 @@ OBV.memoria = () => {
     if (slot === "llm") return m.llm_provider || "";
     if (slot === "embeddings") return m.emb_provider || "";
     if (slot === "reranker") return m.rer_provider || "";
+    if (slot === "decision") return m.dec_provider || "off";
     return "";
   };
   const listFor = slot => providers[slot] || [];
-  const chosen = {llm: "", embeddings: "", reranker: ""};
-  ["llm", "embeddings", "reranker"].forEach(slot => {
+  const chosen = {llm: "", embeddings: "", reranker: "", decision: ""};
+  ["llm", "embeddings", "reranker", "decision"].forEach(slot => {
     const list = listFor(slot);
     const curVal = stackDefault(slot);
     const found = list.find(p => p.key === curVal) || list.find(p => p.recommended) || list[0];
@@ -3036,7 +3052,7 @@ OBV.memoria = () => {
       $("#det").innerHTML = '<h2>Apenas livro-razão</h2><p class="sub" style="margin:0">O Brain usa o índice local de palavras. Você pode ativar o Embed ou o Full depois (a tarefa fica registrada se escolher "Fazer depois").</p>';
       return;
     }
-    const visibleSlots = sel === "full" ? ["llm", "embeddings", "reranker"] : ["embeddings", "reranker"];
+    const visibleSlots = sel === "full" ? ["llm", "embeddings", "reranker", "decision"] : ["embeddings", "reranker"];
     const anyCloud = visibleSlots.some(sl => (getProv(sl, chosen[sl]) || {}).cloud);
     const usesLocal = visibleSlots.some(sl => ["local", "lmstudio"].includes((getProv(sl, chosen[sl]) || {}).key));
     const prereqs = '<div class="rowline" style="margin-top:12px;padding-bottom:0;border-top:1px solid var(--line2)">' +
@@ -3052,6 +3068,7 @@ OBV.memoria = () => {
       (sel === "full" ? renderSlot("llm", "LLM — extração de fatos") : "") +
       renderSlot("embeddings", "Embeddings") +
       renderSlot("reranker", "Reranker") +
+      (sel === "full" ? renderSlot("decision", "Decisão — juiz rápido (opcional)") : "") +
       (anyCloud ? '<div class="egress">⚠ Provedor em nuvem: texto do vault sai da máquina — o doctor narra enquanto estiver ativo.</div>' : "") +
       prereqs +
       (sel === "full" ? '<label class="check"><input type="checkbox" id="consent"> Entendo que trechos das minhas reuniões, mensagens e documentos serão enviados à API do provedor, com a minha chave, e que isso tem custo por uso.</label>' : "");
@@ -3102,10 +3119,11 @@ OBV.memoria = () => {
     }
     if (sel === "full") {
       body.llm = readSlot("llm");
+      body.decision = readSlot("decision");
       body.consent = !!($("#consent") && $("#consent").checked);
       if (!body.consent) return obMsg($("#m"), "err", "Para o modo Full, marque o aceite de envio à API.");
     }
-    const checkSlots = sel === "full" ? [["llm", "LLM"], ["embeddings", "Embeddings"], ["reranker", "Reranker"]]
+    const checkSlots = sel === "full" ? [["llm", "LLM"], ["embeddings", "Embeddings"], ["reranker", "Reranker"], ["decision", "Decisão"]]
       : (sel === "embed" ? [["embeddings", "Embeddings"], ["reranker", "Reranker"]] : []);
     for (const pair of checkSlots) {
       const p = getProv(pair[0], body[pair[0]].provider);

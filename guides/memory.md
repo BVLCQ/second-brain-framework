@@ -271,6 +271,7 @@ Três slots independentes, escolhidos no wizard e re-editáveis a qualquer momen
 | **LLM** (só `full`) | — | Anthropic ✓ (Haiku 5.5 em TUDO, esforço max — régua do dono) · claude-code/xai-oauth (assinatura) · Fireworks (DeepSeek v4.1) · Z.ai (glm-5.3-flash) · OpenAI (gpt-6-luna) · Gemini (3.1-flash-lite) · MiniMax (M3.1-Flash) · custom | wizard · `brain memory providers set llm …` · TUI Configurações · painel |
 | **Embeddings** | embed: local — LM Studio bge-m3 (zero egress) · **full: Fireworks `qwen3-embedding-8b` @1536 (só-nuvem)** | Fireworks `qwen3-embedding-8b` @1536 · OpenAI · Cohere · custom | idem |
 | **Reranker** | off — fusão RRF (veredito 2026-11-07: local reprovado no gate de 400 ms) | Fireworks `qwen3-reranker-8b` (top-50) · Cohere · ZeroEntropy · OpenRouter · custom | idem |
+| **Decisão** (só `full`) | **off — cada um paga só os tokens do próprio LLM (pular é normal)** | Hindsight `hs-decide-1-flash` — US$ 0,02/1M de entrada, chave `hsk_` por uso | idem |
 
 Regras do desenho:
 
@@ -345,6 +346,27 @@ na frente da tabela do servidor pinado (estudo 2026-11-19, leaderboard oficial d
 
 O default é gravado EXPLÍCITO no `config/.env` (o que aplicou é o que o `stack` mostra).
 Modelo digitado vence: vale para todas as operações. `custom` continua exigindo modelo.
+
+### Decisão (opcional) — o juiz rápido que corta ~40% das chamadas do LLM
+
+Quarto slot, **só no modo full**, **desligado de fábrica**: pular é o caminho normal — sem
+ele, cada operação funciona como sempre e cada pessoa paga só os tokens do próprio LLM.
+Quem liga usa o **hs-decide-1-flash** (Hindsight Inference): o modelo de 0,8B treinado
+para os julgamentos que o servidor faz (isso repete? muda? ajuda? é suficiente?) — o LLM
+só é chamado quando algo precisa ser escrito. Na leaderboard oficial isso **cortou ~40%
+das chamadas do LLM SUBINDO a qualidade** (haiku-5.5: US$ 35→21 por 1k casos, 85.5→88.1).
+
+- **Custo**: US$ 0,02 por 1M de tokens de ENTRADA, por uso, sem assinatura — medido em
+  ~US$ 0,64 por 1k casos (≈ 25 julgamentos por caso). A chave `hsk_` sai de
+  `inference.hindsight.vectorize.io` e cola no wizard (ou `brain memory providers set
+  decision --provider hindsight --key …`). Dono cobre a sua e as da equipe; quem não quer
+  cola nada e fica no padrão.
+- **Egress**: trechos pequenos de memória vão à nuvem de inferência do Hindsight para
+  julgamento — mesmo gate narrado dos outros provedores de nuvem.
+- **Segurança de queda**: se o decisor falha, consolidação/reflect/páginas voltam ao
+  caminho só-LLM (perde-se a economia, nunca a operação). Recall segue com RRF.
+- **Servidor**: o pin 1.2.0 já suporta (off = `none`, o valor de fábrica); o doctor aponta
+  chave ausente com o comando exato quando o slot está ligado.
 
 ## Migração de instâncias antigas (0.10.x · dois bancos · sem harnesses)
 
