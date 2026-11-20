@@ -1592,7 +1592,7 @@ def build_parser() -> argparse.ArgumentParser:
     pv.add_argument("slot", choices=["llm", "embeddings", "reranker"])
     pv.add_argument("--provider", required=True,
                     help="llm (assinatura): claude-code|chatgpt|cursor|github-copilot|xai-oauth|nous · "
-                         "llm (chave): anthropic|openai|fireworks|zai|gemini|custom · "
+                         "llm (chave): anthropic|openai|fireworks|zai|gemini|minimax|custom · "
                          "embeddings: local|fireworks|openai|cohere|custom · "
                          "reranker: off|fireworks|cohere|zeroentropy|openrouter|custom")
     pv.add_argument("--model", help="modelo (opcional em assinatura/anthropic; exigido em llm custom/openai/zai/gemini)")

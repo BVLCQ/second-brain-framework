@@ -47,9 +47,9 @@ class ProvidersTests(unittest.TestCase):
                              "fireworks_ai/fireworks/qwen3-reranker-8b")
             self.assertEqual(env["HINDSIGHT_API_RERANKER_MAX_CANDIDATES"], "50")
             self.assertEqual(env["HINDSIGHT_API_LLM_PROVIDER"], "anthropic")
-            # recomendados por operação (cenário B)
+            # recomendados por operação: Haiku 5.5 em tudo (régua do dono, esforço max)
             self.assertEqual(env["HINDSIGHT_API_RETAIN_LLM_MODEL"], "claude-haiku-5-5")
-            self.assertEqual(env["HINDSIGHT_API_MENTAL_MODEL_REFRESH_LLM_MODEL"], "claude-sonnet-5-5")
+            self.assertEqual(env["HINDSIGHT_API_MENTAL_MODEL_REFRESH_LLM_MODEL"], "claude-haiku-5-5")
             # escolha no [memory], chave NUNCA
             mem = b.inst.cfg["memory"]
             self.assertEqual(mem["embeddings_provider"], "fireworks")

@@ -13,7 +13,7 @@ from brainlib import cli, config, doctor, memory, providers, setup, util
 from brainlib.core import Brain
 
 SUBSCRIPTION_IDS = ("claude-code", "chatgpt", "cursor", "github-copilot", "xai-oauth", "nous")
-KEY_IDS = ("anthropic", "openai", "fireworks", "zai", "gemini", "custom")
+KEY_IDS = ("anthropic", "openai", "fireworks", "zai", "gemini", "minimax", "custom")
 
 
 def _inst(tmp: Path) -> config.Instance:
@@ -91,10 +91,14 @@ class SetSlotAndStackTests(unittest.TestCase):
 
             mem = b.inst.cfg["memory"]
             self.assertEqual(mem["llm_provider"], "claude-code")
-            self.assertEqual(mem.get("llm_models", ""), "")
+            # tabela Haiku 5.5 por operação (régua do dono) vai ao [memory] e ao .env
+            self.assertEqual(mem.get("llm_models", ""),
+                             "retain=claude-haiku-5-5,consolidation=claude-haiku-5-5,"
+                             "mental_models=claude-haiku-5-5,reflect=claude-haiku-5-5,default=claude-haiku-5-5")
 
             env = config.load_env(b.inst)
             self.assertEqual(env["HINDSIGHT_API_LLM_PROVIDER"], "claude-code")
+            self.assertEqual(env["HINDSIGHT_API_LLM_REASONING_EFFORT"], "max")
             self.assertNotIn("HINDSIGHT_API_LLM_API_KEY", env)
 
             st = providers.stack(b)["llm"]
@@ -409,15 +413,18 @@ class ModelDefaultsTests(unittest.TestCase):
             self.assertTrue(providers.default_model(pid), f"{pid} sem default conhecido")
 
     def test_default_model_precedence(self):
-        # cura do registro vence a tabela do servidor
+        # cura do registro (pesquisada na leaderboard da Hindsight, 2026-11-19) vence a
+        # tabela do servidor pinado em TODOS os curados
         self.assertEqual(providers.default_model("anthropic"),
-                         providers.PROVIDERS["llm"]["anthropic"]["models"]["default"])
+                         providers.PROVIDERS["llm"]["anthropic"]["models"]["default"])   # haiku-5.5
         self.assertEqual(providers.default_model("fireworks"),
                          providers.PROVIDERS["llm"]["fireworks"]["model"])
-        # sem cura: default do servidor pinado (sondado da imagem)
-        self.assertEqual(providers.default_model("gemini"), "gemini-3.5-flash")
-        self.assertEqual(providers.default_model("claude-code"), "claude-sonnet-4-5-20250929")
-        self.assertEqual(providers.default_model("xai-oauth"), "grok-4.5")
+        self.assertEqual(providers.default_model("openai"), "gpt-6-luna")
+        self.assertEqual(providers.default_model("zai"), "glm-5.3-flash")
+        self.assertEqual(providers.default_model("gemini"), "gemini-3.1-flash-lite")
+        self.assertEqual(providers.default_model("minimax"), "MiniMax-M3.1-Flash")
+        self.assertEqual(providers.default_model("claude-code"), "claude-haiku-5-5")     # régua do dono
+        self.assertEqual(providers.default_model("xai-oauth"), "grok-4.7")               # = preço do 4.6
         self.assertEqual(providers.default_model("custom"), "")
 
     def test_set_slot_blank_model_writes_default_explicit(self):
@@ -425,7 +432,18 @@ class ModelDefaultsTests(unittest.TestCase):
             b = _brain(Path(td))
             providers.set_slot(b, "llm", "openai", key="ok-1")
             env = config.load_env(b.inst)
-            self.assertEqual(env.get("HINDSIGHT_API_LLM_MODEL"), "gpt-4o-mini")
+            self.assertEqual(env.get("HINDSIGHT_API_LLM_MODEL"), "gpt-6-luna")
+
+    def test_haiku_effort_max_written_for_both_claude_lanes(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            for provider in ("anthropic", "claude-code"):
+                providers.set_slot(b, "llm", provider)
+                env = config.load_env(b.inst)
+                self.assertEqual(env.get("HINDSIGHT_API_LLM_REASONING_EFFORT"), "max")
+                self.assertEqual(env.get("HINDSIGHT_API_RETAIN_LLM_MODEL"), "claude-haiku-5-5")
+                self.assertEqual(env.get("HINDSIGHT_API_MENTAL_MODEL_REFRESH_LLM_MODEL"),
+                                 "claude-haiku-5-5")   # Sonnet saiu: régua do dono é Haiku em tudo
 
     def test_set_slot_custom_without_model_still_refuses(self):
         with tempfile.TemporaryDirectory() as td:
@@ -450,8 +468,8 @@ class ModelDefaultsTests(unittest.TestCase):
                                          "", consent=True)
             setup._providers_step(b, ui, ["llm"])
             env = config.load_env(b.inst)
-            self.assertEqual(env.get("HINDSIGHT_API_RETAIN_LLM_MODEL"), "claude-haiku-5-5")   # cenário B intacto
-            self.assertEqual(env.get("HINDSIGHT_API_MENTAL_MODEL_REFRESH_LLM_MODEL"), "claude-sonnet-5-5")
+            self.assertEqual(env.get("HINDSIGHT_API_RETAIN_LLM_MODEL"), "claude-haiku-5-5")   # tabela por operação
+            self.assertEqual(env.get("HINDSIGHT_API_MENTAL_MODEL_REFRESH_LLM_MODEL"), "claude-haiku-5-5")
 
 
 if __name__ == "__main__":

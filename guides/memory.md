@@ -268,7 +268,7 @@ Três slots independentes, escolhidos no wizard e re-editáveis a qualquer momen
 
 | Slot | Default | Nuvem recomendada | Onde muda |
 |---|---|---|---|
-| **LLM** (só `full`) | — | Anthropic (Haiku extração/consolidação · Sonnet mental models — cenário B) · Fireworks · Z.ai · custom | wizard · `brain memory providers set llm …` · TUI Configurações · painel |
+| **LLM** (só `full`) | — | Anthropic ✓ (Haiku 5.5 em TUDO, esforço max — régua do dono) · claude-code/xai-oauth (assinatura) · Fireworks (DeepSeek v4.1) · Z.ai (glm-5.3-flash) · OpenAI (gpt-6-luna) · Gemini (3.1-flash-lite) · MiniMax (M3.1-Flash) · custom | wizard · `brain memory providers set llm …` · TUI Configurações · painel |
 | **Embeddings** | embed: local — LM Studio bge-m3 (zero egress) · **full: Fireworks `qwen3-embedding-8b` @1536 (só-nuvem)** | Fireworks `qwen3-embedding-8b` @1536 · OpenAI · Cohere · custom | idem |
 | **Reranker** | off — fusão RRF (veredito 2026-11-07: local reprovado no gate de 400 ms) | Fireworks `qwen3-reranker-8b` (top-50) · Cohere · ZeroEntropy · OpenRouter · custom | idem |
 
@@ -322,19 +322,29 @@ pendente — a memória nunca morre em silêncio. Reautenticar é clicar o mesmo
 Nota ToS (documentada do Hindsight): provedores por assinatura são para **uso pessoal,
 máquina local** — exatamente o caso do Brain. Para uso compartilhado/servidor, use
 provedor de chave (`anthropic`, `gemini`…). O Google **não tem** faixa de assinatura no
-Hindsight: Gemini (`gemini-3.8-flash` default) é pela chave do AI Studio.
+Hindsight: Gemini é pela chave do AI Studio (o Brain recomenda a `gemini-3.1-flash-lite`).
 
 ### Modelos: campo livre, vazio = recomendado do provedor
 
 Todo provedor de LLM mostra o campo **Modelo** (assinatura inclusive). Vazio aplica o
-recomendado — o placeholder diz exatamente qual. A precedência: **cura do Brain** (Anthropic
-por operação — cenário B; Fireworks `deepseek-v4p1-flash`) → **default do servidor Hindsight
-pinado** (`providers.SERVER_DEFAULT_MODELS`, sondado da imagem do compose: `gpt-4o-mini` no
-OpenAI, `gemini-3.5-flash` no Gemini, `claude-sonnet-4-5-20250929` no Claude Code, `grok-4.5`
-no SuperGrok…). O default é gravado EXPLÍCITO no `config/.env` — o que aplicou é o que o
-`stack` mostra. Modelo digitado vence: vale para todas as operações (a tabela por operação
-fica fora); o docs upstream anda na frente do pin (gpt-5-nano · haiku-5-5 · gemini-3.8-flash
-· glm-5.3-flash) — qualquer um dos novos basta digitar. `custom` continua exigindo modelo.
+recomendado — o placeholder diz exatamente qual. As recomendações são **curadas pelo Brain**
+na frente da tabela do servidor pinado (estudo 2026-11-19, leaderboard oficial da Hindsight
++ preço de catálogo):
+
+- **Anthropic e Claude Code**: `claude-haiku-5-5` em TODAS as operações, esforço `max`
+  (régua do dono — superou o antigo cenário B com Sonnet: haiku-5.5+decide é a melhor
+  qualidade acessível, 88.5 all-ops, 14/14 idiomas no retain, e $0.10/$0.50 até 100k).
+- **OpenAI/ChatGPT**: `gpt-6-luna` (#2 geral, $11/1k; retain 95.8 @ $0.43/1k).
+- **Z.ai**: `glm-5.3-flash` (#1 VALOR — $9.33/1k all-ops; #1 consolid. e reflect).
+- **Gemini**: `gemini-3.1-flash-lite` ($0.25/$1.50) — **não** a 3.8-flash: 3-6× o preço e
+  MAIS FRACA no retain (84.0 vs 88.3).
+- **Fireworks**: DeepSeek `v4p1-flash` (#5 geral; #2 consolidação).
+- **MiniMax** (novo no menu): `MiniMax-M3.1-Flash` — **campeão de extração** (retain 96.4,
+  qualidade 98.8, $0.81/1k; $0.15/$0.60 o 1M).
+- **SuperGrok**: `grok-4.7` — exatamente o preço do 4.6 ($2/$6): ficar no 4.5 não economiza nada.
+
+O default é gravado EXPLÍCITO no `config/.env` (o que aplicou é o que o `stack` mostra).
+Modelo digitado vence: vale para todas as operações. `custom` continua exigindo modelo.
 
 ## Migração de instâncias antigas (0.10.x · dois bancos · sem harnesses)
 

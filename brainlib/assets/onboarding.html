@@ -888,17 +888,18 @@ V.memoria = () => {
     ? m.providers
     : {
         llm: [
-          {key: "claude-code", label: "Claude Code (assinatura Claude Pro/Max)", recommended: false, cloud: true, model: "claude-sonnet-4-5-20250929", subscription: true, flow: "claude-token", key_set: false},
+          {key: "claude-code", label: "Claude Code (assinatura Claude Pro/Max)", recommended: false, cloud: true, model: "claude-haiku-5-5", subscription: true, flow: "claude-token", key_set: false},
           {key: "chatgpt", label: "ChatGPT (sign-in / assinatura Plus/Pro)", recommended: false, cloud: true, model: "gpt-6-luna", subscription: true, key_set: false},
           {key: "cursor", label: "Cursor (assinatura)", recommended: false, cloud: true, model: "auto", subscription: true, key_set: false},
           {key: "github-copilot", label: "GitHub Copilot (assinatura)", recommended: false, cloud: true, model: "gpt-5.6-terra", subscription: true, key_set: false},
-          {key: "xai-oauth", label: "xAI / SuperGrok (sign-in)", recommended: false, cloud: true, model: "grok-4.5", subscription: true, flow: "xai-device", key_set: false},
+          {key: "xai-oauth", label: "xAI / SuperGrok (sign-in)", recommended: false, cloud: true, model: "grok-4.7", subscription: true, flow: "xai-device", key_set: false},
           {key: "nous", label: "Nous Portal (assinatura)", recommended: false, cloud: true, model: "deepseek/deepseek-v4-flash", subscription: true, key_set: false},
           {key: "anthropic", label: "Anthropic", recommended: true, cloud: true, model: "claude-haiku-5-5", key_set: !!m.llm_key},
-          {key: "fireworks", label: "Fireworks", recommended: false, cloud: true, model: "accounts/fireworks/models/deepseek-v4p1-flash", key_set: !!m.llm_key},
-          {key: "openai", label: "OpenAI", recommended: false, cloud: true, model: "gpt-4o-mini", key_set: !!m.llm_key},
-          {key: "zai", label: "Z.ai (GLM, plano coding)", recommended: false, cloud: true, model: "glm-4.5-flash", key_set: !!m.llm_key},
-          {key: "gemini", label: "Google Gemini (chave do AI Studio)", recommended: false, cloud: true, model: "gemini-3.5-flash", key_set: !!m.llm_key},
+          {key: "fireworks", label: "Fireworks — DeepSeek v4.1-Flash", recommended: false, cloud: true, model: "accounts/fireworks/models/deepseek-v4p1-flash", key_set: !!m.llm_key},
+          {key: "openai", label: "OpenAI", recommended: false, cloud: true, model: "gpt-6-luna", key_set: !!m.llm_key},
+          {key: "zai", label: "Z.ai (GLM, plano coding)", recommended: false, cloud: true, model: "glm-5.3-flash", key_set: !!m.llm_key},
+          {key: "gemini", label: "Google Gemini (chave do AI Studio)", recommended: false, cloud: true, model: "gemini-3.1-flash-lite", key_set: !!m.llm_key},
+          {key: "minimax", label: "MiniMax — M3.1-Flash (campeão de extração)", recommended: false, cloud: true, model: "MiniMax-M3.1-Flash", key_set: !!m.llm_key},
           {key: "custom", label: "Outro (OpenAI-compatível)", recommended: false, cloud: true, key_set: !!m.llm_key},
         ],
         embeddings: [

@@ -1,3 +1,19 @@
+## 2.33.0 — recomendações de modelo reais: leaderboard da Hindsight + preço de catálogo
+
+- **Anthropic e Claude Code: Haiku 5.5 em TODAS as operações, esforço max** (régua do dono,
+  superando o antigo cenário B com Sonnet nos mental models). A leaderboard oficial da
+  Hindsight confirma: haiku-5.5 é a melhor qualidade acessível (88.5 all-ops com decide;
+  14/14 idiomas no retain) e a 5.5 derrubou o preço em ~90% ($0.10/$0.50 até 100k de prompt).
+- **Cada provedor com o modelo certo por valor**, não o default velho do servidor pinado:
+  OpenAI `gpt-6-luna` (#2 geral, retain 95.8 @ $0.43/1k) · Z.ai `glm-5.3-flash` (#1 VALOR,
+  $9.33/1k all-ops) · Gemini `gemini-3.1-flash-lite` ($0.25/$1.50 — a 3.8-flash custa 3-6×
+  mais e é mais fraca na extração) · SuperGrok `grok-4.7` (idêntico em preço ao 4.6: ficar
+  no 4.5 não economiza nada) · Fireworks DeepSeek v4.1-Flash mantido.
+- **MiniMax entra no menu**: `MiniMax-M3.1-Flash` é o campeão de extração da leaderboard
+  (retain 96.4, qualidade 98.8, $0.81/1k casos; $0.15/$0.60 o 1M de tokens).
+- O esforço `max` vai como `HINDSIGHT_API_LLM_REASONING_EFFORT` no config/.env nas duas
+  faixas Claude; o placeholder do campo Modelo segue mostrando o recomendado de cada um.
+
 ## 2.32.1 — modelo do LLM à mão: vazio = recomendado do provedor
 
 - **Campo Modelo para todo provedor de LLM** (antes só OpenAI/custom): assinatura ou chave,

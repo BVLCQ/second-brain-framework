@@ -86,6 +86,13 @@ PROVIDERS: dict[str, dict[str, dict]] = {
             "key_env": "",
             "cost_mode": "subscription",
             "rate_limit_note": _SUB_NOTE,
+            # Régua do dono (2026-11-19): Haiku 5.5 em TODAS as operações, esforço max —
+            # leaderboard da Hindsight: haiku-5.5+decide é a melhor qualidade acessível
+            # (88.5 all-ops; 14/14 idiomas no retain) e a 5.5 derrubou o preço em ~90%.
+            "models": {"retain": "claude-haiku-5-5", "consolidation": "claude-haiku-5-5",
+                       "mental_models": "claude-haiku-5-5", "reflect": "claude-haiku-5-5",
+                       "default": "claude-haiku-5-5"},
+            "effort": "max",
             "setup_hint": "Autentique pelo botão Autenticar (painel) ou `brain memory auth claude-code`: "
                           "o token de longo prazo do `claude setup-token` vai para o config/.env.",
         },
@@ -95,6 +102,7 @@ PROVIDERS: dict[str, dict[str, dict]] = {
             "key_env": "",
             "cost_mode": "subscription",
             "rate_limit_note": _SUB_NOTE,
+            "models": {"default": "gpt-6-luna"},   # #2 geral na leaderboard ($11/1k c/ decide; retain 95.8)
             "setup_hint": "Login por navegador no servidor de memória (hindsight-admin chatgpt login) — "
                           "nesta instalação Docker é manual; prefira claude-code ou uma chave de API.",
         },
@@ -104,6 +112,7 @@ PROVIDERS: dict[str, dict[str, dict]] = {
             "key_env": "",
             "cost_mode": "subscription",
             "rate_limit_note": _SUB_NOTE,
+            "models": {"default": "auto"},
             "setup_hint": "Exige o cursor-agent logado no servidor de memória — não disponível na instalação "
                           "Docker do Brain; prefira claude-code ou uma chave de API.",
         },
@@ -114,7 +123,8 @@ PROVIDERS: dict[str, dict[str, dict]] = {
             "cost_mode": "subscription",
             "rate_limit_note": _SUB_NOTE,
             "setup_hint": "Exige login do Copilot no servidor de memória, ou COPILOT_GITHUB_TOKEN/GH_TOKEN "
-                          "no config/.env (o container lê o arquivo inteiro).",
+                          "no config/.env (o container lê o arquivo inteiro). Valor fraco pra memória: o "
+                          "default do servidor (gpt-5.6-terra) é o pior da leaderboard (73 pontos, $332/1k).",
         },
         "xai-oauth": {
             "label": "xAI / SuperGrok (sign-in)",
@@ -122,6 +132,7 @@ PROVIDERS: dict[str, dict[str, dict]] = {
             "key_env": "",
             "cost_mode": "subscription",
             "rate_limit_note": _SUB_NOTE,
+            "models": {"default": "grok-4.7"},     # mesmo preço do 4.6 ($2/$6) — sem razão pra ficar no 4.5
             "setup_hint": "Autentique pelo botão Autenticar (painel) ou `brain memory auth xai-oauth`: "
                           "código de dispositivo que você aprova no navegador; o token renova sozinho.",
         },
@@ -136,21 +147,32 @@ PROVIDERS: dict[str, dict[str, dict]] = {
         },
         # ── Chave de API ─────────────────────────────────────────────────────
         "anthropic": {"label": "Anthropic", "family": "key", "cost_mode": "api_key", "recommended": True,
+                      # Régua do dono (2026-11-19): Haiku 5.5 em TODAS as operações (o antigo cenário B
+                      # com Sonnet nos mental models foi superado — haiku-5.5 tem a melhor qualidade
+                      # acessível na leaderboard e $0.10/$0.50 até 100k de prompt), esforço max.
                       "models": {"retain": "claude-haiku-5-5", "consolidation": "claude-haiku-5-5",
-                                 "mental_models": "claude-sonnet-5-5", "reflect": "claude-sonnet-5-5",
+                                 "mental_models": "claude-haiku-5-5", "reflect": "claude-haiku-5-5",
                                  "default": "claude-haiku-5-5"},
+                      "effort": "max",
                       "key_env": "HINDSIGHT_API_LLM_API_KEY"},
         "openai": {"label": "OpenAI", "family": "key", "cost_mode": "api_key",
+                   "model": "gpt-6-luna",        # #2 geral ($11/1k c/ decide; retain 95.8 @ $0.43)
                    "key_env": "HINDSIGHT_API_LLM_API_KEY"},
-        "fireworks": {"label": "Fireworks", "family": "key", "cost_mode": "api_key", "recommended": True,
+        "fireworks": {"label": "Fireworks — DeepSeek v4.1-Flash", "family": "key", "cost_mode": "api_key", "recommended": True,
                       "model": "accounts/fireworks/models/deepseek-v4p1-flash",
                       "base_url": "https://api.fireworks.ai/inference/v1", "wire": "openai",
                       "key_env": "HINDSIGHT_API_LLM_API_KEY"},
         "zai": {"label": "Z.ai (GLM, plano coding)", "family": "key", "cost_mode": "api_key",
+                "model": "glm-5.3-flash",        # #1 valor da leaderboard ($9.33/1k; consolid. e reflect #1)
                 "base_url": "https://api.z.ai/api/coding/paas/v4",
                 "wire": "openai", "key_env": "HINDSIGHT_API_LLM_API_KEY"},
         "gemini": {"label": "Google Gemini (chave do AI Studio)", "family": "key", "cost_mode": "api_key",
+                   "model": "gemini-3.1-flash-lite",   # valor do Google: $0.25/$1.50 — 3.8-flash custa
+                   # 3-6× mais e é MAIS FRACA no retain (84.0 vs 88.3): qualidade sobe só no all-ops caro
                    "key_env": "HINDSIGHT_API_LLM_API_KEY"},
+        "minimax": {"label": "MiniMax — M3.1-Flash (campeão de extração)", "family": "key", "cost_mode": "api_key",
+                    "model": "MiniMax-M3.1-Flash",    # retain 96.4 (qualidade 98.8) @ $0.81/1k; $0.15/$0.60
+                    "key_env": "HINDSIGHT_API_LLM_API_KEY"},
         "custom": {"label": "Outro (OpenAI-compatível)", "family": "key", "cost_mode": "api_key",
                    "wire": "openai", "key_env": "HINDSIGHT_API_LLM_API_KEY"},
     },
@@ -233,6 +255,8 @@ def slot_env(slot: str, provider: str, *, model: str = "", models: dict | None =
                 m = ops.get(op) or (model if op == "default" else "")
                 if m:
                     env[f"HINDSIGHT_API_{envk}"] = m
+            if p.get("effort"):
+                env["HINDSIGHT_API_LLM_REASONING_EFFORT"] = p["effort"]
             return env
         env = {"HINDSIGHT_API_LLM_PROVIDER": "openai" if p.get("wire") == "openai" else provider}
         if p.get("wire") == "openai":
@@ -244,6 +268,8 @@ def slot_env(slot: str, provider: str, *, model: str = "", models: dict | None =
                 env[f"HINDSIGHT_API_{envk}"] = m
         if key and p.get("key_env"):
             env[p["key_env"]] = key
+        if p.get("effort"):
+            env["HINDSIGHT_API_LLM_REASONING_EFFORT"] = p["effort"]
         return env
     if slot == "embeddings":
         return _emb_env(p, model or p.get("model", ""), base_url, dimensions, key)

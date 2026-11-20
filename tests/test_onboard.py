@@ -193,7 +193,7 @@ class StepTests(unittest.TestCase):
         from brainlib import setup as _setup
         v = _setup.validate_memory_setup({"mode": "full", "consent": True, "key": "sk-x", "provider": "openai"})
         self.assertEqual(v["provider"], "openai")
-        self.assertEqual(v["model"], "")
+        self.assertEqual(v["model"], "gpt-6-luna")
         # embed aceita local ou nuvem — nada além disso
         with self.assertRaises(util.BrainError):
             onboard.apply_memory(self.b, {"mode": "embed", "embeddings": "turbo"})

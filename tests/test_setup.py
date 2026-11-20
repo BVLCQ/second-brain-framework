@@ -319,14 +319,14 @@ class ProviderRegistryTests(unittest.TestCase):
             "embeddings": {"provider": "fireworks", "key": "fw-1"},
         })
         self.assertEqual(v["provider"], "zai")
-        self.assertEqual(v["model"], "")          # vazio = o default entra no set_slot (gravado explícito)
+        self.assertEqual(v["model"], "glm-5.3-flash")   # cura do registro prefills o recomendado
         with tempfile.TemporaryDirectory() as td:
             b = _brain(Path(td))
             from brainlib import providers
             res = providers.set_slot(b, "llm", "zai", key="zk-1")
             self.assertEqual(res["provider"], "zai")
             env = config.load_env(b.inst)
-            self.assertEqual(env.get("HINDSIGHT_API_LLM_MODEL"), providers.SERVER_DEFAULT_MODELS["zai"])
+            self.assertEqual(env.get("HINDSIGHT_API_LLM_MODEL"), "glm-5.3-flash")
 
     def test_custom_without_base_url_refuses(self):
         with self.assertRaises(util.BrainError):
