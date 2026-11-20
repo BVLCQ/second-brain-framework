@@ -1,3 +1,14 @@
+## 2.33.1 — passos do wizard sempre à vista (nota da correção)
+
+- **Correção de UI embarcada na leva 2.32.x**: a lista de passos da configuração
+  guiada (modo primeira vez F8 do painel e rota `/onboarding`) escondia opções
+  em janelas baixas — o container dos passos encolhia num rolo
+  interno sem indicação (círculo cortado no meio, 8 dos 11 passos sumiam numa
+  janela de 573 px). Os passos agora têm altura natural (`flex: 1 0 auto`, sem
+  rolo interno): se faltar espaço, quem rola é a própria barra lateral; com
+  altura normal, tudo cabe sem rolagem. Entrou junto com a leva 2.32.x; esta
+  entrada apenas credita a correção no histórico.
+
 ## 2.33.0 — recomendações de modelo reais: leaderboard da Hindsight + preço de catálogo
 
 - **Anthropic e Claude Code: Haiku 5.5 em TODAS as operações, esforço max** (régua do dono,
