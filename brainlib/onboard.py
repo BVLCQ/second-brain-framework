@@ -384,6 +384,7 @@ def state(brain) -> dict:
                                          "subscription": slot == "llm" and v.get("family") == "subscription",
                                          "flow": _providers.AUTH_FLOWS.get(k, "") if slot == "llm" else "",
                                          "hint": v.get("setup_hint", ""),
+                                         "model": _providers.default_model(k) if slot == "llm" else "",
                                          "key_set": bool(v.get("key_env") and env.get(v["key_env"]))}
                                         for k, v in providers_registry[slot].items()]
                                  for slot in ("llm", "embeddings", "reranker")},

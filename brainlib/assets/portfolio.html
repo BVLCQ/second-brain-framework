@@ -1918,7 +1918,7 @@ SETUP.memoria = box => {
         '<div id="s-auth-wrap" hidden>' + fld("Assinatura — sem chave de API" + ((m.llm_auth || {}).state === "ok" ? ' <span class="chip h-em-dia">autenticado</span>' : ((m.llm_auth || {}).state === "pending" ? ' <span class="chip h-late">autenticar</span>' : "")),
           '<button class="btn" type="button" id="s-auth">' + ((m.llm_auth || {}).state === "ok" ? "Reautenticar" : "Autenticar") + "</button>",
           "A credencial nasce aqui mesmo (job narrado) — nunca passa pela tela.") + "</div></div>" +
-        '<div class="stgrid" id="s-model-wrap"' + (m.llm_provider === "openai" ? "" : " hidden") + ">" + fld("Modelo do LLM", '<input type="text" id="s-model" placeholder="gpt-… (exigido no OpenAI)">') + "</div>" +
+        '<div class="stgrid" id="s-model-wrap">' + fld("Modelo do LLM", '<input type="text" id="s-model" placeholder="vazio = recomendado do provedor">') + "</div>" +
         '<div class="stgrid">' + fld("Embeddings", selHTML(embOpts(true), curEmb(true), "s-emb")) +
         '<div id="s-ekey-wrap">' + fld("API key do embeddings" + keyChip(m.emb_key), keyInp("s-ekey"), "Fireworks ou OpenAI — conta própria do embeddings.") + "</div></div>" +
         '<div class="stgrid">' + fld("Reranking", selHTML(rerOpts, curRer(), "s-rer")) +
@@ -1938,7 +1938,12 @@ SETUP.memoria = box => {
       } else if (sel === "full" && q("#s-emb")) {
         const openai = q("#s-prov") && q("#s-prov").value === "openai";
         const subscr = q("#s-prov") && ["claude-code", "xai-oauth"].includes(q("#s-prov").value);
-        if (q("#s-model-wrap")) q("#s-model-wrap").hidden = !openai;
+        if (q("#s-model-wrap")) q("#s-model-wrap").hidden = false;
+        if (q("#s-model")) {
+          const pk = q("#s-prov") ? q("#s-prov").value : "";
+          const pe = (m.providers && m.providers.llm || []).find(x => x.key === pk);
+          q("#s-model").placeholder = "vazio = " + ((pe && pe.model) || "padrão do provedor");
+        }
         if (q("#s-key-wrap")) q("#s-key-wrap").hidden = !!subscr;
         if (q("#s-auth-wrap")) q("#s-auth-wrap").hidden = !subscr;
         const same = openai && q("#s-emb").value === "openai";
@@ -1971,7 +1976,6 @@ SETUP.memoria = box => {
         if (!subscr && !body.key && !m.llm_key) return stMsg(q("#s-m"), "late", "cole a API key do LLM");
         if (subscr && (m.llm_auth || {}).state === "pending" && (m.llm_auth || {}).provider === body.provider)
           return stMsg(q("#s-m"), "late", "autentique a assinatura primeiro (botão Autenticar ao lado)");
-        if (body.provider === "openai" && !body.model) return stMsg(q("#s-m"), "late", "digite o modelo do OpenAI");
         const sameAcct = body.provider === "openai" && body.embeddings === "openai";
         if (!sameAcct && !body.emb_key && !m.emb_key) return stMsg(q("#s-m"), "late", "cole a API key do embeddings (" + (body.embeddings === "fireworks" ? "Fireworks" : "OpenAI") + ")");
         const rsame = body.reranker === "fireworks" && body.embeddings === "fireworks";
@@ -4121,17 +4125,17 @@ OBV.memoria = () => {
     ? m.providers
     : {
         llm: [
-          {key: "claude-code", label: "Claude Code (assinatura Claude Pro/Max)", recommended: false, cloud: true, subscription: true, flow: "claude-token", key_set: false},
-          {key: "chatgpt", label: "ChatGPT (sign-in / assinatura Plus/Pro)", recommended: false, cloud: true, subscription: true, key_set: false},
-          {key: "cursor", label: "Cursor (assinatura)", recommended: false, cloud: true, subscription: true, key_set: false},
-          {key: "github-copilot", label: "GitHub Copilot (assinatura)", recommended: false, cloud: true, subscription: true, key_set: false},
-          {key: "xai-oauth", label: "xAI / SuperGrok (sign-in)", recommended: false, cloud: true, subscription: true, flow: "xai-device", key_set: false},
-          {key: "nous", label: "Nous Portal (assinatura)", recommended: false, cloud: true, subscription: true, key_set: false},
-          {key: "anthropic", label: "Anthropic", recommended: true, cloud: true, key_set: !!m.llm_key},
-          {key: "fireworks", label: "Fireworks", recommended: false, cloud: true, key_set: !!m.llm_key},
-          {key: "openai", label: "OpenAI", recommended: false, cloud: true, key_set: !!m.llm_key},
-          {key: "zai", label: "Z.ai (GLM, plano coding)", recommended: false, cloud: true, key_set: !!m.llm_key},
-          {key: "gemini", label: "Google Gemini (chave do AI Studio)", recommended: false, cloud: true, key_set: !!m.llm_key},
+          {key: "claude-code", label: "Claude Code (assinatura Claude Pro/Max)", recommended: false, cloud: true, model: "claude-sonnet-4-5-20250929", subscription: true, flow: "claude-token", key_set: false},
+          {key: "chatgpt", label: "ChatGPT (sign-in / assinatura Plus/Pro)", recommended: false, cloud: true, model: "gpt-6-luna", subscription: true, key_set: false},
+          {key: "cursor", label: "Cursor (assinatura)", recommended: false, cloud: true, model: "auto", subscription: true, key_set: false},
+          {key: "github-copilot", label: "GitHub Copilot (assinatura)", recommended: false, cloud: true, model: "gpt-5.6-terra", subscription: true, key_set: false},
+          {key: "xai-oauth", label: "xAI / SuperGrok (sign-in)", recommended: false, cloud: true, model: "grok-4.5", subscription: true, flow: "xai-device", key_set: false},
+          {key: "nous", label: "Nous Portal (assinatura)", recommended: false, cloud: true, model: "deepseek/deepseek-v4-flash", subscription: true, key_set: false},
+          {key: "anthropic", label: "Anthropic", recommended: true, cloud: true, model: "claude-haiku-5-5", key_set: !!m.llm_key},
+          {key: "fireworks", label: "Fireworks", recommended: false, cloud: true, model: "accounts/fireworks/models/deepseek-v4p1-flash", key_set: !!m.llm_key},
+          {key: "openai", label: "OpenAI", recommended: false, cloud: true, model: "gpt-4o-mini", key_set: !!m.llm_key},
+          {key: "zai", label: "Z.ai (GLM, plano coding)", recommended: false, cloud: true, model: "glm-4.5-flash", key_set: !!m.llm_key},
+          {key: "gemini", label: "Google Gemini (chave do AI Studio)", recommended: false, cloud: true, model: "gemini-3.5-flash", key_set: !!m.llm_key},
           {key: "custom", label: "Outro (OpenAI-compatível)", recommended: false, cloud: true, key_set: !!m.llm_key},
         ],
         embeddings: [
@@ -4202,7 +4206,9 @@ OBV.memoria = () => {
     const list = listFor(slot);
     const curKey = chosen[slot];
     const p = getProv(slot, curKey) || {};
-    const needModelUrl = curKey === "custom" || (slot === "llm" && curKey === "openai");
+    const needModel = slot === "llm" || curKey === "custom";
+    const needModelUrl = needModel;
+    const modelPh = slot === "llm" && p.model ? "vazio = " + p.model : "ex.: gpt-4o-mini";
     return '<div class="slot" data-slot="' + slot + '">' +
       '<div class="sh"><span>' + esc(title) + "</span>" + (p.recommended ? '<span class="pill rec">✓ recomendado</span>' : "") + "</div>" +
       '<select id="prov-' + slot + '">' +
@@ -4221,8 +4227,8 @@ OBV.memoria = () => {
           '<small>Vai direto para <span class="kbd">config/.env</span> (0600) e nunca volta para a tela.</small>' +
         "</label>" +
       "</div>" : "") +
-      (needModelUrl ? '<div class="grid2" style="margin-top:8px">' +
-        '<label class="f" style="margin-bottom:0"><span>Modelo</span><input type="text" id="model-' + slot + '" placeholder="ex.: gpt-4o-mini"></label>' +
+      (needModel ? '<div class="grid2" style="margin-top:8px">' +
+        '<label class="f" style="margin-bottom:0"><span>Modelo</span><input type="text" id="model-' + slot + '" placeholder="' + esc(modelPh) + '"></label>' +
         (curKey === "custom" ? '<label class="f" style="margin-bottom:0"><span>Base URL</span><input type="text" id="url-' + slot + '" placeholder="https://…/v1"></label>' : "<div></div>") +
       "</div>" : "") +
     "</div>";

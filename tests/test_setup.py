@@ -312,14 +312,21 @@ class ProviderRegistryTests(unittest.TestCase):
         self.assertTrue(v["slots"]["llm"]["base_url"].startswith("https://api.z.ai/"))
         self.assertEqual(v["slots"]["reranker"], {"provider": "zeroentropy", "key": "ze-1"})
 
-    def test_zai_without_model_refuses(self):
-        with self.assertRaises(util.BrainError) as ctx:
-            setup.validate_memory_setup({
-                "mode": "full", "consent": True,
-                "llm": {"provider": "zai", "key": "zk-1"},
-                "embeddings": {"provider": "fireworks", "key": "fw-1"},
-            })
-        self.assertIn("zai", str(ctx.exception))
+    def test_zai_without_model_fills_server_default(self):
+        v = setup.validate_memory_setup({
+            "mode": "full", "consent": True,
+            "llm": {"provider": "zai", "key": "zk-1"},
+            "embeddings": {"provider": "fireworks", "key": "fw-1"},
+        })
+        self.assertEqual(v["provider"], "zai")
+        self.assertEqual(v["model"], "")          # vazio = o default entra no set_slot (gravado explícito)
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            from brainlib import providers
+            res = providers.set_slot(b, "llm", "zai", key="zk-1")
+            self.assertEqual(res["provider"], "zai")
+            env = config.load_env(b.inst)
+            self.assertEqual(env.get("HINDSIGHT_API_LLM_MODEL"), providers.SERVER_DEFAULT_MODELS["zai"])
 
     def test_custom_without_base_url_refuses(self):
         with self.assertRaises(util.BrainError):

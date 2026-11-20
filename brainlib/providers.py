@@ -42,6 +42,40 @@ LOCAL_LLM_BLOCKED = frozenset({"lmstudio", "ollama", "llama.cpp"})
 # Vazio = fluxo manual nesta instalação: o setup_hint carrega o caminho exato.
 AUTH_FLOWS = {"claude-code": "claude-token", "xai-oauth": "xai-device"}
 
+# Modelo default de cada provedor no SERVIDOR PINADO (digest do services/compose.yaml) —
+# sondado ao vivo da imagem (a tabela mora em hindsight_api.config.PROVIDER_DEFAULT_MODELS).
+# O docs upstream anda na frente (gpt-5-nano · claude-haiku-5-5 · gemini-3.8-flash ·
+# glm-5.3-flash…): vazio no Brain = o default do servidor que você roda; o campo Modelo
+# aceita qualquer um dos novos. O que o registro do Brain cura (anthropic cenário B,
+# fireworks deepseek-v4p1) TEM PRECEDÊNCIA sobre esta tabela (é gravado explícito no .env).
+SERVER_DEFAULT_MODELS = {
+    "openai": "gpt-4o-mini",
+    "anthropic": "claude-haiku-4-5",
+    "gemini": "gemini-3.5-flash",
+    "zai": "glm-4.5-flash",
+    "fireworks": "accounts/fireworks/models/llama-v3p1-8b-instruct",
+    "openrouter": "qwen/qwen3.5-9b",
+    "litellm": "gpt-4o-mini",
+    "openai-codex": "gpt-5.6-luna",
+    "chatgpt": "gpt-6-luna",
+    "claude-code": "claude-sonnet-4-5-20250929",
+    "cursor": "auto",
+    "github-copilot": "gpt-5.6-terra",
+    "nous": "deepseek/deepseek-v4-flash",
+    "xai-oauth": "grok-4.5",
+}
+
+
+def default_model(provider: str) -> str:
+    """Modelo que o Brain aplica quando o dono deixa o campo em branco: a cura do registro
+    (model/models.default) vence; senão, o default do servidor pinado; senão, vazio."""
+    p = PROVIDERS["llm"].get(provider) or {}
+    if p.get("model"):
+        return p["model"]
+    if p.get("models"):
+        return p["models"].get("default", "")
+    return SERVER_DEFAULT_MODELS.get(provider, "")
+
 # key_env: onde a chave mora no .env (para o doctor conferir presença, nunca valor).
 PROVIDERS: dict[str, dict[str, dict]] = {
     "llm": {
@@ -237,10 +271,12 @@ def set_slot(brain, slot: str, provider: str, *, model: str = "", models: dict |
         if _mem_mode(brain.inst.cfg["memory"]) == "full":
             raise util.BrainError("no modo full os embeddings são de nuvem — fireworks (qwen3-embedding-8b) "
                                   "ou openai; o bge-m3 local é do modo embed (guides/memory.md)", code=4)
-    if slot == "llm" and not is_sub and not (models or model):
-        rec = p.get("models") or {}
-        if not rec:
-            raise util.BrainError(f"provedor {provider!r} precisa de --model (ou --models por operação)", code=4)
+    if slot == "llm" and not is_sub and not (models or model) and not p.get("models"):
+        # vazio = recomendado do provedor (tabela do servidor pinado em SERVER_DEFAULT_MODELS) —
+        # gravado EXPLÍCITO no .env: o que aplicou é o que o stack mostra
+        model = default_model(provider)
+        if not model:
+            raise util.BrainError("provedor custom precisa de --model (ou --models por operação)", code=4)
     if slot == "embeddings" and provider in ("custom",) and not (model and (base_url or p.get("base_url"))):
         raise util.BrainError("embeddings custom exige --model e --base-url", code=4)
 

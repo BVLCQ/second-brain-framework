@@ -183,14 +183,17 @@ class StepTests(unittest.TestCase):
         with self.assertRaises(util.BrainError):
             onboard.apply_memory(self.b, {"mode": "turbo"})
 
-    def test_memory_full_is_cloud_only_and_openai_needs_model(self):
+    def test_memory_full_is_cloud_only_and_openai_default_model(self):
         # full é só-nuvem: embeddings locais recusados antes do job
         with self.assertRaises(util.BrainError):
             onboard.apply_memory(self.b, {"mode": "full", "consent": True, "key": "sk-x",
                                           "provider": "anthropic", "embeddings": "local"})
-        # openai não tem modelos por operação: o nome do modelo é exigido (G4)
-        with self.assertRaises(util.BrainError):
-            onboard.apply_memory(self.b, {"mode": "full", "consent": True, "key": "sk-x", "provider": "openai"})
+        # openai sem modelo é caminho válido (2.32.1): vazio = default do servidor pinado,
+        # gravado explícito no set_slot — a validação de porta não recusa mais
+        from brainlib import setup as _setup
+        v = _setup.validate_memory_setup({"mode": "full", "consent": True, "key": "sk-x", "provider": "openai"})
+        self.assertEqual(v["provider"], "openai")
+        self.assertEqual(v["model"], "")
         # embed aceita local ou nuvem — nada além disso
         with self.assertRaises(util.BrainError):
             onboard.apply_memory(self.b, {"mode": "embed", "embeddings": "turbo"})

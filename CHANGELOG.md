@@ -1,3 +1,16 @@
+## 2.32.1 — modelo do LLM à mão: vazio = recomendado do provedor
+
+- **Campo Modelo para todo provedor de LLM** (antes só OpenAI/custom): assinatura ou chave,
+  o campo aparece com o placeholder dizendo o que o vazio aplica — `vazio =
+  claude-sonnet-4-5-20250929`, `vazio = gpt-4o-mini`, `vazio = gemini-3.5-flash`… A tabela
+  de defaults vem sondada da imagem Hindsight pinada no compose (a que você roda), com a
+  cura do Brain na frente onde existe (Anthropic por operação, Fireworks deepseek-v4p1).
+  Modelo digitado vence a tabela por operação do cenário B (vale para todas as operações).
+- **Deixar em branco virou caminho de primeira classe**: `providers set llm --provider zai`
+  sem `--model` não recusa mais — grava o default explícito no `config/.env`; o wizard
+  também aceita Z.ai/OpenAI/Gemini sem digitar modelo (o assistente travava pedindo o que
+  agora tem default). Custom continua exigindo modelo.
+
 ## 2.32.0 — assinatura sem chave na tela: botão Autenticar e memória vigiada
 
 - **Provedor de LLM por assinatura não pede mais chave na tela.** Escolher `Claude Code

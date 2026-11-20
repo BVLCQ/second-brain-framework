@@ -108,8 +108,10 @@ class ProvidersTests(unittest.TestCase):
                 providers.set_slot(b, "nope", "local")
             with self.assertRaises(util.BrainError):
                 providers.set_slot(b, "llm", "nope")
+            # openai sem modelo é válido desde 2.32.1: vazio = default do servidor pinado;
+            # custom sem modelo e sem default conhecido continua recusado
             with self.assertRaises(util.BrainError):
-                providers.set_slot(b, "llm", "openai")          # sem modelo
+                providers.set_slot(b, "llm", "custom")
             with self.assertRaises(util.BrainError):
                 providers.set_slot(b, "embeddings", "custom")   # sem model/base_url
             with self.assertRaises(util.BrainError):

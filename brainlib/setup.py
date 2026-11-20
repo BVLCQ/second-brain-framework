@@ -962,9 +962,10 @@ class ScriptedMemoriaUI:
     interactive = False
 
     def __init__(self, out, choices: dict[str, str], keys: dict[str, str], model: str, consent: bool,
-                 base_url: str = ""):
+                 base_url: str = "", models_override: bool = False):
         self.out, self.choices, self.keys = out, choices, keys
         self.model, self.consent, self.base_url = model, consent, base_url
+        self.models_override = models_override
 
     def say(self, msg: str) -> None:
         self.out.say(msg)
@@ -985,6 +986,10 @@ class ScriptedMemoriaUI:
         return default
 
     def confirm(self, prompt: str, default: bool = False) -> bool:
+        # modelo digitado pelo dono: a tabela por operação (cenário B) fica de fora —
+        # o modelo explícito vira o default de todas as operações
+        if self.models_override and "cenário B" in prompt:
+            return False
         return default
 
     def secret(self, prompt: str) -> str:
@@ -1022,8 +1027,8 @@ def validate_memory_setup(data: dict) -> dict:
     model = str(llm_in.get("model") or data.get("model") or llm_reg.get("model", "")).strip()
     llm_base_url = str(llm_in.get("base_url") or data.get("base_url") or llm_reg.get("base_url", "")).strip()
     if mode == "full":
-        if provider in ("openai", "zai", "custom") and not model:
-            raise util.BrainError(f"provedor {provider} precisa do nome do modelo", code=4)
+        if provider == "custom" and not model:
+            raise util.BrainError("provedor custom precisa do nome do modelo", code=4)
         if provider == "custom" and not llm_base_url:
             raise util.BrainError("provedor custom precisa de base_url", code=4)
 
@@ -1110,7 +1115,8 @@ def configure_memory(brain, data: dict, say=print) -> str:
                 f"cole a chave de {slot} ({key_env}) — ou escolha um provedor local", code=4)
     llm_base = v["slots"].get("llm", {}).get("base_url", "")
     ui = ScriptedMemoriaUI(_SayOnly(say), {"LLM": provider, "embeddings": emb, "reranker": rer},
-                           keys, v["model"], v["consent"], base_url=llm_base)
+                           keys, v["model"], v["consent"], base_url=llm_base,
+                           models_override=bool(v["model"]))
     _run_memoria(brain, ui, mode_hint=mode)
     final = memory.mode(config.reload(brain.inst).cfg["memory"])
     if final == "none":

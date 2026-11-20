@@ -398,5 +398,61 @@ class RunLlmAuthTests(unittest.TestCase):
                 run_mem.assert_called_once()
 
 
+class ModelDefaultsTests(unittest.TestCase):
+    """Vazio = recomendado do provedor: default_model (precedência registro → servidor pinado),
+    preenchimento explícito no set_slot e modelo digitado vencendo a tabela por operação."""
+
+    def test_server_defaults_cover_the_llm_menu(self):
+        for pid in providers.PROVIDERS["llm"]:
+            if pid == "custom":
+                continue
+            self.assertTrue(providers.default_model(pid), f"{pid} sem default conhecido")
+
+    def test_default_model_precedence(self):
+        # cura do registro vence a tabela do servidor
+        self.assertEqual(providers.default_model("anthropic"),
+                         providers.PROVIDERS["llm"]["anthropic"]["models"]["default"])
+        self.assertEqual(providers.default_model("fireworks"),
+                         providers.PROVIDERS["llm"]["fireworks"]["model"])
+        # sem cura: default do servidor pinado (sondado da imagem)
+        self.assertEqual(providers.default_model("gemini"), "gemini-3.5-flash")
+        self.assertEqual(providers.default_model("claude-code"), "claude-sonnet-4-5-20250929")
+        self.assertEqual(providers.default_model("xai-oauth"), "grok-4.5")
+        self.assertEqual(providers.default_model("custom"), "")
+
+    def test_set_slot_blank_model_writes_default_explicit(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            providers.set_slot(b, "llm", "openai", key="ok-1")
+            env = config.load_env(b.inst)
+            self.assertEqual(env.get("HINDSIGHT_API_LLM_MODEL"), "gpt-4o-mini")
+
+    def test_set_slot_custom_without_model_still_refuses(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            with self.assertRaises(util.BrainError):
+                providers.set_slot(b, "llm", "custom", key="ck-1")
+
+    def test_typed_model_beats_per_operation_table(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            ui = setup.ScriptedMemoriaUI(_LogUI(), {"LLM": "anthropic"}, {"HINDSIGHT_API_LLM_API_KEY": "ak-1"},
+                                         "claude-sonnet-5-5", consent=True, models_override=True)
+            setup._providers_step(b, ui, ["llm"])
+            env = config.load_env(b.inst)
+            self.assertEqual(env.get("HINDSIGHT_API_LLM_MODEL"), "claude-sonnet-5-5")
+            self.assertNotIn("HINDSIGHT_API_RETAIN_LLM_MODEL", env)   # cenário B fora: modelo único
+
+    def test_blank_model_on_anthropic_keeps_per_operation_table(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            ui = setup.ScriptedMemoriaUI(_LogUI(), {"LLM": "anthropic"}, {"HINDSIGHT_API_LLM_API_KEY": "ak-1"},
+                                         "", consent=True)
+            setup._providers_step(b, ui, ["llm"])
+            env = config.load_env(b.inst)
+            self.assertEqual(env.get("HINDSIGHT_API_RETAIN_LLM_MODEL"), "claude-haiku-5-5")   # cenário B intacto
+            self.assertEqual(env.get("HINDSIGHT_API_MENTAL_MODEL_REFRESH_LLM_MODEL"), "claude-sonnet-5-5")
+
+
 if __name__ == "__main__":
     unittest.main()

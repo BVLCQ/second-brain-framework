@@ -324,6 +324,18 @@ máquina local** — exatamente o caso do Brain. Para uso compartilhado/servidor
 provedor de chave (`anthropic`, `gemini`…). O Google **não tem** faixa de assinatura no
 Hindsight: Gemini (`gemini-3.8-flash` default) é pela chave do AI Studio.
 
+### Modelos: campo livre, vazio = recomendado do provedor
+
+Todo provedor de LLM mostra o campo **Modelo** (assinatura inclusive). Vazio aplica o
+recomendado — o placeholder diz exatamente qual. A precedência: **cura do Brain** (Anthropic
+por operação — cenário B; Fireworks `deepseek-v4p1-flash`) → **default do servidor Hindsight
+pinado** (`providers.SERVER_DEFAULT_MODELS`, sondado da imagem do compose: `gpt-4o-mini` no
+OpenAI, `gemini-3.5-flash` no Gemini, `claude-sonnet-4-5-20250929` no Claude Code, `grok-4.5`
+no SuperGrok…). O default é gravado EXPLÍCITO no `config/.env` — o que aplicou é o que o
+`stack` mostra. Modelo digitado vence: vale para todas as operações (a tabela por operação
+fica fora); o docs upstream anda na frente do pin (gpt-5-nano · haiku-5-5 · gemini-3.8-flash
+· glm-5.3-flash) — qualquer um dos novos basta digitar. `custom` continua exigindo modelo.
+
 ## Migração de instâncias antigas (0.10.x · dois bancos · sem harnesses)
 
 1. **Atualize o servidor** — `guides/memory.md` § *Atualizar o Hindsight de versão*
