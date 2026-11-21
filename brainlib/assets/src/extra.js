@@ -2382,7 +2382,7 @@ const OB_STEP_GROUPS = {
   maquina: "O cérebro",
   planejamento: "Começando", conversa: "Começando", pronto: "Começando",
 };
-let OBS = null, obCur = "inicio";
+let OBS = null, obCur = "inicio", obStepGen = 0;   // geração de navegação — quem capturou e viu mudar, o passo já não é o seu
 let obPickedAgent = null;    // destaque (sugestão de detecção conta)
 let obAgentChosen = false;   // mas só o clique do dono é escolha — é o que nomeia a TASK do "Fazer depois"
 let obAgentHint = null;      // receita manual quando wire_mcp devolve mcp=false + hint
@@ -2397,6 +2397,7 @@ function obDoneSet() { return new Set((OBS && OBS.progress && OBS.progress.done)
 function obSet(html) { $("#view").innerHTML = '<div class="obw"><div class="bar"><i id="ob-bar"></i></div><div class="obcontent">' + html + "</div></div>"; }
 function obGo(step) {
   obCur = step;
+  obStepGen++;            // invalida as continuações async do passo anterior (scan, jobs): nada de pintar nem navegar por ele
   try { localStorage.setItem("brain-onboarding-step", step); } catch (e) {}
   obRender();
   window.scrollTo({top: 0, behavior: "smooth"});
@@ -2416,6 +2417,7 @@ function obTickLog(logEl, j) {
   logEl.textContent = (j && j.log && j.log.length) ? j.log.join("\n") : "executando…";
   logEl.scrollTop = logEl.scrollHeight;
 }
+function obStillOn(gen) { return gen === obStepGen; }   // false = o dono trocou de passo; a continuação async não pinta nem navega
 function obRenderSteps() {
   const list = $("#ob-steps"); if (!list) return;
   const done = obDoneSet();
@@ -2563,18 +2565,20 @@ OBV.sobre = () => {
   obBindNav(async btn => {
     obProfileDraft = {about: $("#about").value, how: $("#how").value, focus: $("#focus").value};
     if (!(obProfileDraft.about + obProfileDraft.how + obProfileDraft.focus).trim()) return obMsg($("#m"), "err", "Escreva pelo menos um dos campos — ou pule este passo.");
+    const gen = obStepGen;
     obBusy(btn, true, "Montando…");
     try {
       const r = await obAct("profile_preview", obProfileDraft);
+      if (!obStillOn(gen)) return;
       $("#pv").innerHTML = obMd(r.markdown); $("#pv").dataset.md = r.markdown;
       $("#form").classList.add("hidden"); $("#prev").classList.remove("hidden"); $("#nav").classList.add("hidden");
-    } catch (e) { obMsg($("#m"), "err", e.message); } finally { obBusy(btn, false); }
+    } catch (e) { if (obStillOn(gen)) obMsg($("#m"), "err", e.message); } finally { obBusy(btn, false); }
   });
   $("#edit").onclick = () => { $("#prev").classList.add("hidden"); $("#form").classList.remove("hidden"); $("#nav").classList.remove("hidden"); };
   $("#save").onclick = async () => {
-    const b = $("#save"); obBusy(b, true);
-    try { await obAct("profile_save", {markdown: $("#pv").dataset.md, overwrite: !tpl}); await obRefresh(); obNext(); }
-    catch (e) { obMsg($("#m2"), "err", e.message); } finally { obBusy(b, false); }
+    const b = $("#save"), gen = obStepGen; obBusy(b, true);
+    try { await obAct("profile_save", {markdown: $("#pv").dataset.md, overwrite: !tpl}); await obRefresh(); if (obStillOn(gen)) obNext(); }
+    catch (e) { if (obStillOn(gen)) obMsg($("#m2"), "err", e.message); } finally { obBusy(b, false); }
   };
 };
 
@@ -2664,27 +2668,30 @@ OBV.agente = () => {
   }
 
   const doLater = async btn => {
+    const gen = obStepGen;
     obBusy(btn, true, "Criando tarefa…");
     try {
       const r = await obAct("agent_later", obAgentChosen && obPickedAgent !== "other" ? {agent: obPickedAgent} : {});
       await obRefresh();
+      if (!obStillOn(gen)) return;
       obMsg($("#m"), "ok", "✓ Tarefa " + r.id + " criada — ficou no seu TODO.");
-      setTimeout(obNext, 1100);
-    } catch (e) { obMsg($("#m"), "err", e.message); } finally { if (btn.isConnected) obBusy(btn, false); }
+      setTimeout(() => { if (obStillOn(gen)) obNext(); }, 1100);
+    } catch (e) { if (obStillOn(gen)) obMsg($("#m"), "err", e.message); } finally { if (btn.isConnected) obBusy(btn, false); }
   };
   $("#ag-later").onclick = () => doLater($("#ag-later"));
 
   if ($("#ag-manual")) {
     $("#ag-manual").onclick = async () => {
-      const btn = $("#ag-manual");
+      const btn = $("#ag-manual"), gen = obStepGen;
       obBusy(btn, true, "Salvando…");
       try {
         await obAct("agent_connect", {agent: "other"});
         await obRefresh();
         obRenderSteps();
+        if (!obStillOn(gen)) return;
         OBV.agente();
         obMsg($("#m"), "ok", "✓ Marcado como configurado manualmente.");
-      } catch (e) { obMsg($("#m"), "err", e.message); } finally { if (btn.isConnected) obBusy(btn, false); }
+      } catch (e) { if (obStillOn(gen)) obMsg($("#m"), "err", e.message); } finally { if (btn.isConnected) obBusy(btn, false); }
     };
   }
 
@@ -2694,21 +2701,22 @@ OBV.agente = () => {
       if (!obj) return;
       obAgentChosen = true;               // o botão nomeia o agente: conectar é escolher
       obAgentHint = null;
-      const btn = $("#ag-connect"), log = $("#ag-log");
+      const btn = $("#ag-connect"), log = $("#ag-log"), gen = obStepGen;
       obBusy(btn, true, "Conectando…");
       try {
         const r = await obAct("agent_connect", {agent: obj.key});
         let res = r;
         if (r.job) {
-          const j = await obJob(r.job, jj => obTickLog(log, jj));
+          const j = await obJob(r.job, jj => { if (obStillOn(gen)) obTickLog(log, jj); });
           if (j.status === "error") {
-            obMsg($("#m"), "err", (j.result && j.result.error) || "não consegui conectar o agente");
+            if (obStillOn(gen)) obMsg($("#m"), "err", (j.result && j.result.error) || "não consegui conectar o agente");
             return;
           }
           res = j.result || {};
         }
         await obRefresh();
         obRenderSteps();
+        if (!obStillOn(gen)) return;
         if (!res.mcp && res.hint) {
           obAgentHint = res.hint;
           OBV.agente();
@@ -2717,8 +2725,8 @@ OBV.agente = () => {
         }
         btn.textContent = "✓ " + obj.label + " conectado";
         obMsg($("#m"), "ok", "✓ " + obj.label + " conectado.");
-        setTimeout(obNext, 700);
-      } catch (e) { obMsg($("#m"), "err", e.message); } finally { if (btn.isConnected) obBusy(btn, false); }
+        setTimeout(() => { if (obStillOn(gen)) obNext(); }, 700);
+      } catch (e) { if (obStillOn(gen)) obMsg($("#m"), "err", e.message); } finally { if (btn.isConnected) obBusy(btn, false); }
     };
   }
   obBindNav(() => obNext());
@@ -2774,14 +2782,16 @@ OBV.conectores = () => {
     obNav({main: "Salvar e continuar", skip: "Fazer depois"}));
 
   const drawConns = () => {
+    const box = $("#conns");
+    if (!box) return;                 // o passo saiu de cena — nunca pintar em DOM de outro passo
     const src = (scanRes && scanRes.source) || OBS.connectors_source;
     const hint = (scanRes && scanRes.hint) || OBS.connectors_hint;
     if (src === "none") {
-      $("#conns").innerHTML = '<p style="color:var(--muted);margin:10px 0 0">' + esc(hint) + "</p>";
+      box.innerHTML = '<p style="color:var(--muted);margin:10px 0 0">' + esc(hint) + "</p>";
       $("#extra").classList.add("hidden");
       return;
     }
-    $("#conns").innerHTML = OBS.connectors.map(c => {
+    box.innerHTML = OBS.connectors.map(c => {
       const pair = OB_ST_LABEL[OBS.connectors_scanned ? c.status : "unknown"] || OB_ST_LABEL.unknown;
       const can = c.status === "connected" || c.enabled;
       return '<div class="conn"><div class="info"><b>' + esc(c.label) + "</b><p>" + esc(c.what) + '</p></div>' +
@@ -2799,9 +2809,11 @@ OBV.conectores = () => {
   };
 
   const drawSources = () => {
+    const tbl = $("#srctable");
+    if (!tbl) return;                 // idem: passo trocado, DOM morto
     const list = OBS.sources || [];
     if (!list.length) {
-      $("#srctable").innerHTML = '<tr><td colspan="5" style="color:var(--muted);padding:12px 4px">Nenhuma fonte cadastrada ainda.</td></tr>';
+      tbl.innerHTML = '<tr><td colspan="5" style="color:var(--muted);padding:12px 4px">Nenhuma fonte cadastrada ainda.</td></tr>';
       return;
     }
     const detailOf = s => [
@@ -2813,7 +2825,7 @@ OBV.conectores = () => {
       s.query,
       s.note,
     ].filter(Boolean).join(" · ") || "—";
-    $("#srctable").innerHTML = "<thead><tr><th>key</th><th>tipo</th><th>janela</th><th>detalhe</th><th></th></tr></thead><tbody>" +
+    tbl.innerHTML = "<thead><tr><th>key</th><th>tipo</th><th>janela</th><th>detalhe</th><th></th></tr></thead><tbody>" +
       list.map(s => "<tr>" +
         '<td><span class="kbd">' + esc(s.key) + "</span></td>" +
         "<td>" + esc(s.kind) + "</td>" +
@@ -2890,25 +2902,31 @@ OBV.conectores = () => {
   drawSources();
 
   const scan = async force => {
-    const b = $("#scan"), log = $("#scanlog");
+    const b = $("#scan"), log = $("#scanlog"), gen = obStepGen;
+    const here = () => obStillOn(gen);   // o dono trocou de passo? a varredura segue no servidor; a tela, não
     obBusy(b, true, "Verificando…");
     try {
       const r = await obAct("connectors_scan", {force});
       if (r.job) {
-        const j = await obJob(r.job, jj => obTickLog(log, jj));
-        if (j.status === "error") obMsg($("#m"), "err", (j.result && j.result.error) || "não consegui verificar");
+        const j = await obJob(r.job, jj => { if (here()) obTickLog(log, jj); });
+        if (j.status === "error") {
+          if (here()) obMsg($("#m"), "err", (j.result && j.result.error) || "não consegui verificar");
+          return;
+        }
         scanRes = j.result || null;
       } else {
         scanRes = r;
       }
-      await obRefresh(); drawConns();
-    } catch (e) { obMsg($("#m"), "err", e.message); } finally { obBusy(b, false); }
+      await obRefresh();
+      if (here()) drawConns();
+    } catch (e) { if (here()) obMsg($("#m"), "err", e.message); } finally { obBusy(b, false); }
   };
   $("#scan").onclick = () => scan(true);
   if (!OBS.connectors_scanned) scan(false);
   obBindNav(async btn => {
     const keys = obAll("#conns input:checked").map(i => i.dataset.c);
     if (!keys.length) return obSkip(obCur);
+    const gen = obStepGen;
     obBusy(btn, true);
     try {
       await obAct("connectors_enable", {
@@ -2916,8 +2934,8 @@ OBV.conectores = () => {
         slack_channels: $("#slack") ? $("#slack").value : "",
         drive_folder: $("#drive") ? $("#drive").value : "",
       });
-      await obRefresh(); obNext();
-    } catch (e) { obMsg($("#m"), "err", e.message); } finally { obBusy(btn, false); }
+      await obRefresh(); if (obStillOn(gen)) obNext();
+    } catch (e) { if (obStillOn(gen)) obMsg($("#m"), "err", e.message); } finally { obBusy(btn, false); }
   });
 };
 
@@ -3079,21 +3097,24 @@ OBV.memoria = () => {
     });
     const aBtn = $("#auth-llm");
     if (aBtn) aBtn.onclick = async () => {
+      const gen = obStepGen;
       obBusy(aBtn, true, "Autenticando…");
       const log = $("#log");
       try {
         const r = await obAct("memory_auth", {provider: chosen.llm});
         if (r.job) {
-          const j = await obJob(r.job, jj => obTickLog(log, jj));
+          const j = await obJob(r.job, jj => { if (obStillOn(gen)) obTickLog(log, jj); });
+          if (!obStillOn(gen)) return;
           if (j.status === "error") return obMsg($("#m"), "err", (j.result && j.result.error) || "não consegui autenticar");
           if (j.result && j.result.ok === false)
             obMsg($("#m"), "late", "Autenticação não completou — o log acima diz o que faltou.");
           else obMsg($("#m"), "ok", "✓ Autenticado.");
         }
         await obRefresh();
+        if (!obStillOn(gen)) return;
         Object.assign(m, OBS.memory || {});
         drawDetails();
-      } catch (e) { obMsg($("#m"), "err", e.message); } finally { obBusy(aBtn, false); }
+      } catch (e) { if (obStillOn(gen)) obMsg($("#m"), "err", e.message); } finally { obBusy(aBtn, false); }
     };
   };
 
@@ -3132,23 +3153,27 @@ OBV.memoria = () => {
       }
     }
     obBusy(btn, true, "Ativando…");
-    const log = $("#log");
+    const log = $("#log"), gen = obStepGen;
     try {
       const r = await obAct("memory", body);
       obAll("#det input[type=password]").forEach(i => { i.value = ""; });
       if (r.job) {
-        const j = await obJob(r.job, jj => obTickLog(log, jj));
+        const j = await obJob(r.job, jj => { if (obStillOn(gen)) obTickLog(log, jj); });
         if (j.status === "error") {
-          obMsg($("#m"), "err", (j.result && j.result.error) || "não consegui ligar a memória");
+          if (obStillOn(gen)) obMsg($("#m"), "err", (j.result && j.result.error) || "não consegui ligar a memória");
           return;
         }
       }
-      await obRefresh(); obMsg($("#m"), "ok", "✓ Memória configurada."); setTimeout(obNext, 700);
-    } catch (e) { obMsg($("#m"), "err", e.message); } finally { obBusy(btn, false); }
+      await obRefresh();
+      if (!obStillOn(gen)) return;
+      obMsg($("#m"), "ok", "✓ Memória configurada.");
+      setTimeout(() => { if (obStillOn(gen)) obNext(); }, 700);
+    } catch (e) { if (obStillOn(gen)) obMsg($("#m"), "err", e.message); } finally { obBusy(btn, false); }
   }, async skipBtn => {
+    const gen = obStepGen;
     obBusy(skipBtn, true, "Salvando…");
-    try { await obAct("memory", {mode: sel, later: true}); await obRefresh(); obNext(); }
-    catch (e) { obMsg($("#m"), "err", e.message); } finally { obBusy(skipBtn, false); }
+    try { await obAct("memory", {mode: sel, later: true}); await obRefresh(); if (obStillOn(gen)) obNext(); }
+    catch (e) { if (obStillOn(gen)) obMsg($("#m"), "err", e.message); } finally { obBusy(skipBtn, false); }
   });
 };
 
@@ -3272,21 +3297,22 @@ OBV.maquina = () => {
       tui: $("#mq-tui").checked,
       framework: $("#mq-framework").checked,
     };
-    const log = $("#log");
+    const log = $("#log"), gen = obStepGen;
     obBusy(btn, true, "Configurando…");
     try {
       const r = await obAct("maquina", payload);
       if (r.job) {
-        const j = await obJob(r.job, jj => obTickLog(log, jj));
+        const j = await obJob(r.job, jj => { if (obStillOn(gen)) obTickLog(log, jj); });
         if (j.status === "error") {
-          obMsg($("#m"), "err", (j.result && j.result.error) || "não consegui configurar a máquina");
+          if (obStillOn(gen)) obMsg($("#m"), "err", (j.result && j.result.error) || "não consegui configurar a máquina");
           return;
         }
       }
       await obRefresh();
+      if (!obStillOn(gen)) return;
       obMsg($("#m"), "ok", "✓ Máquina configurada.");
-      setTimeout(obNext, 700);
-    } catch (e) { obMsg($("#m"), "err", e.message); } finally { obBusy(btn, false); }
+      setTimeout(() => { if (obStillOn(gen)) obNext(); }, 700);
+    } catch (e) { if (obStillOn(gen)) obMsg($("#m"), "err", e.message); } finally { obBusy(btn, false); }
   });
 };
 
@@ -3330,7 +3356,7 @@ OBV.planejamento = () => {
     }
     $("#manual").onclick = () => { if (!obPlan.goals.length) obPlan.goals.push(obEmptyGoal()); obPlanTab = "revisar"; OBV.planejamento(); };
     $("#ob-gen").onclick = async () => {
-      const b = $("#ob-gen"), log = $("#log");
+      const b = $("#ob-gen"), log = $("#log"), gen = obStepGen;
       const t = $("#ptext").value.trim();
       if (!t && !obUploads.length) return obMsg($("#m"), "err", "Escreva algo ou envie um documento primeiro.");
       obBusy(b, true, "Lendo…");
@@ -3338,10 +3364,11 @@ OBV.planejamento = () => {
         if (t) await obAct("planning_note", {text: t});
         const r = await obAct("planning_draft");
         log.classList.add("show"); log.textContent = "O Brain está lendo o que você mandou. Isso leva de 1 a 3 minutos…";
-        const j = await obJob(r.job, jj => { if (jj.log && jj.log.length) obTickLog(log, jj); });
+        const j = await obJob(r.job, jj => { if (jj.log && jj.log.length && obStillOn(gen)) obTickLog(log, jj); });
         if (j.status === "error") throw new Error((j.result && j.result.error) || "não consegui gerar a proposta");
-        obPlan = j.result.proposal; obPlanTab = "revisar"; await obRefresh(); OBV.planejamento();
-      } catch (e) { obMsg($("#m"), "err", e.message); } finally { obBusy(b, false); }
+        obPlan = j.result.proposal; obPlanTab = "revisar"; await obRefresh();
+        if (obStillOn(gen)) OBV.planejamento();   // dono saiu do passo? a proposta fica em obPlan e aparece quando ele voltar
+      } catch (e) { if (obStillOn(gen)) obMsg($("#m"), "err", e.message); } finally { obBusy(b, false); }
     };
   } else {
     obDrawTree();
@@ -3351,9 +3378,10 @@ OBV.planejamento = () => {
     const goals = obPlan.goals.filter(g => g.title.trim());
     if (!goals.length) return obMsg($("#m"), "err", 'Adicione pelo menos um goal — ou escolha "Fazer depois".');
     if (!$("#approve").checked) return obMsg($("#m"), "err", "Marque a confirmação para criar os goals.");
+    const gen = obStepGen;
     obBusy(btn, true, "Criando…");
-    try { await obAct("planning_apply", {proposal: {goals}, approved: true}); obPlan = {goals: []}; await obRefresh(); obNext(); }
-    catch (e) { obMsg($("#m"), "err", e.message); } finally { obBusy(btn, false); }
+    try { await obAct("planning_apply", {proposal: {goals}, approved: true}); obPlan = {goals: []}; await obRefresh(); if (obStillOn(gen)) obNext(); }
+    catch (e) { if (obStillOn(gen)) obMsg($("#m"), "err", e.message); } finally { obBusy(btn, false); }
   });
 };
 function obDrawTree() {

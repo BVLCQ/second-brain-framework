@@ -1,3 +1,18 @@
+## 2.35.1 — wizard: trabalho que termina depois de avançar de passo não pinta mais na tela errada
+
+- **Corrigido o erro fantasma na criação de goals.** A verificação automática de
+  conectores continuava rodando depois de você avançar para o passo seguinte; ao
+  terminar, tentava atualizar uma tela que já não existia e o erro vermelho era
+  pintado em cima do formulário de goals e projetos — parecia que criar o
+  entregável tinha quebrado. Nada tinha quebrado: era mensagem de outro passo.
+- Agora cada passo do wizard carrega a sua geração de navegação: trocou de passo,
+  a continuação do trabalho anterior continua no servidor mas não escreve nada na
+  tela nova — nem erro, nem mensagem de sucesso, nem avanço automático indevido.
+  A regra vale para a verificação de conectores, conexão do agente, memória,
+  máquina e a proposta de planejamento com IA.
+- O caminho bom segue intacto: quem espera no passo continua vendo o resultado
+  chegar (status dos conectores, "✓ configurado", avanço automático).
+
 ## 2.35.0 — slot Decisão: o juiz rápido opcional que corta ~40% das chamadas do LLM
 
 - **Quarto motor, opcional, desligado de fábrica** (só no modo full): **Decisão — juiz
