@@ -227,44 +227,77 @@ PROVIDERS: dict[str, dict[str, dict]] = {
 CLOUD_FLAGS = {"embeddings": "cloud_embeddings", "reranker": "cloud_reranker"}
 
 
-def _emb_env(p: dict, model: str, base_url: str, dimensions: int, key: str) -> dict:
+def _validate_key(provider: str, p: dict, key: str | None) -> None:
+    """Chave vazia (`""`) vale como não informada: nada a gravar e nenhum erro — o wizard
+    (`setup._providers_step`) repassa `""` quando a chave já está no `.env` e não pergunta de novo."""
+    if key is None or (isinstance(key, str) and not key.strip()):
+        return
+    env_var = p.get("key_env", "")
+    if not env_var:
+        raise util.BrainError(
+            f"provedor '{provider}' não usa variável de ambiente para chave — remova a flag de chave",
+            code=4,
+        )
+    if not isinstance(key, str):
+        raise util.BrainError(
+            f"valor inválido para a variável de ambiente {env_var} — nada gravado no .env",
+            code=4,
+        )
+
+
+def _guard_env_updates(env_updates: dict) -> None:
+    for k, v in env_updates.items():
+        if not isinstance(k, str) or not k.strip():
+            raise util.BrainError("nome de variável de ambiente vazio — nada gravado no .env", code=4)
+        if v is None or (isinstance(v, str) and v.strip() == ""):
+            raise util.BrainError(f"valor vazio para a variável de ambiente {k} — nada gravado no .env", code=4)
+
+
+def _emb_env(p: dict, model: str, base_url: str, dimensions: int, key: str | None) -> dict:
     env: dict[str, str] = {}
     wire = p.get("wire", "openai")
     env[_EMB + "PROVIDER"] = wire
     pref = _EMB + ("OPENAI_" if wire == "openai" else wire.upper() + "_")
     env[pref + "MODEL"] = model
-    if wire == "openai":
-        env[pref + "BASE_URL"] = base_url or p.get("base_url", "")
+    url = base_url or p.get("base_url", "")
+    if wire == "openai" and url:
+        env[pref + "BASE_URL"] = url
     dimensions = dimensions or p.get("dimensions", 0)
     if dimensions:
         env[pref + "DIMENSIONS"] = str(dimensions)
-    if key:
-        env[p.get("key_env", pref + "API_KEY")] = key
+    kenv = p.get("key_env")
+    if key and kenv:
+        env[kenv] = key
     return env
 
 
-def _rer_env(p: dict, model: str, base_url: str, candidates: int, key: str) -> dict:
+def _rer_env(p: dict, model: str, base_url: str, candidates: int, key: str | None) -> dict:
     if p is PROVIDERS["reranker"]["off"]:
         return {_RER + "PROVIDER": "rrf"}
     env = {_RER + "PROVIDER": p["wire"]}
     pref = _RER + p["wire"].upper().replace("-", "_") + "_"
     env[pref + "MODEL"] = model
-    if p["wire"] == "litellm-sdk":
-        env[_RER + "LITELLM_SDK_API_BASE"] = base_url or p.get("base_url", "")
+    url = base_url or p.get("base_url", "")
+    if p["wire"] == "litellm-sdk" and url:
+        env[_RER + "LITELLM_SDK_API_BASE"] = url
     elif base_url:
         env[pref + "BASE_URL"] = base_url
     candidates = candidates or p.get("candidates", 0)
     if candidates:
         env[_RER + "MAX_CANDIDATES"] = str(candidates)
-    if key:
-        env[p.get("key_env", pref + "API_KEY")] = key
+    kenv = p.get("key_env")
+    if key and kenv:
+        env[kenv] = key
     return env
 
 
 def slot_env(slot: str, provider: str, *, model: str = "", models: dict | None = None,
-             base_url: str = "", dimensions: int = 0, candidates: int = 0, key: str = "") -> dict:
+             base_url: str = "", dimensions: int = 0, candidates: int = 0, key: str | None = None) -> dict:
     """Env do .env para a escolha (sem tocar disco). Valores vazios caem fora — segredo nunca ecoa."""
     p = PROVIDERS[slot][provider]
+    _validate_key(provider, p, key)
+    if isinstance(key, str):
+        key = key.strip() or None            # vazia ou só espaços = não informada, em todo slot (nada vazio chega ao .env)
     if slot == "llm":
         if p.get("family") == "subscription":
             env = {"HINDSIGHT_API_LLM_PROVIDER": p.get("wire", provider)}
@@ -277,8 +310,9 @@ def slot_env(slot: str, provider: str, *, model: str = "", models: dict | None =
                 env["HINDSIGHT_API_LLM_REASONING_EFFORT"] = p["effort"]
             return env
         env = {"HINDSIGHT_API_LLM_PROVIDER": "openai" if p.get("wire") == "openai" else provider}
-        if p.get("wire") == "openai":
-            env["HINDSIGHT_API_LLM_BASE_URL"] = base_url or p.get("base_url", "")
+        url = base_url or p.get("base_url", "")
+        if p.get("wire") == "openai" and url:
+            env["HINDSIGHT_API_LLM_BASE_URL"] = url
         ops = models or {}
         for op, envk in LLM_OPS:
             m = ops.get(op) or (model if op == "default" else "")
@@ -305,7 +339,7 @@ def slot_env(slot: str, provider: str, *, model: str = "", models: dict | None =
 
 
 def set_slot(brain, slot: str, provider: str, *, model: str = "", models: dict | None = None,
-             base_url: str = "", dimensions: int = 0, candidates: int = 0, key: str = "") -> dict:
+             base_url: str = "", dimensions: int = 0, candidates: int = 0, key: str | None = None) -> dict:
     """Grava a escolha: .env (wire + chave) + [memory] (provedor/modelo/flags). Devolve o resumo."""
     if slot not in SLOTS:
         raise util.BrainError(f"slot inválido: {slot!r} — use {', '.join(SLOTS)}", code=4)
@@ -340,6 +374,7 @@ def set_slot(brain, slot: str, provider: str, *, model: str = "", models: dict |
         models = dict(p["models"])              # recomendados por operação (cenário B) como default
     env_updates = slot_env(slot, provider, model=model, models=models, base_url=base_url,
                            dimensions=dimensions, candidates=candidates, key=key)
+    _guard_env_updates(env_updates)
     from .setup import set_env                     # lazy: setup importa memory em tempo de execução
     changed_env = set_env(brain.inst, env_updates)
 
@@ -494,7 +529,7 @@ def cli(args, brain) -> None:
         res = set_slot(brain, args.slot, args.provider, model=args.model or "",
                        models=_parse_models(args.models) if args.models else None,
                        base_url=args.base_url or "", dimensions=args.dimensions or 0,
-                       candidates=args.candidates or 0, key=args.key or "")
+                       candidates=args.candidates or 0, key=args.key)
         print(f"✓ {res['slot']} → {res['label']}")
         if res["env"]:
             print(f"  .env: {', '.join(res['env'])} (valor não impresso)")
@@ -511,7 +546,7 @@ def cli(args, brain) -> None:
             print("  ⚠ egress: texto do vault vai para a API do provedor — recreate do container aplica "
                   f"(docker compose -f services/compose.yaml{_full} --env-file config/.env up -d)")
         if res["rebuild_needed"]:
-            print("  ⚠ embeddings mudaram: vetores antios são incompatíveis — `brain memory rebuild` "
+            print("  ⚠ embeddings mudaram: vetores antigos são incompatíveis — `brain memory rebuild` "
                   "re-deriva tudo do vault")
         return
     st = stack(brain)

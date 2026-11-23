@@ -48,7 +48,7 @@ def use_brand(cfg: dict | None) -> None:
 LABEL_WIDTH = 130                   # pt — coluna de rótulos da tabela 2 (o resto do corpo da página fica com o valor)
 
 
-ID_RE = re.compile(r"\b(OPP|PROC|TASK|DEC|WIN|PROP)-(\d{4})\b")   # IDs zero-padded são do Brain (PROJ-1 pode ser do Jira)
+ID_RE = re.compile(r"\b(OPP|PROC|TASK|DEC|WIN|PROP)-(\d{1,5})\b")   # IDs com 1–5 dígitos do Brain (PROJ-1 pode ser do Jira)
 NO_LINK_KINDS = ("pasta", "one-pager", "fontes", "fonte")             # docs ligados que não são "arquivo relacionado"
 MEETING = {"reuniao", "reunião"}
 DOC_URL = "https://docs.google.com/document/d/{}/edit"
@@ -153,8 +153,8 @@ def links(b, oid: str, f: dict) -> dict[str, str]:
     o = b.state.opportunities[oid]
     text = "\n".join(f.values())
     out = {}
-    for m in re.finditer(r"\bOPP-\d{4}\b", text):
-        if m.group(0) != oid and (url := onepager_url(b, m.group(0))):
+    for m in ID_RE.finditer(text):
+        if m.group(1) == "OPP" and m.group(0) != oid and (url := onepager_url(b, m.group(0))):
             out[label(b, m.group(0))] = url
     up = uploaded(b, o)
     for path in [o.source, *o.evidence]:

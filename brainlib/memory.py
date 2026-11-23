@@ -881,8 +881,13 @@ def cost(brain, hs: Hindsight | None = None) -> dict:
         row["cost_usd"] += float(r.get("cost_usd") or r.get("cost") or 0.0)
     total = sum(r["cost_usd"] for r in rows.values())
     return {"mode": m, "month": month, "usd": round(total, 4),
-            "detail": f"US$ {total:.2f} em {month}" + ("" if total else " — sem uso registrado"),
+            "detail": f"US$ {_fmt_dec_br(total)} em {month}" + ("" if total else " — sem uso registrado"),
             "rows": [{"operation": k[0], "model": k[1], **v} for k, v in sorted(rows.items())]}
+
+
+def _fmt_dec_br(v: float, places: int = 2) -> str:
+    """Formata decimal em pt-BR (vírgula decimal, ponto de milhar) sem depender de locale."""
+    return f"{v:,.{places}f}".replace(",", "_").replace(".", ",").replace("_", ".")
 
 
 def _cost_text(c: dict) -> str:
@@ -894,8 +899,10 @@ def _cost_text(c: dict) -> str:
         return head
     lines = [head]
     for r in c["rows"]:
+        in_tok = f"{r['input_tokens']:,}".replace(",", ".")
+        out_tok = f"{r['output_tokens']:,}".replace(",", ".")
         lines.append(f"  {r['operation']} · {r['model']}: {r['requests']} chamadas · "
-                     f"{r['input_tokens']:,} in/{r['output_tokens']:,} out tokens · US$ {r['cost_usd']:.2f}".replace(",", "."))
+                     f"{in_tok} in/{out_tok} out tokens · US$ {_fmt_dec_br(r['cost_usd'])}")
     return "\n".join(lines)
 
 

@@ -6,6 +6,7 @@ Nada aqui grava no vault: a saída vai para o stdout ou para uma pasta temporár
 """
 from __future__ import annotations
 
+import math
 import re
 import subprocess
 import sys
@@ -15,9 +16,13 @@ from collections import defaultdict
 from pathlib import Path
 
 from . import util
+from .pdf import sweep_temp_dirs
 from .swift import swift_tool
 
 VIDEO_TIMEOUT_S = 600
+VIDEO_MAX_TIMEOUT_S = 7200
+MDLS_TIMEOUT_S = 10
+TRANSCRIBE_S_PER_S = 1.0
 
 HINT = ("transcrição/quadros precisam do macOS 26+ com as Command Line Tools (`xcode-select --install`) — "
         "em outro sistema, use o whisper.cpp ou o ffmpeg e coloque o texto na inbox")
@@ -164,8 +169,46 @@ def _fmt(t: int) -> str:
     return f"[{t // 3600:02d}:{t % 3600 // 60:02d}:{t % 60:02d}]"
 
 
+def probe_duration(path: Path, run=None) -> float | None:
+    """Sonda a duração da mídia em segundos via `mdls` do macOS; retorna None se indisponível ou inválido."""
+    runner = subprocess.run if run is None else run
+    if runner is subprocess.run and not Path("/usr/bin/mdls").is_file():
+        return None
+    try:
+        res = runner(
+            ["/usr/bin/mdls", "-name", "kMDItemDurationSeconds", "-raw", str(path)],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=MDLS_TIMEOUT_S,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if res.returncode != 0:
+        return None
+    try:
+        val = float((res.stdout or "").strip())
+    except ValueError:
+        return None
+    return val if math.isfinite(val) and val > 0 else None
+
+
+def _transcribe_timeout(duration_s: float | None, n_locales: int) -> int:
+    if not duration_s or duration_s <= 0:
+        return VIDEO_TIMEOUT_S
+    scaled = math.ceil(duration_s * max(1, n_locales) * TRANSCRIBE_S_PER_S)
+    return min(VIDEO_MAX_TIMEOUT_S, max(VIDEO_TIMEOUT_S, scaled))
+
+
+def _frames_timeout(duration_s: float | None, every: int) -> int:
+    if not duration_s or duration_s <= 0:
+        return VIDEO_TIMEOUT_S
+    n_frames = max(1, math.ceil(duration_s / max(1, every)))
+    return min(VIDEO_MAX_TIMEOUT_S, max(VIDEO_TIMEOUT_S, n_frames * 5))
+
+
 def transcribe(path: str | Path, locales: list[str] | None = None, start: float = 0, length: float = 0,
-               timeout: int = VIDEO_TIMEOUT_S, popen=subprocess.Popen) -> str:
+               timeout: int | None = None, popen=subprocess.Popen, probe=None) -> str:
     p = Path(path)
     if not p.is_file():
         raise util.BrainError(f"arquivo não encontrado: {p}", code=3)
@@ -173,6 +216,11 @@ def transcribe(path: str | Path, locales: list[str] | None = None, start: float 
     tool = swift_tool(SWIFT_STT, "stt", library=True)
     if not tool:
         raise util.BrainError(HINT, code=3)
+    if timeout is None:
+        dur = length if length > 0 else (probe or probe_duration)(p)
+        if length <= 0 and dur is not None and start > 0:
+            dur = max(0.0, dur - start)
+        timeout = _transcribe_timeout(dur, len(locales))
     procs: dict = {}
     rows: dict[str, list[tuple[int, str]]] = {}
     deadline = time.monotonic() + timeout
@@ -197,7 +245,7 @@ def transcribe(path: str | Path, locales: list[str] | None = None, start: float 
 
 
 def frames(path: str | Path, every: int = 150, width: int = 900, start: float = 0, end: float = 0,
-           out: str | Path | None = None, timeout: int = VIDEO_TIMEOUT_S, run=subprocess.run) -> list[Path]:
+           out: str | Path | None = None, timeout: int | None = None, run=subprocess.run, probe=None) -> list[Path]:
     p = Path(path)
     if not p.is_file():
         raise util.BrainError(f"arquivo não encontrado: {p}", code=3)
@@ -207,7 +255,16 @@ def frames(path: str | Path, every: int = 150, width: int = 900, start: float = 
     tool = swift_tool(SWIFT_FRAMES, "frames", library=True)
     if not tool:
         raise util.BrainError(HINT, code=3)
-    dest = Path(out) if out else Path(tempfile.mkdtemp(prefix="brain-video-"))
+    if timeout is None:
+        dur = (end - start) if (end > 0 and end > start) else (probe or probe_duration)(p)
+        if not (end > 0 and end > start) and dur is not None and start > 0:
+            dur = max(0.0, dur - start)
+        timeout = _frames_timeout(dur, every)
+    if out is None:
+        dest = Path(tempfile.mkdtemp(prefix="brain-video-"))
+        sweep_temp_dirs("brain-video-", keep=dest)
+    else:
+        dest = Path(out)
     dest.mkdir(parents=True, exist_ok=True)
     args = [*tool, str(p), str(dest), str(every), str(width), str(start)] + ([str(end)] if end else [])
     try:

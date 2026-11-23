@@ -26,7 +26,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from . import __version__, util
+from . import __version__, config, util
 
 INBOX_UPLOAD_MAX = 50 * 1024 * 1024  # 50 MB por upload para a inbox via ponte
 CSP = (
@@ -549,6 +549,14 @@ def _delete_original_paths(paths: list[str], data: bytes, inst) -> tuple[list[st
     return removed, refused
 
 
+def _running_max_age(runner_cfg: dict) -> int:
+    try:
+        timeout_min = int((runner_cfg or {}).get("timeout_min", config.DEFAULTS["runner"]["timeout_min"]))
+    except (TypeError, ValueError):
+        timeout_min = config.DEFAULTS["runner"]["timeout_min"]
+    return max(600, timeout_min * 60 + 300)
+
+
 class _Handler(BaseHTTPRequestHandler):
     state: _State = None                                # type: ignore[assignment]
     timeout = 60                                        # socket: pedido travado não segura a thread p/ sempre
@@ -922,11 +930,7 @@ class _Handler(BaseHTTPRequestHandler):
                 self.state.agent_jobs.pop(old, None)
 
             runner_cfg = inst.cfg.get("runner", {}) if isinstance(inst.cfg, dict) else {}
-            try:
-                timeout_min = int(runner_cfg.get("timeout_min", 10))
-            except (TypeError, ValueError):
-                timeout_min = 10
-            running_max_age = max(600, timeout_min * 60 + 300)
+            running_max_age = _running_max_age(runner_cfg)
 
             for j in self.state.agent_jobs.values():
                 if j.get("status") == "running" and now - j.get("_started", 0) > running_max_age:

@@ -391,7 +391,9 @@ def _absorb_goals(brain, goals_path: Path, window: dict, events: list[dict], not
                                       "mantidas; revise o arquivo"})
 
 
-def _opportunity_events(brain, last: dict, notices: list[dict], window: dict | None = None) -> list[dict]:
+def _opportunity_events(
+    brain, last: dict, notices: list[dict], window: dict | None = None, updates: dict[str, str] | None = None,
+) -> list[dict]:
     from .schema import OPP_REASON_STATUS, OPP_STATUS
     out = []
     rec_dir = brain.inst.fresh / "records" / "opportunities"
@@ -422,15 +424,21 @@ def _opportunity_events(brain, last: dict, notices: list[dict], window: dict | N
             if now_val in OPP_REASON_STATUS:
                 data["reason"] = "alterado na ficha (status)"
             out.append(_owner_event("opportunity.status", oid, data, src))
+            if updates is not None:
+                updates[oid] = now_val
     return out
 
 
-def collect(brain, notices: list[dict] | None = None, window: dict | None = None) -> list[dict]:
+def _collect_with_updates(
+    brain, notices: list[dict] | None = None, window: dict | None = None,
+) -> tuple[list[dict], dict[str, bool], dict[str, str]]:
     st = brain.state
     fresh = brain.inst.fresh
     last = load_state(fresh)
     notices = notices if notices is not None else []
     events: list[dict] = []
+    todo_updates: dict[str, bool] = {}
+    record_updates: dict[str, str] = {}
     touched: set[str] = set()
 
     rec_dir = fresh / "records" / "actions"
@@ -456,6 +464,7 @@ def collect(brain, notices: list[dict] | None = None, window: dict | None = None
         if t == "action.updated" and not a.open:
             events.append(_owner_event("action.reopened", aid, {"reason": data["note"]}, src))
         events.append(_owner_event(t, aid, dict(data), src))
+        record_updates[aid] = now_val
         touched.add(aid)
 
     todo = fresh / "todo.md"
@@ -480,16 +489,18 @@ def collect(brain, notices: list[dict] | None = None, window: dict | None = None
             if checked and a.open:
                 events.append(_owner_event("action.closed", aid, {"how": "marcada como feita em todo.md"},
                                            "FRESH/todo.md"))
+                todo_updates[aid] = checked
             elif not checked and not a.open:
                 events.append(_owner_event("action.reopened", aid, {"reason": "desmarcada em todo.md"},
                                            "FRESH/todo.md"))
+                todo_updates[aid] = checked
             touched.add(aid)
         if absorbed_todo_ids:
             notices.append({"level": "warn", "title": "colheita",
                             "detail": f"FRESH/todo.md alterado durante a janela do agente ({', '.join(absorbed_todo_ids)}) — "
                                       "ignorado (se foi você, marque novamente)"})
 
-    events += _opportunity_events(brain, last, notices, window=window)
+    events += _opportunity_events(brain, last, notices, window=window, updates=record_updates)
 
     goals_path = brain.inst.planning_file
     if window is not None and goals_path.exists() and _is_absorbed("PLANNING/goals.md", goals_path, window):
@@ -499,12 +510,36 @@ def collect(brain, notices: list[dict] | None = None, window: dict | None = None
         for did, d in plan.deliverables.items():
             if d.status != _known_status(st, did):
                 events.append(_deliverable_event(did, d))
-    return events
+    return events, todo_updates, record_updates
+
+
+def collect(brain, notices: list[dict] | None = None, window: dict | None = None) -> list[dict]:
+    return _collect_with_updates(brain, notices, window=window)[0]
+
+
+def _advance_state(fresh: Path, todo_updates: dict[str, bool], record_updates: dict[str, str]) -> None:
+    if not todo_updates and not record_updates:
+        return
+    state = load_state(fresh)
+    todo = dict(state.get("todo", {}))
+    records = dict(state.get("records", {}))
+    todo.update(todo_updates)
+    records.update(record_updates)
+    util.write_json(fresh / STATE_FILE, {**state, "todo": todo, "records": records})
 
 
 def run(brain, notices: list[dict] | None = None, window: dict | None = None) -> list[dict]:
-    events = collect(brain, notices, window=window)
-    return brain.record(events) if events else []
+    events, todo_updates, record_updates = _collect_with_updates(brain, notices, window=window)
+    if not events:
+        return []
+    recorded = brain.record(events)
+    ok = {e.get("id") for e in recorded}
+    _advance_state(
+        brain.inst.fresh,
+        {k: v for k, v in todo_updates.items() if k in ok},
+        {k: v for k, v in record_updates.items() if k in ok},
+    )
+    return recorded
 
 
 def save_state(fresh: Path, todo: dict[str, bool], records: dict[str, str]) -> None:

@@ -109,7 +109,7 @@ def require(kind: str, body: str, what: str = "o corpo da issue") -> None:
                               f". Veja o molde: `brain feedback template --kind {kind}`", code=4)
 
 
-TAG_PREFIX_RE = re.compile(r"^\s*(?:\[[^\]]{1,24}\]|\b[A-Z]{2,5}-\d+\b)[\s:·-]*", re.I)
+TAG_PREFIX_RE = re.compile(r"^\s*(?:\[[^\]]{1,24}\]|\bFB?-\d+\b)[\s:·-]*", re.I)
 
 
 def strip_tag(title: str) -> str:
