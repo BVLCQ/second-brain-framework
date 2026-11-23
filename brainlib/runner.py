@@ -8,6 +8,7 @@ qualquer evento "do dono", aprovação, envio ou publicação — não há dono 
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import hashlib
 import os
 import plistlib
@@ -19,7 +20,7 @@ import sys
 import traceback
 from pathlib import Path
 
-from . import util
+from . import config, util
 
 BASH_ALLOW = "Bash"   # qualquer comando de shell, sempre liberado para o agente headless (noturno e ações ⚡ do TUI)
 # Toda ferramenta nativa do claude, sem restrição: o agente headless não consegue pedir permissão, então cada uma
@@ -47,8 +48,56 @@ NIGHT_PROMPT = ("{base} — MODO NOTURNO: o dono não está presente. Permitido:
                 "commands/opportunity/SKILL.md. Na dúvida, não faça — registre uma proposta.")
 
 
+MCP_WRITE_DENY_PATTERNS: tuple[str, ...] = (
+    *(f"{srv}*{verb}*"
+      for srv in ("mcp__slack__", "mcp__claude_ai_Slack__")
+      for verb in ("send", "post", "create", "update", "delete", "write", "reply")),
+    *(f"{srv}*{verb}*"
+      for srv in ("mcp__gmail__", "mcp__claude_ai_Gmail__")
+      for verb in ("send", "create", "delete", "trash", "modify", "update", "write")),
+    *(f"{srv}*{verb}*"
+      for srv in ("mcp__gcal__", "mcp__claude_ai_Google_Calendar__")
+      for verb in ("create", "update", "delete", "move", "patch")),
+    *(f"{srv}*{verb}*"
+      for srv in ("mcp__gdrive__", "mcp__claude_ai_Google_Drive__")
+      for verb in ("create", "update", "delete", "move", "write", "share", "upload")),
+    *(f"{srv}*{verb}*"
+      for srv in ("mcp__github__", "mcp__claude_ai_GitHub__")
+      for verb in ("create", "update", "delete", "push", "merge", "write")),
+)
+
+
+def filtered_mcp_allow(cfg: dict, *, include_tui: bool = False, extra: list[str] | None = None) -> list[str]:
+    """Regras extras de permissão filtradas: `[runner].allow` + porta `oppdrive` (+ `[tui].agent_allow` e `extra`).
+    Descarta qualquer ferramenta MCP de escrita externa fora de `[oppdrive].tools`."""
+    door_list = door_allow(cfg)
+    door = set(door_list)
+    rules = read_allow(cfg) + door_list
+    if include_tui:
+        rules += [t for t in cfg.get("tui", {}).get("agent_allow", []) if t]
+    if extra:
+        rules += [t for t in extra if t]
+    out: list[str] = []
+    for rule in rules:
+        if rule in out:
+            continue
+        if rule.startswith("mcp__") and config.is_external_write(rule) and rule not in door:
+            continue
+        out.append(rule)
+    return out
+
+
+def disallowed_tools(cfg: dict) -> list[str]:
+    """Regras de negação para `--disallowedTools`: limites da Constituição (`perms.DENY`) + ferramentas MCP de escrita
+    externa dos conectores padrão não liberadas explicitamente pela porta `oppdrive` (`door_allow`)."""
+    from . import perms
+    door = set(door_allow(cfg))
+    mcp_deny = [pat for pat in MCP_WRITE_DENY_PATTERNS if not any(fnmatch.fnmatchcase(d, pat) for d in door)]
+    return [*perms.DENY, *mcp_deny]
+
+
 def preset_argv(name: str, cfg: dict, prompt: str) -> list[str] | None:
-    """argv do preset `name` com `prompt`, ou None sem binário no PATH. claude ganha --model e as regras MCP."""
+    """argv do preset `name` com `prompt`, ou None sem binário no PATH. claude ganha --model, --disallowedTools e as regras MCP."""
     preset = PRESETS.get(name)
     if not preset or not shutil.which(preset[0]):
         return None
@@ -57,7 +106,11 @@ def preset_argv(name: str, cfg: dict, prompt: str) -> list[str] | None:
         r = cfg["runner"]
         if r.get("model"):   # antes do --allowedTools (variádico): flag depois dele seria engolida
             argv = [argv[0], "--model", str(r["model"])] + argv[1:]
-        argv += read_allow(cfg) + door_allow(cfg)
+        disallowed = disallowed_tools(cfg)
+        if disallowed:       # antes do --allowedTools (variádico)
+            idx = argv.index("--allowedTools")
+            argv[idx:idx] = ["--disallowedTools", *disallowed]
+        argv += filtered_mcp_allow(cfg, include_tui=False)
     return argv
 
 

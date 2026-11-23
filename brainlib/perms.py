@@ -30,6 +30,15 @@ RECALL_HOOK = "services/hooks/recall_context.py"
 DENY = [
     "Edit(/vault/PROCESSED/_ledger/**)",     # o livro-razão só se escreve via ./brain
     "Edit(/config/.env)", "Read(/config/.env)", "Edit(/.env)", "Read(/.env)",    # segredos nunca no chat
+    "Read(**/config/.env)",
+    "Read(~/.ssh/**)", "Read(~/.aws/**)", "Read(~/.config/gh/hosts.yml)",
+    "Read(~/.netrc)", "Read(~/.gnupg/**)",
+    "Bash(*cat *.env*)",
+    "Bash(*cat ~/.ssh/*)", "Bash(*cat */.ssh/*)",
+    "Bash(*cat ~/.aws/*)", "Bash(*cat */.aws/*)",
+    "Bash(*cat ~/.config/gh/hosts.yml*)", "Bash(*cat */.config/gh/hosts.yml*)",
+    "Bash(*cat ~/.netrc*)", "Bash(*cat */.netrc*)",
+    "Bash(*cat ~/.gnupg/*)", "Bash(*cat */.gnupg/*)",
     "Bash(git push --force*)", "Bash(git push -f*)", "Bash(git push * --force*)", "Bash(git push * -f*)",
     "Bash(*--no-verify*)",                   # porta 5: nunca force, nunca --no-verify
 ]
@@ -54,15 +63,7 @@ def static_settings() -> dict:
 def mcp_rules(cfg: dict) -> list[str]:
     """MCP liberadas na sessão interativa: leitura ([runner].allow), porta oppdrive e extras do dono ([tui].agent_allow).
     Ferramenta de escrita externa fora da porta oppdrive é descartada, mesmo que alguém a tenha escrito à mão no brain.toml."""
-    door = set(runner.door_allow(cfg))
-    out: list[str] = []
-    for rule in runner.read_allow(cfg) + sorted(door) + [t for t in cfg.get("tui", {}).get("agent_allow", []) if t]:
-        if rule in out:
-            continue
-        if rule.startswith("mcp__") and config.is_external_write(rule) and rule not in door:
-            continue
-        out.append(rule)
-    return out
+    return runner.filtered_mcp_allow(cfg, include_tui=True)
 
 
 def extra_directories(inst) -> list[str]:
@@ -90,7 +91,15 @@ def abs_denies(inst) -> list[str]:
     r = Path(inst.root).resolve()
     ledger = Path(inst.vault).resolve() / "PROCESSED" / "_ledger"
     env = [Path(inst.config_dir).resolve() / ".env", r / ".env"]
-    return [f"Edit(/{ledger}/**)"] + [f"{t}(/{e})" for e in env for t in ("Read", "Edit")]
+    home = Path.home().resolve()
+    home_denies = [
+        f"Read(/{home / '.ssh'}/**)",
+        f"Read(/{home / '.aws'}/**)",
+        f"Read(/{home / '.config' / 'gh' / 'hosts.yml'})",
+        f"Read(/{home / '.netrc'})",
+        f"Read(/{home / '.gnupg'}/**)",
+    ]
+    return [f"Edit(/{ledger}/**)"] + [f"{t}(/{e})" for e in env for t in ("Read", "Edit")] + home_denies
 
 
 def local_permissions(inst) -> dict:
