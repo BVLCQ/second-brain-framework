@@ -30,6 +30,7 @@ import re
 import secrets
 import shutil
 import subprocess
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -139,6 +140,7 @@ def needed(brain) -> bool:
 
 # ── jobs em segundo plano (claude mcp list, memória, proposta do agente) ─────
 JOB_TIMEOUT_S = 900  # 15 min: job travado expira como 'stale' em vez de prender o polling
+JOB_TTL_S = 3600     # 1 h: jobs antigos saem da memória em partida ou leitura
 
 
 class _Job:
@@ -172,11 +174,16 @@ _JOBS_LOCK = threading.Lock()
 _MCP_CACHE: dict = {"at": 0.0, "servers": None, "source": None, "hint": "", "job": None}
 
 
+def _purge_jobs_locked(now: float | None = None) -> None:
+    t = time.time() if now is None else now
+    for old in [k for k, j in _JOBS.items() if t - j.started > JOB_TTL_S]:
+        _JOBS.pop(old, None)
+
+
 def _start(kind: str, fn) -> _Job:
     job = _Job(kind)
     with _JOBS_LOCK:
-        for old in [k for k, j in _JOBS.items() if time.time() - j.started > 3600]:
-            _JOBS.pop(old, None)
+        _purge_jobs_locked()
         _JOBS[job.id] = job
 
     def run():
@@ -200,8 +207,10 @@ def _start(kind: str, fn) -> _Job:
 
 
 def job(job_id: str) -> dict | None:
-    j = _JOBS.get(job_id)
-    return j.as_dict() if j else None
+    with _JOBS_LOCK:
+        _purge_jobs_locked()
+        j = _JOBS.get(job_id)
+        return j.as_dict() if j else None
 
 
 class _JobUI:
@@ -266,8 +275,14 @@ def parse_mcp_list(text: str) -> dict[str, str]:
 
 def scan_connectors(force: bool = False, run=subprocess.run) -> dict:
     """Dispara (ou reaproveita) o `claude mcp list` em segundo plano — leva 30–60 s. Nunca segura a trava da ponte."""
-    if not force and _MCP_CACHE["job"] and _JOBS.get(_MCP_CACHE["job"]) and _JOBS[_MCP_CACHE["job"]].status == "running":
-        return {"job": _MCP_CACHE["job"]}
+    if not force:
+        with _JOBS_LOCK:
+            _purge_jobs_locked()
+            cached_job_id = _MCP_CACHE["job"]
+            cached_job = _JOBS.get(cached_job_id) if cached_job_id else None
+            is_running = bool(cached_job and cached_job.status == "running")
+        if is_running:
+            return {"job": cached_job_id}
     if not force and _MCP_CACHE["servers"] is not None and time.time() - _MCP_CACHE["at"] < 600:
         return {"source": _MCP_CACHE.get("source") or "claude", "servers": _MCP_CACHE["servers"],
                 "hint": _MCP_CACHE.get("hint") or ""}
@@ -635,9 +650,23 @@ def apply_memory(brain, data: dict) -> dict:
     mode = {"lite": "embed"}.get(str(data.get("mode")), str(data.get("mode")))
     if mode not in ("none", "embed", "full"):
         raise util.BrainError("modo de memória inválido", code=4)
-    if data.get("later"):                               # "fazer depois": guarda a intenção, não liga nada
+    if data.get("later"):                               # "fazer depois": vira TASK nomeada no ledger
+        if util.is_nightly():
+            raise util.BrainError("memória é escolha do dono presente — nunca no noturno", code=4)
+        if brain.owner not in brain.state.people:
+            raise util.BrainError("preencha o passo Você primeiro — a tarefa precisa do dono registrado", code=4)
+        title = (
+            f"Configurar memória semântica do Brain no modo {mode} (`brain setup --only memoria`)"
+            if mode in ("embed", "full")
+            else "Decidir e configurar a memória semântica do Brain (`brain setup --only memoria`)"
+        )
+        ev = brain.record_one({
+            "type": "action.opened", "by": "owner", "prov": "declarado", "source": "onboarding",
+            "data": {"title": title, "owner": brain.owner, "list": "mine"},
+        })
+        _mark(brain.inst, "memoria")
         _save_progress(brain.inst, memory_later={"embed": "lite"}.get(mode, mode))
-        return {"later": True}
+        return {"later": True, "id": ev["id"], "mode": mode}
     setup.validate_memory_setup(data)                    # erros de escolha sobem ANTES do job (sem rodar nada)
     if mode == "none":
         from . import memory
@@ -789,12 +818,22 @@ def maquina_state(brain) -> dict:
         plat = launcher._platform()
     except util.BrainError:
         plat = ""
-    ours = bool(launcher._find_ours("Brain", plat)) if plat else False
+    ours = bool(launcher.find_for_instance(brain.inst.root, platform=plat)) if plat else False
+    pinned = launcher.pin_status(root=brain.inst.root, platform=plat or None) if ours else False
+    other_dock = launcher.docked_other(brain.inst.root, platform=plat or None) if (plat and not pinned) else None
+    icon_hint = ""
+    if other_dock:
+        icon_hint = (
+            f"o atalho atual abre outra instância ({other_dock}) — clique para pregar o app desta instância"
+            if ours else
+            f"o atalho atual abre outra instância ({other_dock}) — instale o app desta instância com `brain app install`"
+        )
     return {
         "comando": setup._st_comando(brain),
         "noturno": setup._st_noturno(brain),
         # sem o app instalado o pin é recusa honesta: pill de atenção, não "pendente" fingido
-        "icon": ("warn" if not ours else "done" if launcher.pin_status(platform=plat or None) else "pending"),
+        "icon": ("warn" if not ours else "done" if pinned else "pending"),
+        "icon_hint": icon_hint,
         "platform": plat,
         "tui": setup._st_tui(brain),
         "foco": setup._st_foco(brain),
@@ -842,7 +881,7 @@ def apply_maquina(brain, data: dict) -> dict:
         if wants["icon"]:
             from . import launcher
             try:
-                j.say(launcher.pin_shortcut())
+                j.say(launcher.pin_shortcut(root=b.inst.root))
                 done.append("icon")
             except (util.BrainError, OSError, subprocess.SubprocessError) as e:
                 j.say(f"– ícone: {e}")                  # cosmético: nunca derruba os passos seguintes
@@ -892,7 +931,17 @@ def save_upload(brain, filename: str, body: bytes) -> dict:
         n += 1
     if target.resolve().parent != inbox.resolve():
         raise util.BrainError("nome de arquivo inválido", code=4)
-    target.write_bytes(body)
+    fd, tmp_name = tempfile.mkstemp(prefix=".upload-", suffix=".tmp", dir=str(inbox))
+    tmp_path = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(body)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, target)
+    except BaseException:
+        tmp_path.unlink(missing_ok=True)
+        raise
     pg = progress(brain.inst)
     _save_progress(brain.inst, planning_sources=list(dict.fromkeys([*pg.get("planning_sources", []),
                                                                      brain.inst.rel(target)])))
@@ -1058,43 +1107,48 @@ def finish(brain) -> dict:
     from . import ask, render
     if util.is_nightly():
         raise util.BrainError("o onboarding nunca termina no noturno — o dono fecha no app", code=4)
+    try:
+        # a entrevista que o /init faz de profundidade não morre com o formulário: vira ASK aberta —
+        # o agente retoma sozinho na próxima sessão (/dump passo 0 aplica a resposta) ou pela TUI ⚡
+        _, ask_id, _ = ask.add(
+            brain,
+            "Terminar a entrevista do onboarding: quem são as pessoas recorrentes (nome, e-mail, como te chamam) "
+            "e quais fontes além das conectadas valem observar?",
+            options=["conversar agora", "deixar para depois"], kind="outro",
+            by="agent", prov="observado", source="onboarding")
+        stash = progress(brain.inst).get("entrevista") or {}
+        people_txt, sources_txt = str(stash.get("people") or ""), str(stash.get("sources") or "")
+        applied_inline: list[str] = []
+        if people_txt.strip():
+            applied_inline = _apply_people(brain, people_txt)
+        if sources_txt.strip():
+            brain.record_one({"type": "question.answered", "id": ask_id, "by": "owner", "prov": "declarado",
+                              "source": "onboarding",
+                              "data": {"answer": f"fontes que valem observar: {sources_txt.strip()}", "free": True}})
+        elif applied_inline:
+            brain.record_one({"type": "question.answered", "id": ask_id, "by": "owner", "prov": "declarado",
+                              "source": "onboarding", "data": {"answer": "conversar agora", "free": None}})
+            brain.record_one({"type": "question.applied", "id": ask_id, "by": "agent", "prov": "observado",
+                              "source": "onboarding",
+                              "data": {"how": f"pessoas viraram fichas no onboarding: {', '.join(applied_inline)}"}})
+        elif not stash.get("answered") and brain.owner in brain.state.people:
+            # pulou a conversa: não se perde — vira TASK no TODO do dono (a ASK segue aberta pro agente;
+            # sem a ficha do dono (passo Você pulado) a ASK sozinha cobre — nada de ficha fantasma)
+            brain.record_one({"type": "action.opened", "by": "agent", "prov": "observado", "source": "onboarding",
+                              "data": {"title": "Terminar a entrevista do Brain — pessoas recorrentes e fontes que valem observar",
+                                       "owner": brain.owner, "list": "mine", "due": None, "due_suggested": None,
+                                       "due_reason": "", "due_none_reason": "entrevista pós-onboarding — responda quando quiser (chat ou TUI ⚡)",
+                                       "effort_min": None, "project": None, "deliverable": None, "blocked_by": [],
+                                       "unblocks": [], "people": [], "priority": None, "link": "", "origin": "onboarding"}})
+        render.render_all(brain)
+        brain.record_one({"type": "onboarding.finished", "by": "owner", "prov": "declarado",
+                          "source": "onboarding", "data": {}})
+    except util.BrainError:
+        raise
+    except Exception as e:  # noqa: BLE001 — falha parcial não fecha onboarding
+        raise util.BrainError(f"não consegui concluir o onboarding: {e}", code=3) from e
     _mark(brain.inst, "pronto")
     _save_progress(brain.inst, finished=util.today().isoformat())
-    brain.record_one({"type": "onboarding.finished", "by": "owner", "prov": "declarado",
-                      "source": "onboarding", "data": {}})
-    # a entrevista que o /init faz de profundidade não morre com o formulário: vira ASK aberta —
-    # o agente retoma sozinho na próxima sessão (/dump passo 0 aplica a resposta) ou pela TUI ⚡
-    _, ask_id, _ = ask.add(
-        brain,
-        "Terminar a entrevista do onboarding: quem são as pessoas recorrentes (nome, e-mail, como te chamam) "
-        "e quais fontes além das conectadas valem observar?",
-        options=["conversar agora", "deixar para depois"], kind="outro",
-        by="agent", prov="observado", source="onboarding")
-    stash = progress(brain.inst).get("entrevista") or {}
-    people_txt, sources_txt = str(stash.get("people") or ""), str(stash.get("sources") or "")
-    applied_inline: list[str] = []
-    if people_txt.strip():
-        applied_inline = _apply_people(brain, people_txt)
-    if sources_txt.strip():
-        brain.record_one({"type": "question.answered", "id": ask_id, "by": "owner", "prov": "declarado",
-                          "source": "onboarding",
-                          "data": {"answer": f"fontes que valem observar: {sources_txt.strip()}", "free": True}})
-    elif applied_inline:
-        brain.record_one({"type": "question.answered", "id": ask_id, "by": "owner", "prov": "declarado",
-                          "source": "onboarding", "data": {"answer": "conversar agora", "free": None}})
-        brain.record_one({"type": "question.applied", "id": ask_id, "by": "agent", "prov": "observado",
-                          "source": "onboarding",
-                          "data": {"how": f"pessoas viraram fichas no onboarding: {', '.join(applied_inline)}"}})
-    elif not stash.get("answered") and brain.owner in brain.state.people:
-        # pulou a conversa: não se perde — vira TASK no TODO do dono (a ASK segue aberta pro agente;
-        # sem a ficha do dono (passo Você pulado) a ASK sozinha cobre — nada de ficha fantasma)
-        brain.record_one({"type": "action.opened", "by": "agent", "prov": "observado", "source": "onboarding",
-                          "data": {"title": "Terminar a entrevista do Brain — pessoas recorrentes e fontes que valem observar",
-                                   "owner": brain.owner, "list": "mine", "due": None, "due_suggested": None,
-                                   "due_reason": "", "due_none_reason": "entrevista pós-onboarding — responda quando quiser (chat ou TUI ⚡)",
-                                   "effort_min": None, "project": None, "deliverable": None, "blocked_by": [],
-                                   "unblocks": [], "people": [], "priority": None, "link": "", "origin": "onboarding"}})
-    render.render_all(brain)
     return {"ok": True, "ask": ask_id, "people_added": applied_inline}
 
 

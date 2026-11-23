@@ -102,16 +102,14 @@ def set_env(inst, updates: dict[str, str]) -> list[str]:
     """Grava chaves no config/.env preservando as existentes (0600). Nunca imprime valores."""
     path = inst.env_file
     lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
-    have = {}
-    out = []
-    for ln in lines:
-        k, sep, v = ln.partition("=")
-        if sep and not k.strip().startswith("#"):
-            have[k.strip()] = ln
-            out.append(ln)
-        else:
-            out.append(ln)
-    changed = []
+    out: list[str | None] = list(lines)
+    indices: dict[str, list[int]] = {}
+    for idx, ln in enumerate(lines):
+        k, sep, _ = ln.partition("=")
+        ks = k.strip()
+        if sep and ks and not ks.startswith("#"):
+            indices.setdefault(ks, []).append(idx)
+    changed: list[str] = []
     for k, v in updates.items():
         if not isinstance(k, str) or any(c in k for c in ("\n", "\r", "\x00")) or not _ENV_KEY_RE.match(k):
             raise util.BrainError(f"config/.env: chave inválida ({k!r})", code=4)
@@ -120,16 +118,25 @@ def set_env(inst, updates: dict[str, str]) -> list[str]:
         sv = str(v)
         if any(c in sv for c in ("\n", "\r", "\x00")):
             raise util.BrainError(f"config/.env: valor inválido para {k!r} (contém quebra de linha ou caractere nulo)", code=4)
-        if k in have:
-            if have[k] != f"{k}={sv}":
-                out[out.index(have[k])] = f"{k}={sv}"
+        new_line = f"{k}={sv}"
+        if k in indices:
+            idxs = indices[k]
+            last_idx = idxs[-1]
+            had_dupes = len(idxs) > 1
+            if had_dupes or out[last_idx] != new_line:
+                for prev in idxs[:-1]:
+                    out[prev] = None
+                out[last_idx] = new_line
+                indices[k] = [last_idx]
                 changed.append(k)
         else:
-            out.append(f"{k}={sv}")
+            out.append(new_line)
+            indices[k] = [len(out) - 1]
             changed.append(k)
     if changed:
         path.parent.mkdir(parents=True, exist_ok=True)
-        util.atomic_write(path, "\n".join(out) + "\n")
+        final_lines = [ln for ln in out if ln is not None]
+        util.atomic_write(path, "\n".join(final_lines) + "\n")
         os.chmod(path, 0o600)
     return changed
 
@@ -178,6 +185,12 @@ def install_brain_command(root: Path, ui: ConsoleUI, *, replace: bool = False) -
     cur = link.resolve() if link.is_symlink() else None
     other = cur.parent if (cur and cur.exists() and cur != (root / "brain").resolve()) else None
     if other and other.exists() and not replace:
+        return None
+    if link.exists() and not link.is_symlink():
+        ui.say(
+            f"⚠ {link} já existe e não é link simbólico — não vou apagar; "
+            "remova ou mova o arquivo e rode `brain setup --only comando`"
+        )
         return None
     if link.exists() or link.is_symlink():
         link.unlink()
@@ -546,28 +559,43 @@ def google_refresh_token(client_id: str, client_secret: str, open_browser: bool 
                          wait_s: int = 300, say=print) -> str:
     """Fluxo OAuth loopback (calendar.events.owned + drive.file). Devolve o refresh token —
     o chamador grava no .env; o valor não é impresso. `say` narra (CLI imprime; wizard vira log de job)."""
+    import errno
     redirect = f"http://localhost:{OAUTH_PORT}"
     _OAuthHandler.code = _OAuthHandler.denied = None
     _OAuthHandler.expected_state = secrets.token_urlsafe(24)
     auth_url = "https://accounts.google.com/o/oauth2/v2/auth?" + urllib.parse.urlencode({
         "response_type": "code", "client_id": client_id, "redirect_uri": redirect, "scope": SCOPES,
         "access_type": "offline", "prompt": "consent", "state": _OAuthHandler.expected_state})
-    if open_browser:
-        opener = shutil.which("xdg-open") or shutil.which("open")
-        if opener:
-            try:
-                subprocess.run([opener, auth_url], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                               timeout=15)
-            except (OSError, subprocess.TimeoutExpired):
-                pass
-    say(f"Abrindo o navegador para autorizar (escopos: calendar.events.owned + drive.file)…")
-    say(f"Se não abrir: {auth_url}")
-    server = HTTPServer(("127.0.0.1", OAUTH_PORT), _OAuthHandler)
-    threading.Thread(target=lambda: (setattr(server, "timeout", 1), _pump(server, wait_s)), daemon=True).start()
-    deadline = time.time() + wait_s
-    while not (_OAuthHandler.code or _OAuthHandler.denied) and time.time() < deadline:
-        time.sleep(1)
-    server.server_close()
+    try:
+        server = HTTPServer(("127.0.0.1", OAUTH_PORT), _OAuthHandler)
+    except OSError as e:
+        if e.errno == errno.EADDRINUSE:
+            raise util.BrainError(
+                f"OAuth: a porta local {OAUTH_PORT} já está em uso — feche o processo que a ocupa "
+                f"(ex.: `lsof -i :{OAUTH_PORT}`) e rode de novo",
+                code=3,
+            ) from e
+        raise util.BrainError(
+            f"OAuth: não consegui abrir o servidor local na porta {OAUTH_PORT} ({e.strerror or e}) — rode de novo",
+            code=3,
+        ) from e
+    try:
+        if open_browser:
+            opener = shutil.which("xdg-open") or shutil.which("open")
+            if opener:
+                try:
+                    subprocess.run([opener, auth_url], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                   timeout=15)
+                except (OSError, subprocess.TimeoutExpired):
+                    pass
+        say(f"Abrindo o navegador para autorizar (escopos: calendar.events.owned + drive.file)…")
+        say(f"Se não abrir: {auth_url}")
+        threading.Thread(target=lambda: (setattr(server, "timeout", 1), _pump(server, wait_s)), daemon=True).start()
+        deadline = time.time() + wait_s
+        while not (_OAuthHandler.code or _OAuthHandler.denied) and time.time() < deadline:
+            time.sleep(1)
+    finally:
+        server.server_close()
     if not _OAuthHandler.code:
         raise util.BrainError(f"OAuth: nenhum código recebido ({_OAuthHandler.denied or 'timeout'}) — rode de novo",
                               code=3)

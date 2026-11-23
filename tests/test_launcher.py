@@ -178,12 +178,20 @@ class InstallTests(unittest.TestCase):
         self.assertFalse(script.exists())
 
     def test_vault_and_config_overrides_are_baked(self):
-        os.environ["BRAIN_VAULT"] = str(self.tmp / "outro vault")
+        import contextlib
+        import io
+        detour = str(self.tmp / "outro vault")
+        buf = io.StringIO()
+        os.environ["BRAIN_VAULT"] = detour
         try:
-            body = (self._install() / "Contents" / "MacOS" / "launcher").read_text(encoding="utf-8")
+            with contextlib.redirect_stdout(buf):
+                body = (self._install() / "Contents" / "MacOS" / "launcher").read_text(encoding="utf-8")
         finally:
             del os.environ["BRAIN_VAULT"]
-        self.assertIn("export BRAIN_VAULT='" + str(self.tmp / "outro vault") + "'", body)
+        self.assertNotIn("BRAIN_VAULT", body)
+        self.assertNotIn(detour, body)
+        self.assertIn("⚠", buf.getvalue())
+        self.assertIn("BRAIN_VAULT", buf.getvalue())
 
     def test_is_installed_matches_instance(self):
         self._install()
