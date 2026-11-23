@@ -178,6 +178,18 @@ class TestPublicguardHygiene(_PublicguardCase):
             with self.subTest(sample=sample):
                 self.assertIn("endereço IP", self.kinds(sample))
 
+    def test_ip_glued_to_word_or_in_url_path_is_still_flagged(self) -> None:
+        """`v` colado em palavra é host (`srv10.0.0.5`); `/` só isenta produto estilo User-Agent, nunca caminho de URL."""
+        for sample in ("srv10.0.0.5", "dev10.0.0.5", "http://example.com/192.168.1.42/admin",
+                       "example.com/10.0.0.5", "api/v2/10.0.0.5"):
+            with self.subTest(flagged=sample):
+                self.assertIn("endereço IP", self.kinds(sample))
+
+        for sample in ("v1.2.3.4", "srv v1.2.3.4", "Python-v1.2.3.4", "Chrome/120.0.0.0",
+                       "Mozilla/5.0 (X11) Chrome/120.0.0.0 Safari/537.36", "pkg>=1.2.3.4"):
+            with self.subTest(version=sample):
+                self.assertEqual(publicguard.scan(self.inst, sample), [])
+
     def test_localhost_email_suffix_allowed(self) -> None:
         self.assertEqual(publicguard.scan(self.inst, "teste@app.localhost"), [])
         self.assertEqual(publicguard.scan(self.inst, "contato@dev.localhost"), [])

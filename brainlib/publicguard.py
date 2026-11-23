@@ -127,7 +127,10 @@ def _has_compact_phone(line: str) -> bool:
 def _is_version_like(line: str, m: re.Match) -> bool:
     """Identifica falsos positivos de IP em strings de versão (v1.2.3.4, Chrome/120.0.1.2, versão 1.2.3.4)."""
     prefix = line[:m.start()]
-    if re.search(r"(?:[vV]|[A-Za-z0-9]/|==|>=|<=|~=)$", prefix) and not prefix.endswith("://"):
+    # `v` solto (colado em palavra é host: `srv10.0.0.5`) · `produto/` começando numa borda, sem ponto nem barra antes
+    # (caminho de URL é IP: `example.com/192.168.1.42`) · operador de versão
+    if re.search(r"(?:(?<![A-Za-z0-9])[vV]|(?<![\w./:@-])[A-Za-z][\w+-]*/|==|>=|<=|~=)$", prefix) \
+            and not prefix.endswith("://"):
         return True
     return bool(re.search(r"\b(?:vers[aã]o|version|ver\.?|release|build)\s*[:=]?\s*v?$", prefix, re.I))
 
