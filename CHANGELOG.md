@@ -1,3 +1,25 @@
+## 2.36.0 — lote de polimento da interface (#95–#100)
+
+- **Projetos no celular (#95):** o chip de motivo do goal ("↳ …") ganha linha
+  própria no cabeçalho e mostra o texto inteiro — antes, em tela estreita,
+  cerca de metade da informação ficava escondida no reticências.
+- **Alvos de toque (#96):** os links de ação do feed (decidir/ver/revisar) e os
+  chips de ID passam a ter 24px de altura — o mínimo confortável (WCAG 2.5.8).
+- **Foco de teclado (#97):** navegar com Tab agora desenha o anel na cor do
+  tema — o mesmo idioma do anel de seleção j/k — em vez do azul padrão do
+  navegador, que não existe na paleta.
+- **Tipografia (#98):** os textos secundários (`<small>`) computam 11,5px na
+  escala tipográfica do painel; antes cada contexto rendia um tamanho
+  levemente diferente (11,11px e 11,67px) por conta do fator do navegador.
+- **Tipo de oportunidade (#99):** a ficha exibe "Melhoria de processo" em vez
+  do slug cru "melhoria-de-processo" — no painel, na TUI e nos formulários. O
+  slug continua sendo o valor no CLI e no ledger.
+- **Polimento geral (#100):** padding dos cards por papel (listas 12px, brief
+  destacado 14px, matriz 8px), o botão pequeno "declarar %" na altura do
+  botão primário da mesma tela, as ações do feed com classe própria
+  (`.feed-act`) e um aviso no console quando um chip recebe modificador fora
+  do vocabulário — em vez de cair no estilo base em silêncio.
+
 ## 2.35.1 — wizard: trabalho que termina depois de avançar de passo não pinta mais na tela errada
 
 - **Corrigido o erro fantasma na criação de goals.** A verificação automática de
