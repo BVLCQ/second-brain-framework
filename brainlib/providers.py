@@ -228,7 +228,9 @@ CLOUD_FLAGS = {"embeddings": "cloud_embeddings", "reranker": "cloud_reranker"}
 
 
 def _validate_key(provider: str, p: dict, key: str | None) -> None:
-    if key is None:
+    """Chave vazia (`""`) vale como não informada: nada a gravar e nenhum erro — o wizard
+    (`setup._providers_step`) repassa `""` quando a chave já está no `.env` e não pergunta de novo."""
+    if key is None or (isinstance(key, str) and not key.strip()):
         return
     env_var = p.get("key_env", "")
     if not env_var:
@@ -236,9 +238,9 @@ def _validate_key(provider: str, p: dict, key: str | None) -> None:
             f"provedor '{provider}' não usa variável de ambiente para chave — remova a flag de chave",
             code=4,
         )
-    if not isinstance(key, str) or key.strip() == "":
+    if not isinstance(key, str):
         raise util.BrainError(
-            f"valor vazio para a variável de ambiente {env_var or '(sem nome)'} — nada gravado no .env",
+            f"valor inválido para a variável de ambiente {env_var} — nada gravado no .env",
             code=4,
         )
 
@@ -294,6 +296,8 @@ def slot_env(slot: str, provider: str, *, model: str = "", models: dict | None =
     """Env do .env para a escolha (sem tocar disco). Valores vazios caem fora — segredo nunca ecoa."""
     p = PROVIDERS[slot][provider]
     _validate_key(provider, p, key)
+    if isinstance(key, str):
+        key = key.strip() or None            # vazia ou só espaços = não informada, em todo slot (nada vazio chega ao .env)
     if slot == "llm":
         if p.get("family") == "subscription":
             env = {"HINDSIGHT_API_LLM_PROVIDER": p.get("wire", provider)}

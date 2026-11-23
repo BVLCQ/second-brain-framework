@@ -27,6 +27,7 @@ from brainlib import (  # noqa: E402
     opener,
     providers,
     serve,
+    setup,
     util,
 )
 from brainlib.core import Brain  # noqa: E402
@@ -170,23 +171,39 @@ class TestOpenerReap(unittest.TestCase):
         self.assertIs(kw.get("stderr"), subprocess.DEVNULL)
 
 
+class _WizardUI:
+    """UI mínima para `setup._providers_step`: escolhe o provedor roteirizado e anota os pedidos de chave."""
+
+    def __init__(self, choices: dict[str, str], keys: dict[str, str]):
+        self.choices, self.keys, self.secret_prompts = choices, keys, []
+
+    def say(self, msg: str) -> None:
+        pass
+
+    def ask(self, prompt: str, default: str = "") -> str:
+        return default
+
+    def confirm(self, prompt: str, default: bool) -> bool:
+        return False
+
+    def choice(self, prompt: str, options: list[str], default: str) -> str:
+        for slot, want in self.choices.items():
+            if slot in prompt and want in options:
+                return want
+        return default
+
+    def secret(self, prompt: str) -> str:
+        self.secret_prompts.append(prompt)
+        return next((v for k, v in self.keys.items() if k in prompt), "")
+
 class TestProvidersHygiene(unittest.TestCase):
-    def test_refuses_key_for_local_provider_and_empty_value(self):
+    def test_refuses_key_for_local_provider_and_guards_env(self):
         with tempfile.TemporaryDirectory() as td:
             b = _brain(Path(td))
             fake_secret = "sk-" + "demo" + "01"
             with self.assertRaises(util.BrainError) as cm_local:
                 providers.set_slot(b, "embeddings", "local", key=fake_secret)
             self.assertEqual(cm_local.exception.code, 4)
-
-            with self.assertRaises(util.BrainError) as cm_local_empty:
-                providers.set_slot(b, "embeddings", "local", key="")
-            self.assertEqual(cm_local_empty.exception.code, 4)
-
-            for empty_val in ("", "   "):
-                with self.assertRaises(util.BrainError) as cm_empty:
-                    providers.set_slot(b, "embeddings", "fireworks", key=empty_val)
-                self.assertEqual(cm_empty.exception.code, 4)
 
             with self.assertRaises(util.BrainError) as cm_slot_env:
                 providers.slot_env("embeddings", "local", key=fake_secret)
@@ -218,6 +235,34 @@ class TestProvidersHygiene(unittest.TestCase):
             with contextlib.redirect_stdout(buf):
                 providers.cli(args_ok, b)
             self.assertIn("embeddings", buf.getvalue())
+
+    def test_empty_key_means_not_given_and_writes_nothing(self):
+        """Chave vazia = não informada: não há o que recusar e nada vazio chega ao .env (#81)."""
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            kenv = providers.PROVIDERS["embeddings"]["fireworks"]["key_env"]
+            providers.set_slot(b, "embeddings", "local", key="")          # provedor local sem chave: ok, nada gravado
+            for empty_val in ("", "   "):
+                res = providers.set_slot(b, "embeddings", "fireworks", key=empty_val)
+                self.assertNotIn(kenv, res["env"])
+            self.assertNotIn(kenv, config.load_env(b.inst))
+            self.assertFalse(any(v is None or str(v).strip() == "" for v in config.load_env(b.inst).values()))
+            trimmed = providers.set_slot(b, "embeddings", "fireworks", key="  fw-demo-1 \n")
+            self.assertEqual(config.load_env(b.inst).get(kenv), "fw-demo-1")     # chave colada com espaços: gravada limpa
+
+    def test_wizard_step_rerun_with_stored_key_keeps_working(self):
+        """`setup._providers_step` repassa key="" quando a chave já está no .env — a reexecução do wizard
+        não pode cair na guarda de valor vazio (regressão: BrainError 4 logo depois de gravar a chave)."""
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            kenv = providers.PROVIDERS["llm"]["anthropic"]["key_env"]
+            first = _WizardUI({"LLM": "anthropic"}, {kenv: "ak-demo-1"})
+            setup._providers_step(b, first, ["llm"])
+            self.assertTrue(config.load_env(b.inst).get(kenv))
+            again = _WizardUI({"LLM": "anthropic"}, {})          # chave já gravada: o passo não volta a pedir
+            setup._providers_step(b, again, ["llm"])
+            self.assertEqual(again.secret_prompts, [])
+            self.assertTrue(config.load_env(b.inst).get(kenv))
 
     def test_rebuild_notice_spelling(self):
         with tempfile.TemporaryDirectory() as td:
