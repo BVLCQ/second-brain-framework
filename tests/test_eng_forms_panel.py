@@ -14,11 +14,12 @@ import tempfile
 import types
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from brainlib import config, forms, providers, render  # noqa: E402
+from brainlib import config, dupes, forms, providers, render, util  # noqa: E402
 from brainlib.core import Brain  # noqa: E402
 from brainlib.demo import cli as demo_cli  # noqa: E402
 from brainlib.tui.config_keys import ConfigKeys  # noqa: E402
@@ -259,6 +260,27 @@ class ActionNewNoForceTest(unittest.TestCase):
         cmds = forms.build("action.new", {"title": "Revisar proposta da Padaria Pão Quente"}, {}, {})
         self.assertNotIn("--force", cmds[0])
         self.assertEqual(cmds[0][-2:], ["--by", "owner"])
+
+    def test_panel_recognises_the_real_duplicate_refusal_text(self):
+        """O painel reconhece a recusa pelo texto do erro — o /api/cmd não leva campo estruturado. As
+        frases que o extra.js casa têm de ser as que `dupes.require_checked` emite: se o texto mudar de um
+        lado sem o outro, o painel fecha o formulário sem oferecer o "Criar mesmo assim"."""
+        hits = [{"id": "TASK-0001", "status": "aberta", "title": "Fechar contrato com a Padaria Pão Quente",
+                 "score": 1.0, "why": ["mesmo título"]}]
+        ev = {"type": "action.opened", "data": {"title": "Fechar contrato com a Padaria Pão Quente"}}
+        with mock.patch.object(dupes, "similar", return_value=hits):
+            with self.assertRaises(util.BrainError) as cm:
+                dupes.require_checked(ev, object())
+        self.assertEqual(cm.exception.code, 2)
+        lines = str(cm.exception).splitlines()
+        self.assertTrue(lines[0].startswith("possível ação duplicada — nada gravado"), lines[0])
+        self.assertTrue(any(ln.startswith("  TASK-0001 (aberta)") for ln in lines), lines)
+        self.assertTrue(any(ln.startswith("se for a mesma") for ln in lines), lines)
+        self.assertTrue(any(ln.startswith("se for outra") for ln in lines), lines)
+
+        js = (ROOT / "brainlib" / "assets" / "src" / "extra.js").read_text(encoding="utf-8")
+        for needle in ("possível ação duplicada — nada gravado", "/^se for a mesma\\b/i", "/^se for outra\\b/i"):
+            self.assertIn(needle, js)
 
     @unittest.skipUnless(shutil.which("node"), "node ausente no ambiente")
     def test_panel_extra_js_handles_duplicate_refusal_and_forces(self):
