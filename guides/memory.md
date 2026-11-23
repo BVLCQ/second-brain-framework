@@ -281,8 +281,9 @@ Regras do desenho:
   reranker, cada um com provedor e chave; reranker: off/RRF default · Fireworks · Cohere) no painel
   (Configurações › Memória), na TUI (Configurações › Provedores, tecla `m`) e no CLI headless
   (`brain memory setup --mode full --provider … --approval ok`). Fireworks embeddings+reranker usam a
-  mesma conta; OpenAI de LLM+embeddings idem. Ligou o full? O fluxo verifica o LLM no servidor
-  (`health/llm`) e conta se falhou.
+  mesma conta; OpenAI de LLM+embeddings idem. Flag ausente mantém o slot como está — só o que você nomeou é
+  regravado (slot ainda sem escolha válida cai no padrão do modo). Ligou o full? O fluxo verifica o LLM no
+  servidor (`health/llm`) e conta se falhou.
 - **A escolha mora no `[memory]`** (`llm_provider`, `embeddings_provider`, `reranker_provider`…);
   **a chave mora no `config/.env`** (0600) e nunca volta em output, view ou painel.
 - **Egress é dito na tela**: qualquer provedor de nuvem manda texto do vault para fora
