@@ -1192,6 +1192,7 @@ Específicos desta instalação (OrbStack + LM Studio + watchdog + hook).
 | Pausar o watchdog | `touch ~/.brain-watchdog-off` (retomar: `rm ~/.brain-watchdog-off`) |
 | Rodar o watchdog agora | `launchctl kickstart gui/$(id -u)/com.segundo-cerebro.watchdog` |
 | Log do watchdog | `cat ~/brain/vault/logs/watchdog.log` |
+| Instalar o watchdog | da raiz da instância: `sed "s\|__BRAIN_DIR__\|$PWD\|g" services/com.segundo-cerebro.watchdog.plist > ~/Library/LaunchAgents/com.segundo-cerebro.watchdog.plist && launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.segundo-cerebro.watchdog.plist` (o plist do repo traz o placeholder `__BRAIN_DIR__`, nunca um caminho) |
 | Descarregar modelos ociosos | automático, a cada minuto (LaunchAgent `com.segundo-cerebro.idle`): sem trabalho no LM Studio nem operações pendentes no Hindsight, o LLM sai após 5 min e o embedding após 15; se um modelo volta logo depois de descarregado, o tempo dele dobra (até 60 min); com pouca memória livre, metade da base. O JIT recarrega na próxima chamada |
 | Ver o que o descarregador faria agora | `/usr/bin/python3 ~/brain/services/idle_unload.py ~/brain/vault/logs/idle-state.json --dry-run` |
 | Log / estado do descarregador | `cat ~/brain/vault/logs/idle.log` · `cat ~/brain/vault/logs/idle-state.json` (tempo atual de cada modelo) |
@@ -1303,13 +1304,30 @@ já nos nomes novos, o comando diz "nada a migrar". Peça ao agente para mostrar
 
 ## 25. Setup assistido — `setup`
 
-Wizard idempotente da instância: instancia, identidade, rotina, **comando `brain` no
-PATH**, foco (ics/google com OAuth inline), noturno, TUI, **memória none/embed/full**,
-portas opcionais, fontes, runner e fechamento (render + doctor). Status de cada passo
-deriva do `doctor` — re-executar pula o pronto. `--only id1,id2` re-visita; `--yes`
-roda não-interativo (caminho das IAs; o modo `full` segue exigindo o "ok" literal).
+Wizard idempotente da instância: instancia, identidade, rotina, framework, **comando
+`brain` no PATH**, painel, foco (ics/google com OAuth inline), noturno, TUI, **memória
+none/embed/full**, portas opcionais, fontes, runner e fechamento (render + doctor). Status
+de cada passo deriva do `doctor` — re-executar pula o pronto. `--only id1,id2` re-visita;
+`--yes` roda não-interativo (caminho das IAs; o modo `full` segue exigindo o "ok" literal).
 O passo memória sobe o Hindsight pelo compose (OrbStack), detecta o LM Studio e valida
 com `health/llm` no full. Guia: `guides/setup.md`; bootstrap: `install.sh` na raiz.
+
+| Passo (`--only`) | O que configura |
+|---|---|
+| `instancia` | Instância (vault + config) |
+| `identidade` | Identidade do dono (ledger) |
+| `rotina` | Rotina (fuso, expediente) |
+| `framework` | Framework (git: regra de fetch + hook pre-push) |
+| `comando` | Comando `brain` no PATH |
+| `painel` | Ícone do painel (clique duplo) |
+| `foco` | Foco (ics \| google) |
+| `noturno` | Noturno (agendamento) |
+| `tui` | TUI (venv Textual) |
+| `memoria` | Memória (none \| embed \| full) |
+| `portas` | Portas opcionais (backup, feedback, outbox…) |
+| `fontes` | Fontes observáveis (watch) |
+| `runner` | Runner do agente |
+| `fechamento` | Fechamento (render + doctor) |
 
 ```bash
 brain setup                       # interativo
