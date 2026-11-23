@@ -1632,6 +1632,8 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
         allow = self.store.allow()
         if v.startswith("#"):
             to = v
+        elif util.fold(v) == "eu":                      # "eu" vale o dono do Brain, como em cli._resolve_people
+            to = self.store.brain.owner
         else:
             cands = people_mod.resolve(self.store.brain.state, v) if v not in self.store.brain.state.people else [v]
             if not cands:
