@@ -954,8 +954,10 @@ class _Handler(BaseHTTPRequestHandler):
             self.state.agent_jobs[job_id] = job
 
         def _worker():
+            from . import harvest
             info = bridge.RunInfo(id=run_id)
             rc = 1
+            snap: dict | None = None
 
             def on_line(ln: str) -> None:
                 if not ln:
@@ -966,6 +968,7 @@ class _Handler(BaseHTTPRequestHandler):
                         del job["lines"][:-2000]
 
             try:
+                snap = harvest.begin_agent_window(inst, f"panel:{action_name}")
                 rc = asyncio.run(bridge.run_agent(inst, argv, on_line, info))
                 try:
                     bridge.record_run(inst, info, argv, prompt)
@@ -975,6 +978,12 @@ class _Handler(BaseHTTPRequestHandler):
                 on_line(f"erro inesperado: {e}")
                 rc = 1
             finally:
+                if snap is not None:
+                    try:
+                        harvest.end_agent_window(inst, snap)
+                        on_line("janela da colheita fechada: a próxima regeneração de views absorve edições do agente.")
+                    except Exception as e:  # noqa: BLE001
+                        on_line(f"aviso ao fechar janela da colheita: {e}")
                 with self.state.agent_lock:
                     job["rc"] = rc
                     job["status"] = "done" if rc == 0 else "error"

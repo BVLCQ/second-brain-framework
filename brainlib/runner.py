@@ -240,8 +240,28 @@ def _attempt(brain, cmd: list[str], env: dict, timeout: int) -> tuple[int, str]:
     return proc.returncode, failure_reason(tail[-4000:])
 
 
+def run_agent(brain, ran: dict | None = None) -> str:
+    cands = agent_candidates(brain.inst.cfg)
+    if not cands:
+        return "nenhum agente headless encontrado — inbox espera o primeiro chat do dia"
+    env = {**os.environ, "BRAIN_NIGHTLY": "1"}
+    timeout = brain.inst.cfg["runner"]["timeout_min"] * 60
+    failed: list[str] = []
+    for name, cmd in cands:
+        before = _footprint(brain)
+        rc, why = _attempt(brain, cmd, env, timeout)     # TimeoutExpired sobe: rodou de verdade, não há fallback
+        if rc == 0:
+            if ran is not None:
+                ran["name"] = name
+            return f"{name} ok" + (f" (fallback: {'; '.join(failed)})" if failed else "")
+        if _footprint(brain) != before:
+            raise RuntimeError(f"{name} saiu com código {rc} depois de começar — {why} (vault/logs/nightly-agent.log)")
+        failed.append(f"{name} — {why or f'código {rc}'}")
+    raise RuntimeError("nenhum agente conseguiu rodar: " + "; ".join(failed) + " (vault/logs/nightly-agent.log)")
+
+
 def nightly(brain, skip_agent: bool = False) -> dict:
-    from . import render
+    from . import harvest, render
     steps: dict[str, str] = {}
     ok = True
     _log(brain, f"──── nightly {util.iso_now()} ────")
@@ -260,27 +280,14 @@ def nightly(brain, skip_agent: bool = False) -> dict:
     from . import perms
     perms.try_sync(brain.inst)    # o brain.toml pode ter mudado desde a última vez: o chat do dono acompanha
     step("render", lambda: render.summary(render.render_all(brain)).splitlines()[0])
+    window: dict | None = None
     if not skip_agent:
         ran: dict = {}
-
-        def run_agent():
-            cands = agent_candidates(brain.inst.cfg)
-            if not cands:
-                return "nenhum agente headless encontrado — inbox espera o primeiro chat do dia"
-            env = {**os.environ, "BRAIN_NIGHTLY": "1"}
-            timeout = brain.inst.cfg["runner"]["timeout_min"] * 60
-            failed: list[str] = []
-            for name, cmd in cands:
-                before = _footprint(brain)
-                rc, why = _attempt(brain, cmd, env, timeout)     # TimeoutExpired sobe: rodou de verdade, não há fallback
-                if rc == 0:
-                    ran["name"] = name
-                    return f"{name} ok" + (f" (fallback: {'; '.join(failed)})" if failed else "")
-                if _footprint(brain) != before:
-                    raise RuntimeError(f"{name} saiu com código {rc} depois de começar — {why} (vault/logs/nightly-agent.log)")
-                failed.append(f"{name} — {why or f'código {rc}'}")
-            raise RuntimeError("nenhum agente conseguiu rodar: " + "; ".join(failed) + " (vault/logs/nightly-agent.log)")
-        step("agente", run_agent)
+        snap = harvest.begin_agent_window(brain.inst, "nightly", strict=True)
+        try:
+            step("agente", lambda: run_agent(brain, ran))
+        finally:
+            window = harvest.end_agent_window(brain.inst, snap)
         gap = mcp_gap(brain)
         if ran.get("name") and ran["name"] != "claude" and gap:
             steps["fontes MCP"] = f"{ran['name']} não recebe [runner].allow — a leitura das fontes depende dos conectores do próprio {ran['name']}"
@@ -329,7 +336,17 @@ def nightly(brain, skip_agent: bool = False) -> dict:
         return "ok" if had_today else "sem novidades"
 
     step("brief", _ensure_brief)
-    step("render final", lambda: render.summary(render.render_all(brain)).splitlines()[0])
+
+    def _final_render() -> str:
+        rep = render.render_all(brain, window=window)
+        absorbed = [w for w in rep.get("warnings", []) if w.get("title") == "colheita"]
+        for w in absorbed:
+            _log(brain, f"⚠ {w['title']}: {w['detail']}")
+        if absorbed:
+            steps["colheita"] = f"{len(absorbed)} alteração(ões) absorvida(s) na janela do agente"
+        return render.summary(rep).splitlines()[0]
+
+    step("render final", _final_render)
     try:
         from . import upstream as _up
         c = _up.check_update(brain.inst, force=False)   # renova o cache de versão/atualização (painel/TUI/doctor)

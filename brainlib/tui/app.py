@@ -25,6 +25,7 @@ from textual.widget import Widget
 from textual.widgets import RichLog, Static
 
 from .. import dupes
+from .. import harvest
 from .. import opener
 from .. import ids as idmod
 from .. import notes as notes_mod
@@ -1178,7 +1179,12 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
     async def _render_after(self) -> None:
         r = await asyncio.to_thread(bridge.run_brain, self.inst, ["render"])
         if r.ok:
-            self.log_line("↻ brain render · " + (r.out.splitlines()[0] if r.out else "views regeneradas"), "dim")
+            lines = r.out.splitlines() if r.out else []
+            self.log_line("↻ brain render · " + (lines[0] if lines else "views regeneradas"), "dim")
+            for ln in lines[1:]:
+                s = ln.strip()
+                if s.startswith("⚠ colheita:"):
+                    self.log_line(s, "yellow")
             return
         lines = (r.err or r.out or "").strip().splitlines()
         self.log_line(f"⚠ brain render falhou (código {r.rc}) — FRESH e o painel HTML ficaram velhos: "
@@ -1766,7 +1772,11 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
             try:
                 self.log_line("⚡ " + prompt.splitlines()[0][:100], "magenta")
                 info = bridge.RunInfo(id=run_id, resumed_from=resumed_from)
-                rc = await bridge.run_agent(self.inst, argv, lambda ln: self.log_line("  " + ln, "magenta") if ln else None, info)
+                snap = await asyncio.to_thread(harvest.begin_agent_window, self.inst, "tui")
+                try:
+                    rc = await bridge.run_agent(self.inst, argv, lambda ln: self.log_line("  " + ln, "magenta") if ln else None, info)
+                finally:
+                    await asyncio.to_thread(harvest.end_agent_window, self.inst, snap)
                 if info.denials:
                     await self.after_run(info)                # cada negação vira uma pergunta (kind=permissao)
                 await asyncio.to_thread(bridge.record_run, self.inst, info, argv, prompt)
