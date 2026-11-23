@@ -505,6 +505,12 @@ html[data-live="1"] .only-portrait,html:not([data-live="1"]) .only-live{display:
 /* ── #54 chip motivo do goal ── */
 .chip.h-reason{background:var(--chip);color:var(--ink);border:1px solid var(--line);text-decoration:none;max-width:100%;overflow:hidden;text-overflow:ellipsis;margin-left:6px}
 .chip.h-reason:hover{border-color:var(--accent);color:var(--accent);text-decoration:none}
+/* #95: tela estreita — o chip de motivo ganha linha própria no cabeçalho do goal e clampa em 2 linhas
+   (scrollHeight == clientHeight: o texto inteiro cabe; antes ~56% ficava no ellipsis) */
+@media (max-width:600px){
+  h2.sec{flex-wrap:wrap}
+  .chip.h-reason{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;white-space:normal;line-height:1.35}
+}
 .projcard.just-moved{animation:justmoved 1.2s ease}
 
 /* ── frescor (pílula no rodapé + faixa na home) e cartão 'Seu dia' (#57w2 #60w2) ── */
