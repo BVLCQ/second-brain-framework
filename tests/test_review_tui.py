@@ -183,7 +183,6 @@ class ReviewTuiTest(unittest.IsolatedAsyncioTestCase):
         app = self.app()
         async with app.run_test(size=(140, 44)) as pilot:
             await pilot.pause(0.4)
-            goals.write_text(after, encoding="utf-8")                 # o que o editor deixou
             with mock.patch.object(bridge, "run_brain", failing):
                 app.gate_for_plan(before, after)
                 await pilot.pause(0.2)

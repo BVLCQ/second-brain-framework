@@ -1566,8 +1566,8 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             await pilot.press("3", "E")
             await pilot.pause(0.5)
             self.assertEqual(type(app.screen).__name__, "FormModal")
-            self.assertIn("GOAL-9", goals.read_text(encoding="utf-8"))
-            await pilot.press("escape")                               # cancelar desfaz a edição
+            self.assertEqual(goals.read_text(encoding="utf-8"), original)   # cópia temporária: não toca no goals.md antes do gate
+            await pilot.press("escape")                               # cancelar mantém goals.md intacto
             await pilot.pause(0.2)
             self.assertEqual(goals.read_text(encoding="utf-8"), original)
             await pilot.press("E")

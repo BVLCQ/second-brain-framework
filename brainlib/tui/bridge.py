@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-from .. import runner, util
+from .. import forms, runner, util
 
 FRAMEWORK = Path(__file__).resolve().parents[2]      # onde mora o script `brain` (≠ BRAIN_HOME em instâncias de demo)
 
@@ -85,9 +85,15 @@ def safe_args(args: list[str]) -> list[str]:
     return head + out
 
 
+def redact_args(args: list[str], secret_flags: set[str] | frozenset[str] | None = None) -> list[str]:
+    """Substitui o valor de opções secretas (`--key <v>`, `--key=<v>`) por `***` antes de exibir ou logar."""
+    return forms.redact_args(args, secret_flags)
+
+
 def display(args: list[str]) -> str:
-    """A linha que o dono veria no terminal (a que roda, blindada). Argumento enorme (texto de nota) é encurtado só na exibição."""
-    shown = [a if len(a) <= MAX_ARG else f"{a[:MAX_ARG - 30]}…(+{len(a) - MAX_ARG + 30} caracteres)" for a in safe_args(args)]
+    """A linha que o dono veria no terminal (a que roda, blindada e sem segredos). Argumento enorme (texto de nota) é encurtado só na exibição."""
+    redacted = redact_args(safe_args(args))
+    shown = [a if len(a) <= MAX_ARG else f"{a[:MAX_ARG - 30]}…(+{len(a) - MAX_ARG + 30} caracteres)" for a in redacted]
     return "brain " + shlex.join(shown)
 
 
