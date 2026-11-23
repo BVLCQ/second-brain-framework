@@ -1,3 +1,19 @@
+## 2.37.1 — wizard: o seletor de Tipo na mesma caixa dos campos, e sem opção que o formulário não sabe preencher
+
+- **Corrigido o seletor menor que o campo ao lado.** No passo "Fontes observadas", os seletores (Tipo e
+  Janela) apareciam mais baixos que o campo de texto ao lado, com a seta e o texto fora do eixo: o
+  navegador desenha `<select>` com o tema nativo do sistema e não respeita o padding de cima e de
+  baixo. Agora seletor e campo têm a mesma altura e a mesma borda, nos dois temas (claro e escuro), com
+  a seta desenhada na cor do tema.
+- **Fora a opção "slack-dm · DMs e grupos do Slack".** Escolher esse tipo abria um campo com o rótulo
+  "undefined" e descartava o que fosse digitado: o formulário do wizard não sabe preencher esse tipo
+  (ele nasce pelo `brain watch add --kind slack-dm`, opt-in do dono). O Tipo só lista o que o
+  formulário sabe preencher — e um teste guarda isso: tipo novo no servidor sem receita no formulário
+  reprova até a decisão ser tomada de propósito.
+- **Rótulo longo cabe inteiro.** A coluna do Tipo ganhou largura ("drive-doc · doc, planilha ou slides"
+  aparece inteiro, em vez de cortado no meio da letra); quando o tipo não tem janela, Tipo e Key
+  ocupam a linha inteira em vez de deixar um buraco à direita.
+
 ## 2.37.0 — o brief do dia vira cartão de verdade (#160)
 
 - **Cartão "Seu dia" renderizado (#160):** o brief do agente deixa de aparecer

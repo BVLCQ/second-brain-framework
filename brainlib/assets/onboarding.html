@@ -92,6 +92,15 @@ input[type=text],input[type=email],input[type=password],input[type=time],input[t
 textarea{min-height:100px;resize:vertical}
 input:focus,select:focus,textarea:focus{border-color:var(--accent)}
 input::placeholder,textarea::placeholder{color:var(--muted);opacity:.75}
+/* Campo e seletor são a mesma caixa. `<select>` com appearance:auto entrega o desenho ao tema nativo
+   (no macOS, um botão de altura própria dentro da caixa) e o UA stylesheet força line-height:normal
+   nele — ficava 2px mais baixo que o campo ao lado. Desenho nosso: altura única, seta em var(--muted)
+   (acompanha o tema) e rótulo longo termina em reticências em vez de cortar no meio da letra. */
+input[type=text],input[type=email],input[type=password],input[type=time],input[type=date],select{height:40px}
+select{appearance:none;-webkit-appearance:none;line-height:1.5;padding-right:30px;text-overflow:ellipsis;
+  background-image:linear-gradient(45deg,transparent 40%,var(--muted) 40%,var(--muted) 60%,transparent 60%),
+    linear-gradient(135deg,transparent 40%,var(--muted) 40%,var(--muted) 60%,transparent 60%);
+  background-position:right 16px center,right 10px center;background-size:6px 6px;background-repeat:no-repeat}
 .req{color:var(--warn)}
 .kbd{font:600 11.5px ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--chip);color:var(--ink);
   border:1px solid var(--line);border-radius:5px;padding:1px 6px;white-space:nowrap}
@@ -156,6 +165,10 @@ table.src th{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line)
 table.src td{padding:8px;border-bottom:1px solid var(--line2);vertical-align:middle}
 table.src td .d{color:var(--muted);font-size:12.5px}
 .addform{border:1px dashed var(--line);border-radius:10px;padding:14px;margin-top:12px;background:var(--bg)}
+/* Tipo carrega os rótulos mais longos do registro ("drive-doc · doc, planilha ou slides"); Janela só
+   "1d…auto". Sem a Janela (tipos relidos fora de janela), as duas colunas restantes ocupam a linha. */
+.addform .grid3{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) minmax(0,.8fr)}
+.addform .grid3:has(>label.f:nth-child(3).hidden){grid-template-columns:minmax(0,1.3fr) minmax(0,1fr)}
 
 /* ── agentes ── */
 .agentcard{display:flex;align-items:center;gap:12px;border:1.5px solid var(--line);border-radius:var(--r);
@@ -252,6 +265,7 @@ table.src td .d{color:var(--muted);font-size:12.5px}
   .side-foot{border-top:none;padding:0;position:absolute;top:14px;right:14px;margin:0}
   .content{padding:22px 16px 40px}
   .grid2,.grid3,.feat,.welcome{grid-template-columns:1fr}
+  .addform .grid3,.addform .grid3:has(>label.f:nth-child(3).hidden){grid-template-columns:1fr}
   .welcome img{width:140px;height:140px;margin:0 auto}
 }
 </style>
@@ -847,9 +861,6 @@ V.conectores = () => {
     });
   };
 
-  const kinds = S.watch_kinds || [];
-  $("#src-kind").innerHTML = kinds.map(([k, l]) => `<option value="${esc(k)}">${esc(l)}</option>`).join("");
-
   // o formulário se molda ao tipo: alguns não têm parâmetro, outros não têm janela
   const SRC_META = {
     gmail:       {key: "gmail-hoje",      param: null},
@@ -861,6 +872,11 @@ V.conectores = () => {
     jira:        {key: "jira-meus",       field: "jql",     label: "JQL",              ph: "assignee = currentUser() — os seus cards", req: true},
     github:      {key: "github-repo",     field: "path",    label: "Caminho do clone local", ph: "~/projetos/meu-repo", req: true, noWindow: true},
   };
+  // O Tipo só oferece o que este formulário sabe preencher. A lista de kinds do servidor traz também os
+  // opt-in avançados (hoje `slack-dm`, que nasce pelo `brain watch add`): sem receita aqui, o campo de
+  // parâmetro aparecia com rótulo "undefined" e o que fosse digitado era descartado no envio.
+  const kinds = (S.watch_kinds || []).filter(([k]) => SRC_META[k]);
+  $("#src-kind").innerHTML = kinds.map(([k, l]) => `<option value="${esc(k)}">${esc(l)}</option>`).join("");
   const syncSrcForm = () => {
     const m = SRC_META[$("#src-kind").value] || {};
     $("#src-key").placeholder = `ex.: ${m.key || "minha-fonte"}`;

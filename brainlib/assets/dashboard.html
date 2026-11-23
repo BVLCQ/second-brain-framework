@@ -663,6 +663,20 @@ body.obmode #faces, body.obmode #tabs, body.obmode #openpal { display: none; }
 .obw textarea { min-height: 100px; resize: vertical; }
 .obw input:focus, .obw select:focus, .obw textarea:focus { border-color: var(--accent); }
 .obw input::placeholder, .obw textarea::placeholder { color: var(--muted); opacity: .75; }
+/* Campo e seletor são a mesma caixa. `<select>` com appearance:auto entrega o desenho ao tema nativo
+   (no macOS, um botão de altura própria dentro da caixa) e o UA stylesheet força line-height:normal
+   nele — ficava 2px mais baixo que o campo ao lado. Desenho nosso: altura única, seta em var(--muted)
+   (acompanha o tema) e rótulo longo termina em reticências em vez de cortar no meio da letra. */
+.obw input[type=text], .obw input[type=email], .obw input[type=password], .obw input[type=time],
+.obw input[type=date], .obw select { height: 40px; }
+.obw select {
+  appearance: none; -webkit-appearance: none; line-height: 1.5;
+  padding-right: 30px; text-overflow: ellipsis;
+  background-image: linear-gradient(45deg, transparent 40%, var(--muted) 40%, var(--muted) 60%, transparent 60%),
+                    linear-gradient(135deg, transparent 40%, var(--muted) 40%, var(--muted) 60%, transparent 60%);
+  background-position: right 16px center, right 10px center;
+  background-size: 6px 6px; background-repeat: no-repeat;
+}
 .obw .req { color: var(--warn); }
 .obw .kbd { font: 600 11.5px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--chip);
   color: var(--ink); border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; white-space: nowrap; }
@@ -731,6 +745,10 @@ body.obmode #faces, body.obmode #tabs, body.obmode #openpal { display: none; }
 .obw table.src td { padding: 8px; border-bottom: 1px solid var(--line2); vertical-align: middle; }
 .obw table.src td .d { color: var(--muted); font-size: 12.5px; }
 .obw .addform { border: 1px dashed var(--line); border-radius: 10px; padding: 14px; margin-top: 12px; background: var(--bg); }
+/* Tipo carrega os rótulos mais longos do registro ("drive-doc · doc, planilha ou slides"); Janela só
+   "1d…auto". Sem a Janela (tipos relidos fora de janela), as duas colunas restantes ocupam a linha. */
+.obw .addform .grid3 { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, .8fr); }
+.obw .addform .grid3:has(> label.f:nth-child(3).hidden) { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); }
 
 /* agentes */
 .obw .agentcard { display: flex; align-items: center; gap: 12px; border: 1.5px solid var(--line); border-radius: var(--r);
@@ -825,6 +843,7 @@ body.obmode #faces, body.obmode #tabs, body.obmode #openpal { display: none; }
   .obnav .obnote { display: none; }
   .obw .obcontent { padding: 18px 14px 0; }
   .obw .grid2, .obw .grid3, .obw .feat, .obw .welcome { grid-template-columns: 1fr; }
+  .obw .addform .grid3, .obw .addform .grid3:has(> label.f:nth-child(3).hidden) { grid-template-columns: 1fr; }
   .obw .welcome img { width: 140px; height: 140px; margin: 0 auto; }
 }
 </style>
@@ -4365,9 +4384,7 @@ OBV.conectores = () => {
     });
   };
 
-  const kinds = OBS.watch_kinds || [];
-  $("#src-kind").innerHTML = kinds.map(([k, l]) => '<option value="' + esc(k) + '">' + esc(l) + "</option>").join("");
-
+  // o formulário se molda ao tipo: alguns não têm parâmetro, outros não têm janela
   const SRC_META = {
     gmail:       {key: "gmail-hoje",      param: null},
     gcal:        {key: "gcal-agenda",     param: null},
@@ -4378,6 +4395,11 @@ OBV.conectores = () => {
     jira:        {key: "jira-meus",       field: "jql",     label: "JQL",              ph: "assignee = currentUser() — os seus cards", req: true},
     github:      {key: "github-repo",     field: "path",    label: "Caminho do clone local", ph: "~/projetos/meu-repo", req: true, noWindow: true},
   };
+  // O Tipo só oferece o que este formulário sabe preencher. A lista de kinds do servidor traz também os
+  // opt-in avançados (hoje `slack-dm`, que nasce pelo `brain watch add`): sem receita aqui, o campo de
+  // parâmetro aparecia com rótulo "undefined" e o que fosse digitado era descartado no envio.
+  const kinds = (OBS.watch_kinds || []).filter(([k]) => SRC_META[k]);
+  $("#src-kind").innerHTML = kinds.map(([k, l]) => '<option value="' + esc(k) + '">' + esc(l) + "</option>").join("");
   const syncSrcForm = () => {
     const m = SRC_META[$("#src-kind").value] || {};
     $("#src-key").placeholder = "ex.: " + (m.key || "minha-fonte");

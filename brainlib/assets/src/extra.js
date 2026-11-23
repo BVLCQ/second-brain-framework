@@ -3042,9 +3042,7 @@ OBV.conectores = () => {
     });
   };
 
-  const kinds = OBS.watch_kinds || [];
-  $("#src-kind").innerHTML = kinds.map(([k, l]) => '<option value="' + esc(k) + '">' + esc(l) + "</option>").join("");
-
+  // o formulário se molda ao tipo: alguns não têm parâmetro, outros não têm janela
   const SRC_META = {
     gmail:       {key: "gmail-hoje",      param: null},
     gcal:        {key: "gcal-agenda",     param: null},
@@ -3055,6 +3053,11 @@ OBV.conectores = () => {
     jira:        {key: "jira-meus",       field: "jql",     label: "JQL",              ph: "assignee = currentUser() — os seus cards", req: true},
     github:      {key: "github-repo",     field: "path",    label: "Caminho do clone local", ph: "~/projetos/meu-repo", req: true, noWindow: true},
   };
+  // O Tipo só oferece o que este formulário sabe preencher. A lista de kinds do servidor traz também os
+  // opt-in avançados (hoje `slack-dm`, que nasce pelo `brain watch add`): sem receita aqui, o campo de
+  // parâmetro aparecia com rótulo "undefined" e o que fosse digitado era descartado no envio.
+  const kinds = (OBS.watch_kinds || []).filter(([k]) => SRC_META[k]);
+  $("#src-kind").innerHTML = kinds.map(([k, l]) => '<option value="' + esc(k) + '">' + esc(l) + "</option>").join("");
   const syncSrcForm = () => {
     const m = SRC_META[$("#src-kind").value] || {};
     $("#src-key").placeholder = "ex.: " + (m.key || "minha-fonte");
