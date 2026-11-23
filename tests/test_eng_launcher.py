@@ -243,8 +243,10 @@ class TestDockPinByOwner(unittest.TestCase):
 
             with mock.patch.object(launcher, "_dock_tiles", return_value=tiles), \
                  mock.patch.object(launcher, "_search_dests", return_value=[dir_b]):
+                def _no_subprocess(*args, **kwargs):
+                    self.fail("pin_shortcut chamou subprocess com o Dock de outra instância no caminho")
                 with self.assertRaises(util.BrainError) as ctx:
-                    launcher.pin_shortcut(root=inst_b.root, platform="darwin")
+                    launcher.pin_shortcut(root=inst_b.root, platform="darwin", run=_no_subprocess)
                 self.assertIn(str(inst_a.root), str(ctx.exception))
 
     def test_linux_desktop_pin_by_owner(self):
