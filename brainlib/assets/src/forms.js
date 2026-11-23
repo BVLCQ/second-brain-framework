@@ -111,6 +111,10 @@ const BRAIN_FORMS = (function(){
   const OPP_STATUS = ["ideia", "triagem", "priorizada", "em-andamento", "piloto", "validando", "entregue", "em-espera", "descartada"];
   const OPP_LATERAL = ["em-espera", "descartada"];
   const st = M => M.form_static || {};
+  const withCurrent = (opts, cur) => cur && !opts.some(o => o[0] === cur) ? [[cur, cur + " (atual)"]].concat(opts) : opts.slice();
+  const DOT_NUM_RE = /^[0-9]+(?:\.[0-9]+)?$/;
+  const COMMA_NUM_RE = /^[0-9]+,[0-9]{1,2}$/;
+  const THOUSANDS_RE = /^[0-9.,]+$/;
   const SOURCES = {
     people: M => (M.people || []).map(p => [p.id, p.name]),
     recipients: M => (M.people || []).filter(p => !p.is_owner).map(p => [p.id, p.name]),
@@ -144,8 +148,11 @@ const BRAIN_FORMS = (function(){
     reports: M => (st(M).reports || []).map(r => [r, r]),
     destinations: M => (st(M).destinations || []).map(d => [d, d]),
     providers: (M, v) => (((st(M).providers || {})[(v && v.slot) || "embeddings"]) || []).map(x => [x[0], x[1]]),
-    memory_embs: (M, v) => { const t = st(M).memory_embs || {};
-      return ((t[(v && v.mode) || "embed"]) || t.embed || []).map(x => [x[0], x[1]]); },
+    memory_llm: (M, v, ctx) => withCurrent((((st(M).providers || {}).llm) || []).map(x => [x[0], x[1]]), ((ctx && ctx.item) || {}).provider || ""),
+    memory_embs: (M, v, ctx) => { const t = st(M).memory_embs || {}, mode = (v && v.mode) || "embed";
+      const opts = (t[mode] || t.embed || []).map(x => [x[0], x[1]]), cur = ((ctx && ctx.item) || {}).embeddings || "";
+      return (mode === "full" && cur === "local") ? opts : withCurrent(opts, cur); },
+    memory_reranker: (M, v, ctx) => withCurrent((((st(M).providers || {}).reranker) || []).map(x => [x[0], x[1]]), ((ctx && ctx.item) || {}).reranker || ""),
     "ice:impact": ice("impact"), "ice:confidence": ice("confidence"), "ice:ease": ice("ease"),
   };
   function options(f, M, v, ctx){
@@ -170,7 +177,7 @@ const BRAIN_FORMS = (function(){
       const idPref = !!q && fid.startsWith(q);
       const dash = fid.indexOf("-");
       const numPart = dash >= 0 ? fid.slice(dash + 1) : "";
-      const numPref = !!q && /^\d+$/.test(q) && dash >= 0 && (numPart.startsWith(q) || numPart.replace(/^0+/, "").startsWith(q));
+      const numPref = !!q && /^[0-9]+$/.test(q) && dash >= 0 && (numPart.startsWith(q) || numPart.replace(/^0+/, "").startsWith(q));
       if (!words.length || idPref || numPref || words.every(w => flab.includes(w) || fid.includes(w))) {
         matched.push({tier: idPref ? 0 : 1, flab, fid, item: {id: oid, label: lab}});
       }
@@ -227,19 +234,29 @@ const BRAIN_FORMS = (function(){
     return Object.entries(c).every(([k, vals]) => { const neg = k.endsWith("!"); k = k.replace(/!+$/, "");
       const got = str(k[0] === "@" ? ctx[k.slice(1)] : (v[k] || "")); return vals.includes(got) !== neg; });
   }
-  function hidden(fm, raw, ctx, M){ return new Set(fm.fields.filter(f => !cond(f.show, raw, ctx || {}, M)).map(f => f.id)); }
-  function values(fm, raw, ctx, M, surface = "painel"){
-    const r = {}; fm.fields.forEach(f => {
-      const s = str(raw[f.id]).trim();
+  function cleanRaw(fm, raw, surface = "painel"){
+    const r = {};
+    fm.fields.forEach(f => {
+      const s = str((raw || {})[f.id]).trim();
       r[f.id] = (f.auto === "surface" && surface && !s) ? surface : s;
     });
-    const h = hidden(fm, r, ctx, M); const o = {}; Object.keys(r).forEach(k => { o[k] = h.has(k) ? "" : r[k]; }); return o;
+    return r;
+  }
+  function hidden(fm, raw, ctx, M){
+    const clean = {};
+    Object.entries(raw || {}).forEach(([k, val]) => { clean[k] = str(val).trim(); });
+    return new Set(fm.fields.filter(f => !cond(f.show, clean, ctx || {}, M)).map(f => f.id));
+  }
+  function values(fm, raw, ctx, M, surface = "painel"){
+    const clean = cleanRaw(fm, raw, surface), h = hidden(fm, clean, ctx, M), o = {};
+    Object.keys(clean).forEach(k => { o[k] = h.has(k) ? "" : clean[k]; });
+    return o;
   }
 
   // ── validação e dicas ──
   const delivFull = (x, project, M) => { const r = normId(str(x).trim().toUpperCase().replace(/^\.+/, ""), M);
-    if (/^\d+$/.test(r)) return project && project !== NONE ? project + "." + (+r) : ""; return r; };
-  const ckInt = (lo, hi) => x => { const ok = /^\d+$/.test(x) && (lo === null || +x >= lo) && (hi === null || +x <= hi);
+    if (/^[0-9]+$/.test(r)) return project && project !== NONE ? project + "." + (+r) : ""; return r; };
+  const ckInt = (lo, hi) => x => { const ok = /^[0-9]+$/.test(x) && (lo === null || +x >= lo) && (hi === null || +x <= hi);
     return ok ? "" : (lo !== null && hi !== null ? "Use um inteiro de " + lo + " a " + hi + "." : "Use um inteiro a partir de " + lo + "."); };
   const ckDur = pos => (x, v, ctx, M) => { let n; try { n = parseDuration(x, M); } catch (e) { return e.message; }
     return pos && !n ? "Use uma duração maior que zero (45m, 1h30m)." : ""; };
@@ -248,7 +265,12 @@ const BRAIN_FORMS = (function(){
   const CHECKS = {
     date: (x, v, ctx, M) => { try { parseDue(x, todayOf(M), M); return ""; } catch (e) { return e.message; } },
     duration: ckDur(false), duration_pos: ckDur(true),
-    num: x => { const t = str(x).replace(",", ".").trim(), f = Number(t); return (t !== "" && !isNaN(f) && f > 0) ? "" : "Use um número maior que zero."; },
+    num: x => {
+      if (DOT_NUM_RE.test(x)) return Number(x) > 0 ? "" : "Use um número maior que zero.";
+      if (COMMA_NUM_RE.test(x)) return Number(x.replace(",", ".")) > 0 ? "" : "Use um número maior que zero.";
+      if (x.includes(",") && THOUSANDS_RE.test(x)) return "Use ponto decimal ou vírgula só para decimais (sem separador de milhar).";
+      return "Use um número maior que zero.";
+    },
     slug: x => /^[a-z0-9]+(-[a-z0-9]+)*$/.test(x) ? "" : "Use minúsculas, números e hífens (ex.: growth).",
     watch_key: (x, v, ctx, M) => { if (!re(M, "key").test(x)) return "key: minúsculas, números, '.', '_' e '-' (ex.: slack-time-dados)";
       return (M.sources || []).some(s => s.in_watch && s.key === x && s.key !== ctx.key0) ? "já existe uma fonte com essa key" : ""; },
@@ -298,7 +320,7 @@ const BRAIN_FORMS = (function(){
       return t ? "→ " + l + " · " + t : ""; },
     "ice:impact": hIce("impact"), "ice:confidence": hIce("confidence"), "ice:ease": hIce("ease"),
     ice_impact: (x, v, ctx, M) => { let out = hIce("impact")(x, v, ctx, M); const h = (ctx.item || {}).hours_saved;
-      if (/^\d+$/.test(x) && h) { const hint = hHours(+h); out += "\nhoras declaradas: " + num(+h) + " h/mês → faixa sugerida " + hint;
+      if (/^[0-9]+$/.test(x) && h) { const hint = hHours(+h); out += "\nhoras declaradas: " + num(+h) + " h/mês → faixa sugerida " + hint;
         if (+x > hint) out += " · ⚠ escopo e horas divergem: vale a menor nota"; } return out; },
   };
   function hint(name, x, v, ctx, M){ return (!name || !x || !HINTS[name]) ? "" : HINTS[name](x, v, ctx || {}, M); }
@@ -306,7 +328,7 @@ const BRAIN_FORMS = (function(){
     date: (x, v, ctx, M) => { let d; try { d = parseDue(x, todayOf(M), M); } catch (e) { return ""; } return d ? iso(d) : ""; },
     deliv: (x, v, ctx, M) => delivFull(x, v.project || "", M) || x,
     nospace: x => x.replace(/ /g, ""),
-    num: x => x ? num(x.replace(",", ".")) : "",
+    num: x => x ? num(COMMA_NUM_RE.test(x) ? x.replace(",", ".") : x) : "",
     note_link: (x, v, ctx, M) => x ? linkNorm(x, M) : "",
     lower_eu: x => x.toLowerCase() === "eu" ? "eu" : x,
     jql: (x, v, ctx, M) => { if (!x) return ""; try { return jiraJql(x || "mine", v.jref || "", v.mode || "", M); } catch (e) { return v.jref || ELL; } },
@@ -339,20 +361,24 @@ const BRAIN_FORMS = (function(){
   const emits = f => !!(f.arg || f.set || f.flag);
   function formArgv(fm, raw, ctx, M, surface = "painel"){
     ctx = ctx || {};
-    const v = values(fm, raw, ctx, M, surface), byId = {}; fm.fields.forEach(f => { byId[f.id] = f; });
+    const clean = cleanRaw(fm, raw, surface), h = hidden(fm, clean, ctx, M), v = {};
+    Object.keys(clean).forEach(k => { v[k] = h.has(k) ? "" : clean[k]; });
+    const byId = {}; fm.fields.forEach(f => { byId[f.id] = f; });
     const placed = new Set(fm.cmd.filter(t => t[0] === "{").map(t => t.replace(/[{}?*@]/g, "")));
     let main = []; fm.cmd.forEach(t => { main = main.concat(tok(t, fm, v, ctx, M)); });
     const base = fm.edit ? baseline(fm, ctx, M) : {};
+    const baseHid = fm.edit ? hidden(fm, base, ctx, M) : new Set();
     const order = (fm.order || []).concat(fm.fields.map(f => f.id).filter(id => !(fm.order || []).includes(id)));
-    order.forEach(id => { const f = byId[id]; if (!f || placed.has(id) || !emits(f)) return;
+    order.forEach(id => { const f = byId[id]; if (!f || placed.has(id) || !emits(f) || h.has(id)) return;
       const val = xf(f, v[id], v, ctx, M);
       if (fm.edit && !f.always) {
         if (f.set === "*") { const old = pairs(base[id] || ""), nw = pairs(val);
           Object.entries(nw).forEach(([k, x]) => { if (old[k] !== x) main.push("--set", k + "=" + x); });
-          Object.keys(old).forEach(k => { if (!(k in nw)) main.push("--unset", k); }); return; }
+          if (!baseHid.has(id)) Object.keys(old).forEach(k => { if (!(k in nw)) main.push("--unset", k); });
+          return; }
         const was = f.xf !== "new_people" ? xf(f, base[id] || "", v, ctx, M) : (base[id] || "");
         if (val === was) return;
-        if (val === "") { main = main.concat(f.clear || []); return; }
+        if (val === "") { if (!baseHid.has(id)) main = main.concat(f.clear || []); return; }
       }
       if (val === "" || (f.skip || []).includes(val)) return;
       main = main.concat(argOf(f, val));
@@ -364,8 +390,8 @@ const BRAIN_FORMS = (function(){
   }
   function missing(fm, raw, ctx, M, surface = "painel"){
     ctx = ctx || {};
-    const v = values(fm, raw, ctx, M, surface), r = {}; Object.keys(v).forEach(k => { r[k] = str(raw[k]); });
-    const h = hidden(fm, r, ctx, M);
+    const clean = cleanRaw(fm, raw, surface), h = hidden(fm, clean, ctx, M), v = {};
+    Object.keys(clean).forEach(k => { v[k] = h.has(k) ? "" : clean[k]; });
     for (const f of fm.fields) { if (h.has(f.id)) continue;
       if (f.req && !v[f.id]) return 'Preencha "' + label(f, M) + '".';
       const msg = check(f.check, v[f.id], v, ctx, M); if (msg) return msg; }

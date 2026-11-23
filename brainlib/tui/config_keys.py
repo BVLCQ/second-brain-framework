@@ -40,14 +40,13 @@ class ConfigKeys:
         st = prov.stack(self.store.brain) if self.store else {}
         cfg = self.store.brain.inst.cfg["memory"] if self.store else {}
         cur = _memory.mode(cfg) if cfg else "embed"
-        vals = {"mode": cur if cur in ("none", "embed", "full") else "embed"}
-        for fld, slot, menu in (("provider", "llm", ("anthropic", "openai")),
-                                ("embeddings", "embeddings", ("local", "fireworks", "openai")),
-                                ("reranker", "reranker", ("off", "fireworks", "cohere"))):
-            p = st.get(slot, {}).get("provider", "")
-            if p in menu:
-                vals[fld] = p
-        self.open_form("memory.mode", None, values=vals, render=False, show="Provedores")
+        item = {
+            "mode": cur if cur in ("none", "embed", "full") else "embed",
+            "provider": st.get("llm", {}).get("provider", ""),
+            "embeddings": st.get("embeddings", {}).get("provider", ""),
+            "reranker": st.get("reranker", {}).get("provider", ""),
+        }
+        self.open_form("memory.mode", {"item": item}, render=False, show="Provedores")
 
     def f_providers_set(self) -> None:
         """Muda um slot (llm · embeddings · reranker) — mesmo caminho do wizard, sem refazer setup."""
