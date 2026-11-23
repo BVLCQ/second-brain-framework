@@ -41,6 +41,11 @@ def render_html(m: dict, asset: Path = ASSET) -> str:
     return asset.read_text(encoding="utf-8").replace("__DATA__", data, 1)
 
 
+def render_shell_html(asset: Path = ASSET) -> str:
+    """Shell HTML sem dados do vault para a ponte (`./brain serve`): o cliente hidrata via /api/data|/api/portfolio."""
+    return asset.read_text(encoding="utf-8").replace("__DATA__", "{}", 1)
+
+
 def _cleanup(fresh: Path, keep: set[Path]) -> list[str]:
     removed = []
     notes_dir = (fresh / "notes").resolve()

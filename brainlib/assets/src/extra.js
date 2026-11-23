@@ -9,6 +9,7 @@ D0.feedback = D0.feedback || [];
 D0.actions = D0.actions || []; D0.shares = D0.shares || []; D0.people = D0.people || [];
 D0.projects = D0.projects || []; D0.goals = D0.goals || []; D0.decisions = D0.decisions || [];
 D0.portfolio = D0.portfolio || {areas: [], processes: [], opportunities: [], gaps: []};
+D0.owner = D0.owner || {name: ""};
 D0.agent_ok = !!D0.agent_ok;
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -17,8 +18,9 @@ const IS_MAC = typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/i.test(
 const KMOD = IS_MAC ? "⌘K" : "Ctrl K";
 
 // ── sidebar: dono ───────────────────────────────────────────────────────
-$("#ownername").textContent = D0.owner.name;
-$("#avatar").textContent = D0.owner.name.trim().slice(0, 1).toUpperCase();
+const ownBootName = (D0.owner && D0.owner.name) || "—";
+$("#ownername").textContent = ownBootName;
+$("#avatar").textContent = ownBootName.trim().slice(0, 1).toUpperCase() || "B";
 
 window.renderTabs = function(view, TABS, PARENT){
   document.getElementById("tabs").innerHTML = TABS.map(function(t){
@@ -73,24 +75,116 @@ $("#conx").onclick = () => conToggle(false);
 
 // ── ponte CLI: ./brain serve (127.0.0.1 + token). file:// continua sendo retrato somente-leitura ──
 const SERVE = location.protocol === "http:" && location.hostname === "127.0.0.1";
+const TOK_KEY = "brain-serve-token";
+const TOK_TTL_MS = 12 * 3600 * 1000;
+let tokConsumed = false;
+function readStoredToken(){
+  try { localStorage.removeItem(TOK_KEY); } catch (e) {}
+  try {
+    const raw = sessionStorage.getItem(TOK_KEY);
+    if (!raw) return null;
+    const rec = JSON.parse(raw);
+    if (!rec || typeof rec.tok !== "string" || !rec.tok || typeof rec.exp !== "number" || Date.now() > rec.exp) {
+      sessionStorage.removeItem(TOK_KEY);
+      return null;
+    }
+    return rec.tok;
+  } catch (e) {
+    try { sessionStorage.removeItem(TOK_KEY); } catch (x) {}
+    return null;
+  }
+}
+function storeToken(tok){
+  try { localStorage.removeItem(TOK_KEY); } catch (e) {}
+  try { sessionStorage.setItem(TOK_KEY, JSON.stringify({tok: tok, exp: Date.now() + TOK_TTL_MS})); } catch (e) {}
+}
+function consumeBootToken(){
+  if (!SERVE || tokConsumed) return null;
+  tokConsumed = true;
+  const rawHash = location.hash || "";
+  if (!rawHash.startsWith("#")) return null;
+  const parts = rawHash.slice(1).split("&");
+  let foundTok = null;
+  const kept = [];
+  for (const p of parts) {
+    if (foundTok === null && p.startsWith("t=")) {
+      const val = p.slice(2);
+      if (val) {
+        try { foundTok = decodeURIComponent(val); } catch (e) { foundTok = val; }
+      }
+    } else if (p !== "") {
+      kept.push(p);
+    }
+  }
+  if (!foundTok) return null;
+  storeToken(foundTok);
+  const nextHash = kept.length ? "#" + kept.join("&") : "";
+  history.replaceState(null, "", location.pathname + location.search + nextHash);
+  return foundTok;
+}
 let TOK = null;
 if (SERVE) {
-  const m = location.hash.match(/[#&]t=([^&]+)/);
-  if (m) { TOK = decodeURIComponent(m[1]); try { localStorage.setItem("brain-serve-token", TOK); } catch (e) {}
-           history.replaceState(null, "", location.pathname + location.search); }
-  else { try { TOK = localStorage.getItem("brain-serve-token"); } catch (e) {} }
+  TOK = consumeBootToken() || readStoredToken();
 }
-let LIVE = SERVE && !!TOK;
-document.documentElement.dataset.live = LIVE ? "1" : "0";
-// o ícone do app reaproveita esta aba (util.focus_open_tab) apontando-a para `/#t=<token>`: se a ponte foi reiniciada
-// o token mudou — guarda o novo, devolve a URL ao que era (a rota fica) e recarrega; token igual, só devolve a URL
+// aba reaproveitada (util.focus_open_tab): a nova URL traz `#t=<token>` e só muda o fragmento — a página não recarrega
+// sozinha, e o boot de cima já rodou. Guarda o token novo (com validade), devolve a rota ao que era e recarrega; token
+// igual, só devolve a URL. Sem isto a aba reaproveitada fica com o token antigo e a ponte nova responde 401.
 if (SERVE) window.addEventListener("hashchange", e => {
   const m = location.hash.match(/[#&]t=([^&]+)/); if (!m) return;
-  const tok = decodeURIComponent(m[1]), back = (e.oldURL || "").split("#").slice(1).join("#");
-  try { localStorage.setItem("brain-serve-token", tok); } catch (x) {}
+  let tok = m[1]; try { tok = decodeURIComponent(tok); } catch (x) {}
+  const back = (e.oldURL || "").split("#").slice(1).join("#");
+  storeToken(tok);
   history.replaceState(null, "", location.pathname + location.search + (back ? "#" + back : ""));
   if (tok !== TOK) location.reload();
 });
+let LIVE = SERVE && !!TOK;
+document.documentElement.dataset.live = LIVE ? "1" : "0";
+function paintLiveStatus(){
+  document.documentElement.dataset.live = LIVE ? "1" : "0";
+  const cm = document.querySelector("#conmode");
+  const ci = document.querySelector("#clidot");
+  if (LIVE) {
+    if (cm) cm.textContent = "vivo — comandos executam";
+    document.body.classList.add("bridge-live");
+    if (ci) { ci.classList.add("live"); ci.title = "ponte CLI conectada — comandos executam (clique/` para o console)"; }
+  } else {
+    if (cm) cm.textContent = "retrato — comandos só copiam";
+    document.body.classList.remove("bridge-live");
+    if (ci) { ci.classList.remove("live"); ci.title = "ponte CLI offline — retrato: comandos são copiados (clique/` para o console)"; }
+  }
+}
+function handle401(silent){
+  TOK = null;
+  LIVE = false;
+  try { localStorage.removeItem(TOK_KEY); } catch (e) {}
+  try { sessionStorage.removeItem(TOK_KEY); } catch (e) {}
+  paintLiveStatus();
+  if (!silent) toast("sessão expirada — reabra via ./brain render --open ou pelo app Brain");
+}
+function renderAuthRequired(detail){
+  const v = document.getElementById("view");
+  if (!v) return;
+  const msg = detail || "Esta página precisa do token temporário da ponte local.";
+  v.innerHTML = '<section class="panel" data-auth-required="1"><h2>Sessão não autenticada</h2>' +
+    '<p>' + esc(msg) + '</p>' +
+    '<p class="muted">Reabra o painel pelo aplicativo <b>Brain</b> (Brain.app) ou rode <code>./brain render --open</code> no terminal.</p></section>';
+}
+async function hydrateShell(){
+  try {
+    const endpoint = window.PF_ONLY ? "/api/portfolio" : "/api/data";
+    const d = await api(endpoint);
+    if (d && d.model && window.BRAIN && window.BRAIN.refresh) {
+      window.BRAIN.refresh(d.model);
+      return;
+    }
+    renderAuthRequired("Resposta inesperada da ponte — reabra via ./brain render --open ou pelo app Brain.");
+  } catch (e) {
+    renderAuthRequired(e && e.message === "401"
+      ? "Token inválido ou expirado — reabra via ./brain render --open ou pelo app Brain."
+      : "Não foi possível conectar à ponte local — rode ./brain render --open ou abra pelo app Brain.");
+  }
+}
+window.BRAIN_AUTH = { isLive: () => LIVE, hydrate: hydrateShell, showAuthRequired: renderAuthRequired };
 function copyCmd(cmd){
   const t = document.createElement("textarea");
   t.value = cmd; t.style.position = "fixed"; t.style.opacity = "0";
@@ -105,16 +199,7 @@ function offlineCmd(cmd){
   conLine('<span class="ok">copiado</span> <span class="dim">— rode no terminal (mesma linha que o TUI dispara) · views: brain render</span>');
   toast("comando copiado — rode no terminal");
 }
-if (LIVE) {
-  const cm = document.querySelector("#conmode");
-  if (cm) cm.textContent = "vivo — comandos executam";
-  document.body.classList.add("bridge-live");
-  const ci = document.querySelector("#clidot");
-  if (ci) { ci.classList.add("live"); ci.title = "ponte CLI conectada — comandos executam (clique/\` para o console)"; }
-} else {
-  const ci = document.querySelector("#clidot");
-  if (ci) ci.title = "ponte CLI offline — retrato: comandos são copiados (clique/\` para o console)";
-}
+paintLiveStatus();
 
 // ── comandos (mesmas linhas que o TUI roda) ────────────────────────────
 function commands(){
@@ -126,10 +211,10 @@ function commands(){
   mine.forEach(a => out.push({label: "Fechar · " + a.id + " " + a.title, act: () => closeForm(a)}));
   MD.actions.filter(a => a.open && a.due_suggested).forEach(a => out.push({label: "Confirmar prazo sugerido · " + a.id + " (" + (a.due || "").slice(0, 10) + ")",
     cmd: "brain action update " + a.id + " --confirm-due", mut: m => { m.actions.find(x => x.id === a.id).due_suggested = false; }}));
-  if (D0.focus && D0.focus.status === "proposto")
-    out.push({label: "Aprovar plano de foco " + D0.focus.id + " (gate)", act: () => focusApproveForm()});
-  if (D0.focus && D0.focus.status === "aprovado")
-    out.push({label: "Aplicar plano de foco " + D0.focus.id + " no calendário (gate)", act: () => focusApplyForm()});
+  if (MD.focus && MD.focus.status === "proposto")
+    out.push({label: "Aprovar plano de foco " + MD.focus.id + " (gate)", act: () => focusApproveForm()});
+  if (MD.focus && MD.focus.status === "aprovado")
+    out.push({label: "Aplicar plano de foco " + MD.focus.id + " no calendário (gate)", act: () => focusApplyForm()});
   MD.outbox.filter(m0 => m0.status === "rascunho").forEach(m0 => out.push({label: "Aprovar mensagem " + m0.id + " para " + m0.to_name,
     act: () => approveMsgForm(m0)}));
   MD.proposals.forEach(p => {
@@ -162,9 +247,9 @@ function commands(){
 }
 
 async function api(path, opts){
-  const headers = Object.assign({"X-Brain-Token": TOK}, (opts && opts.headers) || {});
+  const headers = Object.assign({"X-Brain-Token": TOK || ""}, (opts && opts.headers) || {});
   const r = await fetch(path, Object.assign({}, opts, {headers}));
-  if (r.status === 401) { toast("token inválido — rode ./brain serve e abra a URL impressa"); throw new Error("401"); }
+  if (r.status === 401) { handle401(); throw new Error("401"); }
   return r.json();
 }
 async function serveRun(cmd){
@@ -516,10 +601,12 @@ let dragId = null, lastMoved = null;
 const SETUP_STEPS = [["perfil", "Perfil"], ["rotina", "Rotina"], ["agente", "Seu agente"], ["conectores", "Conectores"], ["memoria", "Memória"], ["integracoes", "Integrações"]];
 const MEM_LABEL = {none: "nenhuma", lite: "embed", embed: "embed", full: "full"};   // a API ainda diz "lite"; a tela diz o nome da CLI
 let SS = null, profileDraftCfg = null;
+const OB_JOB_TIMEOUT_MS = 15 * 60 * 1000;
 async function obApi(path, body){
-  const o = {headers: {"X-Brain-Token": TOK}};
+  const o = {headers: {"X-Brain-Token": TOK || ""}};
   if (body !== undefined) { o.method = "POST"; o.headers["Content-Type"] = "application/json"; o.body = JSON.stringify(body); }
   const r = await fetch(path, o);
+  if (r.status === 401) { handle401(); throw new Error("sessão expirada — reabra via ./brain render --open ou pelo app Brain"); }
   let j = {};
   try { j = await r.json(); } catch (e) {}
   if (!r.ok || j.ok === false) throw new Error(j.error || ("erro " + r.status));
@@ -527,10 +614,13 @@ async function obApi(path, body){
 }
 const obAct = (name, body) => obApi("/api/onboard/" + name, body || {});
 async function obJob(id, onTick){
+  const started = Date.now();
   for (;;) {
     const j = (await obApi("/api/onboard/job/" + id)).job;
     if (onTick) onTick(j);
+    if (j.status === "stale") throw new Error((j.result && j.result.error) || "tempo esgotado (15 min) — rode `brain doctor --online` no terminal");
     if (j.status !== "running") return j;
+    if (Date.now() - started >= OB_JOB_TIMEOUT_MS) throw new Error("tempo esgotado (15 min) — rode `brain doctor --online` no terminal");
     await new Promise(r => setTimeout(r, 1500));
   }
 }
@@ -2118,10 +2208,10 @@ async function handleInboxDrop(mode, entries, fallbackFiles, rejected){
     fd.append("file", item.file, item.file.name);
     let r, j = null;
     try {
-      r = await fetch("/api/inbox", {method: "POST", headers: {"X-Brain-Token": TOK}, body: fd});
+      r = await fetch("/api/inbox", {method: "POST", headers: {"X-Brain-Token": TOK || ""}, body: fd});
       if (r.status === 401) {
-        toast("token inválido — rode ./brain serve e abra a URL impressa");
-        conLine('<span class="late">✗ token inválido</span>');
+        handle401();
+        conLine('<span class="late">✗ sessão expirada — reabra via ./brain render --open</span>');
         return;
       }
       try { j = await r.json(); } catch (e) {}
@@ -2296,8 +2386,14 @@ function inboxDupesDialog(groups){
       const g = groups[+gi];
       let r, j = null;
       try {
-        r = await fetch("/api/inbox/remove", {method: "POST", headers: {"X-Brain-Token": TOK, "Content-Type": "application/json"},
+        r = await fetch("/api/inbox/remove", {method: "POST", headers: {"X-Brain-Token": TOK || "", "Content-Type": "application/json"},
           body: JSON.stringify({inbox_name: g.inboxName, paths: picked[gi]})});
+        if (r.status === 401) {
+          handle401();
+          conLine('<span class="late">✗ sessão expirada — reabra via ./brain render --open</span>');
+          close();
+          return;
+        }
         try { j = await r.json(); } catch (e) {}
       } catch (err) { conLine('<span class="late">✗ ' + esc(g.file.name) + ": ponte fora do ar</span>"); continue; }
       if (r.ok && j && j.ok) {
@@ -3348,7 +3444,8 @@ OBV.planejamento = () => {
       for (const f of Array.from(list)) {
         const li = document.createElement("li"); li.innerHTML = "<span>" + esc(f.name) + "</span><span><i class='spin'></i></span>"; $("#files").appendChild(li);
         try {
-          const r = await fetch("/api/onboard/upload", {method: "POST", headers: {"X-Brain-Token": TOK, "X-File-Name": encodeURIComponent(f.name)}, body: f});
+          const r = await fetch("/api/onboard/upload", {method: "POST", headers: {"X-Brain-Token": TOK || "", "X-File-Name": encodeURIComponent(f.name)}, body: f});
+          if (r.status === 401) { handle401(); throw new Error("sessão expirada — reabra via ./brain render --open"); }
           const j = await r.json(); if (!r.ok || !j.ok) throw new Error(j.error || "falhou");
           obUploads.push({name: j.name}); li.lastChild.textContent = "✓ recebido";
         } catch (e) { li.lastChild.textContent = "✗ " + e.message; }
@@ -3600,7 +3697,8 @@ window.exitOnboarding = exitOnboarding;
         return;
       }
       try {
-        const r = await fetch("/api/data", {headers: {"X-Brain-Token": TOK}});
+        const r = await fetch("/api/data", {headers: {"X-Brain-Token": TOK || ""}});
+        if (r.status === 401) { handle401(); setUpdateTriggersDisabled(false); return; }
         if (r.ok) { location.reload(); return; }
       } catch (e) {}
       delay = Math.min(2000, Math.round(delay * 1.4));
@@ -3660,11 +3758,11 @@ window.exitOnboarding = exitOnboarding;
     try {
       const r = await fetch("/api/update", {
         method: "POST",
-        headers: {"X-Brain-Token": TOK, "Content-Type": "application/json"},
+        headers: {"X-Brain-Token": TOK || "", "Content-Type": "application/json"},
         body: "{}",
       });
       if (r.status === 401) {
-        toast("token inválido — rode ./brain serve e abra a URL impressa");
+        handle401();
         setUpdateTriggersDisabled(false);
         return;
       }

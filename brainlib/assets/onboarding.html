@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; font-src 'self' data:; base-uri 'none'; form-action 'none'">
 <title>Brain — configuração guiada</title>
 <link rel="icon" href="/brain-mark.svg" type="image/svg+xml">
 <style>
@@ -282,11 +283,63 @@ table.src td .d{color:var(--muted);font-size:12.5px}
 <script>
 "use strict";
 // ── infraestrutura ─────────────────────────────────────────────────────────
+const TOK_KEY = "brain-serve-token";
+const TOK_TTL_MS = 12 * 3600 * 1000;
+const JOB_TIMEOUT_MS = 15 * 60 * 1000;
 let TOK = "";
+let tokConsumed = false;
+function readStoredToken() {
+  try { localStorage.removeItem(TOK_KEY); } catch (e) {}
+  try {
+    const raw = sessionStorage.getItem(TOK_KEY);
+    if (!raw) return "";
+    const rec = JSON.parse(raw);
+    if (!rec || typeof rec.tok !== "string" || !rec.tok || typeof rec.exp !== "number" || Date.now() > rec.exp) {
+      sessionStorage.removeItem(TOK_KEY);
+      return "";
+    }
+    return rec.tok;
+  } catch (e) {
+    try { sessionStorage.removeItem(TOK_KEY); } catch (x) {}
+    return "";
+  }
+}
+function storeToken(tok) {
+  try { localStorage.removeItem(TOK_KEY); } catch (e) {}
+  try { sessionStorage.setItem(TOK_KEY, JSON.stringify({tok: tok, exp: Date.now() + TOK_TTL_MS})); } catch (e) {}
+}
+function clearToken() {
+  TOK = "";
+  try { localStorage.removeItem(TOK_KEY); } catch (e) {}
+  try { sessionStorage.removeItem(TOK_KEY); } catch (e) {}
+}
 (function () {
-  const m = location.hash.match(/[#&]t=([^&]+)/);
-  if (m) { TOK = decodeURIComponent(m[1]); try { localStorage.setItem("brain-serve-token", TOK); } catch (e) {} }
-  if (!TOK) { try { TOK = localStorage.getItem("brain-serve-token") || ""; } catch (e) {} }
+  if (!tokConsumed) {
+    tokConsumed = true;
+    const rawHash = location.hash || "";
+    if (rawHash.startsWith("#")) {
+      const parts = rawHash.slice(1).split("&");
+      let foundTok = "";
+      const kept = [];
+      for (const p of parts) {
+        if (!foundTok && p.startsWith("t=")) {
+          const val = p.slice(2);
+          if (val) {
+            try { foundTok = decodeURIComponent(val); } catch (e) { foundTok = val; }
+          }
+        } else if (p !== "") {
+          kept.push(p);
+        }
+      }
+      if (foundTok) {
+        TOK = foundTok;
+        storeToken(TOK);
+        const nextHash = kept.length ? "#" + kept.join("&") : "";
+        history.replaceState(null, "", location.pathname + location.search + nextHash);
+      }
+    }
+  }
+  if (!TOK) TOK = readStoredToken();
 })();
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
@@ -297,16 +350,19 @@ async function api(path, body) {
   const r = await fetch(path, opt);
   let j = {};
   try { j = await r.json(); } catch (e) {}
-  if (r.status === 401) { showFatal(); throw new Error("sem acesso"); }
+  if (r.status === 401) { clearToken(); showFatal(); throw new Error("sem acesso"); }
   if (!r.ok || j.ok === false) throw new Error(j.error || ("erro " + r.status));
   return j;
 }
 const act = (name, body) => api("/api/onboard/" + name, body || {});
 async function waitJob(id, onTick) {
+  const started = Date.now();
   for (;;) {
     const j = (await api("/api/onboard/job/" + id)).job;
     if (onTick) onTick(j);
+    if (j.status === "stale") throw new Error((j.result && j.result.error) || "tempo esgotado (15 min) — rode `brain doctor --online` no terminal");
     if (j.status !== "running") return j;
+    if (Date.now() - started >= JOB_TIMEOUT_MS) throw new Error("tempo esgotado (15 min) — rode `brain doctor --online` no terminal");
     await new Promise(r => setTimeout(r, 1500));
   }
 }
@@ -1269,6 +1325,7 @@ V.planejamento = () => {
         const li = document.createElement("li"); li.innerHTML = `<span>${esc(f.name)}</span><span><i class="spin"></i></span>`; $("#files").appendChild(li);
         try {
           const r = await fetch("/api/onboard/upload", {method: "POST", headers: {"X-Brain-Token": TOK, "X-File-Name": encodeURIComponent(f.name)}, body: f});
+          if (r.status === 401) { clearToken(); showFatal(); throw new Error("sem acesso"); }
           const j = await r.json(); if (!r.ok || !j.ok) throw new Error(j.error || "falhou");
           uploads.push({name: j.name}); li.lastChild.textContent = "✓ recebido";
         } catch (e) { li.lastChild.textContent = "✗ " + e.message; }
@@ -1425,7 +1482,6 @@ function render() { renderSteps(); (V[cur] || V.inicio)(); }
 (async function boot() {
   if (!TOK) return showFatal();
   try { await refresh(); } catch (e) { if ($("#fatal").classList.contains("hidden")) { document.body.innerHTML = `<div class="fatal"><h1>Não consegui falar com o Brain</h1><p class="lead">${esc(e.message)}</p></div>`; } return; }
-  history.replaceState(null, "", location.pathname);   // o token sai da barra de endereço (fica no localStorage)
   $("#app").classList.remove("hidden");
   render();
 })();

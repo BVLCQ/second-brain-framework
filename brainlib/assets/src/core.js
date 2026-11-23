@@ -4,7 +4,14 @@
 "use strict";
 // normalização: o portfolio.html injeta só o recorte do portfólio — e instâncias antigas podem
 // não ter todas as chaves. Nenhuma leitura do painel pode ver undefined (boot OU refresh do serve).
+const RAW_DATA = JSON.parse(document.getElementById("data").textContent);
+const SERVE_ORIGIN = location.protocol === "http:" && location.hostname === "127.0.0.1";
+const IS_SHELL = SERVE_ORIGIN && Object.keys(RAW_DATA).length === 0;
+let HYDRATED = !IS_SHELL;
 function normalizeBrain(m){
+  m.owner = m.owner || {id: "eu", name: ""};
+  m.today = m.today || "";
+  m.portfolio = m.portfolio || {areas: [], processes: [], opportunities: [], gaps: [], by_area: [], stages: [], matrix: {"ganho rápido": [], "aposta": [], "preencher depois": [], "evitar": []}, funnel: {}, ranking: []};
   m.update = m.update || {}; m.update = Object.assign({version:"?", news:[], cli_cmd:"", checked_at:"", behind:0, ahead:0, remote_version:""}, m.update);
   m.freshness = m.freshness || {};
   m.freshness = Object.assign({
@@ -42,7 +49,7 @@ function normalizeBrain(m){
       to: x.destination || "—", status: x.status, date: x.date, link: x.link || null}));
   return m;
 }
-const M = normalizeBrain(JSON.parse(document.getElementById("data").textContent));
+const M = normalizeBrain(RAW_DATA);
 const idx = (arr, k) => { k = k || "id"; return Object.assign(Object.create(null), Object.fromEntries(arr.map(x => [x[k], x]))); };
 var A = idx(M.actions), D = idx(M.decisions), P = idx(M.projects), G = idx(M.goals), PE = idx(M.people), ART = idx(M.artifacts);
 var DL = idx(M.deliveries), DD = idx(M.deliverables_done);
@@ -1056,6 +1063,10 @@ const faceOf = v => (v.indexOf("pf/") === 0 || v === "people" || v === "person")
 const PARENT = {project: "projects", person: "people", action: "todo", decision: "decisions", "pf/opp": "pf/opps", "pf/area": "pf/areas"};
 function go(view, params){ const q = new URLSearchParams(Object.entries(params || {}).filter(([, v]) => v)).toString(); location.hash = view + (q ? "?" + q : ""); }
 function route(){
+  if (IS_SHELL && !HYDRATED) {
+    if (window.BRAIN_AUTH && !window.BRAIN_AUTH.isLive()) window.BRAIN_AUTH.showAuthRequired();
+    return;
+  }
   const raw = location.hash.slice(1) || "home", parts = raw.split("?"), path = parts[0], qs = parts[1] || "";
   let seg = path.split("/");
   if (seg[0] === "face") {                       // trocar de face: volta pra onde a face estava
@@ -1096,11 +1107,16 @@ window.BRAIN = {M, A, D, P, G, PE, OPP, PROC, AREA, docUrl, go, route, chip, aL,
     normalizeBrain(nm);
     for (const k of Object.keys(M)) delete M[k];
     Object.assign(M, nm);
+    HYDRATED = true;
     A = idx(M.actions); D = idx(M.decisions); P = idx(M.projects); G = idx(M.goals);
     PE = idx(M.people); ART = idx(M.artifacts); DL = idx(M.deliveries); DD = idx(M.deliverables_done);
     PF = M.portfolio; AREA = idx(PF.areas); OPP = idx(PF.opportunities); PROC = idx(PF.processes);
     BRAIN.A = A; BRAIN.D = D; BRAIN.P = P; BRAIN.G = G; BRAIN.PE = PE;   // re-exporta: quem lê
     BRAIN.OPP = OPP; BRAIN.PROC = PROC; BRAIN.AREA = AREA;              // window.BRAIN não pode ficar congelado no boot
+    const ownName = (M.owner && M.owner.name) || "—";
+    const onEl = document.getElementById("ownername"); if (onEl) onEl.textContent = ownName;
+    const avEl = document.getElementById("avatar"); if (avEl) avEl.textContent = ownName.trim().slice(0, 1).toUpperCase() || "B";
+    syncVerBadge();
     syncFreshBadge();
     route();
   }};
@@ -1124,20 +1140,27 @@ if (qi) {
   });
 }
 window.addEventListener("hashchange", route);
-route();
+if (IS_SHELL) {
+  if (window.BRAIN_AUTH && window.BRAIN_AUTH.isLive()) {
+    $("#view").innerHTML = '<div class="pagehead"><div><h1>Carregando…</h1><p class="sub">conectando à ponte local…</p></div></div>';
+    window.BRAIN_AUTH.hydrate();
+  } else if (window.BRAIN_AUTH) {
+    window.BRAIN_AUTH.showAuthRequired();
+  } else {
+    $("#view").innerHTML = '<section class="panel" data-auth-required="1"><h2>Sessão não autenticada</h2><p>Reabra via <code>./brain render --open</code> ou pelo app <b>Brain</b>.</p></section>';
+  }
+} else {
+  route();
+}
 
 
 // ── versão + atualização (rodapé da barra lateral; dados vêm do cache do render) ──
 // (dentro do MESMO IIFE do core: o M e o $ daqui não existem fora dele)
-(function(){
+function syncVerBadge(){
   const u = M.update || {};
   const b = document.getElementById("verbadge");
   if (!b) return;
   const back = document.getElementById("newsback");
-  const meta = document.getElementById("newsmeta");
-  const act = document.getElementById("newsact");
-  const log = document.getElementById("newslog");
-  const fb = document.getElementById("newsfb");
   const behind = (u.behind || 0) > 0;
   const commitsTxt = u.behind + (u.behind === 1 ? " commit atrás" : " commits atrás");
   const verTxt = "v" + (u.version || "?");
@@ -1149,11 +1172,31 @@ route();
     back.dataset.remoteVersion = u.remote_version || "";
     back.dataset.cliCmd = u.cli_cmd || "";
   }
-  const semNovidade = () => u.checked
+  b.textContent = behind
+    ? transTxt + " · " + commitsTxt
+    : (u.checked ? verTxt + " · em dia" : verTxt);
+  b.classList.toggle("behind", behind);
+  b.title = behind ? "atualização disponível (" + commitsTxt + ") — comando `update`"
+                   : "Segundo Cérebro " + verTxt + (u.checked ? " — em dia" : "");
+}
+(function(){
+  const b = document.getElementById("verbadge");
+  if (!b) return;
+  const back = document.getElementById("newsback");
+  const meta = document.getElementById("newsmeta");
+  const act = document.getElementById("newsact");
+  const log = document.getElementById("newslog");
+  const fb = document.getElementById("newsfb");
+  const semNovidade = u => u.checked
     ? ["Tudo em dia por aqui. A lista completa mora no CHANGELOG.md do repositório."]
     : ["Ainda não verificamos se há atualizações — o noturno ou o comando `update --check` fazem isso."];
   const openNews = () => {
-    const news = (u.news && u.news.length) ? u.news : semNovidade();
+    const u = M.update || {};
+    const behind = (u.behind || 0) > 0;
+    const commitsTxt = u.behind + (u.behind === 1 ? " commit atrás" : " commits atrás");
+    const verTxt = "v" + (u.version || "?");
+    const transTxt = verTxt + " → v" + (u.remote_version || "?");
+    const news = (u.news && u.news.length) ? u.news : semNovidade(u);
     document.getElementById("newslist").innerHTML =
       news.map(n => '<div class="ni">' + esc(n) + "</div>").join("");
     document.getElementById("newstitle").textContent = behind ? "Atualização disponível" : "Novidades da versão";
@@ -1178,12 +1221,7 @@ route();
     back.classList.remove("open");
     back.hidden = true;
   };
-  b.textContent = behind
-    ? transTxt + " · " + commitsTxt
-    : (u.checked ? verTxt + " · em dia" : verTxt);
-  b.classList.toggle("behind", behind);
-  b.title = behind ? "atualização disponível (" + commitsTxt + ") — comando `update`"
-                   : "Segundo Cérebro " + verTxt + (u.checked ? " — em dia" : "");
+  if (!IS_SHELL) syncVerBadge();
   b.addEventListener("click", openNews);
   const closeBtn = document.getElementById("newsclose");
   if (closeBtn) closeBtn.addEventListener("click", closeNews);
@@ -1194,7 +1232,7 @@ route();
 (function(){
   const b = document.getElementById("freshbadge");
   if (!b) return;
-  syncFreshBadge();
+  if (!IS_SHELL) syncFreshBadge();
   b.addEventListener("click", () => go("cfg/saude"));
 })();
 })();
