@@ -223,7 +223,7 @@ class TuiFormAutocompleteTest(unittest.IsolatedAsyncioTestCase):
 
         app = BrainApp(self.inst)
         executed: list[list[list[str]]] = []
-        app.exec = lambda cmds, **kw: executed.append(cmds)
+        app.run_cmds = lambda cmds, **kw: executed.append(cmds)
 
         async with app.run_test(size=(140, 44)) as pilot:
             await pilot.pause(0.3)

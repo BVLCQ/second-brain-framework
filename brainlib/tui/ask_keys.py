@@ -100,10 +100,10 @@ class AskKeys:
 
     def _answer_text(self, q) -> None:
         self.open_form("ask.answer", {"id": q.id, "text": q.text, "item": {"options": list(q.options or [])}},
-                       wrap=lambda cmds, v: self._answer_cmds(q, v["answer"] or "…"), after=lambda: self._after_answer(q))
+                       wrap=lambda cmds, v: self._answer_cmds(q, v["answer"]), after=lambda: self._after_answer(q))
 
     def answer_question(self, q, text: str) -> None:
-        self.exec(self._answer_cmds(q, text), after=lambda: self._after_answer(q))
+        self.run_cmds(self._answer_cmds(q, text), after=lambda: self._after_answer(q))
 
     @staticmethod
     def _allow_rule(q) -> tuple[str, str]:
@@ -187,7 +187,7 @@ class AskKeys:
                 self.resume_now(self.store.answered_asks(), free_text=text)
             else:
                 self.log_line("sem sessão do agente para retomar: gravei como nota para o próximo /update ler", "yellow")
-                self.exec([["note", "add", "--text", text]])
+                self.run_cmds([["note", "add", "--text", text]])
             return True
         sub = ("Continua a conversa do agente na mesma sessão." if self._resumable()
                else "Não há sessão do agente para retomar: o texto vira uma nota na inbox (o próximo /update lê).")

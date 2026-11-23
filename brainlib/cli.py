@@ -10,7 +10,7 @@ import os
 import sys
 from pathlib import Path
 
-from . import __version__, config, dupes, gates, ids, people, planning, schema, util
+from . import __version__, config, dupes, gates, ids, people, planning, providers, schema, util
 from .core import Brain
 
 
@@ -1024,6 +1024,14 @@ def cmd_upstream(args, b) -> None:
 
 
 # ── parser ──────────────────────────────────────────────────────────────────
+def _flat_memory_providers(slot: str) -> list[str]:
+    """Provedores do slot que as flags planas do `memory setup` (`--provider` · `--embeddings` · `--reranker`)
+    conseguem expressar: o registro inteiro menos `custom`, que exige model + base_url sem flag que os leve
+    (`setup.validate_memory_setup`). O formulário `memory.mode` oferece o mesmo cardápio
+    (`forms.memory_provider_options`); um teste cruza os dois."""
+    return [p for p in providers.PROVIDERS[slot] if p != "custom"]
+
+
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(prog="brain", description="Segundo Cérebro v2 — livro-razão, views e portas.")
     ap.add_argument("--version", action="version", version=f"brain {__version__}")
@@ -1558,14 +1566,16 @@ def build_parser() -> argparse.ArgumentParser:
             x.add_argument("--limit", type=int)
             x.add_argument("--dry-run", action="store_true")
         if name == "setup":
+            # Cardápio vem do registro — não espelhar à mão: lista chumbada aqui recusava, com "invalid
+            # choice", o que o formulário memory.mode (derivado do registro) oferecia.
             x.add_argument("--mode", choices=["none", "embed", "full"],
                            help="grava as chaves do modo antes de criar os bancos (guides/memory.md)")
-            x.add_argument("--provider", choices=["anthropic", "openai"],
+            x.add_argument("--provider", choices=_flat_memory_providers("llm"),
                            help="fluxo headless (wizard roteirizado): provedor de LLM — exige --mode full")
             x.add_argument("--model", help="modelo do LLM (exigido quando --provider openai)")
-            x.add_argument("--embeddings", choices=["local", "fireworks", "openai"],
+            x.add_argument("--embeddings", choices=_flat_memory_providers("embeddings"),
                            help="provedor de embeddings (full é só-nuvem: local não)")
-            x.add_argument("--reranker", choices=["off", "fireworks", "cohere"],
+            x.add_argument("--reranker", choices=_flat_memory_providers("reranker"),
                            help="reranker (default off — fusão RRF)")
             x.add_argument("--key", help="chave do LLM (full) — vai ao config/.env, nunca sai em output")
             x.add_argument("--emb-key", help="chave do provedor de embeddings")

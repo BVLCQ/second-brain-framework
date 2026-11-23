@@ -252,14 +252,15 @@ async function api(path, opts){
   if (r.status === 401) { handle401(); throw new Error("401"); }
   return r.json();
 }
-async function serveRun(cmd){
+async function serveRun(cmd, onResp){
   conOpen();
   conLine('<span class="dim">$</span> ' + esc(cmd));
   let j;
   try {
     j = await api("/api/cmd", {method: "POST", headers: {"Content-Type": "application/json"},
                               body: JSON.stringify({cmd: cmd})});
-  } catch (e) { conLine('<span class="late">ponte fora do ar — ./brain serve</span>'); return false; }
+  } catch (e) { conLine('<span class="late">ponte fora do ar — ./brain serve</span>'); if (onResp) onResp(null); return false; }
+  if (onResp) onResp(j);
   (j.out || []).forEach(l => conLine('<span class="' + (l.startsWith("✓") ? "ok" : "dim") + '">' + esc(l) + "</span>"));
   if (j.err) conLine('<span class="late">' + esc(j.err.split("\n")[0]) + "</span>");
   if (j.error) conLine('<span class="late">' + esc(j.error) + "</span>");
@@ -1240,6 +1241,7 @@ function openForm(id, ctx, opts){
     '<div class="pal-confirm open" style="display:block;border-top:0;padding:14px 16px;max-height:70vh;overflow:auto">' +
     (sub ? '<p class="note-s" style="margin:0 0 10px">' + esc(sub) + "</p>" : "") + (opts.extra || "") + rows +
     '<div class="cline" data-preview style="min-height:34px;white-space:pre"></div>' +
+    '<div class="dup-box" data-dup-box hidden style="margin:8px 0;padding:10px 12px;border:1px solid var(--warn, #b45309);border-radius:8px;background:rgba(180,83,9,.08)"></div>' +
     '<div class="note-s" data-err style="margin:0 0 6px;color:var(--risk)"></div>' +
     '<div class="row"><span class="note-s">mesma linha que a TUI roda · ' + (fm.fields.some(f => f.multi) ? "ctrl+enter" : "enter") + " confirma · esc cancela</span>" +
     (opts.help ? '<button class="btn ghost" data-help>? orientações</button>' : "") +
@@ -1297,7 +1299,89 @@ function openForm(id, ctx, opts){
     changed(f.id);
     inp.focus();
   };
+  const dupBox = ov.querySelector("[data-dup-box]");
+  const clearDup = () => {
+    if (!dupBox) return;
+    dupBox.hidden = true;
+    dupBox.textContent = "";
+  };
+  const parseDupCandidates = errTxt => {
+    const lines = String(errTxt || "").split(/\r?\n/);
+    const idx = lines.findIndex(l => /possível ação duplicada — nada gravado/.test(l));
+    if (idx >= 0) {
+      const cands = [];
+      for (let i = idx + 1; i < lines.length; i++) {
+        const t = lines[i].trim();
+        if (!t) continue;
+        if (/^se for a mesma\b/i.test(t) || /^se for outra\b/i.test(t)) break;
+        cands.push(t);
+      }
+      if (cands.length) return cands;
+    }
+    const trimmed = String(errTxt || "").trim();
+    return trimmed ? [trimmed] : [];
+  };
+  let submitting = false;
+  const showDup = (cands, pendingCmds) => {
+    if (!dupBox) return;
+    dupBox.textContent = "";
+    dupBox.hidden = false;
+    const hd = document.createElement("div");
+    hd.style.fontWeight = "600";
+    hd.style.marginBottom = "4px";
+    hd.textContent = "Possível duplicata";
+    dupBox.appendChild(hd);
+    const ul = document.createElement("ul");
+    ul.style.margin = "4px 0 8px 18px";
+    ul.style.padding = "0";
+    cands.forEach(line => {
+      const li = document.createElement("li");
+      li.textContent = line;
+      ul.appendChild(li);
+    });
+    dupBox.appendChild(ul);
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn primary";
+    btn.setAttribute("data-force-submit", "1");
+    btn.textContent = "Criar mesmo assim";
+    btn.onclick = () => sendCmds(pendingCmds.map((c, idx) => idx === 0 && !c.includes("--force") ? c.concat(["--force"]) : c), true);
+    dupBox.appendChild(btn);
+  };
+  const sendCmds = async (cmds, forced) => {
+    if (submitting) return;
+    if (!LIVE || id !== "action.new") {
+      close();
+      runArgv(cmds, m => opts.run && opts.run(F.values(fm, vals(), ctx, M), m));
+      return;
+    }
+    submitting = true;
+    const okBtn = ov.querySelector("[data-ok]");
+    const forceBtn = dupBox && dupBox.querySelector("[data-force-submit]");
+    if (okBtn) okBtn.disabled = true;
+    if (forceBtn) forceBtn.disabled = true;
+    let lastResp = null;
+    let ok = false;
+    try {
+      ok = await runArgv(cmds, m => opts.run && opts.run(F.values(fm, vals(), ctx, M), m), r => { lastResp = r; });
+    } finally {
+      submitting = false;
+      if (okBtn) okBtn.disabled = false;
+      if (forceBtn) forceBtn.disabled = false;
+    }
+    if (ok) {
+      close();
+      return;
+    }
+    const errTxt = (lastResp && lastResp.err) || "";
+    if (!forced && lastResp && !lastResp.ok && /possível ação duplicada — nada gravado/.test(errTxt)) {
+      showDup(parseDupCandidates(errTxt), cmds);
+      return;
+    }
+    close();
+  };
   const changed = id0 => {
+    clearDup();
     fm.fields.filter(f => f.depends === id0 && f.choices !== undefined).forEach(f => { const e = el(f.id); e.innerHTML = optHTML(f, vals(), e.value); });
     fm.fields.filter(f => f.fill && f.fill[0] === id0).forEach(f => { const nv = F.FILL[f.fill[1]](vals()), e = el(f.id);
       if (nv !== undefined && e) { e.value = nv; closeSug(f.id); } });
@@ -1308,8 +1392,7 @@ function openForm(id, ctx, opts){
     if (msg) { ov.querySelector("[data-err]").textContent = msg; const p = ov.querySelector("[data-preview]");
       p.classList.add("miss"); setTimeout(() => p.classList.remove("miss"), 600); return; }
     let cmds = F.formArgv(fm, v, ctx, M); if (opts.wrap) cmds = opts.wrap(cmds, F.values(fm, v, ctx, M));
-    close();
-    runArgv(cmds, m => opts.run && opts.run(F.values(fm, v, ctx, M), m));
+    sendCmds(cmds, false);
   };
   fm.fields.filter(f => f.auto !== "surface" && f.suggest).forEach(f => {
     sugState[f.id] = {items: [], sel: 0, open: false, nav: false, box: ov.querySelector('[data-sug="' + f.id + '"]')};
@@ -1318,6 +1401,7 @@ function openForm(id, ctx, opts){
     const f = fm.fields.find(x => x.id === e.dataset.k), st = f && sugState[f.id];
     e.addEventListener("input", () => { if (st) { st.nav = false; refreshSug(f, false); } changed(e.dataset.k); });
     if (e.tagName === "SELECT") e.addEventListener("change", () => changed(e.dataset.k));
+    else e.addEventListener("change", clearDup);
     if (st) e.addEventListener("focus", () => Object.keys(sugState).forEach(k => { if (k !== f.id) closeSug(k); }));
     e.addEventListener("keydown", ev => {
       if (st) {
@@ -1357,10 +1441,11 @@ function openForm(id, ctx, opts){
   const first = ov.querySelector("input,select,textarea"); if (first) first.focus(); else ov.querySelector("[data-ok]").focus();
 }
 // comandos da especificação: em sequência no modo vivo (para no primeiro que falhar); no retrato, a linha vai copiada
-async function runArgv(cmds, mut){
+async function runArgv(cmds, mut, onResp){
   const lines = cmds.map(c => "brain " + window.BRAIN_FORMS.shjoin(c));
-  if (!LIVE) { offlineCmd(lines.join(" && ")); return; }
-  for (const ln of lines) { if (!(await serveRun(ln))) return; }
+  if (!LIVE) { offlineCmd(lines.join(" && ")); return true; }
+  for (const ln of lines) { if (!(await serveRun(ln, onResp))) return false; }
+  return true;
 }
 // overlay de orientações empilhável por cima do formulário aberto: Esc/? fecham SÓ a ajuda (capture, antes do global)
 function stackHelp(title, html){

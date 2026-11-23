@@ -13,7 +13,7 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
-from .. import config, doctor, dupes, ids, model, notes as notes_mod, opener, rawsort, util, watch
+from .. import config, doctor, dupes, ids, model, notes as notes_mod, opener, rawsort, schema, util, watch
 from ..core import Brain
 
 # Abas do painel Plano (Execução): 0 = árvore inteira; 1-4 = só goals/projetos naquele status.
@@ -73,9 +73,20 @@ PANELS_CFG = {
 # (carrossel). Uma face nova entra só declarando-se aqui (e em FACE_START: o painel em que ela abre).
 FACES = [("Execução", PANELS_EXEC), ("Portfólio", PANELS_PORT), ("Configurações", PANELS_CFG)]
 FACE_START = [2, 3, 1]
-OPP_TABS = [("ideia", "triagem"), ("priorizada",), ("em-andamento", "piloto", "validando"),
-            ("entregue", "em-espera", "descartada")]      # status de cada aba de Oportunidades (a última recebe o resto)
-PANELS = PANELS_EXEC                 # compatibilidade: os painéis da face Execução
+_OPP_NAMED_TABS: tuple[tuple[str, ...], ...] = (
+    ("ideia", "triagem"),
+    ("priorizada",),
+    ("em-andamento", "piloto", "validando"),
+)
+
+
+def build_opp_tabs() -> list[tuple[str, ...]]:
+    """Status de cada aba de Oportunidades: grupos nomeados e, na última aba, o resto de schema.OPP_STATUS."""
+    named = {s for grp in _OPP_NAMED_TABS for s in grp}
+    return [*_OPP_NAMED_TABS, tuple(sorted(schema.OPP_STATUS - named))]
+
+
+OPP_TABS: list[tuple[str, ...]] = build_opp_tabs()
 
 SYS_OPS = [
     {"id": "sys:render", "name": "Regenerar views", "args": ["render"],

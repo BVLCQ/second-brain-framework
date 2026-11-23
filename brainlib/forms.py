@@ -279,7 +279,7 @@ def _forms() -> list[Form]:
             F("unblocks", "destrava", ph="TASK-#### (opcional)", suggest="@actions", xf="nospace", arg="--unblocks"),
             F("link", "link", ph="URL ou arquivo de origem (opcional)", arg="--link")),
             sub="Equivalente ao /todo. Sem prazo, o agente oferece uma sugestão (roxa).",
-            tail=("--by", "owner", "--force"),
+            tail=("--by", "owner"),
             order=("list", "owner", "due", "effort", "project", "prio", "deliv", "people", "blocked", "unblocks", "link")),
         Form("action.edit", "Editar {id}", ("action", "update", "{id}"), (
             F("title", "título", req=True, init="title", arg="--title"),
@@ -538,17 +538,14 @@ def _forms() -> list[Form]:
         Form("memory.mode", "Memória: modo e provedores", ("memory", "setup", "--mode", "{mode}"), (
             F("mode", "modo", choices=(("none", "nenhuma — busca por palavra"),
                                        ("embed", "embed — semântica; local ou nuvem"),
-                                       ("full", "full — fatos; só-nuvem")), value="embed"),
-            F("provider", "LLM", choices=(("anthropic", "Anthropic — Haiku/Sonnet por operação"),
-                                          ("openai", "OpenAI — pede o modelo")),
+                                       ("full", "full — fatos; só-nuvem")), value="embed", init="mode"),
+            F("provider", "LLM", choices="@memory_llm", init="provider",
               show={"mode": ["full"]}, arg="--provider"),
             F("model", "modelo do LLM", ph="gpt-… (exigido no OpenAI)",
               show={"mode": ["full"], "provider": ["openai"]}, arg="--model"),
-            F("embeddings", "embeddings", choices="@memory_embs", depends="mode",
+            F("embeddings", "embeddings", choices="@memory_embs", depends="mode", init="embeddings",
               show={"mode": ["embed", "full"]}, arg="--embeddings"),
-            F("reranker", "reranker", choices=(("off", "desligado — fusão RRF"),
-                                               ("fireworks", "Fireworks — Qwen3-Reranker-8B"),
-                                               ("cohere", "Cohere — rerank-v3.5")),
+            F("reranker", "reranker", choices="@memory_reranker", init="reranker",
               show={"mode": ["embed", "full"]}, arg="--reranker"),
             F("key", "API key (LLM)", secret=True, ph="vazio = mantém a do .env",
               show={"mode": ["full"]}, arg="--key"),
@@ -562,7 +559,7 @@ def _forms() -> list[Form]:
             sub="O modo define o cardápio: embed aceita embeddings locais (bge-m3) ou de nuvem; full é "
                 "só-nuvem (LLM + embeddings de provedor). As chaves vão ao config/.env (nunca voltam em "
                 "output) e o container é recriado pelo fluxo. No painel: Configurações › Memória.",
-            gate=True, where="tui",
+            edit=True, gate=True, where="tui",
             why="o painel tem o passo Memória dedicado (Configurações), com o mesmo resultado"),
         Form("memory.provider", "Provedor da memória", ("memory", "providers", "set", "{slot}", "--provider", "{provider}"), (
             F("slot", "slot", choices=(("llm", "LLM — só vale no modo full"), ("embeddings", "embeddings"),
@@ -640,16 +637,49 @@ def _src_opp_status(m, v, ctx):
     return out
 
 
+def memory_provider_options(slot: str, mode: str = "embed") -> list[tuple[str, str]]:
+    """Cardápio de provedores de um slot derivado do registro providers.PROVIDERS — o mesmo que o
+    `brain memory setup` aceita (cli._flat_memory_providers; um teste cruza os dois). Sem `custom`: exige
+    model + base_url, que este formulário não pede; o valor atual em custom aparece como "(atual)"."""
+    tbl = _providers.PROVIDERS.get(slot, {})
+    out = [(pid, tbl[pid].get("label") or pid) for pid in tbl if pid != "custom"]
+    if slot == "embeddings" and mode == "full":
+        return [(pid, lab) for pid, lab in out
+                if pid != "local" and not tbl[pid].get("local") and tbl[pid].get("family") != "local"]
+    return out
+
+
+def _with_current(opts: list[tuple[str, str]], cur: str) -> list[tuple[str, str]]:
+    if cur and all(k != cur for k, _ in opts):
+        return [(cur, f"{cur} (atual)"), *opts]
+    return list(opts)
+
+
 def _src_providers(m, v, ctx):
     slot = (v or {}).get("slot") or "embeddings"
     return [tuple(x) for x in (m.get("form_static") or {}).get("providers", {}).get(slot, [])]
+
+
+def _src_memory_llm(m, v, ctx):
+    opts = memory_provider_options("llm", (v or {}).get("mode") or "embed")
+    return _with_current(opts, ((ctx or {}).get("item") or {}).get("provider", ""))
 
 
 def _src_memory_embs(m, v, ctx):
     """Cardápio de embeddings pelo modo — modo fora da tabela (ex.: none) cai no cardápio do embed.
     Fonte dinâmica nunca devolve vazio: o Select do formulário exige opções (IndexError no compose)."""
     tbl = (m.get("form_static") or {}).get("memory_embs", {})
-    return [tuple(x) for x in tbl.get((v or {}).get("mode") or "embed", tbl.get("embed", []))]
+    mode = (v or {}).get("mode") or "embed"
+    opts = [tuple(x) for x in tbl.get(mode, tbl.get("embed", []))]
+    cur = ((ctx or {}).get("item") or {}).get("embeddings", "")
+    if mode == "full" and cur == "local":
+        return opts
+    return _with_current(opts, cur)
+
+
+def _src_memory_reranker(m, v, ctx):
+    opts = memory_provider_options("reranker")
+    return _with_current(opts, ((ctx or {}).get("item") or {}).get("reranker", ""))
 
 
 SOURCES = {
@@ -689,7 +719,9 @@ SOURCES = {
     "reports": lambda m, v, ctx: [(r, r) for r in (m.get("form_static") or {}).get("reports", [])],
     "destinations": lambda m, v, ctx: [(d, d) for d in (m.get("form_static") or {}).get("destinations", [])],
     "providers": _src_providers,
+    "memory_llm": _src_memory_llm,
     "memory_embs": _src_memory_embs,
+    "memory_reranker": _src_memory_reranker,
     "ice:impact": _ice("impact"), "ice:confidence": _ice("confidence"), "ice:ease": _ice("ease"),
 }
 
@@ -727,7 +759,7 @@ def filter_options(items, query: str = "", limit: int = SUGGEST_LIMIT) -> list[d
             lab = lab[len(prefix):]
         fid, flab = util.fold(oid), util.fold(lab)
         id_pref = bool(q) and fid.startswith(q)
-        num_pref = bool(q) and q.isdigit() and "-" in fid and (
+        num_pref = bool(q) and q.isascii() and q.isdigit() and "-" in fid and (
             fid.split("-", 1)[1].startswith(q) or fid.split("-", 1)[1].lstrip("0").startswith(q)
         )
         if not words or id_pref or num_pref or all(w in flab or w in fid for w in words):
@@ -760,6 +792,8 @@ def _fmt_dur(mins) -> str:
 def _num(x) -> str:
     if x in (None, ""):
         return ""
+    if isinstance(x, str) and not x.isascii():
+        return x
     try:
         f = float(x)
     except (TypeError, ValueError):
@@ -868,18 +902,24 @@ def _cond(c, v: dict, ctx: dict, m: dict) -> bool:
     return True
 
 
-def hidden(form: Form, raw: dict, ctx: dict | None = None, m: dict | None = None) -> set[str]:
-    return {f.id for f in form.fields if not _cond(f.show, raw, ctx or {}, m or {})}
-
-
-def values(form: Form, raw: dict, ctx: dict | None = None, m: dict | None = None, surface: str = "") -> dict[str, str]:
-    """Valores que valem: aparados, e escondido = vazio (não conta, nem para obrigatório)."""
-    clean = {}
+def _clean(form: Form, raw: dict, surface: str = "") -> dict[str, str]:
+    clean: dict[str, str] = {}
     for f in form.fields:
         s = ("" if raw.get(f.id) is None else str(raw.get(f.id))).strip()
         if f.auto == "surface" and surface and not s:
             s = surface
         clean[f.id] = s
+    return clean
+
+
+def hidden(form: Form, raw: dict, ctx: dict | None = None, m: dict | None = None) -> set[str]:
+    clean = {k: ("" if val is None else str(val)).strip() for k, val in (raw or {}).items()}
+    return {f.id for f in form.fields if not _cond(f.show, clean, ctx or {}, m or {})}
+
+
+def values(form: Form, raw: dict, ctx: dict | None = None, m: dict | None = None, surface: str = "") -> dict[str, str]:
+    """Valores que valem: aparados, e escondido = vazio (não conta, nem para obrigatório)."""
+    clean = _clean(form, raw, surface)
     hid = hidden(form, clean, ctx, m)
     return {k: ("" if k in hid else x) for k, x in clean.items()}
 
@@ -904,9 +944,14 @@ def _ck_duration(x, v, ctx, m, positive=False):
     return "Use uma duração maior que zero (45m, 1h30m)." if positive and not mins else ""
 
 
+_DOT_NUM_RE = re.compile(r"^[0-9]+(?:\.[0-9]+)?$")
+_COMMA_NUM_RE = re.compile(r"^[0-9]+,[0-9]{1,2}$")
+_THOUSANDS_RE = re.compile(r"^[0-9.,]+$")
+
+
 def _ck_int(lo, hi):
     def ck(x, v, ctx, m):
-        ok = x.isdigit() and (lo is None or int(x) >= lo) and (hi is None or int(x) <= hi)
+        ok = x.isascii() and x.isdigit() and (lo is None or int(x) >= lo) and (hi is None or int(x) <= hi)
         if ok:
             return ""
         if lo is not None and hi is not None:
@@ -916,10 +961,13 @@ def _ck_int(lo, hi):
 
 
 def _ck_num(x, v, ctx, m):
-    try:
+    if _DOT_NUM_RE.fullmatch(x):
+        return "" if float(x) > 0 else "Use um número maior que zero."
+    if _COMMA_NUM_RE.fullmatch(x):
         return "" if float(x.replace(",", ".")) > 0 else "Use um número maior que zero."
-    except ValueError:
-        return "Use um número maior que zero."
+    if "," in x and _THOUSANDS_RE.fullmatch(x):
+        return "Use ponto decimal ou vírgula só para decimais (sem separador de milhar)."
+    return "Use um número maior que zero."
 
 
 def _ck_watch_key(x, v, ctx, m):
@@ -955,7 +1003,7 @@ def _ck_pairs(x, v, ctx, m):
 
 def _deliv_full(x: str, project: str) -> str:
     r = ids.normalize((x or "").strip().upper().lstrip("."))
-    if r.isdigit():
+    if r.isascii() and r.isdigit():
         return f"{project}.{int(r)}" if project and project != NONE else ""
     return r
 
@@ -1116,7 +1164,7 @@ def _hint_from_hours(h: float) -> int:
 def _h_ice_impact(x, v, ctx, m):
     out = _h_ice("impact")(x, v, ctx, m)
     h = (ctx.get("item") or {}).get("hours_saved")
-    if x.isdigit() and h:
+    if x.isascii() and x.isdigit() and h:
         hint = _hint_from_hours(float(h))
         out += f"\nhoras declaradas: {float(h):g} h/mês → faixa sugerida {hint}"
         if int(x) > hint:
@@ -1187,7 +1235,7 @@ XF = {   # (valor, valores, ctx, m) → valor que vai para a CLI
     "date": _xf_date,
     "deliv": lambda x, v, ctx, m: _deliv_full(x, v.get("project", "")) or x,
     "nospace": lambda x, v, ctx, m: x.replace(" ", ""),
-    "num": lambda x, v, ctx, m: _num(x.replace(",", ".")) if x else "",
+    "num": lambda x, v, ctx, m: _num(x.replace(",", ".") if _COMMA_NUM_RE.fullmatch(x) else x) if x else "",
     "note_link": lambda x, v, ctx, m: _note_link(x) if x else "",
     "lower_eu": lambda x, v, ctx, m: "eu" if x.lower() == "eu" else x,
     "jql": _xf_jql,
@@ -1268,30 +1316,35 @@ def _emits(f: F) -> bool:
 def build(form_id: str, raw: dict, ctx: dict | None = None, m: dict | None = None, surface: str = "") -> list[list[str]]:
     """Valores do formulário → comandos `brain` (listas de argumentos). A MESMA regra do `formArgv` do forms.js."""
     form, ctx, m = FORMS[form_id], ctx or {}, m or {}
-    v = values(form, raw, ctx, m, surface=surface)
+    clean = _clean(form, raw, surface)
+    hid = hidden(form, clean, ctx, m)
+    v = {k: ("" if k in hid else x) for k, x in clean.items()}
     fields = {f.id: f for f in form.fields}
     placed = {re.sub(r"[{}?*@]", "", t) for t in form.cmd if t.startswith("{")}
     main: list[str] = []
     for t in form.cmd:
         main += _tok(t, form, v, ctx, m)
     base = baseline(form, ctx, m) if form.edit else {}
+    base_hid = hidden(form, base, ctx, m) if form.edit else set()
     order = list(form.order) + [f.id for f in form.fields if f.id not in form.order]
     for fid in order:
         f = fields.get(fid)
-        if f is None or fid in placed or not _emits(f):
+        if f is None or fid in placed or not _emits(f) or fid in hid:
             continue
         val = _xf(f, v[fid], v, ctx, m)
         if form.edit and not f.always:
             if f.set == "*":
                 old, new = _pairs(base.get(fid, "")), _pairs(val)
                 main += [t for k, x in new.items() if old.get(k) != x for t in ("--set", f"{k}={x}")]
-                main += [t for k in old if k not in new for t in ("--unset", k)]
+                if fid not in base_hid:
+                    main += [t for k in old if k not in new for t in ("--unset", k)]
                 continue
             was = _xf(f, base.get(fid, ""), v, ctx, m) if f.xf not in ("new_people",) else base.get(fid, "")
             if val == was:
                 continue
             if val == "":
-                main += list(f.clear or [])
+                if fid not in base_hid:
+                    main += list(f.clear or [])
                 continue
         if val == "" or val in f.skip:
             continue
@@ -1311,8 +1364,9 @@ def missing(form_id: str, raw: dict, ctx: dict | None = None, m: dict | None = N
             surface: str = "") -> str:
     """Primeiro problema que impede confirmar ("" = pode): obrigatório vazio ou validação que falhou."""
     form, ctx, m = FORMS[form_id], ctx or {}, m or {}
-    v = values(form, raw, ctx, m, surface=surface)
-    hid = hidden(form, {k: (raw.get(k) or "") for k in v}, ctx, m)
+    clean = _clean(form, raw, surface)
+    hid = hidden(form, clean, ctx, m)
+    v = {k: ("" if k in hid else x) for k, x in clean.items()}
     for f in form.fields:
         if f.id in hid:
             continue
@@ -1389,11 +1443,10 @@ def static(brain=None) -> dict:
     out = {"recurrence": sorted(schema.RECURRENCE), "opp_kinds": sorted(schema.OPP_KINDS),
            "providers": {slot: [(p, info.get("label") or p) for p, info in tbl.items()]
                          for slot, tbl in prov.PROVIDERS.items()},
-           "memory_embs": {"embed": [("local", "Local — LM Studio bge-m3 (nada sai)"),
-                                     ("fireworks", "Fireworks — Qwen3-Embedding-8B"),
-                                     ("openai", "OpenAI — text-embedding-3-small")],
-                           "full": [("fireworks", "Fireworks — Qwen3-Embedding-8B"),
-                                    ("openai", "OpenAI — text-embedding-3-small")]},
+           "memory_embs": {
+               "embed": [list(x) for x in memory_provider_options("embeddings", "embed")],
+               "full": [list(x) for x in memory_provider_options("embeddings", "full")],
+           },
            "reports": [], "destinations": [], "re": _patterns(), "weekdays": util.WEEKDAYS_PT, "date_help": dates.HELP,
            "secret_flags": sorted(secret_flags())}
     if brain is not None:
@@ -1429,5 +1482,6 @@ def export() -> dict:
 
 
 __all__ = ["F", "Form", "FORMS", "SOURCES", "INIT", "IFMT", "PRED", "CHECKS", "HINTS", "XF", "FILL", "PY_ONLY",
-           "SUGGEST_LIMIT", "build", "missing", "required", "initial", "baseline", "values", "hidden", "options",
-           "filter_options", "label", "title", "sub", "secret_flags", "redact_args", "display", "export", "static"]
+           "SUGGEST_LIMIT", "memory_provider_options", "build", "missing", "required", "initial", "baseline",
+           "values", "hidden", "options", "filter_options", "label", "title", "sub", "secret_flags", "redact_args",
+           "display", "export", "static"]
