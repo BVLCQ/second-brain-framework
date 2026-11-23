@@ -74,6 +74,7 @@ def classify(question: str, db: Path | None = None) -> dict:
     q = util.fold(question)
     short = len(question.split()) <= 5
     seen_ids: set[str] = set()
+    bare_short_only: set[str] = set()
     for pre, dash, num in ID_TOKEN.findall(question):
         u = pre.upper()
         bare_short = len(u) == 1 and not dash                  # G1 · P1 · R2: costuma ser prioridade do Jira
@@ -81,13 +82,21 @@ def classify(question: str, db: Path | None = None) -> dict:
             continue                                           # frase longa sem vocabulário de estado: ruído
         raw = f"{u}{num}" if len(u) == 1 and u in "GP" else f"{u}-{num}"
         cand = ids.normalize(raw)
-        if isinstance(cand, str) and NORMAL_ID.match(cand) and cand not in seen_ids:
-            seen_ids.add(cand)
-            out["ids"].append(cand)
+        if isinstance(cand, str) and NORMAL_ID.match(cand):
+            if cand not in seen_ids:
+                seen_ids.add(cand)
+                out["ids"].append(cand)
+                if bare_short:
+                    bare_short_only.add(cand)
+            elif not bare_short:
+                bare_short_only.discard(cand)
     if out["ids"]:
         db0 = db or _find_db()
-        if db0 is not None and _ids_exist(out["ids"], db0) is not None:
-            out["ids"] = _ids_exist(out["ids"], db0)      # P1/R2 do Jira etc. não viram rota
+        existing = _ids_exist(out["ids"], db0) if db0 is not None else None
+        if existing is not None:
+            out["ids"] = existing                          # P1/R2 do Jira etc. não viram rota
+        elif bare_short_only:
+            out["ids"] = [eid for eid in out["ids"] if eid not in bare_short_only]
         if out["ids"]:
             out["route"] = "ledger"
             out["why"] = "ID de entidade na pergunta"

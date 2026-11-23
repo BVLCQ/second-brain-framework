@@ -64,6 +64,22 @@ def _decisions_win(con, kind: str, eid: str, limit: int = 6) -> tuple[list[dict]
             "SELECT w.id, w.title, w.date, w.result FROM deliveries w "
             "JOIN edges ea ON ea.src = w.ref AND ea.rel = 'owner' WHERE ea.dst = ? "
             "ORDER BY w.date DESC LIMIT ?", (eid, limit)).fetchall()
+    elif kind == "decision":
+        row = con.execute("SELECT project, superseded_by FROM decisions WHERE id = ?", (eid,)).fetchone()
+        proj, sup_by = (row[0], row[1]) if row else (None, None)
+        dec_rows = con.execute(
+            "SELECT id, title, date, status, project, rationale FROM decisions "
+            "WHERE id != ? AND ((? IS NOT NULL AND project = ?) OR id = ? "
+            "OR id IN (SELECT dst FROM edges WHERE src = ? AND rel = 'supersedes') "
+            "OR id IN (SELECT src FROM edges WHERE dst = ? AND rel = 'supersedes')) "
+            "ORDER BY date DESC LIMIT ?", (eid, proj, proj, sup_by, eid, eid, limit)).fetchall()
+        win_rows = (
+            con.execute(
+                "SELECT w.id, w.title, w.date, w.result FROM deliveries w "
+                "JOIN edges ep ON ep.src = w.ref AND ep.rel = 'project' "
+                "WHERE ep.dst = ? ORDER BY w.date DESC LIMIT ?", (proj, limit)).fetchall()
+            if proj else []
+        )
     else:
         scope = _project_scope(con, kind, eid)
         if not scope:
@@ -85,7 +101,8 @@ def _decisions_win(con, kind: str, eid: str, limit: int = 6) -> tuple[list[dict]
     return decs, wins
 
 
-def _chunks(brain, kind: str, eid: str, name: str, hs, limit: int = 5) -> list[dict]:
+def _chunks(brain, kind: str, eid: str, name: str, hs, limit: int = 5,
+            tags: set[str] | None = None) -> list[dict]:
     """Melhores trechos do banco com as tags da entidade — memória ligada e servidor no ar."""
     from . import memory
     if hs is None:
@@ -95,9 +112,8 @@ def _chunks(brain, kind: str, eid: str, name: str, hs, limit: int = 5) -> list[d
             hs = memory.client(brain)
         except Exception:                                       # noqa: BLE001 — sem servidor: só as 2 primeiras camadas
             return []
-    tags = {f"pessoa:{eid}"} if kind == "person" else {f"proj:{eid}"}
-    if kind == "goal":
-        tags = {f"goal:{eid}"}
+    if tags is None:
+        tags = {f"pessoa:{eid}"} if kind == "person" else {f"goal:{eid}"} if kind == "goal" else {f"proj:{eid}"}
     try:
         res = hs.recall(brain.inst.cfg["memory"]["bank"], name, tags=sorted(tags))
     except util.BrainError:
@@ -138,6 +154,34 @@ def build(brain, ref: str, hs=None) -> dict:
             out["open_actions"] = [{"id": r[0], "title": r[1], "due": r[2], "overdue": bool(r[3])}
                                    for r in open_actions]
             name = (row[0] if row else eid)
+        elif kind == "decision":
+            row = con.execute(
+                "SELECT title, date, project, status, superseded_by, context, rationale, source, prov "
+                "FROM decisions WHERE id = ?", (eid,)).fetchone()
+            decided_by = [
+                {"id": r[0], "name": r[1] or r[0]}
+                for r in con.execute(
+                    "SELECT e.dst, p.name FROM edges e LEFT JOIN people p ON p.id = e.dst "
+                    "WHERE e.src = ? AND e.rel = 'decided_by'", (eid,))
+            ]
+            supersedes = con.execute(
+                "SELECT dst FROM edges WHERE src = ? AND rel = 'supersedes'", (eid,)).fetchone()
+            proj = row[2] if row else None
+            proj_row = (con.execute("SELECT title FROM planning WHERE id = ?", (proj,)).fetchone()
+                        if proj else None)
+            out["ficha"] = (
+                {
+                    "id": eid, "title": row[0], "date": row[1], "project": proj,
+                    "project_title": proj_row[0] if proj_row else None,
+                    "status": row[3], "superseded_by": row[4], "context": row[5],
+                    "rationale": row[6], "source": row[7] or f"ledger/{eid}", "prov": row[8],
+                    "decided_by": [x["id"] for x in decided_by],
+                    "decided_by_names": [x["name"] for x in decided_by],
+                    "supersedes": supersedes[0] if supersedes else None,
+                }
+                if row else {"id": eid}
+            )
+            name = row[0] if row else eid
         else:
             row = con.execute("SELECT title, status, parent, progress FROM planning WHERE id = ?", (eid,)).fetchone()
             out["ficha"] = ({"id": eid, "title": row[0], "status": row[1], "parent": row[2],
@@ -145,7 +189,11 @@ def build(brain, ref: str, hs=None) -> dict:
                             if row else {"id": eid})
             name = row[0] if row else eid
         out["decisions"], out["deliveries"] = _decisions_win(con, kind, eid)
-        out["chunks"] = _chunks(brain, kind, eid, name, hs)
+        chunk_tags = (
+            ({f"proj:{out['ficha']['project']}"} if out["ficha"].get("project") else {"tipo:decisao"})
+            if kind == "decision" else None
+        )
+        out["chunks"] = _chunks(brain, kind, eid, name, hs, tags=chunk_tags)
         return out
     finally:
         con.close()
@@ -166,6 +214,23 @@ def render(d: dict) -> str:
                 flag = " ⚠ atrasada" if a["overdue"] else ""
                 L.append(f"- {a['id']} · {a['title']}" + (f" · vence {a['due']}" if a["due"] else "")
                          + f"{flag} ⟶ ledger/{a['id']}")
+    elif d["kind"] == "decision":
+        who = ", ".join(f.get("decided_by_names") or f.get("decided_by") or []) or "—"
+        proj_id = f.get("project")
+        proj_lbl = f"{proj_id} ({f['project_title']})" if proj_id and f.get("project_title") else proj_id
+        proj = f" · projeto {proj_lbl}" if proj_lbl else ""
+        src = f.get("source") or f"ledger/{d['id']}"
+        prov = f" [{f['prov']}]" if f.get("prov") else ""
+        L.append(f"Status: {f.get('status') or '—'} · data {f.get('date') or '—'} · "
+                 f"decidido por {who}{proj}  ⟶ {src}{prov}")
+        if f.get("context"):
+            L.append(f"Contexto: {f['context']}")
+        if f.get("rationale"):
+            L.append(f"Por quê: {f['rationale']}")
+        if f.get("supersedes"):
+            L.append(f"Substitui: {f['supersedes']}")
+        if f.get("superseded_by"):
+            L.append(f"Substituída por: {f['superseded_by']}")
     else:
         pct = f"{(f.get('progress') or 0):.0%}" if f.get("progress") is not None else "—"
         L.append(f"Status: {f.get('status') or '—'} · progresso {pct}  ⟶ PLANNING/goals.md")
