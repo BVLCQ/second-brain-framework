@@ -347,6 +347,12 @@ function runEnv(opts) {
     const protocol = process.argv[7] || "http:";
     const embedded = process.argv[8] ? JSON.parse(process.argv[8]) : {};
     const fetchCalls = [];
+    // A hidratação é assíncrona (pedidos reais à ponte): o harness espera ela assentar em vez de
+    // dormir um tempo fixo — um sleep de 80 ms lia o nome do dono antes da resposta chegar num
+    // runner carregado. "Assentado" = nenhum pedido à ponte em voo (resposta ou corpo) E DOM
+    // estável há 40 ms. `inFlight` sempre volta a zero: cada incremento tem o decremento dele.
+    let inFlight = 0;
+    let settledAt = 0;
     const env = runEnv({
       kind: "dashboard",
       protocol,
@@ -355,15 +361,45 @@ function runEnv(opts) {
       embeddedData: embedded,
       fetchImpl: async (url, init) => {
         fetchCalls.push(url);
-        const res = await globalThis.fetch(baseUrl + url, init);
+        inFlight += 1;
+        let res;
+        try {
+          res = await globalThis.fetch(baseUrl + url, init);
+        } catch (e) {
+          inFlight -= 1;
+          settledAt = Date.now();
+          throw e;
+        }
+        inFlight -= 1;
+        settledAt = Date.now();
         return {
           ok: res.ok,
           status: res.status,
-          json: async () => res.json(),
+          json: async () => {
+            inFlight += 1;
+            try {
+              return await res.json();
+            } finally {
+              inFlight -= 1;
+              settledAt = Date.now();
+            }
+          },
         };
       },
     });
-    await new Promise(r => setTimeout(r, 80));
+    const snap = () => env.els.get("view").innerHTML + "\u0000" + env.els.get("ownername").textContent;
+    const t0 = Date.now();
+    let prev = snap();
+    let stableSince = Date.now();
+    while (Date.now() - t0 < 8000) {
+      await new Promise(r => setTimeout(r, 10));
+      const cur = snap();
+      if (cur !== prev) {
+        prev = cur;
+        stableSince = Date.now();
+      }
+      if (inFlight === 0 && Date.now() - Math.max(stableSince, settledAt) >= 40) break;
+    }
     console.log(JSON.stringify({
       hash: env.loc.hash,
       fetchCalls,
