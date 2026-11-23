@@ -114,10 +114,17 @@ def view_model(brain) -> dict:
     return m
 
 
-def render_all(brain, do_harvest: bool = True) -> dict:
+_UNSET = object()
+
+
+def render_all(brain, do_harvest: bool = True, window=_UNSET) -> dict:
+    if window is _UNSET:
+        window = harvest_mod.consume_agent_window(brain.inst) if do_harvest else None
+    elif window is not None:
+        (brain.inst.logs / harvest_mod.HARVEST_GUARD_FILE).unlink(missing_ok=True)
     notices: list[dict] = []
     brain.sweep_proposals()        # propostas que o dono já resolveu por fora do painel
-    harvested = harvest_mod.run(brain, notices) if do_harvest else []
+    harvested = harvest_mod.run(brain, notices, window=window) if do_harvest else []
     m = view_model(brain)
     pages = render_md.Pages(brain.inst, m)
     pages.home()
