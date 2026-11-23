@@ -129,6 +129,8 @@ ul.feed{list-style:none;padding:0;margin:0}
 ul.feed li{padding:8px 2px;border-bottom:1px solid var(--line2);display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
 .card-title,ul.feed li{overflow-wrap:anywhere}
 ul.feed li:last-child{border:0}
+/* #96: alvos de clique ≥24px (WCAG 2.5.8) — links de ação do feed, chips-âncora e chips de ID */
+.feed li>a,a.chip,a.idchip{min-height:24px;display:inline-flex;align-items:center}
 ul.feed li.warn{background:linear-gradient(90deg,color-mix(in srgb,var(--warn) 7%,transparent),transparent);border-radius:8px;padding-left:8px}
 ul.feed li.info{background:linear-gradient(90deg,color-mix(in srgb,var(--info) 6%,transparent),transparent);border-radius:8px;padding-left:8px}
 .health li{padding:8px 2px}.health .hicon{display:inline-block;width:20px;font-weight:700}
