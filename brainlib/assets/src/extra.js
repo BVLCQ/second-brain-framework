@@ -303,10 +303,11 @@ function navEntries(){
 }
 function entEntries(){
   const out = [];
-  D0.actions.filter(a => a.open).forEach(a => out.push({group: "ações abertas", label: a.title, ent: a.id, view: "action/" + a.id}));
-  D0.decisions.slice(0, 8).forEach(d => out.push({group: "decisões", label: d.title, ent: d.id, view: "decision/" + d.id}));
-  D0.projects.forEach(p => out.push({group: "projetos", label: p.id + " " + p.title, ent: p.id, view: "project/" + p.id}));
-  D0.people.forEach(p => out.push({group: "pessoas", label: p.name, ent: p.id, view: "person/" + encodeURIComponent(p.id)}));
+  const MD = (window.BRAIN && window.BRAIN.M) || D0;
+  (MD.actions || []).filter(a => a.open).forEach(a => out.push({group: "ações abertas", label: a.title, ent: a.id, view: "action/" + a.id}));
+  (MD.decisions || []).slice(0, 8).forEach(d => out.push({group: "decisões", label: d.title, ent: d.id, view: "decision/" + d.id}));
+  (MD.projects || []).forEach(p => out.push({group: "projetos", label: p.id + " " + p.title, ent: p.id, view: "project/" + p.id}));
+  (MD.people || []).forEach(p => out.push({group: "pessoas", label: p.name, ent: p.id, view: "person/" + encodeURIComponent(p.id)}));
   return out;
 }
 function buildItems(q){
@@ -1185,7 +1186,10 @@ function selOpen(){
   const el = selEl(); if (!el) return;
   if (el.classList.contains("blk")) { el.click(); return; }
   if (el.dataset.sel && el.dataset.sel.startsWith("doc:")) {          // Documentos: enter abre o link (ou diz onde está no vault)
-    if (el.dataset.url) window.open(el.dataset.url, "_blank", "noopener"); else toast("documento do vault: " + (el.children[2] ? el.children[2].textContent : ""));
+    if (el.dataset.url) {
+      const u = window.BRAIN && window.BRAIN.safeUrl ? window.BRAIN.safeUrl(el.dataset.url) : "";
+      if (u) window.open(u, "_blank", "noopener"); else toast("URL inválida para este documento");
+    } else toast("documento do vault: " + (el.children[2] ? el.children[2].textContent : ""));
     return; }
   const a = el.querySelector('a[href^="#"]'); if (a) location.hash = a.getAttribute("href");
 }
@@ -2068,21 +2072,31 @@ async function inboxOriginsWritable(){
   return out;
 }
 async function inboxOriginRemove(handles, relPath, file){
-  // Apaga APENAS sob nome+tamanho+horário idênticos ao que caiu — nunca por nome puro:
+  // Apaga APENAS sob nome+tamanho+horário+bytes idênticos ao que caiu — nunca por nome puro:
   // homônimo na pasta concedida com outro conteúdo é cópia mantida, não original apagado.
   for (const handle of handles) {
     try {
       const parts = relPath.split("/").filter(Boolean), name = parts.pop();
+      if (!name) continue;
       let dir = handle;
       for (const seg of parts) dir = await dir.getDirectoryHandle(seg);
       const g = await (await dir.getFileHandle(name)).getFile();
       if (g.size !== file.size || g.lastModified !== file.lastModified) continue;
+      const [aBuf, bBuf] = await Promise.all([file.arrayBuffer(), g.arrayBuffer()]);
+      if (aBuf.byteLength !== bBuf.byteLength) continue;
+      const aBytes = new Uint8Array(aBuf), bBytes = new Uint8Array(bBuf);
+      let same = true;
+      for (let i = 0; i < aBytes.length; i++) {
+        if (aBytes[i] !== bBytes[i]) { same = false; break; }
+      }
+      if (!same) continue;
       await dir.removeEntry(name);
       return handle.name;
     } catch (e) { /* tenta a próxima pasta */ }
   }
   return null;
 }
+window.BRAIN_INBOX = { originRemove: inboxOriginRemove };
 if (LIVE) inboxOriginsLoad();
 
 function isFileDrag(e){
@@ -3103,10 +3117,11 @@ OBV.memoria = () => {
 
   const pre = (on, t, link, midNote) => {
     const mid = on === "installed";
+    const safeLink = (window.BRAIN && window.BRAIN.safeUrl) ? window.BRAIN.safeUrl(link) : "";
     return '<div style="display:flex;align-items:center;gap:8px;margin-top:4px">' +
       (mid ? '<span class="pill info">instalado</span>' : on ? '<span class="pill ok">pronto</span>' : '<span class="pill warn">falta</span>') +
       " <span>" + t +
-      (!on && !mid && link ? ' — <a href="' + link + '" target="_blank" rel="noopener">baixar</a>' : "") +
+      (!on && !mid && safeLink ? ' — <a href="' + esc(safeLink) + '" target="_blank" rel="noopener">baixar</a>' : "") +
       (mid ? " — " + (midNote || "o Brain sobe e configura ao ativar") : "") + "</span></div>";
   };
 

@@ -1530,10 +1530,11 @@ function navEntries(){
 }
 function entEntries(){
   const out = [];
-  D0.actions.filter(a => a.open).forEach(a => out.push({group: "ações abertas", label: a.title, ent: a.id, view: "action/" + a.id}));
-  D0.decisions.slice(0, 8).forEach(d => out.push({group: "decisões", label: d.title, ent: d.id, view: "decision/" + d.id}));
-  D0.projects.forEach(p => out.push({group: "projetos", label: p.id + " " + p.title, ent: p.id, view: "project/" + p.id}));
-  D0.people.forEach(p => out.push({group: "pessoas", label: p.name, ent: p.id, view: "person/" + encodeURIComponent(p.id)}));
+  const MD = (window.BRAIN && window.BRAIN.M) || D0;
+  (MD.actions || []).filter(a => a.open).forEach(a => out.push({group: "ações abertas", label: a.title, ent: a.id, view: "action/" + a.id}));
+  (MD.decisions || []).slice(0, 8).forEach(d => out.push({group: "decisões", label: d.title, ent: d.id, view: "decision/" + d.id}));
+  (MD.projects || []).forEach(p => out.push({group: "projetos", label: p.id + " " + p.title, ent: p.id, view: "project/" + p.id}));
+  (MD.people || []).forEach(p => out.push({group: "pessoas", label: p.name, ent: p.id, view: "person/" + encodeURIComponent(p.id)}));
   return out;
 }
 function buildItems(q){
@@ -2412,7 +2413,10 @@ function selOpen(){
   const el = selEl(); if (!el) return;
   if (el.classList.contains("blk")) { el.click(); return; }
   if (el.dataset.sel && el.dataset.sel.startsWith("doc:")) {          // Documentos: enter abre o link (ou diz onde está no vault)
-    if (el.dataset.url) window.open(el.dataset.url, "_blank", "noopener"); else toast("documento do vault: " + (el.children[2] ? el.children[2].textContent : ""));
+    if (el.dataset.url) {
+      const u = window.BRAIN && window.BRAIN.safeUrl ? window.BRAIN.safeUrl(el.dataset.url) : "";
+      if (u) window.open(u, "_blank", "noopener"); else toast("URL inválida para este documento");
+    } else toast("documento do vault: " + (el.children[2] ? el.children[2].textContent : ""));
     return; }
   const a = el.querySelector('a[href^="#"]'); if (a) location.hash = a.getAttribute("href");
 }
@@ -3295,21 +3299,31 @@ async function inboxOriginsWritable(){
   return out;
 }
 async function inboxOriginRemove(handles, relPath, file){
-  // Apaga APENAS sob nome+tamanho+horário idênticos ao que caiu — nunca por nome puro:
+  // Apaga APENAS sob nome+tamanho+horário+bytes idênticos ao que caiu — nunca por nome puro:
   // homônimo na pasta concedida com outro conteúdo é cópia mantida, não original apagado.
   for (const handle of handles) {
     try {
       const parts = relPath.split("/").filter(Boolean), name = parts.pop();
+      if (!name) continue;
       let dir = handle;
       for (const seg of parts) dir = await dir.getDirectoryHandle(seg);
       const g = await (await dir.getFileHandle(name)).getFile();
       if (g.size !== file.size || g.lastModified !== file.lastModified) continue;
+      const [aBuf, bBuf] = await Promise.all([file.arrayBuffer(), g.arrayBuffer()]);
+      if (aBuf.byteLength !== bBuf.byteLength) continue;
+      const aBytes = new Uint8Array(aBuf), bBytes = new Uint8Array(bBuf);
+      let same = true;
+      for (let i = 0; i < aBytes.length; i++) {
+        if (aBytes[i] !== bBytes[i]) { same = false; break; }
+      }
+      if (!same) continue;
       await dir.removeEntry(name);
       return handle.name;
     } catch (e) { /* tenta a próxima pasta */ }
   }
   return null;
 }
+window.BRAIN_INBOX = { originRemove: inboxOriginRemove };
 if (LIVE) inboxOriginsLoad();
 
 function isFileDrag(e){
@@ -4330,10 +4344,11 @@ OBV.memoria = () => {
 
   const pre = (on, t, link, midNote) => {
     const mid = on === "installed";
+    const safeLink = (window.BRAIN && window.BRAIN.safeUrl) ? window.BRAIN.safeUrl(link) : "";
     return '<div style="display:flex;align-items:center;gap:8px;margin-top:4px">' +
       (mid ? '<span class="pill info">instalado</span>' : on ? '<span class="pill ok">pronto</span>' : '<span class="pill warn">falta</span>') +
       " <span>" + t +
-      (!on && !mid && link ? ' — <a href="' + link + '" target="_blank" rel="noopener">baixar</a>' : "") +
+      (!on && !mid && safeLink ? ' — <a href="' + esc(safeLink) + '" target="_blank" rel="noopener">baixar</a>' : "") +
       (mid ? " — " + (midNote || "o Brain sobe e configura ao ativar") : "") + "</span></div>";
   };
 
@@ -5024,9 +5039,29 @@ const SERVE_ORIGIN = location.protocol === "http:" && location.hostname === "127
 const IS_SHELL = SERVE_ORIGIN && Object.keys(RAW_DATA).length === 0;
 let HYDRATED = !IS_SHELL;
 function normalizeBrain(m){
-  m.owner = m.owner || {id: "eu", name: ""};
+  m.owner = m.owner || {};
+  m.owner = Object.assign({id: "eu", name: "Dono"}, m.owner);
   m.today = m.today || "";
-  m.portfolio = m.portfolio || {areas: [], processes: [], opportunities: [], gaps: [], by_area: [], stages: [], matrix: {"ganho rápido": [], "aposta": [], "preencher depois": [], "evitar": []}, funnel: {}, ranking: []};
+  m.agenda = m.agenda || [];
+  if (!Array.isArray(m.agenda)) m.agenda = [];
+  m.wins = m.wins || {};
+  m.wins = Object.assign({weeks: [], last_30d: 0, closed_30d: 0}, m.wins);
+  if (!Array.isArray(m.wins.weeks)) m.wins.weeks = [];
+  m.portfolio = m.portfolio || {};
+  m.portfolio = Object.assign({
+    areas: [], processes: [], opportunities: [], ranking: [],
+    matrix: {}, funnel: {}, by_goal: {}, counts: {}, gaps: {}, ice_rubric: {},
+  }, m.portfolio);
+  if (!Array.isArray(m.portfolio.areas)) m.portfolio.areas = [];
+  if (!Array.isArray(m.portfolio.processes)) m.portfolio.processes = [];
+  if (!Array.isArray(m.portfolio.opportunities)) m.portfolio.opportunities = [];
+  if (!Array.isArray(m.portfolio.ranking)) m.portfolio.ranking = [];
+  m.portfolio.matrix = Object.assign({"ganho rápido": [], "aposta": [], "preencher depois": [], "evitar": []}, m.portfolio.matrix || {});
+  m.portfolio.funnel = m.portfolio.funnel || {};
+  m.portfolio.by_goal = m.portfolio.by_goal || {};
+  m.portfolio.counts = Object.assign({opportunities: 0, prioritized: 0, processes: 0}, m.portfolio.counts || {});
+  m.portfolio.gaps = Object.assign({total: 0, areas_without_process: [], processes: [], no_ice: [], ice_suggested: [], stale: []}, m.portfolio.gaps || {});
+  m.portfolio.ice_rubric = Object.assign({success_measures: [], principles: [], axes: {}}, m.portfolio.ice_rubric || {});
   m.update = m.update || {}; m.update = Object.assign({version:"?", news:[], cli_cmd:"", checked_at:"", behind:0, ahead:0, remote_version:""}, m.update);
   m.freshness = m.freshness || {};
   m.freshness = Object.assign({
@@ -5042,22 +5077,42 @@ function normalizeBrain(m){
   m.daily_brief = Object.assign({
     exists: false, is_today: false, date: null, generated_at: null, empty: false, text: "",
   }, m.daily_brief);
-  m.counts = m.counts || {}; m.questions = m.questions || []; m.proposals = m.proposals || [];
-  m.outbox = m.outbox || []; m.health = m.health || []; m.deliveries = m.deliveries || [];
-  m.feedback = m.feedback || [];
-  m.sources = m.sources || []; m.source_kinds = m.source_kinds || []; m.doc_kinds = m.doc_kinds || [];   // Fontes e Documentos (ausentes em instância antiga)
+  m.counts = m.counts || {};
+  m.counts = Object.assign({
+    mine_open: 0, mine_overdue: 0, mine_due_7d: 0, mine_blocked: 0,
+    waiting_open: 0, wins_30d: 0, decisions_30d: 0, outbox_pending: 0,
+  }, m.counts);
+  m.review = m.review || {};
+  m.review = Object.assign({total: 0, counts: {}, batch_acceptable: 0, ports: 0}, m.review);
+  m.questions = m.questions || []; if (!Array.isArray(m.questions)) m.questions = [];
+  m.proposals = m.proposals || []; if (!Array.isArray(m.proposals)) m.proposals = [];
+  m.outbox = m.outbox || []; if (!Array.isArray(m.outbox)) m.outbox = [];
+  m.health = m.health || []; if (!Array.isArray(m.health)) m.health = [];
+  m.deliveries = m.deliveries || []; if (!Array.isArray(m.deliveries)) m.deliveries = [];
+  m.feedback = m.feedback || []; if (!Array.isArray(m.feedback)) m.feedback = [];
+  m.sources = m.sources || []; if (!Array.isArray(m.sources)) m.sources = [];
+  m.source_kinds = m.source_kinds || []; if (!Array.isArray(m.source_kinds)) m.source_kinds = [];
+  m.doc_kinds = m.doc_kinds || []; if (!Array.isArray(m.doc_kinds)) m.doc_kinds = [];   // Fontes e Documentos (ausentes em instância antiga)
   m.providers = m.providers || {};   // face Configurações (ausente em instância antiga)
-  m.actions = m.actions || []; m.publishes = m.publishes || []; m.focus = m.focus || null;
-  m.deliverables_done = m.deliverables_done || [];
-  m.timeline = m.timeline || {past: [], ahead: []}; m.people = m.people || [];
+  m.actions = m.actions || []; if (!Array.isArray(m.actions)) m.actions = [];
+  m.publishes = m.publishes || []; if (!Array.isArray(m.publishes)) m.publishes = [];
+  m.focus = m.focus || null;
+  m.deliverables_done = m.deliverables_done || []; if (!Array.isArray(m.deliverables_done)) m.deliverables_done = [];
+  m.timeline = m.timeline || {};
+  m.timeline = Object.assign({past: [], future: [], back: "", ahead: ""}, m.timeline);
+  if (!Array.isArray(m.timeline.past)) m.timeline.past = [];
+  if (!Array.isArray(m.timeline.future)) m.timeline.future = [];
+  m.people = m.people || []; if (!Array.isArray(m.people)) m.people = [];
   m.people = m.people.map(p => Object.assign({aliases: []}, p));
-  m.goals = m.goals || [];
-  m.goals = m.goals.map(g => Object.assign({health_from: null, health_reason: ""}, g));
-  m.projects = m.projects || []; m.decisions = m.decisions || [];
-  m.artifacts = m.artifacts || []; m.shares = m.shares || []; m.notes = m.notes || [];
+  m.goals = m.goals || []; if (!Array.isArray(m.goals)) m.goals = [];
+  m.goals = m.goals.map(g => Object.assign({health_from: null, health_reason: "", projects: [], progress: {pct: null, done: 0, total: 0}}, g));
+  m.projects = m.projects || []; if (!Array.isArray(m.projects)) m.projects = [];
+  m.decisions = m.decisions || []; if (!Array.isArray(m.decisions)) m.decisions = [];
+  m.artifacts = m.artifacts || []; if (!Array.isArray(m.artifacts)) m.artifacts = [];
+  m.shares = m.shares || []; if (!Array.isArray(m.shares)) m.shares = [];
+  m.notes = m.notes || []; if (!Array.isArray(m.notes)) m.notes = [];
   m.agent_ok = !!m.agent_ok;
   m.onboarding = m.onboarding || {needed: false};   // F8: primeira vez entra no wizard da própria página
-  if (m.portfolio) m.portfolio.ice_rubric = m.portfolio.ice_rubric || {success_measures: [], principles: [], axes: {}};   // instância antiga: metodologia some, painel sobe
   // publicações (porta 3) vêm dos shares reais do ledger (Share: solicitada|aprovada|publicada|cancelada)
   if (!m.publishes.length && m.shares.length)
     m.publishes = m.shares.map(x => ({id: x.id, title: String(x.report || "").split("/").pop() || x.id,
@@ -5618,24 +5673,28 @@ V.feedback = (q) => {
     return f.status === "retratado" ? "" : ' <span class="muted small">issue ? — s sincroniza</span>';
   };
   const statusChip = s => chip(s === "criado" ? "em-dia" : s === "falhou" ? "em-risco" : s === "retratado" ? "atencao" : "info", s);
-  const row = f => "<div class=\"msgrow\" data-sel=\"" + esc(f.id) + "\"><header><b>" + f.id + "</b> " + glyph[f.kind] + " " + esc(f.title) + " " +
-    statusChip(f.status) +
-    (f.number && f.url ? ' · <a href="' + esc(f.url) + '" target="_blank" rel="noopener">issue #' + f.number + "</a>" : "") +
-    issueChip(f) +
-    (f.added ? ' <span class="muted">· ' + fmtD(f.added) + "</span>" : "") +
-    (f.status === "pendente" || f.status === "falhou"
-      ? ' · <button class="btn tiny" data-fb="' + esc(f.id) + '" title="criar a issue no GitHub">p publicar</button>' +
-        ' <button class="btn tiny" data-fbwithdraw="' + esc(f.id) + '" title="retirar rascunho antes de publicar">d retirar</button>'
-      : "") +
-    (f.status === "criado"
-      ? ' · <button class="btn tiny" data-fbretract="' + esc(f.id) + '" title="retratar issue publicada (fechar ou corrigir texto)">r retratar</button>'
-      : "") +
-    "</header>" + (f.body ? '<div class="msg">' + esc(f.body) + "</div>" : "") +
-    ((f.status === "retirado" || f.status === "retratado") && f.reason
-      ? '<div class="msg muted"><b>Motivo' + (f.retract_mode ? " (" + esc(f.retract_mode) + ")" : "") + ":</b> " + esc(f.reason) +
-        (f.comment_url ? ' · <a href="' + esc(f.comment_url) + '" target="_blank" rel="noopener">comentário</a>' : "") + "</div>"
-      : "") +
-    ((f.status === "falhou" || (f.status === "criado" && f.error)) && f.error ? '<div class="msg muted">' + esc(f.error) + "</div>" : "") + "</div>";
+  const row = f => {
+    const issueUrl = safeUrl(f.url);
+    const commentUrl = safeUrl(f.comment_url);
+    return "<div class=\"msgrow\" data-sel=\"" + esc(f.id) + "\"><header><b>" + f.id + "</b> " + glyph[f.kind] + " " + esc(f.title) + " " +
+      statusChip(f.status) +
+      (f.number && issueUrl ? ' · <a href="' + esc(issueUrl) + '" target="_blank" rel="noopener">issue #' + esc(f.number) + "</a>" : "") +
+      issueChip(f) +
+      (f.added ? ' <span class="muted">· ' + fmtD(f.added) + "</span>" : "") +
+      (f.status === "pendente" || f.status === "falhou"
+        ? ' · <button class="btn tiny" data-fb="' + esc(f.id) + '" title="criar a issue no GitHub">p publicar</button>' +
+          ' <button class="btn tiny" data-fbwithdraw="' + esc(f.id) + '" title="retirar rascunho antes de publicar">d retirar</button>'
+        : "") +
+      (f.status === "criado"
+        ? ' · <button class="btn tiny" data-fbretract="' + esc(f.id) + '" title="retratar issue publicada (fechar ou corrigir texto)">r retratar</button>'
+        : "") +
+      "</header>" + (f.body ? '<div class="msg">' + esc(f.body) + "</div>" : "") +
+      ((f.status === "retirado" || f.status === "retratado") && f.reason
+        ? '<div class="msg muted"><b>Motivo' + (f.retract_mode ? " (" + esc(f.retract_mode) + ")" : "") + ":</b> " + esc(f.reason) +
+          (commentUrl ? ' · <a href="' + esc(commentUrl) + '" target="_blank" rel="noopener">comentário</a>' : "") + "</div>"
+        : "") +
+      ((f.status === "falhou" || (f.status === "criado" && f.error)) && f.error ? '<div class="msg muted">' + esc(f.error) + "</div>" : "") + "</div>";
+  };
   const pend = M.feedback.filter(f => f.status === "pendente" || f.status === "falhou");
   const done = M.feedback.filter(f => f.status !== "pendente" && f.status !== "falhou");
   const doneTitle = 'Já no GitHub / encerradas · ' + done.length + ' <button class="btn tiny" data-fbsync title="relê o estado dos issues no GitHub">s sincronizar</button>';
@@ -5868,9 +5927,35 @@ V["pf/docs"] = () => {
         esc(r.d.title || r.d.ref) + "</td><td>" + (r.d.watch ? "sim" : "—") + "</td></tr>").join("") + "</table></div>"
       : empty("Nenhum documento ligado — L liga a um processo ou oportunidade."));
 };
-function docUrl(ref){                                 // URL do doc: http direto; id cru do Drive vira o link genérico; caminho do vault não tem URL
-  if (/^https?:\/\//.test(ref)) return ref;
-  if (/^[A-Za-z0-9_-]{20,}$/.test(ref)) return "https://drive.google.com/file/d/" + ref + "/view";
+function safeUrl(u, allowMailto){
+  if (typeof u !== "string") return "";
+  const s = u.trim();
+  if (!s) return "";
+  if (/[\x00-\x1f\x7f\s]/.test(s)) return "";
+  if (s.startsWith("//") || s.includes("\\")) return "";
+  let parsed;
+  try {
+    parsed = new URL(s, "https://invalid.local");
+  } catch (e) {
+    return "";
+  }
+  const proto = parsed.protocol.toLowerCase();
+  if (proto === "http:" || proto === "https:") {
+    if (!/^https?:\/\/[^/?#]/i.test(s)) return "";
+    if (!parsed.hostname) return "";
+    return s;
+  }
+  if (allowMailto && proto === "mailto:") {
+    if (!/^mailto:[^/?#]/i.test(s)) return "";
+    return s;
+  }
+  return "";
+}
+function docUrl(ref){                                 // URL do doc: http direto (validado); id cru do Drive vira o link genérico; caminho do vault não tem URL
+  const u = safeUrl(ref);
+  if (u) return u;
+  if (typeof ref === "string" && /^[A-Za-z0-9_-]{20,}$/.test(ref))
+    return safeUrl("https://drive.google.com/file/d/" + ref + "/view");
   return "";
 }
 
@@ -6045,16 +6130,19 @@ V.ask = (q) => {
     : empty("nenhuma proposta aberta"), ' style="margin-top:14px"');
   const pubs = (M.publishes || []).filter(x => all || x.status !== "publicada");
   if (pubs.length) h += panel("Publicar (porta 3) · " + pubs.filter(x => x.status !== "publicada").length + " aguardando",
-    pubs.map(x => '<div class="card" style="margin:0 0 10px"><header><span class="ids">' + idc(x.id) + "</span>" +
-      chip(x.status === "solicitada" ? "atencao" : x.status === "publicada" ? "em-dia" : "info", x.status) +
-      ' <span class="muted small">→ ' + esc(x.to) + "</span></header>" +
-      '<h3 class="card-title">' + esc(x.title) + "</h3>" +
-      (x.link ? '<p class="muted small">' + esc(x.link) + "</p>" : "") +
-      '<div class="ask-opts">' +
-      (x.status === "solicitada" ? '<button class="btn primary" data-pub="approve:' + esc(x.id) + '">aprovar (gate)</button><button class="btn" data-pub="cancel:' + esc(x.id) + '">cancelar</button>' : "") +
-      (x.status === "aprovada" ? '<button class="btn primary" data-pub="done:' + esc(x.id) + '">publicar (agente)</button><button class="btn" data-pub="cancel:' + esc(x.id) + '">cancelar</button>' : "") +
-      (x.status === "publicada" ? '<a class="btn" href="' + esc(x.link || "#") + '">abrir ↗</a>' : "") +
-      "</div></div>").join("") + '<p class="muted small">pedir nova: tecla n · o export sai de brain share; o agente posta na porta 3</p>', ' style="margin-top:14px"');
+    pubs.map(x => {
+      const pubUrl = safeUrl(x.link);
+      return '<div class="card" style="margin:0 0 10px"><header><span class="ids">' + idc(x.id) + "</span>" +
+        chip(x.status === "solicitada" ? "atencao" : x.status === "publicada" ? "em-dia" : "info", x.status) +
+        ' <span class="muted small">→ ' + esc(x.to) + "</span></header>" +
+        '<h3 class="card-title">' + esc(x.title) + "</h3>" +
+        (x.link ? '<p class="muted small">' + esc(x.link) + "</p>" : "") +
+        '<div class="ask-opts">' +
+        (x.status === "solicitada" ? '<button class="btn primary" data-pub="approve:' + esc(x.id) + '">aprovar (gate)</button><button class="btn" data-pub="cancel:' + esc(x.id) + '">cancelar</button>' : "") +
+        (x.status === "aprovada" ? '<button class="btn primary" data-pub="done:' + esc(x.id) + '">publicar (agente)</button><button class="btn" data-pub="cancel:' + esc(x.id) + '">cancelar</button>' : "") +
+        (x.status === "publicada" && pubUrl ? '<a class="btn" href="' + esc(pubUrl) + '" target="_blank" rel="noopener">abrir ↗</a>' : "") +
+        "</div></div>";
+    }).join("") + '<p class="muted small">pedir nova: tecla n · o export sai de brain share; o agente posta na porta 3</p>', ' style="margin-top:14px"');
   if (all && feitas.length) h += panel("Respondidas", '<ul class="feed">' + feitas.map(q =>
     "<li>" + idc(q.id) + ' <span class="muted">' + esc(q.text.slice(0, 90)) + "…</span> → <b>" + esc(q.answer || "") + "</b></li>").join("") + "</ul>", ' style="margin-top:14px"');
   return h;
@@ -6116,16 +6204,37 @@ function route(){
   if (typeof window.afterRoute === "function") window.afterRoute(view, q, arg);
   window.scrollTo(0, 0);
 }
-window.BRAIN = {M, A, D, P, G, PE, OPP, PROC, AREA, docUrl, go, route, chip, aL, dL, pL, peL, fmtD, fmtDW, donut, bar, esc,
+window.BRAIN = {M, A, D, P, G, PE, OPP, PROC, AREA, docUrl, safeUrl, normalizeBrain, go, route, chip, aL, dL, pL, peL, fmtD, fmtDW, donut, bar, esc,
   qArg, V, get S_SORT(){ return S_SORT; }, set S_SORT(v){ S_SORT = v; },
-  refresh: function(nm){                       // ponte CLI (./brain serve): novo view model → índices + views
-    normalizeBrain(nm);
+  refresh: function(nm){                       // ponte CLI (./brain serve): novo view model → índices + views (troca atômica)
+    let nextM, nA, nD, nP, nG, nPE, nART, nDL, nDD, nPF, nAREA, nOPP, nPROC;
+    try {
+      if (!nm || typeof nm !== "object" || Array.isArray(nm)) throw new Error("view model inválido");
+      nextM = normalizeBrain(Object.assign({}, nm));
+      nA = idx(nextM.actions); nD = idx(nextM.decisions); nP = idx(nextM.projects); nG = idx(nextM.goals);
+      nPE = idx(nextM.people); nART = idx(nextM.artifacts); nDL = idx(nextM.deliveries); nDD = idx(nextM.deliverables_done);
+      nPF = nextM.portfolio; nAREA = idx(nPF.areas); nOPP = idx(nPF.opportunities); nPROC = idx(nPF.processes);
+    } catch (err) {
+      const msg = "Falha ao atualizar dados do painel — mantendo estado anterior.";
+      const t = document.getElementById("toast");
+      if (t) { t.textContent = msg; t.classList.add("show"); }
+      const view = document.getElementById("view");
+      if (view && !document.getElementById("refresh-err-banner")) {
+        const b = document.createElement("div");
+        b.id = "refresh-err-banner";
+        b.className = "fresh-banner";
+        b.setAttribute("role", "alert");
+        b.innerHTML = '<div class="fresh-banner-text"><strong>⚠ ' + esc(msg) + "</strong></div>";
+        if (typeof view.prepend === "function") view.prepend(b);
+        else if (typeof view.insertBefore === "function") view.insertBefore(b, view.firstChild || null);
+      }
+      return false;
+    }
     for (const k of Object.keys(M)) delete M[k];
-    Object.assign(M, nm);
+    Object.assign(M, nextM);
     HYDRATED = true;
-    A = idx(M.actions); D = idx(M.decisions); P = idx(M.projects); G = idx(M.goals);
-    PE = idx(M.people); ART = idx(M.artifacts); DL = idx(M.deliveries); DD = idx(M.deliverables_done);
-    PF = M.portfolio; AREA = idx(PF.areas); OPP = idx(PF.opportunities); PROC = idx(PF.processes);
+    A = nA; D = nD; P = nP; G = nG; PE = nPE; ART = nART; DL = nDL; DD = nDD;
+    PF = nPF; AREA = nAREA; OPP = nOPP; PROC = nPROC;
     BRAIN.A = A; BRAIN.D = D; BRAIN.P = P; BRAIN.G = G; BRAIN.PE = PE;   // re-exporta: quem lê
     BRAIN.OPP = OPP; BRAIN.PROC = PROC; BRAIN.AREA = AREA;              // window.BRAIN não pode ficar congelado no boot
     const ownName = (M.owner && M.owner.name) || "—";
@@ -6134,6 +6243,7 @@ window.BRAIN = {M, A, D, P, G, PE, OPP, PROC, AREA, docUrl, go, route, chip, aL,
     syncVerBadge();
     syncFreshBadge();
     route();
+    return true;
   }};
 
 // tema (claro/escuro manual + automático)
