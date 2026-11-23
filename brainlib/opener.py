@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import threading
 from pathlib import Path
 
 from . import util
@@ -54,6 +55,16 @@ def _shellexecute(path: Path, app: str = "", shell32=None) -> None:
         raise OSError(f"ShellExecuteW retornou {rc}")
 
 
+def _spawn(argv: list[str], popen=None) -> subprocess.Popen:
+    """Dispara processo em POSIX e colhe o filho em thread daemon para não acumular zumbis."""
+    proc = (subprocess.Popen if popen is None else popen)(
+        argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL, start_new_session=True,
+    )
+    threading.Thread(target=proc.wait, daemon=True, name="brain-opener-reap").start()   # colhe o filho; nunca bloqueia
+    return proc
+
+
 def open_file(inst, rel: str) -> str:
     """Abre `rel` (relativo ao vault) sem bloquear; devolve o aplicativo usado ('padrão do sistema' se não houver mapa)."""
     path = resolve(inst, rel)
@@ -62,8 +73,7 @@ def open_file(inst, rel: str) -> str:
         if sys.platform.startswith("win"):
             _shellexecute(path, app)
         else:
-            subprocess.Popen(argv_for(inst.cfg, path), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                             stderr=subprocess.DEVNULL, start_new_session=True)
+            _spawn(argv_for(inst.cfg, path))
     except OSError as e:
         raise util.BrainError(f"não consegui abrir {path.name}: {e}", code=4) from e
     return app or "padrão do sistema"

@@ -74,6 +74,9 @@ class Index:
                 s += 0.05
                 why.append("pessoas: " + ", ".join(sorted(pa & pb)))
             else:
+                # Nota de calibração (#81): quando o score base está perto do limiar `CANDIDATE` (0.3),
+                # `s *= 0.5` pode empurrá-lo abaixo de 0.3 — intencional para pares com pessoas distintas
+                # não virarem candidatos fracos por padrão.
                 s *= 0.5      # "onboarding com Ana" ≠ "onboarding com Bia": vira candidata, não bloqueia
                 why.append("pessoas diferentes")
         if cites:

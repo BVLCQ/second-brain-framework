@@ -114,7 +114,14 @@ def make(entity: str, n: int) -> str:
 
 def number(ref: str) -> int:
     """Número de um ID longo ou de goal/projeto (`TASK-0146` → 146, `PROJ-3` → 3, `PROJ-3.2` → 3)."""
-    return int(re.search(r"-(\d+)", ref).group(1))
+    if not isinstance(ref, str):
+        from . import util
+        raise util.BrainError(f"ID inválido (esperava texto): {ref!r}", code=2)
+    m = re.search(r"-([0-9]+)", ref)
+    if not m:
+        from . import util
+        raise util.BrainError(f"ID sem número reconhecível: {ref!r}", code=2)
+    return int(m.group(1))
 
 
 # ── migração: o mesmo mapa, só para quem escreve o texto antigo ─────────────────────────────────────────

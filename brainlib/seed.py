@@ -42,6 +42,9 @@ def _read_docx(path: Path) -> str:
         raise util.BrainError("word/document.xml excede o limite de 10 MB", code=4)
     if _FORBIDDEN_XML_RE.search(xml_bytes):
         raise util.BrainError("DOCX contém declarações XML não permitidas (DOCTYPE/ENTITY)", code=4)
+    # Nota de auditoria (#81 — registro): `xml.etree.ElementTree.fromstring` lê DOCX local do dono
+    # já filtrado por `_FORBIDDEN_XML_RE` (bloqueia `<!DOCTYPE`/`<!ENTITY>`) e pelo teto
+    # `MAX_DOCX_XML_BYTES` (10 MB); sem parser XML externo para manter o núcleo stdlib-only.
     try:
         root = ET.fromstring(xml_bytes)
     except ET.ParseError as e:
