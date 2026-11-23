@@ -34,21 +34,36 @@ def resolve(inst, rel: str) -> Path:
 
 
 def argv_for(cfg: dict, path: Path, platform: str | None = None) -> list[str]:
+    """Argumentos para abrir `path` no macOS/Linux. No Windows não há argv seguro (tudo passa por cmd.exe): []."""
     platform = platform or sys.platform
     app = app_for(cfg, path)
     if platform == "darwin":
         return ["open", "-a", app, str(path)] if app else ["open", str(path)]
     if platform.startswith("win"):
-        return ["cmd", "/c", "start", "", str(path)]
+        return []
     return [app, str(path)] if app else ["xdg-open", str(path)]
+
+
+def _shellexecute(path: Path, app: str = "", shell32=None) -> None:
+    """Windows: abre pelo ShellExecuteW — sem cmd.exe, então `&`, `|` e `^` no nome do arquivo não viram comando (#130)."""
+    if shell32 is None:
+        import ctypes
+        shell32 = getattr(ctypes, "windll").shell32      # só existe no Windows
+    rc = shell32.ShellExecuteW(None, "open", app or str(path), f'"{path}"' if app else None, None, 1)
+    if rc <= 32:
+        raise OSError(f"ShellExecuteW retornou {rc}")
 
 
 def open_file(inst, rel: str) -> str:
     """Abre `rel` (relativo ao vault) sem bloquear; devolve o aplicativo usado ('padrão do sistema' se não houver mapa)."""
     path = resolve(inst, rel)
-    argv = argv_for(inst.cfg, path)
+    app = app_for(inst.cfg, path)
     try:
-        subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+        if sys.platform.startswith("win"):
+            _shellexecute(path, app)
+        else:
+            subprocess.Popen(argv_for(inst.cfg, path), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL, start_new_session=True)
     except OSError as e:
         raise util.BrainError(f"não consegui abrir {path.name}: {e}", code=4) from e
-    return app_for(inst.cfg, path) or "padrão do sistema"
+    return app or "padrão do sistema"
