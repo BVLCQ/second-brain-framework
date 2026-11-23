@@ -231,7 +231,7 @@ def push(brain: Brain, fid: str) -> dict:
         raise util.BrainError(f"{fid} está '{f.status}' — não pode ser publicado", code=4)
     if f.status == "criado":
         raise util.BrainError(f"{fid}: issue já criada — {f.url}", code=4)
-    if os.environ.get("BRAIN_NIGHTLY") == "1":
+    if util.is_nightly():
         raise util.BrainError(f"{fid}: publicar issue é do dia — no noturno a porta não abre "
                               "(registrar ficou; `brain feedback push {fid}` amanhã)", code=4)
     repo = brain.inst.cfg["feedback"]["repo"]
@@ -310,7 +310,7 @@ def retract(brain: Brain, fid: str, *, mode: str, reason: str, body: str | None 
         rendered_body = issue_body(f, clean_body)
         refs_guard(rendered_body)
 
-    if os.environ.get("BRAIN_NIGHTLY") == "1":
+    if util.is_nightly():
         parts = [f"Retratar {fid} (#{f.number}, modo={mode}): {reason}"]
         if evidence:
             parts.append(f"evidência: {evidence}")

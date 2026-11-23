@@ -964,7 +964,7 @@ def run_llm_auth(brain, ui, provider: str) -> bool:
     from . import providers as prov
     reg = prov.PROVIDERS["llm"].get(provider)
     subs = [p for p, v in prov.PROVIDERS["llm"].items() if v.get("family") == "subscription"]
-    if os.environ.get("BRAIN_NIGHTLY") == "1":
+    if util.is_nightly():
         raise util.BrainError("autenticar provedor é ato do dono presente — nunca no noturno", code=4)
     if not reg or reg.get("family") != "subscription":
         ui.say(f"✗ {provider!r} não é provedor de assinatura — use um de: {', '.join(subs)}")
@@ -1164,7 +1164,7 @@ def validate_memory_setup(data: dict) -> dict:
     if mode == "full" and not consent:
         raise util.BrainError('o modo full precisa do seu aceite ("ok"/consent): o texto do vault vai para a API',
                               code=4)
-    if mode == "full" and os.environ.get("BRAIN_NIGHTLY") == "1":
+    if mode == "full" and util.is_nightly():
         raise util.BrainError("o noturno não liga o modo full (gate de egress pede o dono presente)", code=4)
 
     k_top = _key_ok(data.get("key"))
@@ -1418,6 +1418,6 @@ def run(brain, only: list[str] | None = None, auto: bool = False, mode: str | No
 
 
 def cli(args, brain) -> None:
-    if os.environ.get("BRAIN_NIGHTLY") == "1":
+    if util.is_nightly():
         raise util.BrainError("setup é decisão do dono, presente — nunca no noturno", code=4)
     run(brain, only=util.split_csv(args.only) or None, auto=args.yes, mode=args.mode)

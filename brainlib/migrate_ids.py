@@ -357,7 +357,7 @@ def make_backup(inst) -> dict:
 
 # ── comando ─────────────────────────────────────────────────────────────────────────────────────────────
 def _precheck(brain) -> Path:
-    if os.environ.get("BRAIN_NIGHTLY") == "1":
+    if util.is_nightly():
         raise util.BrainError("migrate ids: proibido no noturno — a migração precisa do dono presente", code=4)
     marker = brain.inst.vault / MARKER_REL
     if marker.exists():

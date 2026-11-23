@@ -49,6 +49,13 @@ def _brainlib():
     return route
 
 
+def _is_nightly() -> bool:
+    """Mesma regra do resto do cérebro (`brainlib.util.is_nightly`) — o hook não pode divergir do CLI (#134)."""
+    _brainlib()
+    from brainlib import util
+    return util.is_nightly()
+
+
 def _find_instance() -> Path | None:
     env = os.environ.get("BRAIN_HOME")
     start = Path(env).resolve() if env else Path.cwd().resolve()
@@ -147,7 +154,7 @@ def _emit(header: str, lines: list[str]) -> None:
 
 
 def main():
-    if os.environ.get("BRAIN_NIGHTLY") == "1" or os.environ.get("BRAIN_RECALL_OFF") == "1" or ROUTE == "off":
+    if _is_nightly() or os.environ.get("BRAIN_RECALL_OFF") == "1" or ROUTE == "off":
         sys.exit(0)
     inst = _find_instance()
     if inst is None:

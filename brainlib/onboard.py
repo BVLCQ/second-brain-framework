@@ -681,7 +681,7 @@ def agents_state(brain) -> list[dict]:
 def connect_agent(brain, data: dict) -> dict:
     """Conecta o agente escolhido (job visível): [runner].agent + MCP somente-leitura + permissões
     (claude). Hermes é chat, não runner headless — os canais conectam, o runner segue no automático."""
-    if os.environ.get("BRAIN_NIGHTLY") == "1":
+    if util.is_nightly():
         raise util.BrainError("conectar agente é decisão do dono presente — nunca no noturno", code=4)
     key = str(data.get("agent") or "")
     if key == "other":
@@ -739,7 +739,7 @@ def apply_foco_google(brain, data: dict) -> dict:
     grava id/secret → abre o navegador no consentimento (loopback) → captura o refresh token →
     foco em modo google. Escopo mínimo: calendar.events.owned + drive.file."""
     from . import setup
-    if os.environ.get("BRAIN_NIGHTLY") == "1":
+    if util.is_nightly():
         raise util.BrainError("conectar o Google é decisão do dono presente — nunca no noturno", code=4)
     env = config.load_env(brain.inst)
     cid = _text(data.get("client_id"), 200) or env.get("GOOGLE_CLIENT_ID", "")
@@ -792,7 +792,7 @@ def maquina_state(brain) -> dict:
 def apply_maquina(brain, data: dict) -> dict:
     """Passo "A máquina" (plano F2): noturno · comando no PATH · TUI · foco ics · regra de fetch/hook.
     Cada item é opcional e idempotente — o default da tela é "ligar tudo" com os horários dados."""
-    if os.environ.get("BRAIN_NIGHTLY") == "1":
+    if util.is_nightly():
         raise util.BrainError("a máquina não se configura no noturno — abra o app com o dono presente", code=4)
     hhmm = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
     noturno = str(data.get("noturno") or "").strip()          # "" = não agendar / não mexer; "05:00" = instalar no horário
@@ -965,7 +965,7 @@ def draft_planning(brain) -> dict:
 def apply_planning(brain, data: dict) -> dict:
     """Cria a árvore aprovada pelo dono no navegador — o botão "Aprovar e criar" é a aprovação explícita."""
     from . import cli, planning
-    if os.environ.get("BRAIN_NIGHTLY") == "1":
+    if util.is_nightly():
         raise util.BrainError("o planejamento nunca nasce no noturno", code=4)
     proposal = clean_proposal(data.get("proposal") or {})
     if not proposal["goals"]:
@@ -1007,7 +1007,7 @@ def apply_entrevista(brain, data: dict) -> dict:
     pular vira TASK no TODO, não só ASK esperando o agente. As respostas ficam no progresso
     (logs/onboarding.json) e o finish() aplica: pessoas viram fichas na hora, fontes viram
     resposta da ASK para o agente aplicar (/dump passo 0)."""
-    if os.environ.get("BRAIN_NIGHTLY") == "1":
+    if util.is_nightly():
         raise util.BrainError("a entrevista é fala do dono — nunca no noturno", code=4)
     people = _text(data.get("people"), 4000)
     sources = _text(data.get("sources"), 4000)
@@ -1042,7 +1042,7 @@ def _apply_people(brain, text: str) -> list[str]:
 
 def finish(brain) -> dict:
     from . import ask, render
-    if os.environ.get("BRAIN_NIGHTLY") == "1":
+    if util.is_nightly():
         raise util.BrainError("o onboarding nunca termina no noturno — o dono fecha no app", code=4)
     _mark(brain.inst, "pronto")
     _save_progress(brain.inst, finished=util.today().isoformat())
@@ -1087,7 +1087,7 @@ def finish(brain) -> dict:
 def memory_auth(brain, data: dict) -> dict:
     """Autentica o provedor de assinatura do slot LLM (botão Autenticar do passo Memória) —
     job visível: cada linha do fluxo (token/setup-token, URL do device-code) cai no log."""
-    if os.environ.get("BRAIN_NIGHTLY") == "1":
+    if util.is_nightly():
         raise util.BrainError("autenticar provedor é ato do dono presente — nunca no noturno", code=4)
     from . import providers as _providers
     provider = str(data.get("provider") or "")
