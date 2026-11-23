@@ -149,6 +149,7 @@ class FileChange:
     new: str
     subs: int
     path: Path | None = None
+    old_sha: str = ""
 
 
 @dataclass
@@ -165,6 +166,7 @@ class Migration:
     include_external: bool = False
     hashes: dict[str, int] = field(default_factory=dict)             # quantos hashes recalculados por tipo
     ledger_sha: str = ""                                             # sha do ledger que o plano leu (apply confere sob o lock)
+    goals_sha: str = ""                                              # sha do PLANNING/goals.md que o plano leu
 
     @property
     def zones(self) -> dict[str, dict]:
@@ -212,14 +214,17 @@ def plan_migration(brain, include_external: bool = False) -> Migration:
     inst = brain.inst
     ledger_sha = _ledger_sha(brain)                  # antes de ler: evento que chegar no meio faz o apply abortar
     raw_events = brain.read_events()
-    goals_old = inst.planning_file.read_text(encoding="utf-8") if inst.planning_file.exists() else ""
+    goals_exists = inst.planning_file.exists()
+    goals_old = inst.planning_file.read_text(encoding="utf-8") if goals_exists else ""
+    goals_sha = util.sha(goals_old) if goals_exists else ""
     mapping = build_map(raw_events, goals_old)
     new_events, ledger_subs = [], 0
     for ev in raw_events:
         new, n = rewrite_event(ev, mapping)
         new_events.append(new)
         ledger_subs += n
-    mig = Migration(mapping, new_events, ledger_subs, goals_old, "", include_external=include_external, ledger_sha=ledger_sha)
+    mig = Migration(mapping, new_events, ledger_subs, goals_old, "", include_external=include_external,
+                    ledger_sha=ledger_sha, goals_sha=goals_sha)
 
     vault = inst.vault
     changes: dict[str, FileChange] = {}
@@ -247,13 +252,13 @@ def plan_migration(brain, include_external: bool = False) -> Migration:
                         mig.ambiguous.append({"file": str(rel), "token": m.group(0), "would_be": mapping[m.group(0)],
                                               "context": text[a:b].replace("\n", " ")})
         if n:
-            changes[str(rel)] = FileChange(str(rel), zone, text, new, n, path)
+            changes[str(rel)] = FileChange(str(rel), zone, text, new, n, path, util.sha(text))
     wk = inst.config_dir / "watch.toml"
     if wk.exists():
         text = wk.read_text(encoding="utf-8")
         new, n = sub_text(text, mapping)
         if n:
-            changes["config/watch.toml"] = FileChange("config/watch.toml", "config", text, new, n, wk)
+            changes["config/watch.toml"] = FileChange("config/watch.toml", "config", text, new, n, wk, util.sha(text))
     mig.files = list(changes.values())
     gl = changes.get("PLANNING/goals.md")
     mig.goals_new = gl.new if gl else goals_old
@@ -382,21 +387,41 @@ def _summary(mig: Migration) -> str:
     return "\n".join(lines)
 
 
+def _atomic_write_fsync(path: Path, text: str) -> None:
+    """Escreve em arquivo temporário irmão `.migrating` com flush + fsync antes de `os.replace`."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".migrating")
+    try:
+        with open(tmp, "w", encoding="utf-8") as fh:
+            fh.write(text)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+
+
 def cli(args, brain) -> None:
     marker = _precheck(brain)
+    if args.apply:
+        with brain._lock():
+            mig = plan_migration(brain, args.include_external)
+            if not mig.mapping:
+                print("nada a migrar: a instância já usa os nomes novos (ou ainda não tem IDs)")
+                marker.parent.mkdir(parents=True, exist_ok=True)
+                marker.write_text(json.dumps({"ts": util.iso_now(), "map": 0}) + "\n", encoding="utf-8")
+                return
+            backup = _apply_locked(brain, mig)
+        _post_apply(brain, mig, backup)
+        return
     mig = plan_migration(brain, args.include_external)
     if not mig.mapping:
         print("nada a migrar: a instância já usa os nomes novos (ou ainda não tem IDs)")
-        if args.apply:
-            marker.parent.mkdir(parents=True, exist_ok=True)
-            marker.write_text(json.dumps({"ts": util.iso_now(), "map": 0}) + "\n", encoding="utf-8")
         return
-    if not args.apply:
-        rp = _write_report(brain, mig, False, None)
-        print("dry-run (nada foi alterado, só o relatório):\n" + _summary(mig))
-        print(f"relatório: {brain.inst.rel(rp)}\nPara aplicar: brain migrate ids --apply" + (" --include-external" if mig.include_external else ""))
-        return
-    apply(brain, mig)
+    rp = _write_report(brain, mig, False, None)
+    print("dry-run (nada foi alterado, só o relatório):\n" + _summary(mig))
+    print(f"relatório: {brain.inst.rel(rp)}\nPara aplicar: brain migrate ids --apply" + (" --include-external" if mig.include_external else ""))
 
 
 def _stage_and_validate(brain, mig: Migration, backup: dict) -> list[dict]:
@@ -411,46 +436,88 @@ def _stage_and_validate(brain, mig: Migration, backup: dict) -> list[dict]:
     return events
 
 
-def apply(brain, mig: Migration) -> None:
+def _verify_unchanged_under_lock(brain, mig: Migration) -> None:
+    """Confere sob a trava que nem o ledger, nem os arquivos-alvo, nem o goals.md mudaram desde o plano."""
+    inst = brain.inst
+    if _ledger_sha(brain) != mig.ledger_sha:
+        raise util.BrainError("o ledger mudou desde o dry-run desta execução — nada foi alterado; rode de novo", code=5)
+    for f in mig.files:
+        target = f.path if f.path is not None else (inst.vault / f.rel)
+        expected_sha = f.old_sha or util.sha(f.old)
+        try:
+            current = target.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as e:
+            raise util.BrainError(
+                f"{inst.rel(target)} mudou desde o plano da migração — nada foi alterado; rode de novo", code=5
+            ) from e
+        if util.sha(current) != expected_sha:
+            raise util.BrainError(
+                f"{inst.rel(target)} mudou desde o plano da migração — nada foi alterado; rode de novo", code=5
+            )
+    goals_now = inst.planning_file.read_text(encoding="utf-8") if inst.planning_file.exists() else None
+    expected_goals_sha = mig.goals_sha or (util.sha(mig.goals_old) if mig.goals_old else "")
+    actual_goals_sha = util.sha(goals_now) if goals_now is not None else ""
+    if actual_goals_sha != expected_goals_sha:
+        raise util.BrainError(
+            f"{inst.rel(inst.planning_file)} mudou desde o plano da migração — nada foi alterado; rode de novo", code=5
+        )
+
+
+def _apply_locked(brain, mig: Migration) -> dict:
     inst = brain.inst
     marker = inst.vault / MARKER_REL
-    with brain._lock():
-        # o plano foi montado fora do lock: se o ledger andou desde então (noturno, outra sessão), gravar o ledger
-        # planejado apagaria os eventos novos
-        if _ledger_sha(brain) != mig.ledger_sha:
-            raise util.BrainError("o ledger mudou desde o dry-run desta execução — nada foi alterado; rode de novo", code=5)
-        backup = make_backup(inst)
-        print(f"backup: {backup['path']} ({backup['size']} bytes) — íntegro")
-        events = _stage_and_validate(brain, mig, backup)
-        ledger_new = "".join(json.dumps(e, ensure_ascii=False, separators=(",", ":")) + "\n" for e in events)
-        ledger_old = brain.ledger_path.read_text(encoding="utf-8")
-        for old, new in mig.renames:                                        # conflito de nome: aborta antes de mexer em qualquer coisa
-            if (inst.vault / new).exists():
-                raise util.BrainError(f"já existe {new}: não posso renomear {old} — nada foi alterado", code=4)
-        done_files: list[FileChange] = []
-        done_renames: list[tuple[str, str]] = []
-        try:
-            for f in mig.files:
-                util.atomic_write(f.path, f.new)
-                done_files.append(f)
-            for old, new in mig.renames:
-                os.rename(inst.vault / old, inst.vault / new)
-                done_renames.append((old, new))
-            tmp = brain.ledger_path.with_suffix(".jsonl.migrating")
-            tmp.write_text(ledger_new, encoding="utf-8")
-            os.replace(tmp, brain.ledger_path)
-            marker.write_text(json.dumps({"ts": util.iso_now(), "map": len(mig.mapping), "backup": backup["path"],
-                                          "backup_sha": backup["sha"]}) + "\n", encoding="utf-8")
-        except Exception as e:                                              # desfaz o que deu: arquivos, nomes e ledger
-            for old, new in reversed(done_renames):
+    # o plano pode ter sido montado fora do lock: confere ledger, arquivos-alvo e goals.md antes de mexer em qualquer coisa
+    _verify_unchanged_under_lock(brain, mig)
+    backup = make_backup(inst)
+    print(f"backup: {backup['path']} ({backup['size']} bytes) — íntegro")
+    events = _stage_and_validate(brain, mig, backup)
+    ledger_new = "".join(json.dumps(e, ensure_ascii=False, separators=(",", ":")) + "\n" for e in events)
+    ledger_old = brain.ledger_path.read_text(encoding="utf-8")
+    for old, new in mig.renames:                                        # conflito de nome: aborta antes de mexer em qualquer coisa
+        if (inst.vault / new).exists():
+            raise util.BrainError(f"já existe {new}: não posso renomear {old} — nada foi alterado", code=4)
+    done_files: list[FileChange] = []
+    done_renames: list[tuple[str, str]] = []
+    try:
+        for f in mig.files:
+            util.atomic_write(f.path, f.new)
+            done_files.append(f)
+        for old, new in mig.renames:
+            os.rename(inst.vault / old, inst.vault / new)
+            done_renames.append((old, new))
+        _atomic_write_fsync(brain.ledger_path, ledger_new)
+        marker.write_text(json.dumps({"ts": util.iso_now(), "map": len(mig.mapping), "backup": backup["path"],
+                                      "backup_sha": backup["sha"]}) + "\n", encoding="utf-8")
+    except Exception as e:                                              # desfaz o que deu: arquivos, nomes e ledger
+        # cada passo é tentado até o fim: um passo que falha não pode impedir o seguinte (o ledger é o último e o mais importante)
+        problems: list[str] = []
+        for old, new in reversed(done_renames):
+            try:
                 if (inst.vault / new).exists():
                     os.rename(inst.vault / new, inst.vault / old)
-            for f in done_files:
+            except OSError as u:
+                problems.append(f"renomear {new} de volta para {old}: {u}")
+        for f in done_files:
+            try:
                 util.atomic_write(f.path, f.old)
-            brain.ledger_path.write_text(ledger_old, encoding="utf-8")
-            marker.unlink(missing_ok=True)
-            raise util.BrainError(f"a migração falhou ({e}); tudo foi desfeito. Backup em {backup['path']}", code=5) from e
-        _clear_fresh(inst)
+            except OSError as u:
+                problems.append(f"restaurar {f.rel}: {u}")
+        try:
+            _atomic_write_fsync(brain.ledger_path, ledger_old)
+        except OSError as u:
+            problems.append(f"restaurar o ledger: {u}")
+        marker.unlink(missing_ok=True)
+        if problems:
+            raise util.BrainError(
+                f"a migração falhou ({e}) e o desfazimento ficou incompleto — {'; '.join(problems)}. "
+                f"Restaure pelo backup em {backup['path']}", code=5) from e
+        raise util.BrainError(f"a migração falhou ({e}); tudo foi desfeito. Backup em {backup['path']}", code=5) from e
+    _clear_fresh(inst)
+    return backup
+
+
+def _post_apply(brain, mig: Migration, backup: dict) -> None:
+    inst = brain.inst
     brain.reload()
     problems = brain.validate_all()
     rp = _write_report(brain, mig, True, backup)
@@ -462,6 +529,12 @@ def apply(brain, mig: Migration) -> None:
     print(f"✓ views regeneradas · relatório: {brain.inst.rel(rp)}")
     if inst.cfg.get("memory", {}).get("engine") == "hindsight":
         print("→ Hindsight ligado: rode `./brain memory rebuild` (o índice ainda guarda os nomes antigos)")
+
+
+def apply(brain, mig: Migration) -> None:
+    with brain._lock():
+        backup = _apply_locked(brain, mig)
+    _post_apply(brain, mig, backup)
 
 
 def _clear_fresh(inst) -> None:
