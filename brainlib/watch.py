@@ -221,6 +221,7 @@ def plan_folders(brain, key: str, folders: list[dict], margin: str = FOLDER_MARG
     if delta is None:
         raise util.BrainError("margem inválida (use 12h, 3d, 1w…)", code=4)
     cutoff = start - delta
+    warnings: list[str] = []
     rows = []
     for f in folders:
         name = str(f.get("name") or f.get("title") or "")
@@ -231,15 +232,24 @@ def plan_folders(brain, key: str, folders: list[dict], margin: str = FOLDER_MARG
             go, why = True, "sem data no nome"
         elif at >= cutoff:
             go, why = True, "call dentro da janela"
-        elif mod and util.parse_dt(mod) >= start:
-            go, why = True, "pasta modificada desde o último pull"
-        else:
+        elif mod is None:
             go, why = False, "call anterior à janela"
+        else:
+            try:
+                if not isinstance(mod, str) or not mod.strip():
+                    raise ValueError("modifiedTime não é string não-vazia")
+                if util.parse_dt(mod.strip()) >= start:
+                    go, why = True, "pasta modificada desde o último pull"
+                else:
+                    go, why = False, "call anterior à janela"
+            except (ValueError, TypeError, AttributeError):
+                go, why = True, "modifiedTime inválido — descendo por segurança"
+                warnings.append(f"{f.get('id') or name or '(sem id)'}: modifiedTime inválido ({mod!r})")
         rows.append({"id": f.get("id", ""), "name": name, "call_at": at.isoformat(timespec="minutes") if at else None,
                      "descend": go, "why": why})
     return {"key": key, "since": st["since"], "margin": margin, "cutoff": cutoff.isoformat(timespec="minutes"),
             "full": full, "descend": sum(r["descend"] for r in rows), "skip": sum(not r["descend"] for r in rows),
-            "folders": rows}
+            "warnings": warnings, "folders": rows}
 
 
 def parse_revs(data) -> dict[str, str]:
@@ -356,7 +366,16 @@ def _format_block(fields: dict) -> list[str]:
     return ["[[source]]"] + [f"{k} = {_toml_value(fields[k])}" for k in ordered]
 
 
+def _forbid_nightly(op: str) -> None:
+    if util.is_nightly():
+        raise util.BrainError(
+            f"watch {op}: proibido no noturno — o universo observável é decisão do dono, presente",
+            code=4,
+        )
+
+
 def add(inst, key: str, fields: dict) -> dict:
+    _forbid_nightly("add")
     if not KEY_RE.match(key or ""):
         raise util.BrainError(f"key inválida: {key!r} (minúsculas, números, '.', '_' e '-'; ex.: slack-time-dados)", code=4)
     f = _clean(fields)
@@ -374,6 +393,7 @@ def add(inst, key: str, fields: dict) -> dict:
 
 
 def edit(inst, key: str, set_: dict | None = None, unset: list[str] | None = None, rename: str | None = None) -> dict:
+    _forbid_nightly("edit")
     lines = _read(inst).splitlines()
     blk = _find(_blocks(lines), key)
     changes = _clean(set_ or {})
@@ -409,6 +429,7 @@ def edit(inst, key: str, set_: dict | None = None, unset: list[str] | None = Non
 
 
 def remove(inst, key: str) -> None:
+    _forbid_nightly("remove")
     lines = _read(inst).splitlines()
     blk = _find(_blocks(lines), key)
     end = blk.end
