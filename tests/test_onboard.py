@@ -14,6 +14,7 @@ import unittest
 import urllib.error
 import urllib.request
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -323,6 +324,33 @@ class MoreStepTests(unittest.TestCase):
         self.assertFalse(st["memory"]["lmstudio"])     # booleanos seguem (compat), o estado diz o resto
 
 
+@contextlib.contextmanager
+def _live_bridge(token: str = "x"):
+    """Ponte viva de mentira: só `/api/ping` com o token responde — o único sinal que `live_panel_url` aceita (#112)."""
+    import http.server
+
+    class _H(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            ok = self.path == "/api/ping" and self.headers.get("X-Brain-Token") == token
+            body = json.dumps({"ok": ok}).encode("utf-8")
+            self.send_response(200 if ok else 401)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args):
+            pass
+
+    httpd = http.server.HTTPServer(("127.0.0.1", 0), _H)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    try:
+        yield httpd, httpd.server_address[1]
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+
+
 class OpenTests(unittest.TestCase):
     def setUp(self):
         self._td = tempfile.TemporaryDirectory()
@@ -381,26 +409,43 @@ class OpenTests(unittest.TestCase):
     def test_second_bridge_never_orphans_the_first(self):
         """Uma segunda ponte (outra porta, teste) não sobrescreve nem apaga o registro da que está no ar —
         senão a principal fica viva ocupando a porta, invisível para o app, e o app cai no retrato."""
-        import os
-        import socket
         f = serve.live_url_file(self.b.inst)
         f.parent.mkdir(parents=True, exist_ok=True)
-        live = socket.socket()
-        live.bind(("127.0.0.1", 0))
-        live.listen(1)
-        self.addCleanup(live.close)
-        port = live.getsockname()[1]
-        first = {"url": f"http://127.0.0.1:{port}/#t=x", "port": port, "pid": os.getpid() + 1}
-        f.write_text(json.dumps(first), encoding="utf-8")
-        self.assertFalse(serve.register(self.b.inst, "http://127.0.0.1:2/#t=y", 2))
-        serve.unregister(self.b.inst)                              # a segunda encerra: o registro da primeira fica
-        self.assertEqual(json.loads(f.read_text(encoding="utf-8")), first)
-        live.close()                                               # a primeira morreu: a próxima ponte assume
-        self.assertTrue(serve.register(self.b.inst, "http://127.0.0.1:2/#t=y", 2))
+        with _live_bridge() as (_httpd, port):
+            # pid vivo e ≠ deste processo: é o que faz o register() enxergar "outra ponte" (veja serve.register)
+            first = {"url": f"http://127.0.0.1:{port}/#t=x", "port": port, "pid": os.getppid()}
+            f.write_text(json.dumps(first), encoding="utf-8")
+            self.assertFalse(serve.register(self.b.inst, "http://127.0.0.1:2/#t=y", 2))
+            serve.unregister(self.b.inst)                              # a segunda encerra: o registro da primeira fica
+            self.assertEqual(json.loads(f.read_text(encoding="utf-8")), first)
+        self.assertTrue(serve.register(self.b.inst, "http://127.0.0.1:2/#t=y", 2))   # a primeira morreu: a próxima ponte assume
         self.assertEqual(f.stat().st_mode & 0o777, 0o600)
-        serve.unregister(self.b.inst)                              # o registro é dela: sai com ela
+        serve.unregister(self.b.inst)                                  # o registro é dela: sai com ela
         self.assertFalse(f.exists())
 
+    def test_live_panel_url_ignores_proxy_environment(self):
+        """Loopback não passa por proxy: com `http_proxy` no ar, o token da ponte não pode ir parar no proxy."""
+        f = serve.live_url_file(self.b.inst)
+        f.parent.mkdir(parents=True, exist_ok=True)
+        with _live_bridge() as (_httpd, port):
+            f.write_text(json.dumps({"url": f"http://127.0.0.1:{port}/#t=x", "port": port, "pid": os.getppid()}),
+                         encoding="utf-8")
+            proxies = {"http_proxy": "http://127.0.0.1:9", "HTTP_PROXY": "http://127.0.0.1:9", "no_proxy": "", "NO_PROXY": ""}
+            with mock.patch.dict(os.environ, proxies):
+                url = serve.live_panel_url(self.b.inst)
+        self.assertEqual(url, f"http://127.0.0.1:{port}/#t=x")
+        self.assertTrue(f.exists(), "ponte viva: o registro fica")
+        f.unlink(missing_ok=True)
+
+    def test_pid_alive_probe_never_signals_on_windows(self):
+        """`util.pid_alive` não usa os.kill no Windows (lá `os.kill(pid, 0)` encerra o processo)."""
+        import sys
+        from unittest import mock
+        with mock.patch.object(sys, "platform", "win32"), mock.patch("os.kill") as kill:
+            self.assertTrue(util.pid_alive(os.getppid()))
+        kill.assert_not_called()
+        self.assertTrue(util.pid_alive(os.getppid()))        # POSIX de verdade: o processo pai existe
+        self.assertFalse(util.pid_alive(999_999_999))         # fora do range de pid do sistema
 
 class BridgeTests(unittest.TestCase):
     @classmethod
