@@ -42,7 +42,7 @@ Fonte `kind = "github"` (campo `path` = pasta local com os clones): **não** use
 5. Se memória estiver ligada: `./brain memory sync` (falha isolada — não derruba o resto).
 6. `./brain feedback sync` — relê o estado dos issues do GitHub (porta 7; observação, vale no noturno;
    sem `GITHUB_TOKEN` pula com aviso, falha isolada).
-7. **Brief do dia (`FRESH/notes/brief.md`):** após concluir pulls, `/dump` e `./brain render`, gere o brief curto do dia e grave com `./brain note write brief --text "<brief>"` (ou `./brain note write brief --empty --text "Sem novidades desde a última atualização."` se nada mudou). Isso grava apenas narrativa derivada em `FRESH/notes/` (não escreve no ledger) e respeita `BRAIN_NIGHTLY=1`.
+7. **Brief do dia (`FRESH/notes/brief.md`):** após concluir pulls, `/dump` e `./brain render`, escreva o brief no formato de `commands/brief/SKILL.md` (passo 3: Markdown mínimo, sem linha de título, sem seção de saúde, ids soltos) num arquivo temporário e grave com `./brain note write brief --file <arquivo>` (ou `./brain note write brief --empty --text "Sem novidades desde a última atualização."` se nada mudou). Isso grava apenas narrativa derivada em `FRESH/notes/` (não escreve no ledger) e respeita `BRAIN_NIGHTLY=1`.
 8. Recibo: fontes puxadas / sem novidade / falhas · itens processados · avisos do doctor.
 
 Proibido: ferramentas MCP de escrita, `outbox approve/sent`, `publish`, `focus approve/apply` (google), mudanças de PLANNING.

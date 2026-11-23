@@ -314,8 +314,12 @@ Antes de sobrescrever, **colhe** edições do dono:
 - `status:` em `FRESH/records/opportunities/OPP-*.md` → status da oportunidade (valor inválido: aviso, não grava)
 - checkbox de entregável em `PLANNING/goals.md` → estado factual
 
-Qualquer outra edição em FRESH é descartada. Narrativas do agente
-(`/brief`, `/week`) vão em `FRESH/notes/` e o painel as exibe como estão.
+Qualquer outra edição em FRESH é descartada. Narrativas do agente (`/brief`, `/week`) vão em
+`FRESH/notes/` em **Markdown mínimo** (`##`, `-`, ids soltos — formato em
+`commands/brief/SKILL.md`) e o painel as renderiza: seção vira rótulo, id vira etiqueta com link
+para a ficha (título e situação lidos do painel, não do texto). O brief de hoje mora no cartão
+**Seu dia** — até 3 seções abertas, o resto atrás de "Mostrar tudo"; aviso de saúde liga para a
+tela de saúde. Esse texto é entrada não confiável: só entra como texto escapado, nunca como marca.
 
 Views: `home.md`, `todo.md`, `goals.md`, `projects/PROJ-#.md`, `decisions.md`,
 `wins.md`, `people/<id>.md`, `timeline.md`, `map.md`, `focus.md`, `outbox.md`,

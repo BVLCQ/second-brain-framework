@@ -314,14 +314,287 @@ function renderFreshBanner(f, sum){
     '<button type="button" class="btn ghost" id="fresh-dismiss-btn" aria-label="Dispensar por hoje">Dispensar hoje</button>' +
     "</div></section>";
 }
+// ── Seu dia: o brief do agente em Markdown mínimo → HTML seguro (#160) ──────────────
+// O brief é texto do agente — e o agente leu conteúdo da inbox: é entrada NÃO confiável.
+// Segurança por construção: (1) o texto vira blocos, (2) cada pedaço de TEXTO passa por esc()
+// ANTES de qualquer marcação, (3) só entra sem escapar o que este código gerou — tags próprias,
+// rotas "#..." internas e URLs http(s) já validadas. Sem HTML cru, sem <img>, sem tabela, sem
+// atributo vindo do texto. Entidade que o painel conhece (TASK-####, PROP-####, GOAL-#…) vira
+// etiqueta com link para a ficha; atraso, prazo e status são LIDOS do modelo (quem calcula é o ./brain).
+// O formato que o agente escreve está em commands/brief/SKILL.md (seção ##, lista -, id cru).
+const BD_MAX_SECTIONS = 3;   // além disso o brief abre recolhido, com "Mostrar tudo": é um resumo, não a página
+const BD_ENT_SRC = "\\b(?:TASK|DEC|WIN|PROP|MSG|PUB|FOCUS|PROC|OPP|ASK|FB)-\\d{2,5}\\b|\\b(?:PROJ|GOAL)-\\d{1,3}(?:\\.\\d{1,3})?\\b";   // sem grupos capturando (entra num alternation maior)
+const BD_ENT = new RegExp(BD_ENT_SRC, "i");
+const BD_PROP_KIND = {"atualizar-acao":"atualizar ação","fechar-acao":"fechar ação","descartar-acao":"descartar ação",
+  "unificar-acao":"unificar ação","add-project":"criar projeto","add-goal":"criar goal","add-deliverable":"criar entregável"};
+const BD_SIT_LEVEL = {late:"em-risco", block:"travado", soon:"atencao", done:"concluido", ask:"info", prop:"atencao"};   // tom → classe de chip que o painel já tem
+function bdClamp(s, n){ s = String(s || ""); return s.length > n ? s.slice(0, n - 1).replace(/\s+$/, "") + "…" : s; }
+// O que o painel sabe sobre a entidade citada: rota, título e situação — tudo lido do modelo.
+function bdEnt(id){
+  if (!BD_ENT.test(id)) return null;
+  var up = id.toUpperCase(), k = /^[A-Z]+/.exec(up)[0], sub = /\.\d+$/.test(up);   // sub: entregável (PROJ-#.#)
+  var e = {id: up, kind: k, href: "", title: "", sit: "", tone: "", tip: ""}, a, p, g, x, s;
+  if (k === "TASK" && (a = A[up])) {
+    e.href = "#action/" + up; e.title = a.title; s = [];
+    if (!a.open) { s.push(a.status || "feita"); e.tone = "done"; }
+    else if (a.status === "bloqueada") { s.push("bloqueada"); e.tone = "block"; }
+    else if (a.overdue_days) { s.push("atrasada " + a.overdue_days + "d"); e.tone = "late"; }
+    else if (a.due_in === 0) { s.push("vence hoje"); e.tone = "soon"; }
+    else if (a.due_in > 0 && a.due_in <= 7) { s.push("em " + a.due_in + "d"); e.tone = "soon"; }
+    else if (a.due) s.push(fmtDW(a.due));
+    else s.push("sem prazo");
+    if (a.list === "waiting" && a.owner_name) s.push("com " + a.owner_name);
+    if (a.priority === "alta" && a.open) s.unshift("alta");
+    e.sit = s.join(" · ");
+  } else if (k === "DEC" && (x = D[up])) {
+    e.href = "#decision/" + up; e.title = x.title; e.sit = x.status && x.status !== "ativa" ? x.status : "";
+  } else if (k === "PROJ" || k === "GOAL") {
+    var pid = up.split(".")[0];
+    if (k === "GOAL" && (g = G[pid])) {
+      e.href = "#projects?focus=" + pid; e.title = g.title; e.sit = g.health_label || g.status || "";
+    } else if (k === "PROJ" && (p = P[pid])) {
+      e.href = "#project/" + pid;
+      if (sub) {
+        var dv = (p.deliverables || []).find(v => v.id === up);
+        if (!dv) return null;
+        e.title = dv.title;
+        e.sit = dv.status === "feito" || dv.status === "cancelado" ? dv.status :
+                dv.overdue_days ? "atrasada " + dv.overdue_days + "d" : dv.due ? fmtDW(dv.due) : "sem prazo";
+        e.tone = dv.status === "feito" || dv.status === "cancelado" ? "done" : dv.overdue_days ? "late" : "";
+      } else { e.title = p.title; e.sit = p.progress && p.progress.pct != null ? p.progress.pct + "%" : ""; }
+    } else return null;
+  } else if (k === "PROP" && (x = M.proposals.find(q => q.id === up))) {
+    e.href = "#ask"; e.title = "proposta · " + (BD_PROP_KIND[x.kind] || "proposta");
+    e.sit = !x.status || x.status === "pendente" ? "aguarda decisão" : x.status; e.tone = "prop"; e.tip = x.summary;
+  } else if (k === "ASK" && (x = M.questions.find(q => q.id === up))) {
+    e.href = "#ask"; e.title = "pergunta";
+    e.sit = x.status === "aberta" ? (x.options && x.options.length ? x.options.length + " opções · aberta" : "aberta") : (x.status || "");
+    e.tone = x.status === "aberta" ? "ask" : "done"; e.tip = x.text;
+  } else if (k === "MSG" && (x = (M.outbox || []).find(q => q.id === up))) {
+    e.href = "#outbox"; e.title = "rascunho para " + (x.to_name || x.to || "—");
+    e.sit = x.status || ""; e.tone = x.status === "rascunho" ? "ask" : "done"; e.tip = x.text;
+  } else if (k === "FOCUS" && M.focus && M.focus.id === up) {
+    e.href = "#focus"; e.title = "plano de foco · " + (M.focus.blocks || []).length + " blocos";
+    e.sit = M.focus.status === "proposto" ? "aguarda ok" : (M.focus.status || "");
+    e.tone = M.focus.status === "proposto" ? "ask" : "";
+  } else if (k === "OPP" && OPP[up]) {
+    e.href = "#pf/opp/" + encodeURIComponent(up); e.title = OPP[up].title; e.sit = OPP[up].status || "";
+  } else if (k === "PROC" && PROC[up]) {
+    e.href = "#pf/procs"; e.title = PROC[up].title;
+  } else if (k === "WIN" && DL[up]) {
+    e.href = "#wins"; e.title = DL[up].title;
+  } else if (k === "FB" && (x = (M.feedback || []).find(q => q.id === up))) {
+    e.href = "#feedback"; e.title = x.title || "";
+  } else return null;
+  return e;
+}
+var BD_PE_SRC;                                                              // pessoas que deram origem ao regex (trocou → refaz)
+function bdPeople(){
+  if (BD_PE_SRC === M.people) return;                                       // também cobre BRAIN.refresh: índice novo, regex novo
+  BD_PE_SRC = M.people; BD_PE_MAP = Object.create(null); BD_RE = null;
+  var alts = [], ownerId = (M.owner && M.owner.id) || "";
+  (M.people || []).forEach(p => {
+    if (p.id === ownerId || p.is_owner) return;                             // o dono aparece como texto comum
+    [p.name].concat(p.aliases || []).forEach(n => {
+      n = String(n || "").trim();
+      if (n.length < 3 || /[()@/\\[\]`*_<>"'#]/.test(n) || !/[A-Za-zÀ-ÿ]/.test(n)) return;
+      if (BD_PE_MAP[n.toLowerCase()]) return;
+      BD_PE_MAP[n.toLowerCase()] = p.id;
+      alts.push(n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+    });
+  });
+  BD_PE_RE = alts.length ? alts.sort((a, b) => b.length - a.length).join("|") : "(?!)";
+}
+var BD_PE_RE = null, BD_PE_MAP = null;
+function bdPersonLink(text, noLink){
+  bdPeople();
+  var pid = BD_PE_MAP[String(text).toLowerCase()];
+  return pid && !noLink ? '<a href="#person/' + encodeURIComponent(pid) + '">' + esc(text) + "</a>" : esc(text);
+}
+function bdCode(c, plain){                                                  // `código`: literal, escapado
+  var t = c.trim();
+  if (BD_ENT.test(t)) return bdEntChip(t, plain);                           // id entre crases continua sendo link para a ficha
+  return '<code class="bd-code">' + esc(c) + "</code>";
+}
+function bdUrl(u, noLink){
+  var tail = "";
+  while (/[.,;:!?]$/.test(u)) { tail = u.slice(-1) + tail; u = u.slice(0, -1); }   // pontuação colada no fim é da frase, não do link
+  return (noLink ? esc(u) : '<a href="' + esc(u) + '" target="_blank" rel="noopener noreferrer">' + esc(u) + "</a>") + tail;
+}
+function bdLink(label, url, noLink){                                        // [rótulo](url): só http(s), mailto: e rota "#..." da página
+  var ok = /^(https?:\/\/|mailto:)/i.test(url) || /^#[a-z][\w/.-]*$/i.test(url);
+  if (noLink || !ok) return "[" + bdInline(label, true) + "](" + esc(url) + ")";
+  return '<a href="' + esc(url) + '"' + (url.charAt(0) === "#" ? "" : ' target="_blank" rel="noopener noreferrer"') + ">" +
+    bdInline(label, true) + "</a>";
+}
+// Do bloco em renderização: BD_MANY = várias entidades são o assunto (etiquetas compactas, duas por linha);
+// BD_UNIFORM = todas na mesma situação (o rótulo do item já diz — não repetir em cada etiqueta).
+var BD_MANY = false, BD_UNIFORM = false;
+function bdEntChip(id, plain){
+  var e = bdEnt(id), inner = idc(e ? e.id : id), tip = e ? esc(e.tip || [e.title, e.sit].filter(Boolean).join(" · ")) : "";
+  if (!e || !e.href) return inner;                                          // o painel não conhece: chip comum, sem link
+  if (plain) return '<a class="bd-id" href="' + e.href + '" title="' + tip + '">' + inner + "</a>";
+  return '<a class="bd-tag' + (BD_MANY ? " bd-tag-m" : "") + (e.tone ? " is-" + e.tone : "") + '" href="' + e.href + '" title="' + tip + '">' + inner +
+    (e.title ? '<span class="bd-tag-t">' + esc(bdClamp(e.title, BD_MANY ? 90 : 46)) + "</span>" : "") +
+    (e.sit && !BD_UNIFORM ? '<span class="chip bd-tag-s' + (BD_SIT_LEVEL[e.tone] ? " h-" + BD_SIT_LEVEL[e.tone] : "") + '">' + esc(e.sit) + "</span>" : "") + "</a>";
+}
+var BD_RE = null;
+function bdRe(){
+  bdPeople();
+  if (BD_RE) return BD_RE;
+  BD_RE = new RegExp(
+    "(`+)([^`\\n]+?)\\1(?!`)" +                                     // 1,2  `código`
+    "|\\[([^\\]\\n]+)\\]\\(([^)\\s]+)\\)" +                          // 3,4  [rótulo](url)
+    "|\\*\\*(?=\\S)([^\\n]*?\\S)\\*\\*" +                            // 5    **negrito**
+    "|(?<![\\w*])\\*(?!\\s)([^*\\n]+?)(?<!\\s)\\*(?![\\w*])" +        // 6    *itálico*
+    "|(?<![\\w_])_(?!\\s)([^_\\n]+?)(?<!\\s)_(?![\\w_])" +            // 7    _itálico_
+    "|https?://[^\\s<>\"'`\\])}]+" +                                  // —    url solta (sem grupo: reconhecida pelo texto)
+    "|(?:" + BD_ENT_SRC + ")" +                                    // —    entidade (idem)
+    "|(?<![\\w@./-])(" + BD_PE_RE + ")(?![\\w@-])",                  // 8    pessoa
+    "gi");
+  return BD_RE;
+}
+// id entre parênteses é referência ao que a linha já está dizendo, não o assunto dela: vira chip curto em vez de etiqueta
+var BD_SRC = "";                                                    // texto-fonte do bloco em renderização (para a conta de parênteses)
+function bdRef(at){
+  var t = BD_SRC.slice(0, at);
+  return (t.match(/\(/g) || []).length > (t.match(/\)/g) || []).length;
+}
+function bdInline(raw, noLink, base){
+  raw = String(raw || ""), base = base || 0;
+  var re = bdRe(), out = "", last = 0, m;
+  re.lastIndex = 0;
+  // o regex é compartilhado com as chamadas recursivas: a posição é religada a cada volta
+  while (re.lastIndex = last, (m = re.exec(raw))) {
+    out += esc(raw.slice(last, m.index)); last = re.lastIndex;
+    var piece;
+    if (m[1] != null) piece = bdCode(m[2], noLink || bdRef(base + m.index));
+    else if (m[3] != null) { out += bdLink(m[3], m[4], noLink); continue; }
+    else if (m[5] != null) { out += "<strong>" + bdInline(m[5], noLink, base + m.index + 2) + "</strong>"; continue; }
+    else if (m[6] != null) { out += "<em>" + bdInline(m[6], noLink, base + m.index + 1) + "</em>"; continue; }
+    else if (m[7] != null) { out += "<em>" + bdInline(m[7], noLink, base + m.index + 1) + "</em>"; continue; }
+    else if (/^https?:/i.test(m[0])) { out += bdUrl(m[0], noLink); continue; }
+    else if (/^[A-Z]+-\d/i.test(m[0])) piece = bdEntChip(m[0], noLink || bdRef(base + m.index));
+    else { out += bdPersonLink(m[0], noLink); continue; }
+    // chip e pontuação vizinha ficam grudados: "(TASK-0003)," nunca deixa vírgula ou parêntese órfão no fim da linha
+    var open = raw.charAt(m.index - 1) === "(" && out.slice(-1) === "(";
+    if (open) out = out.slice(0, -1);
+    var punct = (raw.slice(last).match(/^[\)\]]+[.,;:!?]?|^[.,;:!?]/) || [""])[0];
+    // lista de entidades no formato etiqueta: a vírgula entre duas etiquetas é só separador — sai,
+    // para não sobrar uma vírgula órfã no fim da linha que quebrou
+    var sep = punct === "," && /^<a class="bd-tag/.test(piece) && /^(?:\s|`)*[A-Z]+-\d/i.test(raw.slice(last + 1));
+    last += punct.length;
+    out += '<span class="bd-nb">' + (open ? "(" : "") + piece + (sep ? "" : punct) + "</span>";
+  }
+  return out + esc(raw.slice(last));
+}
+function bdGroup(text, canUniform){                                // assunto do bloco = entidades fora de parênteses que o painel conhece
+  var re = new RegExp(BD_ENT_SRC, "gi"), m, ents = [];
+  BD_SRC = text;
+  while ((m = re.exec(text))) if (!bdRef(m.index)) { var e = bdEnt(m[0]); if (e && e.href) ents.push(e); }
+  BD_MANY = ents.length >= 2;
+  BD_UNIFORM = !!canUniform && BD_MANY && ents.every(x => x.sit && x.sit === ents[0].sit);
+}
+function bdItem(text){ bdGroup(text, true); return '<li class="bd-li">' + bdInline(text); }   // quem fecha o item é quem abre o próximo (liOpen)
+function briefHtml(txt){
+  var lines = String(txt || "").replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "").replace(/\r\n?/g, "\n").split("\n"), h = "", stack = [], para = [], quote = [], liOpen = false, head = "", m, i, line;
+  function flushHead(){ if (head) { h += head; head = ""; } }                       // rótulo de seção só entra com conteúdo: seção vazia não aparece
+  function flushPara(){ if (para.length) { flushHead(); h += "<p>" + para.map(t => (bdGroup(t, false), bdInline(t))).join("<br>") + "</p>"; para = []; } }
+  function flushQuote(){ if (quote.length) { flushHead(); h += '<blockquote class="bd-quote">' + quote.map(t => (bdGroup(t, false), bdInline(t))).join("<br>") + "</blockquote>"; quote = []; } }
+  function closeAll(){ if (liOpen) { h += "</li>"; liOpen = false; } while (stack.length) h += "</" + stack.pop() + ">"; }
+  var ITEM = /^(\s*)(?:([-*+])|(\d{1,3})[.)])[ \t]+(.*)$/, HR = /^ {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*$/;
+  for (i = 0; i < lines.length; i++) {
+    line = lines[i];
+    if (!line.trim()) { closeAll(); flushPara(); flushQuote(); continue; }
+    if ((m = /^(#{1,6})\s+(.*)$/.exec(line))) {
+      closeAll(); flushPara(); flushQuote();
+      bdGroup(m[2], false);
+      head = m[1].length <= 2 ? '<div class="bd-h">' + bdInline(m[2]) + "</div>" : '<div class="bd-h4">' + bdInline(m[2]) + "</div>";
+      continue;
+    }
+    if (HR.test(line)) { closeAll(); flushPara(); flushQuote(); flushHead(); h += '<hr class="bd-hr">'; continue; }
+    if (/^ {0,3}>/.test(line)) { closeAll(); flushPara(); quote.push(line.replace(/^ {0,3}> ?/, "")); continue; }   // citação: bloco próprio, mesmo colada numa lista
+    if (liOpen && !ITEM.test(line)) { bdGroup(line.trim(), false); h += "<br>" + bdInline(line.trim()); continue; }     // continuação do item aberto
+    if ((m = ITEM.exec(line))) {
+      var lvl = Math.min(2, Math.floor(m[1].replace(/\t/g, "  ").length / 2)), tag = m[2] ? "ul" : "ol", deeper = false;
+      flushQuote(); flushHead();
+      if (!stack.length) { stack.push(tag); h += "<" + tag + ' class="bd-' + tag + '">'; }
+      else {
+        while (stack.length - 1 > lvl) { if (liOpen) { h += "</li>"; liOpen = false; } h += "</" + stack.pop() + ">"; liOpen = true; }
+        if (stack.length - 1 < lvl && liOpen) { stack.push(tag); h += "<" + tag + ' class="bd-' + tag + ' bd-sub">'; deeper = true; }   // sublista nasce dentro do item aberto
+        else if (stack[stack.length - 1] !== tag) {
+          if (liOpen) { h += "</li>"; liOpen = false; }
+          h += "</" + stack.pop() + ">"; stack.push(tag); h += "<" + tag + ' class="bd-' + tag + (lvl ? " bd-sub" : "") + '">';
+        }
+      }
+      if (liOpen && !deeper) h += "</li>";
+      h += bdItem(m[4]); liOpen = true; continue;
+    }
+    para.push(line.trim());
+  }
+  closeAll(); flushPara(); flushQuote();
+  return h;
+}
+// Avisos do doctor: vêm de M.health, nunca do texto do brief — atalho no cabeçalho, sem ocupar linha
+function bdBad(){
+  var bad = (M.health || []).filter(x => x.level === "warn" || x.level === "error"), seen = Object.create(null), out = [];
+  bad.forEach(x => { if (x.title && !seen[x.title]) { seen[x.title] = 1; out.push(x); } });
+  return out;
+}
+function bdHealthLink(){
+  var bad = bdBad(), n = bad.length;
+  return n ? '<a class="bd-hl" href="#cfg/saude" title="' + esc(bad.map(x => x.title + (x.detail ? ": " + x.detail : "")).join("\n")) + '">⚠ ' + n +
+    (n === 1 ? " aviso de saúde" : " avisos de saúde") + "</a>" : "";
+}
+function bdWhen(br){
+  if (!br.is_today) return "";
+  if (br.generated_at) return "atualizado " + esc(String(br.generated_at).slice(11, 16));
+  return br.date ? esc(fmtD(br.date)) : "";
+}
+// "Mostrar tudo" do brief recolhido: um listener só, delegado no documento (o cartão é re-renderizado a cada render)
+var BD_MORE_BOUND = false, BD_OPEN_KEY = "";                // brief que o dono abriu: continua aberto enquanto for o mesmo
+// o corte do brief recolhido cai na fronteira de seção (antes do 4º rótulo), nunca no meio de uma linha
+function bdFitClamp(body){
+  body = body || document.querySelector("#daily-brief .brief-body.is-clamped:not(.is-open)");
+  if (!body) return;
+  var hs = body.querySelectorAll(".bd-h, .bd-h4"), h4 = hs[BD_MAX_SECTIONS];
+  if (!h4) return;
+  body.style.maxHeight = Math.max(120, Math.floor(h4.offsetTop - body.offsetTop - 7)) + "px";
+}
+function bdBindMore(){
+  if (BD_MORE_BOUND) return;
+  BD_MORE_BOUND = true;
+  document.addEventListener("click", ev => {
+    var b = ev.target.closest && ev.target.closest(".bd-more");
+    if (!b) return;
+    var body = b.parentNode.querySelector(".brief-body"), open = body.classList.toggle("is-open");
+    BD_OPEN_KEY = open ? (b.getAttribute("data-key") || "") : "";
+    b.setAttribute("aria-expanded", open ? "true" : "false");
+    body.style.maxHeight = open ? "none" : "";                 // a altura ajustada (inline) valia só para o estado recolhido
+    if (!open) bdFitClamp(body);
+    // texto do controle por DOM (nada de innerHTML): "N seções" é número contado do brief, mas passa por textContent
+    b.textContent = "";
+    b.append(open ? "Mostrar menos" : "Mostrar tudo");
+    if (!open) { var n = document.createElement("span"); n.className = "bd-more-n"; n.textContent = b.getAttribute("data-n") + " seções"; b.append(n, " ▾"); }
+  });
+}
+function bdTitle(txt){ return String(txt || "").replace(/^#[ \t]+\S[^\n]*\n*/, "").trim(); }   // "# título" solto na primeira linha não aparece: o cartão já tem título (vale até se for só ele)
 function renderDailyBrief(br){
   br = br || {};
-  const txt = String(br.text || "").trim();
+  var txt = String(br.text || "").replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "").trim();
+  txt = bdTitle(txt);
   const isToday = !!br.is_today;
-  const meta = isToday && br.date ? '<span class="muted small">' + fmtD(br.date) + "</span>" : "";
   let body;
   if (isToday && !br.empty && txt) {
-    body = '<div class="brief-body">' + esc(txt) + "</div>";
+    const inner = briefHtml(txt), sections = (inner.match(/class="bd-h"/g) || []).length, clamp = sections > BD_MAX_SECTIONS;   // conta a seção que renderizou: vazia não dobra o brief
+    const key = br.generated_at || br.date || "", open = clamp && !!key && BD_OPEN_KEY === key;
+    if (clamp && document.addEventListener) {
+      bdBindMore();
+      if (!open && typeof requestAnimationFrame === "function") requestAnimationFrame(() => bdFitClamp());
+    }
+    body = '<div class="brief-body' + (clamp ? " is-clamped" : "") + (open ? " is-open" : "") + '">' + inner + "</div>" +
+      (clamp ? '<button class="bd-more" type="button" aria-expanded="' + (open ? "true" : "false") + '" data-n="' + sections + '" data-key="' + esc(key) + '">' +
+        (open ? "Mostrar menos" : "Mostrar tudo<span class=\"bd-more-n\">" + sections + " seções</span> ▾") + "</button>" : "");
   } else if (isToday) {
     body = '<p class="brief-quiet">' + esc(txt || "Sem novidades desde a última atualização.") + "</p>";
   } else {
@@ -329,7 +602,7 @@ function renderDailyBrief(br){
     body = '<p class="brief-quiet">' + esc("Sem novidades ainda hoje — o resumo do dia aparece após a rotina." + last) + "</p>";
   }
   return '<section class="card brief-card' + (isToday && !br.empty && txt ? "" : " is-quiet") + '" id="daily-brief">' +
-    '<header class="brief-head"><h2>Seu dia</h2>' + meta + "</header>" + body + "</section>";
+    '<header class="brief-head"><h2>Seu dia</h2><span class="brief-when">' + bdHealthLink() + bdWhen(br) + "</span></header>" + body + "</section>";
 }
 function syncFreshBadge(){
   const b = document.getElementById("freshbadge");
@@ -399,7 +672,8 @@ V.home = () => {
   h += panel("Aguardando de outros", (waiting.length ? '<ul class="feed">' + Object.entries(by).sort((x, y) => y[1].length - x[1].length).map(([o, l]) => "<li><b>" + peL(o) + "</b> · " +
     l.map(a => aL(a.id) + " " + esc(a.title) + ' <span class="muted">(' + a.aging_days + "d)</span>").join("; ") + "</li>").join("") + "</ul>" : empty("Ninguém te devendo nada registrado.")));
   h += "</div>";
-  (M.notes || []).forEach(n => { h += '<details class="panel note"><summary><b>Nota do agente · ' + esc(n.name) + '</b> <span class="muted">(FRESH/notes/' + esc(n.name) + ".md)</span></summary><div class=\"msg\">" + esc(n.text) + "</div></details>"; });
+  // brief de hoje já tem o cartão "Seu dia"; aqui só aparece o de outro dia (o cartão, nesse caso, mostra o estado quieto)
+  (M.notes || []).filter(n => n.name !== "brief" || !((M.daily_brief || {}).is_today)).forEach(n => { h += '<details class="panel note"><summary><b>Nota do agente · ' + esc(n.name) + '</b> <span class="muted">(FRESH/notes/' + esc(n.name) + ".md)</span></summary><div class=\"msg\"><div class=\"brief-body\">" + briefHtml(n.name === "brief" ? bdTitle(n.text) : n.text || "") + "</div></div></details>"; });
   setTimeout(() => {
     const hb = $("#fresh-health-btn");
     if (hb) hb.onclick = () => go("cfg/saude");

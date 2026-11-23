@@ -225,7 +225,8 @@ vezes por acidente".
 Digite `/brief`. Você recebe o seu dia numa tela: o que vence hoje, o que
 está atrasado, os próximos 3 dias, o que te devem, o goal em risco e o que
 espera você (propostas, planos). A partir daqui a rotina da seção 5 vale
-para sempre.
+para sempre. No painel, o mesmo brief aparece no cartão **Seu dia** já
+renderizado: seções, e cada id citado como etiqueta com link para a ficha.
 
 ---
 

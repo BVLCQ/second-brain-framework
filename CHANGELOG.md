@@ -1,3 +1,23 @@
+## 2.37.0 — o brief do dia vira cartão de verdade (#160)
+
+- **Cartão "Seu dia" renderizado (#160):** o brief do agente deixa de aparecer
+  em Markdown cru. Seção vira rótulo, lista vira lista, e cada id citado
+  (`TASK-`, `DEC-`, `PROP-`, `ASK-`, `GOAL-`…) vira etiqueta com link para a
+  ficha — o título e a situação (vence hoje, atrasada 3d, fechada, aguarda
+  decisão) vêm do painel, não do texto. Mais de 3 seções ficam recolhidas atrás
+  de "Mostrar tudo"; aviso de saúde vira link no cabeçalho para a tela de saúde.
+- **Título e "(noturno)" fora:** a primeira linha `# Brief do dia — … (noturno)`
+  não aparece (o cartão já tem data e horário) e a skill `/brief` passa a definir
+  o formato — Markdown mínimo, sem linha de título, sem seção de saúde, ids
+  soltos, gravado com `./brain note write brief --file`.
+- **Notas do agente:** o painel renderiza `FRESH/notes/*.md` pelo mesmo caminho
+  (o `/week` ganha seções e etiquetas) e o brief de hoje não aparece duas vezes;
+  o de outro dia continua legível quando o cartão está quieto.
+- **Entrada não confiável:** o brief é texto do agente, que leu a inbox. Tudo
+  passa por `esc()` antes de qualquer marca; HTML, imagem, `javascript:`/`data:`
+  e atributo vindo do texto nunca entram. Seção vazia não aparece nem conta
+  para recolher. Regressão: `tests/test_panel_brief_render.py`.
+
 ## 2.36.0 — lote de polimento da interface (#95–#100)
 
 - **Projetos no celular (#95):** o chip de motivo do goal ("↳ …") ganha linha
