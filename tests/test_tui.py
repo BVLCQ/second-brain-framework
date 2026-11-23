@@ -1702,14 +1702,16 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
         async with app.run_test(size=(140, 44)) as pilot:
             await pilot.pause(0.4)
             app.run_catalog((0, 1, 3, "enter", "sys:doctor"))
-            await self.settle_modal(app, pilot, "TextModal")
+            await self.settle_modal(app, pilot, "TextModal", sel="#mb")
             self.assertIn("ledger", self.text_of(app.screen.query_one("#mb")))
             await pilot.press("escape")
 
-    async def settle_modal(self, app, pilot, name, n=80):
+    async def settle_modal(self, app, pilot, name, n=80, sel: str | None = None):
+        """Espera o modal `name` ser a tela atual e, dado `sel`, o widget dele já estar montado: a tela entra na
+        pilha antes de montar o corpo, e sob carga a consulta chegava nesse intervalo."""
         for _ in range(n):
             await pilot.pause(0.1)
-            if type(app.screen).__name__ == name:
+            if type(app.screen).__name__ == name and (sel is None or app.screen.query(sel)):
                 return
         self.fail(f"o modal {name} não abriu")
 
