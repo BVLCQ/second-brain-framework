@@ -259,7 +259,9 @@ class FreshnessMetricsTests(unittest.TestCase):
         self.assertIsNone(f0["last_memory_sync_age_h"])
         self.assertEqual(f0["inbox_backlog"], 0)
         self.assertIsNone(f0["inbox_oldest_age_h"])
-        self.assertFalse(f0["stale"]["dump"])
+        # #128: sem nenhum artifact.added o dump falha fechado — nunca dumpado conta como atrasado, com motivo
+        self.assertTrue(f0["stale"]["dump"])
+        self.assertEqual(f0["dump_reason"], "nunca dumpado")
         self.assertTrue(f0["stale"]["render"])
         self.assertTrue(f0["stale"]["memory_sync"])
         self.assertFalse(f0["stale"]["inbox"])
