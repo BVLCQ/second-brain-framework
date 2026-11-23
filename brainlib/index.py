@@ -23,7 +23,7 @@ from . import util
 DIR_NAME = "_index"
 DB_NAME = "brain.sqlite"
 LOCK_NAME = ".update.lock"
-SCHEMA_VERSION = "1"
+SCHEMA_VERSION = "2"
 BUSY_TIMEOUT_MS = 2000
 RAW_TEXT = {".md", ".txt", ".csv", ".json", ".html", ".htm", ".vtt", ".srt", ".tsv"}
 QUERY_LIMIT = 500
@@ -74,7 +74,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS fts USING fts5(
   kind, ref, title, body, date UNINDEXED, path UNINDEXED,
   tokenize = 'unicode61 remove_diacritics 2'
 );
-CREATE TABLE IF NOT EXISTS fts_docs(path TEXT PRIMARY KEY, sha TEXT);
+CREATE TABLE IF NOT EXISTS fts_docs(path TEXT PRIMARY KEY, sha TEXT, size INTEGER, mtime_ns INTEGER);
 """
 
 
@@ -250,8 +250,8 @@ def _fts_entity_rows(brain) -> list[tuple]:
     return rows
 
 
-def _fts_doc_rows(brain, fts_docs: dict[str, str]) -> list[tuple]:
-    """PROCESSED (md), RAW (tipos §3.2) e PLANNING/PROFILE por sha — só o que mudou."""
+def _fts_doc_rows(brain, fts_docs: dict[str, tuple[str, int, int]]) -> list[tuple]:
+    """PROCESSED (md), RAW (tipos §3.2) e PLANNING/PROFILE por stat+sha — só o que mudou."""
     inst = brain.inst
     out: list[tuple] = []
 
@@ -259,19 +259,27 @@ def _fts_doc_rows(brain, fts_docs: dict[str, str]) -> list[tuple]:
         if not path.is_file() or path.suffix.lower() not in RAW_TEXT or path.name.startswith("."):
             return None
         try:
+            st = path.stat()
+        except OSError:
+            return None
+        prev = fts_docs.get(rel)
+        if isinstance(prev, tuple) and len(prev) >= 3 and prev[1] == st.st_size and prev[2] == st.st_mtime_ns:
+            return None
+        try:
             text = path.read_text(encoding="utf-8", errors="replace")
         except OSError:
             return None
         sha = util.sha(text)
-        if fts_docs.get(rel) == sha:
+        prev_sha = prev[0] if isinstance(prev, tuple) else prev
+        if prev_sha == sha:
             return None
-        return (rel, sha, text)
+        return (rel, sha, text, st.st_size, st.st_mtime_ns)
 
     for path in sorted(inst.processed.glob("[0-9][0-9][0-9][0-9]/[0-9][0-9]/*.md")):
         rel = inst.rel(path)
         got = want(path, rel)
         if got:
-            out.append(("artefato-md", rel, path.stem, got[2], None, rel, got[1]))
+            out.append(("artefato-md", rel, path.stem, got[2], None, rel, got[1], got[3], got[4]))
     raw = inst.vault / "RAW"
     from . import notes as notes_mod
     note_paths = {Path(n.path).name for n in notes_mod.scan(inst)}   # a nota já entra como kind "nota"
@@ -282,12 +290,12 @@ def _fts_doc_rows(brain, fts_docs: dict[str, str]) -> list[tuple]:
             rel = inst.rel(path)
             got = want(path, rel)
             if got:
-                out.append(("raw", rel, path.stem, got[2], None, rel, got[1]))
+                out.append(("raw", rel, path.stem, got[2], None, rel, got[1], got[3], got[4]))
     for rel in ("PLANNING/goals.md", "PLANNING/log.md", "PROFILE/profile.md"):
         got = want(inst.vault / rel, rel)
         if got:
             out.append(("planejamento" if rel.startswith("PLANNING") else "perfil", rel, rel,
-                        got[2], None, rel, got[1]))
+                        got[2], None, rel, got[1], got[3], got[4]))
     return out
 
 
@@ -320,6 +328,10 @@ def update(brain) -> dict:
             con.execute(f"PRAGMA busy_timeout={BUSY_TIMEOUT_MS}")
             con.execute("PRAGMA journal_mode=WAL")       # persistente: leitor ro não trava o escritor
             con.executescript(SCHEMA)
+            cols = {r[1] for r in con.execute("PRAGMA table_info(fts_docs)")}
+            if not {"size", "mtime_ns"}.issubset(cols):
+                con.execute("DROP TABLE IF EXISTS fts_docs")
+                con.executescript(SCHEMA)
             meta = {k: v for k, v in con.execute("SELECT key, value FROM meta")}
             size = ledger.stat().st_size if ledger.exists() else 0
             old_size = int(meta.get("ledger_size") or 0)
@@ -349,12 +361,12 @@ def update(brain) -> dict:
                 con.execute("DELETE FROM fts WHERE path IS NULL")
                 con.executemany("INSERT INTO fts (kind, ref, title, body, date, path) VALUES (?,?,?,?,?,NULL)",
                                 [(k, r, t, b or "", d) for k, r, t, b, d, p in _fts_entity_rows(brain)])
-                fts_docs = {p: s for p, s in con.execute("SELECT path, sha FROM fts_docs")}
-                for kind, rel, title, text, date_, path_, sha in _fts_doc_rows(brain, fts_docs):
+                fts_docs = {p: (s, sz, mt) for p, s, sz, mt in con.execute("SELECT path, sha, size, mtime_ns FROM fts_docs")}
+                for kind, rel, title, text, date_, path_, sha, fsize, mtime_ns in _fts_doc_rows(brain, fts_docs):
                     con.execute("DELETE FROM fts WHERE path = ?", (path_,))
                     con.execute("INSERT INTO fts (kind, ref, title, body, date, path) VALUES (?,?,?,?,?,?)",
                                 (kind, rel, title, text, date_, path_))
-                    con.execute("INSERT OR REPLACE INTO fts_docs VALUES (?,?)", (path_, sha))
+                    con.execute("INSERT OR REPLACE INTO fts_docs VALUES (?,?,?,?)", (path_, sha, fsize, mtime_ns))
                 # documento que saiu do vault (stat barato — sem reler texto)
                 for doc in list(fts_docs):
                     if not (brain.inst.vault / doc).exists():
