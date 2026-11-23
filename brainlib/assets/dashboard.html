@@ -270,6 +270,9 @@ a.card:hover{text-decoration:none;border-color:var(--accent)}
 
 /* ── teclado (mesmas teclas da TUI) ── */
 .kbd-sel{outline:2px solid var(--accent);outline-offset:1px}
+/* #97: um só idioma de foco no painel — :focus-visible usa o mesmo anel accent do j/k (.kbd-sel);
+   campos de formulário mantêm o contorno suave próprio (.fld input:focus, especificidade maior) */
+:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .khelp td,.khelp th{padding:4px 10px}
 .khelp td:first-child{font:12.5px ui-monospace,monospace;color:var(--accent);white-space:nowrap}
 .khelp .grp td{border-top:1px solid var(--line);padding-top:8px;color:var(--muted);font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;font-weight:700}
