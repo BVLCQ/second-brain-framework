@@ -10,11 +10,14 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 from collections import defaultdict
 from pathlib import Path
 
 from . import util
 from .swift import swift_tool
+
+VIDEO_TIMEOUT_S = 600
 
 HINT = ("transcrição/quadros precisam do macOS 26+ com as Command Line Tools (`xcode-select --install`) — "
         "em outro sistema, use o whisper.cpp ou o ffmpeg e coloque o texto na inbox")
@@ -161,7 +164,8 @@ def _fmt(t: int) -> str:
     return f"[{t // 3600:02d}:{t % 3600 // 60:02d}:{t % 60:02d}]"
 
 
-def transcribe(path: str | Path, locales: list[str] | None = None, start: float = 0, length: float = 0) -> str:
+def transcribe(path: str | Path, locales: list[str] | None = None, start: float = 0, length: float = 0,
+               timeout: int = VIDEO_TIMEOUT_S, popen=subprocess.Popen) -> str:
     p = Path(path)
     if not p.is_file():
         raise util.BrainError(f"arquivo não encontrado: {p}", code=3)
@@ -169,15 +173,20 @@ def transcribe(path: str | Path, locales: list[str] | None = None, start: float 
     tool = swift_tool(SWIFT_STT, "stt", library=True)
     if not tool:
         raise util.BrainError(HINT, code=3)
-    procs = {loc: subprocess.Popen([*tool, str(p), loc, str(start), str(length)], stdout=subprocess.PIPE,
-                                   stderr=subprocess.PIPE, text=True) for loc in locales}
+    procs: dict = {}
     rows: dict[str, list[tuple[int, str]]] = {}
+    deadline = time.monotonic() + timeout
     try:
+        procs = {loc: popen([*tool, str(p), loc, str(start), str(length)], stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE, text=True) for loc in locales}
         for loc, pr in procs.items():
-            out, err = pr.communicate()
+            remaining = max(0.0, deadline - time.monotonic())
+            out, err = pr.communicate(timeout=remaining)
             if pr.returncode != 0:
                 raise util.BrainError(f"transcrição ({loc}) falhou: {err.strip().splitlines()[-1] if err.strip() else 'erro'}", code=3)
             rows[loc] = parse(out)
+    except subprocess.TimeoutExpired as e:
+        raise util.BrainError(f"transcrição/quadros excedeu {timeout}s", code=3) from e
     finally:
         for pr in procs.values():          # um idioma falhou (ou Ctrl-C): os outros não ficam rodando órfãos
             if pr.poll() is None:
@@ -188,7 +197,7 @@ def transcribe(path: str | Path, locales: list[str] | None = None, start: float 
 
 
 def frames(path: str | Path, every: int = 150, width: int = 900, start: float = 0, end: float = 0,
-           out: str | Path | None = None) -> list[Path]:
+           out: str | Path | None = None, timeout: int = VIDEO_TIMEOUT_S, run=subprocess.run) -> list[Path]:
     p = Path(path)
     if not p.is_file():
         raise util.BrainError(f"arquivo não encontrado: {p}", code=3)
@@ -201,7 +210,10 @@ def frames(path: str | Path, every: int = 150, width: int = 900, start: float = 
     dest = Path(out) if out else Path(tempfile.mkdtemp(prefix="brain-video-"))
     dest.mkdir(parents=True, exist_ok=True)
     args = [*tool, str(p), str(dest), str(every), str(width), str(start)] + ([str(end)] if end else [])
-    res = subprocess.run(args, capture_output=True, text=True, check=False)
+    try:
+        res = run(args, capture_output=True, text=True, check=False, timeout=timeout)
+    except subprocess.TimeoutExpired as e:
+        raise util.BrainError(f"transcrição/quadros excedeu {timeout}s", code=3) from e
     if res.returncode != 0:
         raise util.BrainError(f"não consegui extrair os quadros: {res.stderr.strip() or 'erro do AVFoundation'}", code=3)
     return [Path(x) for x in res.stdout.splitlines() if x.strip()]

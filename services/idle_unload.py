@@ -29,6 +29,7 @@ Ajustes por variável de ambiente (opcionais, no plist):
 Uso: idle_unload.py <arquivo-de-estado> [--dry-run]
 """
 import json
+import math
 import os
 import subprocess
 import sys
@@ -51,11 +52,23 @@ def log(msg):
     print(time.strftime("%F %T"), "idle:", msg, flush=True)
 
 
+def _num(val, default, *, min_v=0.0) -> float:
+    if isinstance(val, bool) or not isinstance(val, (int, float)):
+        return float(default)
+    f = float(val)
+    if not math.isfinite(f) or f < min_v:
+        return float(default)
+    return f
+
+
 def loaded_models():
     out = subprocess.run([LMS, "ps", "--json"], capture_output=True, text=True, timeout=30)
     if out.returncode != 0:
         raise RuntimeError(f"lms ps falhou: {out.stderr.strip()[:200]}")
-    return json.loads(out.stdout or "[]")
+    data = json.loads(out.stdout or "[]")
+    if not isinstance(data, list):
+        raise RuntimeError(f"lms ps --json retornou {type(data).__name__}, esperado list")
+    return data
 
 
 def hindsight_busy():
@@ -64,10 +77,30 @@ def hindsight_busy():
     for bank in BANKS:
         try:
             with urllib.request.urlopen(f"{URL}/v1/default/banks/{bank}/stats", timeout=5) as r:
-                ops = json.load(r).get("operations_by_status") or {}
+                raw = r.read()
         except Exception:
             continue
-        n = int(ops.get("pending", 0)) + int(ops.get("processing", 0))
+        try:
+            payload = json.loads(raw)
+            if not isinstance(payload, dict):
+                raise ValueError(f"payload {type(payload).__name__}")
+            ops = payload.get("operations_by_status")
+            if ops is None:
+                ops = {}
+            if not isinstance(ops, dict):
+                raise ValueError(f"operations_by_status {type(ops).__name__}")
+            pending_raw = ops.get("pending", 0)
+            proc_raw = ops.get("processing", 0)
+            if isinstance(pending_raw, bool) or isinstance(proc_raw, bool):
+                raise ValueError("contagem booleana")
+            pending = int(pending_raw)
+            processing = int(proc_raw)
+            if pending < 0 or processing < 0:
+                raise ValueError(f"contagem negativa ({pending}, {processing})")
+            n = pending + processing
+        except Exception as e:
+            log(f"hindsight {bank}: resposta malformada ({e})")
+            continue
         if n:
             busy[bank] = n
     return busy
@@ -83,6 +116,27 @@ def memory_level():
         return None
 
 
+def _sanitize_state(raw_state):
+    if not isinstance(raw_state, dict):
+        return {}
+    clean = {}
+    for k, v in raw_state.items():
+        if not isinstance(k, str) or not k.strip() or not isinstance(v, dict):
+            continue
+        entry = {}
+        t = _num(v.get("timeout_s"), -1.0, min_v=0.0)
+        if t > 0:
+            entry["timeout_s"] = t
+        lb = _num(v.get("last_busy"), -1.0, min_v=0.0)
+        if lb >= 0:
+            entry["last_busy"] = lb
+        ua = _num(v.get("unloaded_at"), -1.0, min_v=0.0)
+        if ua > 0:
+            entry["unloaded_at"] = ua
+        clean[k] = entry
+    return clean
+
+
 def main(argv):
     if os.environ.get("BRAIN_IDLE_UNLOAD_OFF") == "1" or (Path.home() / ".brain-watchdog-off").exists():
         return 0
@@ -90,82 +144,103 @@ def main(argv):
         return 0
     state_path, dry = Path(argv[1]), "--dry-run" in argv
     now = time.time()
+    state_loaded = False
     try:
-        state = json.loads(state_path.read_text()).get("models", {})
+        parsed = json.loads(state_path.read_text())
+        raw_models = parsed.get("models", {}) if isinstance(parsed, dict) else {}
     except Exception:
-        state = {}
-    if not isinstance(state, dict):
-        state = {}
+        raw_models = {}
+    state = _sanitize_state(raw_models)
+    state_loaded = True
 
-    models = loaded_models()
-    hs = hindsight_busy()
-    level = memory_level()
-    pressure = level is not None and level < PRESSURE_LEVEL
-    loaded = {m["identifier"] for m in models}
+    loaded = None
+    try:
+        models = loaded_models()
+        hs = hindsight_busy()
+        level = memory_level()
+        pressure = level is not None and level < PRESSURE_LEVEL
+        loaded = {
+            m["identifier"] for m in models
+            if isinstance(m, dict) and isinstance(m.get("identifier"), str) and m["identifier"].strip()
+        }
 
-    for m in models:
-        ident = m["identifier"]
-        base = BASE_S["embedding" if m.get("type") == "embedding" else "llm"]
-        st = state.get(ident)
-        if not isinstance(st, dict):
-            st = state[ident] = {}
-        # novo (ou entrada truncada no estado): conta como recém-usado — sem isto um KeyError a cada minuto
-        # derrubava a rodada inteira e nenhum modelo voltava a ser descarregado
-        st.setdefault("timeout_s", base)
-        st.setdefault("last_busy", now)
+        for m in models:
+            try:
+                if not isinstance(m, dict):
+                    log(f"entrada de modelo inválida ({type(m).__name__}), ignorada")
+                    continue
+                ident = m.get("identifier")
+                if not isinstance(ident, str) or not ident.strip():
+                    log("entrada de modelo sem identifier válido, ignorada")
+                    continue
+                base = BASE_S["embedding" if m.get("type") == "embedding" else "llm"]
+                st = state.get(ident)
+                if not isinstance(st, dict):
+                    st = state[ident] = {}
+                # novo (ou entrada truncada/corrompida no estado): conta como recém-usado
+                st["timeout_s"] = _num(st.get("timeout_s"), base, min_v=1.0 if base >= 1.0 else 0.0)
+                st["last_busy"] = _num(st.get("last_busy"), now, min_v=0.0)
 
-        # voltou depois de descarregado por nós? ajusta o tempo dele
-        if st.get("unloaded_at"):
-            gap = now - st.pop("unloaded_at")
-            old = st["timeout_s"]
-            st["timeout_s"] = min(old * 2, MAX_S) if gap < REWARM_S else max(old / 2, base)
-            st["last_busy"] = now
-            if st["timeout_s"] != old:
-                log(f"{ident} recarregado {gap / 60:.0f} min após descarregar — ociosidade "
-                    f"{old / 60:.0f} → {st['timeout_s'] / 60:.0f} min")
+                # voltou depois de descarregado por nós? ajusta o tempo dele
+                unloaded_at = _num(st.pop("unloaded_at", None), 0.0, min_v=0.0)
+                if unloaded_at > 0:
+                    gap = max(0.0, now - unloaded_at)
+                    old = st["timeout_s"]
+                    st["timeout_s"] = min(old * 2, MAX_S) if gap < REWARM_S else max(old / 2, base)
+                    st["last_busy"] = now
+                    if st["timeout_s"] != old:
+                        log(f"{ident} recarregado {gap / 60:.0f} min após descarregar — ociosidade "
+                            f"{old / 60:.0f} → {st['timeout_s'] / 60:.0f} min")
 
-        if m.get("lastUsedTime"):
-            st["last_busy"] = max(st["last_busy"], m["lastUsedTime"] / 1000)
-        working = m.get("status") not in (None, "idle") or int(m.get("queued") or 0) > 0
-        if working or hs:
-            st["last_busy"] = now
+                last_used = _num(m.get("lastUsedTime"), 0.0, min_v=0.0)
+                if last_used > 0:
+                    st["last_busy"] = max(st["last_busy"], last_used / 1000)
+                queued = _num(m.get("queued"), 0.0, min_v=0.0)
+                working = m.get("status") not in (None, "idle") or queued > 0
+                if working or hs:
+                    st["last_busy"] = now
 
-        limit = base / 2 if pressure else st["timeout_s"]
-        idle_for = now - st["last_busy"]
-        if dry:
-            why = f"ocupado ({m.get('status')}, fila {m.get('queued') or 0}, hindsight {hs or '-'})" if working or hs \
-                else f"ocioso {idle_for / 60:.1f}/{limit / 60:.0f} min"
-            log(f"{ident}: {why}" + (f" · memória livre {level}% (pressão)" if pressure else ""))
-        if ident in KEEP or working or hs or idle_for < limit:
-            continue
-        if dry:
-            log(f"(dry-run) descarregaria {ident}")
-            continue
-        r = subprocess.run([LMS, "unload", ident], capture_output=True, text=True, timeout=60)
-        if r.returncode == 0:
-            st["unloaded_at"] = now
-            log(f"descarregado {ident} — ocioso há {idle_for / 60:.0f} min (limite {limit / 60:.0f}"
-                + (f", memória livre {level}%)" if pressure else ")"))
-        else:
-            log(f"falha ao descarregar {ident}: {r.stderr.strip()[:200]}")
+                limit = base / 2 if pressure else st["timeout_s"]
+                idle_for = now - st["last_busy"]
+                if dry:
+                    why = f"ocupado ({m.get('status')}, fila {int(queued)}, hindsight {hs or '-'})" if working or hs \
+                        else f"ocioso {idle_for / 60:.1f}/{limit / 60:.0f} min"
+                    log(f"{ident}: {why}" + (f" · memória livre {level}% (pressão)" if pressure else ""))
+                if ident in KEEP or working or hs or idle_for < limit:
+                    continue
+                if dry:
+                    log(f"(dry-run) descarregaria {ident}")
+                    continue
+                r = subprocess.run([LMS, "unload", ident], capture_output=True, text=True, timeout=60)
+                if r.returncode == 0:
+                    st["unloaded_at"] = now
+                    log(f"descarregado {ident} — ocioso há {idle_for / 60:.0f} min (limite {limit / 60:.0f}"
+                        + (f", memória livre {level}%)" if pressure else ")"))
+                else:
+                    log(f"falha ao descarregar {ident}: {r.stderr.strip()[:200]}")
+            except Exception as e:
+                log(f"erro ao processar modelo: {e}")
+                continue
 
-    # esquece quem saiu por outro caminho (TTL do LM Studio, à mão); guarda quem nós descarregamos
-    state = {k: v for k, v in state.items() if isinstance(v, dict) and (k in loaded or v.get("unloaded_at"))}
-    for k, v in list(state.items()):
-        if k not in loaded and now - v["unloaded_at"] > 24 * 3600:
-            del state[k]
-
-    if not dry:
-        state_path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = state_path.with_name(state_path.name + ".tmp")   # troca atômica: morte no meio não trunca o estado
-        tmp.write_text(json.dumps({"models": state}, indent=1))
-        os.replace(str(tmp), str(state_path))
+        # esquece quem saiu por outro caminho (TTL do LM Studio, à mão); guarda quem nós descarregamos
+        state = {k: v for k, v in state.items() if isinstance(v, dict) and (k in loaded or v.get("unloaded_at"))}
+        for k, v in list(state.items()):
+            if k not in loaded:
+                ua = _num(v.get("unloaded_at"), -1.0, min_v=0.0)
+                if ua <= 0 or now - ua > 24 * 3600:
+                    del state[k]
+    finally:
+        if not dry and state_loaded:
+            state_path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = state_path.with_name(state_path.name + ".tmp")   # troca atômica: morte no meio não trunca o estado
+            tmp.write_text(json.dumps({"models": state}, indent=1))
+            os.replace(str(tmp), str(state_path))
     return 0
 
 
 if __name__ == "__main__":
     try:
         sys.exit(main(sys.argv))
-    except Exception as e:  # nunca derrubar o agendador por causa disto
+    except Exception as e:
         log(f"erro: {e}")
-        sys.exit(0)
+        sys.exit(1)
