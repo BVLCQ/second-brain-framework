@@ -115,7 +115,13 @@ const donut = (pct, size) => { size = size || 44; const r = (size - 6) / 2, c = 
     '<circle cx="' + size/2 + '" cy="' + size/2 + '" r="' + r + '" fill="none" stroke="var(--accent)" stroke-width="5" stroke-linecap="round" stroke-dasharray="' +
     (c * (pct || 0) / 100).toFixed(1) + " " + c.toFixed(1) + '" transform="rotate(-90 ' + size/2 + " " + size/2 + ')"/>' +
     '<text x="50%" y="50%" dominant-baseline="central" text-anchor="middle">' + (pct == null ? "—" : pct) + "</text></svg>"; };
-const chip = (level, label) => '<span class="chip h-' + esc(level) + '">' + esc(label) + "</span>";
+// #100: modificador vazio não gera mais "chip h-" morto (chip neutro segue válido);
+// nível fora do vocabulário avisa no console em vez de cair no estilo base em silêncio.
+// (CHIP_LEVELS é construído junto de STAGES, mais abaixo — chip() só lê na hora do render.)
+const chip = (level, label) => {
+  if (level && !CHIP_LEVELS.has(level)) console.warn("[chip] modificador sem estilo mapeado:", level);
+  return '<span class="chip' + (level ? " h-" + esc(level) : "") + '">' + esc(label) + "</span>";
+};
 const goalReasonChip = g => (g.health_from && g.health !== "em-dia" && g.health !== "concluido")
   ? '<a class="chip h-reason" href="#projects?focus=' + esc(g.health_from) + '" data-proj-jump="' + esc(g.health_from) + '" title="' + esc(g.health_reason || g.health_from) + '">↳ ' + esc(g.health_from) + (g.health_reason ? " · " + esc(g.health_reason) : "") + "</a>"
   : "";
@@ -352,10 +358,10 @@ V.home = () => {
     ["Aguardando outros", c.waiting_open, ""], ["Conquistas 30d", c.wins_30d, "ok"], ["Decisões 30d", c.decisions_30d, ""]]
     .map(k => '<div class="kpi ' + k[2] + '"><span>' + k[0] + "</span><b>" + k[1] + "</b></div>").join("") + "</div>";
   const needs = [];
-  (M.questions || []).filter(q => q.status === "aberta").forEach(q => needs.push('<li class="info">' + chip("info", q.id) + " " + esc(q.text.slice(0, 100)) + '… — <a href="#ask">responder</a></li>'));
-  M.proposals.forEach(p => needs.push('<li class="warn">' + chip("atencao", "proposta " + p.id) + " " + esc(p.summary) + (p.target ? " · alvo " + (A[p.target] ? aL(p.target) : esc(p.target)) : "") + ' — <a href="#ask">decidir</a></li>'));
-  if (M.focus && M.focus.status === "proposto") needs.push('<li class="info">' + chip("info", "foco " + M.focus.id) + " plano com " + M.focus.blocks.length + ' blocos aguardando seu "ok" — <a href="#focus">ver</a></li>');
-  M.outbox.filter(m => m.status === "rascunho").forEach(m => needs.push('<li class="info">' + chip("info", "rascunho " + m.id) + " para " + esc(m.to_name) + ': "' + esc(m.text.slice(0, 90)) + '" — <a href="#outbox">revisar</a></li>'));
+  (M.questions || []).filter(q => q.status === "aberta").forEach(q => needs.push('<li class="info">' + chip("info", q.id) + " " + esc(q.text.slice(0, 100)) + '… — <a class="feed-act" href="#ask">responder</a></li>'));
+  M.proposals.forEach(p => needs.push('<li class="warn">' + chip("atencao", "proposta " + p.id) + " " + esc(p.summary) + (p.target ? " · alvo " + (A[p.target] ? aL(p.target) : esc(p.target)) : "") + ' — <a class="feed-act" href="#ask">decidir</a></li>'));
+  if (M.focus && M.focus.status === "proposto") needs.push('<li class="info">' + chip("info", "foco " + M.focus.id) + " plano com " + M.focus.blocks.length + ' blocos aguardando seu "ok" — <a class="feed-act" href="#focus">ver</a></li>');
+  M.outbox.filter(m => m.status === "rascunho").forEach(m => needs.push('<li class="info">' + chip("info", "rascunho " + m.id) + " para " + esc(m.to_name) + ': "' + esc(m.text.slice(0, 90)) + '" — <a class="feed-act" href="#outbox">revisar</a></li>'));
   const pl = (n, s, p) => n === 1 ? s : p;
   if (c.mine_no_due) needs.push('<li class="warn">' + chip("atencao", "prazo") + " " + c.mine_no_due + " " + pl(c.mine_no_due, "ação sua sem prazo", "ações suas sem prazo") + " — o foco não consegue agendá-las</li>");
   if (c.mine_no_effort) needs.push('<li class="warn">' + chip("atencao", "esforço") + " " + c.mine_no_effort + " " + pl(c.mine_no_effort, "ação sua sem estimativa", "ações suas sem estimativa") + " de esforço</li>");
@@ -932,6 +938,8 @@ function docUrl(ref){                                 // URL do doc: http direto
 // ── face Portfólio: pf/visao · pf/opps (kanban) · pf/matrix · pf/procs · pf/areas ──
 const STAGES_PIPE = ["ideia", "triagem", "priorizada", "em-andamento", "piloto", "validando", "entregue"];
 const STAGES_LAT = ["em-espera", "descartada"];
+const CHIP_LEVELS = new Set(["em-risco","travado","atencao","em-dia","concluido","congelado","depois","fechado","info","reason",
+  ...STAGES_PIPE, ...STAGES_LAT, ...STAGES_PIPE.map(s => "s-" + s), ...STAGES_LAT.map(s => "s-" + s)]);
 const enc = encodeURIComponent;
 const oL = (id, long) => '<a href="#pf/opp/' + enc(id) + '">' + idc(id) + (long ? " " + esc(OPP[id].title) : "") + "</a>";
 const stChip = s => chip("s-" + s, s);

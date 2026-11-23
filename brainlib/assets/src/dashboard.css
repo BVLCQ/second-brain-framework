@@ -131,6 +131,9 @@ ul.feed li{padding:8px 2px;border-bottom:1px solid var(--line2);display:flex;gap
 ul.feed li:last-child{border:0}
 /* #96: alvos de clique ≥24px (WCAG 2.5.8) — links de ação do feed, chips-âncora e chips de ID */
 .feed li>a,a.chip,a.idchip{min-height:24px;display:inline-flex;align-items:center}
+/* #100: ações do feed (decidir/ver/revisar) com classe própria — varrer e ajustar sem pegar links de texto corrido */
+.feed a.feed-act{color:var(--accent);text-decoration:none}
+.feed a.feed-act:hover{text-decoration:underline}
 ul.feed li.warn{background:linear-gradient(90deg,color-mix(in srgb,var(--warn) 7%,transparent),transparent);border-radius:8px;padding-left:8px}
 ul.feed li.info{background:linear-gradient(90deg,color-mix(in srgb,var(--info) 6%,transparent),transparent);border-radius:8px;padding-left:8px}
 .health li{padding:8px 2px}.health .hicon{display:inline-block;width:20px;font-weight:700}
@@ -162,7 +165,7 @@ tbody tr.src-problem:hover td{background:color-mix(in srgb,var(--riskbg) 55%,tra
 .col h2, .col h3{margin:2px 4px 10px;font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;font-weight:700;
   display:flex;justify-content:space-between;align-items:center}
 .col .count{background:var(--panel);border-radius:999px;padding:0 8px;font-size:11.5px}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px;box-shadow:var(--shadow);
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:8px;box-shadow:var(--shadow);
   transition:transform .12s ease, box-shadow .12s ease}
 .card:hover{transform:translateY(-1px);box-shadow:var(--shadow-lg)}
 .card.is-late{border-left:3px solid var(--risk)}
@@ -208,7 +211,7 @@ a.card:hover{text-decoration:none;border-color:var(--accent)}
 .dmark.is-done{border-color:var(--ok);color:var(--ok)}
 .dmark.is-doing{border-color:var(--info);color:var(--info)}
 .dmark.is-cancel{opacity:.5}
-.btn.tiny{font-size:11.5px;min-height:24px;padding:3px 9px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center}
+.btn.tiny{font-size:11.5px;min-height:29px;padding:3px 9px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center}
 
 /* ── perguntas e propostas ── */
 .ask-opts{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 4px}
