@@ -1389,7 +1389,9 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
             deliverable = forms._deliv_full(raw_deliv, project) if raw_deliv else ""
             ppl: list[str] = []
             for tok in util.split_csv(v.get("people") or ""):
-                if tok in self.store.brain.state.people:
+                if util.fold(tok) == "eu":              # "eu" vale o dono do Brain, como em cli._resolve_people
+                    ppl.append(self.store.brain.owner)
+                elif tok in self.store.brain.state.people:
                     ppl.append(tok)
                 else:
                     cands = people_mod.resolve(self.store.brain.state, tok)

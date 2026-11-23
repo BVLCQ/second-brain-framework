@@ -220,6 +220,44 @@ class ActionDuplicateConfirmTest(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(len(calls[0]), 1)
                 self.assertEqual(calls[0][0].count("--force"), 1)
 
+    async def test_people_eu_counts_as_the_owner_in_the_duplicate_probe(self):
+        """"eu" em pessoas vale o dono do Brain (como em cli._resolve_people). Sem esse fold a ficha literal de "eu"
+        não bate com o id do dono, o título perde metade da nota e a duplicata é enviada sem confirmação."""
+        from brainlib.tui.app import BrainApp
+        from brainlib.tui.modals import ConfirmModal
+
+        tmp2 = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp2.cleanup)
+        root = Path(tmp2.name)
+        _inst(root)                                    # a mesma instância do harness…
+        cfg = root / "config" / "brain.toml"
+        cfg.write_text(cfg.read_text(encoding="utf-8").replace('id = "eu"', 'id = "dona-demo"'), encoding="utf-8")
+        b = Brain(config.load(root))                   # …só que o dono não se chama "eu" nem tem "eu" de alias
+        b.record_one({
+            "type": "person.added", "id": "dona-demo", "by": "owner",
+            "data": {"name": "Dona Demo", "aliases": ["Dona"], "relation": "dono"},
+        })
+        b.record_one({
+            "type": "action.opened", "by": "owner",
+            "data": {"title": "Fechar contrato da Padaria Pão Quente", "list": "mine",
+                     "owner": "dona-demo", "people": ["dona-demo"]},
+        })
+        app = BrainApp(b.inst)
+        calls: list[list[list[str]]] = []
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause(0.2)
+            with mock.patch.object(app, "run_cmds", side_effect=lambda cmds, **kw: calls.append(cmds)):
+                await pilot.press("n")
+                await pilot.pause(0.2)
+                app.screen.query_one("#f_title").value = "Fechar contrato da Padaria Pão Quente"
+                app.screen.query_one("#f_people").value = "eu"
+                await pilot.pause(0.1)
+                await pilot.press("ctrl+s")
+                await pilot.pause(0.2)
+                self.assertIsInstance(app.screen, ConfirmModal)
+                self.assertIn("TASK-0001", app.screen.body)
+                self.assertEqual(calls, [])
+
     async def test_unique_action_submits_without_duplicate_modal(self):
         from brainlib.tui.app import BrainApp
 
