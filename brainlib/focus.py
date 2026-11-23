@@ -305,7 +305,7 @@ def apply(brain, fid: str, mode: str | None = None, cal=None) -> dict:
                           "data": {"mode": "ics", "created": created, "ics": brain.inst.rel(path)}})
         return {"mode": "ics", "created": len(created), "file": str(path), "removed": 0, "skipped": []}
 
-    if os.environ.get("BRAIN_NIGHTLY") == "1":
+    if util.is_nightly():
         # o ledger recusaria o focus.applied, mas só DEPOIS de apagar/criar eventos no Google: barra antes
         raise util.BrainError("focus apply (google): proibido no noturno — exige o dono presente", code=4)
     from .gcal import GoogleCalendar

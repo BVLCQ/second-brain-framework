@@ -51,7 +51,7 @@ def cli(args, brain) -> None:
     if args.setup:
         setup()
         return
-    if os.environ.get("BRAIN_NIGHTLY") == "1":
+    if util.is_nightly():
         raise util.BrainError("o TUI não abre no modo noturno (BRAIN_NIGHTLY=1): não há dono presente", code=4)
     if importlib.util.find_spec("textual") is None:
         py = _venv_python(FRAMEWORK)

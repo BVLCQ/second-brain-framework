@@ -100,7 +100,7 @@ class Brain:
             raise util.BrainError(f"{t}: data deve ser objeto JSON", code=4)
         ev.setdefault("by", "agent")
         mode = (ev.get("data") or {}).get("mode")
-        if os.environ.get("BRAIN_NIGHTLY") == "1" and (ev["by"] == "owner" or t in NIGHT_FORBIDDEN
+        if util.is_nightly() and (ev["by"] == "owner" or t in NIGHT_FORBIDDEN
                                                        or (t == "focus.applied" and mode == "google")):
             raise util.BrainError(f"{t}: proibido no noturno — exige o dono presente (aprovação/envio/publicação)",
                                   code=4)

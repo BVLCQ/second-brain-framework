@@ -280,7 +280,7 @@ def _promote(args, b: Brain) -> None:
     (--level project --goal GOAL-#) ou entregável num projeto (--level deliverable --project PROJ-#).
     Sem --approval só mostra o diff proposto e sai com código de gate."""
     o = _need_opp(b, args.id)
-    if os.environ.get("BRAIN_NIGHTLY") == "1":
+    if util.is_nightly():
         raise util.BrainError("opportunity promote: proibido no noturno — a árvore é do dono, que precisa estar presente", code=4)
     level = args.level or ("deliverable" if args.project else "project" if args.goal else None)
     if level not in PROMOTE_LEVELS:

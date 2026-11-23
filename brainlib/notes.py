@@ -91,7 +91,7 @@ def filename(inst, link: str, day: str) -> str:
 
 
 def create(brain, text: str, link: str = "") -> Path:
-    if os.environ.get("BRAIN_NIGHTLY") == "1":
+    if util.is_nightly():
         raise util.BrainError("note add: proibido no noturno — nota é do dono, que precisa estar presente", code=4)
     text = (text or "").strip("\n")
     if not text.strip():
@@ -130,7 +130,7 @@ def editable_today(inst, link: str) -> Note | None:
 
 def update(brain, rel: str, text: str) -> Path:
     """Reescreve o texto de uma nota que ainda está na inbox; o vínculo e a hora de criação ficam, `editada:` marca a edição."""
-    if os.environ.get("BRAIN_NIGHTLY") == "1":
+    if util.is_nightly():
         raise util.BrainError("note edit: proibido no noturno — nota é do dono, que precisa estar presente", code=4)
     text = (text or "").strip("\n")
     if not text.strip():

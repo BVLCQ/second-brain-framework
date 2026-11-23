@@ -533,7 +533,7 @@ def _create_project(b: Brain, goal: str, title: str, owner: str, approval: str, 
     """Cria projeto num goal (GATE: exige `approval`): goals.md + plan.changed (+ eventos `extra(nid)`) no
     mesmo lote do ledger + linha no PLANNING/log.md. Se o ledger recusar, o goals.md volta ao que era."""
     inst = b.inst
-    if os.environ.get("BRAIN_NIGHTLY") == "1":
+    if util.is_nightly():
         raise util.BrainError("plan add-project: proibido no noturno — a árvore é do dono, que precisa estar presente", code=4)
     if goal not in b.plan.goals:
         raise util.BrainError(f"goal {goal} não existe em PLANNING/goals.md", code=3)
@@ -562,7 +562,7 @@ def _create_goal(b: Brain, title: str, why: str, approval: str, reason: str,
     """Cria goal (GATE: exige `approval`): goals.md + plan.changed (+ eventos `extra(nid)`) no mesmo
     lote do ledger + linha no PLANNING/log.md. Se o ledger recusar, o goals.md volta ao que era."""
     inst = b.inst
-    if os.environ.get("BRAIN_NIGHTLY") == "1":
+    if util.is_nightly():
         raise util.BrainError("plan add-goal: proibido no noturno — a árvore é do dono, que precisa estar presente", code=4)
     if not (approval or "").strip():
         raise util.BrainError("criar goal é mudança estrutural: exige --approval com a resposta literal do dono", code=4)
@@ -600,7 +600,7 @@ def _plan_add(args, b: Brain) -> None:
         _out(args, {"id": nid, "event": events[0]},
              f"✓ {nid} criado em PLANNING/goals.md (aprovado, registrado em PLANNING/log.md e no ledger)")
         return
-    if os.environ.get("BRAIN_NIGHTLY") == "1":
+    if util.is_nightly():
         raise util.BrainError(f"plan {args.plcmd}: proibido no noturno — a árvore é do dono, que precisa estar presente", code=4)
     if args.project not in b.plan.projects:
         raise util.BrainError(f"projeto {args.project} não existe em PLANNING/goals.md", code=3)
@@ -623,7 +623,7 @@ def _plan_add(args, b: Brain) -> None:
 def _plan_edit(args, b: Brain) -> None:
     """Edita goal/projeto (gate: exige --approval, vira plan.changed + PLANNING/log.md) ou entregável (sem gate)."""
     inst = b.inst
-    if os.environ.get("BRAIN_NIGHTLY") == "1":
+    if util.is_nightly():
         raise util.BrainError("plan edit: proibido no noturno — a árvore é do dono, que precisa estar presente", code=4)
     kind = planning.node_kind(b.plan, args.id)
     if kind is None:
@@ -980,7 +980,7 @@ def cmd_agent(args, b) -> None:
         _out(args, res, f"{'✓ gravado' if res['changed'] else '= já em dia'}: .claude/settings.local.json — "
              f"{res['allow']} MCP liberadas · {res['directories']} pastas (sessões novas do Claude Code leem na abertura)")
         return
-    if os.environ.get("BRAIN_NIGHTLY") == "1":
+    if util.is_nightly():
         raise util.BrainError("agent allow: proibido no noturno — liberar permissão é decisão do dono, presente", code=4)
     rule, existed = config.add_allow(b.inst, args.rule, args.scope)
     perms.try_sync(config.load(b.inst.root))   # a regra vale também no chat: um "liberar sempre" só

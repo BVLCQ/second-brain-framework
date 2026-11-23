@@ -672,7 +672,7 @@ class _Handler(BaseHTTPRequestHandler):
 
     def _inbox_post(self):
         """Recebe arquivo arrastado no painel (multipart/form-data) e grava em vault/RAW/inbox/."""
-        if os.environ.get("BRAIN_NIGHTLY"):
+        if util.is_nightly():
             self._deny(403, "o noturno nunca recebe arquivos pelo painel")
             return
         raw_cl = self.headers.get("Content-Length")
@@ -749,7 +749,7 @@ class _Handler(BaseHTTPRequestHandler):
         """Apaga originais escolhidos no diálogo de duplicados — cada caminho é
         revalidado na hora (bytes idênticos à cópia da inbox, dentro de HOME, fora
         da instância). O noturno nunca apaga; sem token, 401 (guard do do_POST)."""
-        if os.environ.get("BRAIN_NIGHTLY"):
+        if util.is_nightly():
             self._deny(403, "o noturno nunca remove originais pelo painel")
             return
         req = self._read_json_body()
@@ -776,7 +776,7 @@ class _Handler(BaseHTTPRequestHandler):
 
     def _agent_post(self):
         """Executa uma ação ⚡ do agente (store.SYS_OPS) pelo mesmo caminho da TUI (`tui/bridge`)."""
-        if os.environ.get("BRAIN_NIGHTLY"):
+        if util.is_nightly():
             self._deny(403, "o noturno nunca executa ações do agente pelo painel")
             return
         req = self._read_json_body()
@@ -1084,7 +1084,7 @@ def unregister(inst) -> None:
 
 
 def serve(inst, port: int = 8787, open_browser: bool = False) -> int:
-    if os.environ.get("BRAIN_NIGHTLY"):
+    if util.is_nightly():
         raise util.BrainError("o noturno nunca serve — a ponte CLI exige o dono presente", 3)
     # a ponte que se substitui passa o token adiante — a página recarregada continua válida
     token = (os.environ.pop("BRAIN_SERVE_TOKEN", "") or "").strip()

@@ -221,6 +221,14 @@ def days_between(a: date, b: date) -> int:
     return (b - a).days
 
 
+def is_nightly() -> bool:
+    """`BRAIN_NIGHTLY` ligado? Única leitura do modo noturno (o agente headless roda sem dono presente).
+
+    Aceita qualquer valor truthy óbvio (``1``/``true``/``yes``/``on``, qualquer caixa): comparação exata com
+    ``"1"`` fazia ``BRAIN_NIGHTLY=true`` desarmar as recusas de gate em silêncio (#134)."""
+    return os.environ.get("BRAIN_NIGHTLY", "").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def split_csv(value: str | list | None) -> list[str]:
     if value in (None, ""):
         return []
