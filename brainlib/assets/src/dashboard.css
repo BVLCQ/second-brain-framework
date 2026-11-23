@@ -168,6 +168,9 @@ tbody tr.src-problem:hover td{background:color-mix(in srgb,var(--riskbg) 55%,tra
 .card.is-late{border-left:3px solid var(--risk)}
 .card header{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .card-title{font-weight:600;margin:5px 0 3px;font-size:14px}
+/* #98: <small> explícito na escala fechada — sem isto o UA aplica 13,33×0,833 e cada pai gera um tamanho
+   diferente (11,11px no pill do console, 11,67px no card de goal) */
+small{font-size:11.5px}
 .card-meta{font-size:12.5px;color:var(--muted);margin:0}
 .card-block{font-size:12.5px;color:var(--risk);margin:6px 0 0}
 .card .qa{margin-top:8px;display:none;gap:6px}
