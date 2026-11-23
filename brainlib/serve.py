@@ -6,7 +6,7 @@ validar uma allowlist FECHADA de subcomandos. Fora da lista, 403. Sem token, 401
 Host diferente de 127.0.0.1, 403 (DNS rebinding). O noturno nunca serve.
 
 `file://` continua sendo retrato somente-leitura (comandos são copiados p/ o terminal).
-O token vive no fragmento da URL (não vai ao servidor) e é guardado no localStorage.
+O token vive no fragmento da URL (não vai ao servidor) e é guardado em sessionStorage (TTL 12h).
 """
 from __future__ import annotations
 
@@ -29,6 +29,11 @@ from pathlib import Path
 from . import __version__, util
 
 INBOX_UPLOAD_MAX = 50 * 1024 * 1024  # 50 MB por upload para a inbox via ponte
+CSP = (
+    "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; "
+    "connect-src 'self'; img-src 'self' data:; font-src 'self' data:; "
+    "base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+)
 
 # (comando, subcomando | None) que o painel emite — nada além disso passa pela ponte.
 # Tudo que muda o mundo exterior continua nos gates do próprio CLI (--quote, aprovações).
@@ -556,7 +561,7 @@ class _Handler(BaseHTTPRequestHandler):
         """Cabeçalhos de segurança em TODA resposta: o painel vivo não pode ser
         embebido (clickjacking numa aba maliciosa dispararia escritas suas)."""
         self.send_header("X-Frame-Options", "DENY")
-        self.send_header("Content-Security-Policy", "frame-ancestors 'none'")
+        self.send_header("Content-Security-Policy", CSP)
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header("Cache-Control", "no-store")
 
@@ -623,14 +628,10 @@ class _Handler(BaseHTTPRequestHandler):
                 return
             if path in ("/", "/index.html"):
                 from . import render
-                with self.state.lock:
-                    m = render.view_model(self._brain())
-                self._html(render.render_html(m))
+                self._html(render.render_shell_html(render.ASSET))
             elif path == "/portfolio.html":
-                from . import model, render, render_portfolio
-                with self.state.lock:
-                    m = model.build(self._brain())
-                self._html(render.render_html(render_portfolio.html_payload(m), render.PORTFOLIO_ASSET))
+                from . import render
+                self._html(render.render_shell_html(render.PORTFOLIO_ASSET))
             elif path == "/onboarding":
                 # F8: o wizard mora no painel — a rota antiga vira atalho para o modo primeira vez.
                 # Rollback (plano onboarding-unification F8): voltar a servir o ONBOARDING_ASSET.
@@ -685,6 +686,11 @@ class _Handler(BaseHTTPRequestHandler):
                 from . import render
                 with self.state.lock:
                     m = render.view_model(self._brain())
+                self._json(200, {"ok": True, "model": m})
+            elif path == "/api/portfolio":
+                from . import render, render_portfolio
+                with self.state.lock:
+                    m = render_portfolio.html_payload(render.view_model(self._brain()))
                 self._json(200, {"ok": True, "model": m})
             else:
                 self._deny(404, "rota desconhecida")

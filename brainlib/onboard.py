@@ -138,6 +138,9 @@ def needed(brain) -> bool:
 
 
 # ── jobs em segundo plano (claude mcp list, memória, proposta do agente) ─────
+JOB_TIMEOUT_S = 900  # 15 min: job travado expira como 'stale' em vez de prender o polling
+
+
 class _Job:
     def __init__(self, kind: str):
         self.id = secrets.token_hex(6)
@@ -153,7 +156,13 @@ class _Job:
                 self.log.append(ln.rstrip())
         del self.log[:-200]
 
+    def check_timeout(self) -> None:
+        if self.status == "running" and time.time() - self.started > JOB_TIMEOUT_S:
+            self.status = "stale"
+            self.result = {"error": "tempo esgotado (15 min) — rode `brain doctor --online` no terminal"}
+
     def as_dict(self) -> dict:
+        self.check_timeout()
         return {"id": self.id, "kind": self.kind, "status": self.status, "log": self.log[-60:],
                 "result": self.result, "elapsed": round(time.time() - self.started)}
 
@@ -172,16 +181,20 @@ def _start(kind: str, fn) -> _Job:
 
     def run():
         try:
-            job.result = fn(job) or {}
-            job.status = "done"
+            res = fn(job) or {}
+            if job.status == "running":
+                job.result = res
+                job.status = "done"
         except util.BrainError as e:
             job.say(f"✗ {e}")
-            job.result = {"error": str(e)}
-            job.status = "error"
+            if job.status == "running":
+                job.result = {"error": str(e)}
+                job.status = "error"
         except Exception as e:  # noqa: BLE001 — o job relata, a ponte segue
             job.say(f"✗ erro inesperado: {e!r}")
-            job.result = {"error": "erro inesperado — detalhe no log da ponte"}
-            job.status = "error"
+            if job.status == "running":
+                job.result = {"error": "erro inesperado — detalhe no log da ponte"}
+                job.status = "error"
     threading.Thread(target=run, daemon=True, name=f"onboard-{kind}").start()
     return job
 

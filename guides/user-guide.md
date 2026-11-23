@@ -703,7 +703,12 @@ arquivo** que funciona em qualquer navegador, com dois modos:
   do terminal — a mesma que o TUI dispara. Nada executa, nada sai da
   máquina.
 - **Ponte CLI (`./brain serve`)** — servidor local em 127.0.0.1 com token
-  (impresso no terminal). O painel passa a **executar** os comandos de
+  (impresso no terminal). O token fica apenas na sessão da aba (`sessionStorage`,
+  validade de 12h), sai da URL ao ser lido e é apagado quando a ponte o recusa:
+  abrir outra aba ou deixar a sessão expirar exige reautenticar com
+  `./brain render --open` ou pelo **Brain.app** — que reaproveitam a aba já aberta,
+  entregando o token novo pelo fragmento (`#t=`) da URL.
+  O painel passa a **executar** os comandos de
   verdade, pelo mesmo caminho do TUI, com os mesmos gates (confirmar no formulário
   aprova com `--approval`/`--quote painel`, `--by owner`). A allowlist é fechada; `update`,
   `migrate`, `backup` e cia. seguem no terminal. Com a ponte no ar, **arrastar um arquivo
