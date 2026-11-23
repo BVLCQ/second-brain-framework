@@ -638,12 +638,15 @@ def _src_opp_status(m, v, ctx):
 
 
 def memory_provider_options(slot: str, mode: str = "embed") -> list[tuple[str, str]]:
-    """Cardápio de provedores de um slot derivado do registro providers.PROVIDERS."""
+    """Cardápio de provedores de um slot derivado do registro providers.PROVIDERS — o mesmo que o
+    `brain memory setup` aceita (cli._flat_memory_providers; um teste cruza os dois). Sem `custom`: exige
+    model + base_url, que este formulário não pede; o valor atual em custom aparece como "(atual)"."""
     tbl = _providers.PROVIDERS.get(slot, {})
+    out = [(pid, tbl[pid].get("label") or pid) for pid in tbl if pid != "custom"]
     if slot == "embeddings" and mode == "full":
-        return [(pid, info.get("label") or pid) for pid, info in tbl.items()
-                if pid != "local" and not info.get("local") and info.get("family") != "local"]
-    return [(pid, info.get("label") or pid) for pid, info in tbl.items()]
+        return [(pid, lab) for pid, lab in out
+                if pid != "local" and not tbl[pid].get("local") and tbl[pid].get("family") != "local"]
+    return out
 
 
 def _with_current(opts: list[tuple[str, str]], cur: str) -> list[tuple[str, str]]:
@@ -658,7 +661,7 @@ def _src_providers(m, v, ctx):
 
 
 def _src_memory_llm(m, v, ctx):
-    opts = [tuple(x) for x in (m.get("form_static") or {}).get("providers", {}).get("llm", [])]
+    opts = memory_provider_options("llm", (v or {}).get("mode") or "embed")
     return _with_current(opts, ((ctx or {}).get("item") or {}).get("provider", ""))
 
 
@@ -675,7 +678,7 @@ def _src_memory_embs(m, v, ctx):
 
 
 def _src_memory_reranker(m, v, ctx):
-    opts = [tuple(x) for x in (m.get("form_static") or {}).get("providers", {}).get("reranker", [])]
+    opts = memory_provider_options("reranker")
     return _with_current(opts, ((ctx or {}).get("item") or {}).get("reranker", ""))
 
 

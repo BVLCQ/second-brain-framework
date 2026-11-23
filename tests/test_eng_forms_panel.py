@@ -25,6 +25,12 @@ from brainlib.tui.config_keys import ConfigKeys  # noqa: E402
 
 
 class MemoryModeFormTest(unittest.TestCase):
+    @staticmethod
+    def _flat(slot):
+        """Registro inteiro menos `custom`: provedor custom exige model + base_url, que nem o formulário
+        nem as flags planas do `memory setup` têm como levar."""
+        return [k for k in providers.PROVIDERS[slot] if k != "custom"]
+
     def test_memory_mode_lists_match_providers_registry(self):
         m = {"form_static": forms.static()}
         fm = forms.FORMS["memory.mode"]
@@ -32,12 +38,59 @@ class MemoryModeFormTest(unittest.TestCase):
         f_emb = next(f for f in fm.fields if f.id == "embeddings")
         f_rer = next(f for f in fm.fields if f.id == "reranker")
 
-        self.assertEqual([k for k, _ in forms.options(f_prov, m, {}, {})], list(providers.PROVIDERS["llm"]))
-        self.assertEqual([k for k, _ in forms.options(f_rer, m, {}, {})], list(providers.PROVIDERS["reranker"]))
+        self.assertEqual([k for k, _ in forms.options(f_prov, m, {}, {})], self._flat("llm"))
+        self.assertEqual([k for k, _ in forms.options(f_rer, m, {}, {})], self._flat("reranker"))
         self.assertEqual([k for k, _ in forms.options(f_emb, m, {"mode": "embed"}, {})],
-                         list(providers.PROVIDERS["embeddings"]))
+                         self._flat("embeddings"))
         self.assertEqual([k for k, _ in forms.options(f_emb, m, {"mode": "full"}, {})],
-                         [k for k in providers.PROVIDERS["embeddings"] if k != "local"])
+                         [k for k in self._flat("embeddings") if k != "local"])
+
+    def test_every_offered_option_is_accepted_by_the_memory_setup_parser(self):
+        """Cardápio só vale se o comando que o formulário monta aceitar a opção. O parser do
+        `brain memory setup` é quem decide: uma opção oferecida que ele recusa derruba a linha com
+        "invalid choice" (rc 2) — foi o que aconteceu com 18 das opções quando o cardápio passou a vir
+        do registro e o parser continuou com a lista chumbada."""
+        from brainlib import cli
+        parser = cli.build_parser()
+        m = {"form_static": forms.static()}
+        fm = forms.FORMS["memory.mode"]
+        seen = 0
+        for fid, mode in (("provider", "full"), ("embeddings", "embed"), ("embeddings", "full"),
+                          ("reranker", "embed")):
+            f = next(x for x in fm.fields if x.id == fid)
+            for value, _label in forms.options(f, m, {"mode": mode}, {}):
+                vals = {"mode": mode, "embeddings": "fireworks" if mode == "full" else "local",
+                        "reranker": "off", "quote": "ok", fid: value}
+                argv = forms.build("memory.mode", vals, {}, m)[0]
+                self.assertIn(value, argv)
+                ns = parser.parse_args(argv)            # SystemExit(2) se o parser recusar a opção
+                self.assertEqual(getattr(ns, fid), value)
+                seen += 1
+        self.assertGreaterEqual(seen, 20)               # 12 LLM + 4 + 3 embeddings + 5 rerankers
+
+    def test_memory_setup_parser_choices_follow_the_registry(self):
+        """As flags planas do `memory setup` não espelham provedores à mão: vêm do registro (menos custom)."""
+        from brainlib import cli
+        parser = cli.build_parser()
+        ns = parser.parse_args(["memory", "setup", "--mode", "full", "--provider", "zai",
+                                "--embeddings", "cohere", "--reranker", "zeroentropy"])
+        self.assertEqual((ns.provider, ns.embeddings, ns.reranker), ("zai", "cohere", "zeroentropy"))
+        with contextlib.redirect_stderr(io.StringIO()):
+            for flag in ("--provider", "--embeddings", "--reranker"):
+                with self.assertRaises(SystemExit):
+                    parser.parse_args(["memory", "setup", "--mode", "full", flag, "custom"])
+                with self.assertRaises(SystemExit):
+                    parser.parse_args(["memory", "setup", "--mode", "full", flag, "nao-existe"])
+
+    def test_current_custom_provider_still_shows_as_atual(self):
+        m = {"form_static": forms.static()}
+        fm = forms.FORMS["memory.mode"]
+        for fid, mode in (("provider", "full"), ("embeddings", "embed"), ("reranker", "embed")):
+            f = next(x for x in fm.fields if x.id == fid)
+            opts = forms.options(f, m, {"mode": mode}, {"item": {fid: "custom"}})
+            self.assertIn(("custom", "custom (atual)"), opts)
+            self.assertEqual(opts[0], ("custom", "custom (atual)"))   # só como "(atual)", nunca como opção do registro
+            self.assertEqual([k for k, _ in opts].count("custom"), 1)
 
     def test_unknown_provider_preserved_and_mode_change_does_not_rewrite(self):
         ctx = {"item": {
