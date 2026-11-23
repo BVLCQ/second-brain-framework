@@ -27,6 +27,7 @@ from . import snapshot, util, watch
 KIND = "github"
 PREFIX = "github"
 MAX_COMMITS = 200         # leitura incremental: um rebase gigante não vira um snapshot de 5 mil commits
+MAX_FULL_COMMITS = 500    # primeira leitura: teto para não explodir em repositórios enormes
 MAX_FILES = 25            # arquivos listados por commit
 MAX_BODY_LINES = 15       # linhas do corpo da mensagem por commit
 MAX_TREE = 1000           # arquivos na árvore da primeira leitura
@@ -129,10 +130,11 @@ def _branch(repo: Path) -> str:
 
 
 def _commits(repo: Path, tips: list[str], old: list[str] | None) -> list[dict]:
-    """`old` None = histórico inteiro; senão só o que as pontas de hoje alcançam e as antigas não."""
+    """`old` None = até `MAX_FULL_COMMITS`; senão só o que as pontas de hoje alcançam e as antigas não."""
     fmt = _SEP.join(["%H", "%h", "%an", "%ae", "%aI", "%D", "%s", "%b"]) + _END
     revs = tips + [f"^{p}" for p in (old or [])]
-    cap = [] if old is None else [f"--max-count={MAX_COMMITS + 1}"]
+    limit = MAX_FULL_COMMITS if old is None else MAX_COMMITS
+    cap = [f"--max-count={limit + 1}"]
     out = _git(repo, "log", "--stdin", "--date-order", f"--format={fmt}", *cap, stdin="\n".join(revs) + "\n",
                timeout=GIT_TIMEOUT * 4)
     rows = []
@@ -145,9 +147,19 @@ def _commits(repo: Path, tips: list[str], old: list[str] | None) -> list[dict]:
     return rows
 
 
-def _files(repo: Path, sha: str) -> list[str]:
-    out = _git(repo, "diff-tree", "--no-commit-id", "--name-status", "-r", "-M", "--root", sha)
-    return [" ".join(ln.split("\t")) for ln in out.splitlines() if ln.strip()]
+def _files_batch(repo: Path, shas: list[str]) -> dict[str, list[str]]:
+    if not shas:
+        return {}
+    out = _git(repo, "diff-tree", "--stdin", "--name-status", "-r", "-M", "--root", f"--format={_END}%H",
+               stdin="\n".join(shas) + "\n", timeout=GIT_TIMEOUT * 4)
+    res: dict[str, list[str]] = {sha: [] for sha in shas}
+    for block in out.split(_END):
+        lines = [ln for ln in block.splitlines() if ln.strip()]
+        if not lines:
+            continue
+        sha = lines[0].strip()
+        res[sha] = [" ".join(ln.split("\t")) for ln in lines[1:]]
+    return res
 
 
 def _is_doc(path: str) -> bool:
@@ -184,18 +196,21 @@ def _overview(repo: Path, ref: str) -> list[str]:
 
 def render(name: str, repo: Path, commits: list[dict], how: str, fetched: str, files: dict[str, list[str]],
            overview: list[str] | None = None) -> str:
-    capped = overview is None and len(commits) > MAX_COMMITS
-    shown = commits[:MAX_COMMITS] if capped else commits
+    limit = MAX_FULL_COMMITS if overview is not None else MAX_COMMITS
+    capped = len(commits) > limit
+    shown = commits[:limit] if capped else commits
     title = "leitura completa" if overview is not None else "commits novos"
     lines = [f"# GitHub · {name} — {title}", "",
              f"_pull: {util.iso_now()} · {how} · fetch: {fetched}", "",
              f"- repo: {name} (local: {repo.name})",
              f"- remoto: {_remote(repo) or '—'}",
              f"- branch: {_branch(repo)}",
-             f"- commits: {len(shown)}" + (f" (mostrando os {MAX_COMMITS} mais recentes; há mais)" if capped else ""),
+             f"- commits: {len(shown)}" + (f" (mostrando os {limit} mais recentes; há mais)" if capped else ""),
              ""]
     if overview is not None:
-        lines += overview + [f"## Histórico completo ({len(shown)} commits)", ""]
+        hist_hdr = (f"## Histórico ({len(shown)} commits mais recentes; teto de {limit})"
+                    if capped else f"## Histórico completo ({len(shown)} commits)")
+        lines += overview + [hist_hdr, ""]
     for c in shown:
         lines += [f"### {c['short']} — {c['subject']}" if overview is not None else f"## {c['short']} — {c['subject']}",
                   f"- autor: {c['author']} <{c['email']}> · data: {c['date']}" + (f" · refs: {c['refs']}" if c["refs"] else "")]
@@ -236,8 +251,9 @@ def _pull_repo(brain, key: str, root: Path, repo: Path, do_fetch: bool, full: bo
             commits, overview, how = _commits(repo, tips, None), _overview(repo, _main_ref(repo)), f"{why} — repositório inteiro"
             row["full"] = True
         if commits or overview is not None:
-            shown = commits if overview is not None else commits[:MAX_COMMITS]
-            files = {c["sha"]: _files(repo, c["sha"]) for c in shown}
+            limit = MAX_FULL_COMMITS if overview is not None else MAX_COMMITS
+            shown = commits[:limit]
+            files = _files_batch(repo, [c["sha"] for c in shown])
             res = snapshot.take(brain, key, render(name, repo, commits, how, fetched, files, overview),
                                 prefix=PREFIX, item=name, name=name, with_key=False)
             row["new"] = len(shown)

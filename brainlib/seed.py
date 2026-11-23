@@ -15,6 +15,8 @@ from . import pdf, snapshot, util
 SUPPORTED_EXTS = {".md", ".txt", ".docx", ".pdf"}
 DEFAULT_LIMIT = 30
 KINDS = ("nota", "documento")
+MAX_DOCX_XML_BYTES = 10 * 1024 * 1024
+_FORBIDDEN_XML_RE = re.compile(rb"<!(?:DOCTYPE|ENTITY)\b", re.I)
 
 
 def _read_text(path: Path) -> str:
@@ -31,8 +33,19 @@ def _local_tag(tag: str) -> str:
 
 def _read_docx(path: Path) -> str:
     with zipfile.ZipFile(path) as zf:
-        xml_bytes = zf.read("word/document.xml")
-    root = ET.fromstring(xml_bytes)
+        info = zf.getinfo("word/document.xml")
+        if info.file_size > MAX_DOCX_XML_BYTES:
+            raise util.BrainError("word/document.xml excede o limite de 10 MB", code=4)
+        with zf.open(info) as member:
+            xml_bytes = member.read(MAX_DOCX_XML_BYTES + 1)
+    if len(xml_bytes) > MAX_DOCX_XML_BYTES:
+        raise util.BrainError("word/document.xml excede o limite de 10 MB", code=4)
+    if _FORBIDDEN_XML_RE.search(xml_bytes):
+        raise util.BrainError("DOCX contém declarações XML não permitidas (DOCTYPE/ENTITY)", code=4)
+    try:
+        root = ET.fromstring(xml_bytes)
+    except ET.ParseError as e:
+        raise util.BrainError(f"XML inválido em word/document.xml: {e}", code=3) from e
     paras: list[str] = []
     for el in root.iter():
         if _local_tag(el.tag) == "p":
