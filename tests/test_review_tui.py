@@ -198,7 +198,7 @@ class ReviewTuiTest(unittest.IsolatedAsyncioTestCase):
         app = self.app()
         async with app.run_test(size=(140, 44)) as pilot:
             await pilot.pause(0.4)
-            app.exec([["agent", "allow", "Bash(./brain note:*)", "--scope", "tui"]], render=False)
+            app.run_cmds([["agent", "allow", "Bash(./brain note:*)", "--scope", "tui"]], render=False)
             await self.settle(app, pilot)
             self.assertIn("Bash(./brain note:*)", app.inst.cfg["tui"]["agent_allow"])
             cfg = app.inst.cfg | {"runner": {**app.inst.cfg["runner"], "agent": "claude", "command": ""}}

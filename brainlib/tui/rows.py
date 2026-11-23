@@ -869,7 +869,7 @@ def _area_name(store, a: str) -> str:
 def _docs_section(doc: Doc, d: dict) -> None:
     doc.sec("Documentos")
     if not d["docs"]:
-        doc.p(("Nenhum. l liga um documento.", DIM))
+        doc.p(("Nenhum. L liga um documento.", DIM))
     for n, x in enumerate(d["docs"]):
         doc.p((f"[{x['kind']}] ", DIM), doc_link(x["title"] or x["ref"], d["id"], n, "underline"),
               (f"  · lido em {util.fmt_date(x['read'])}" if x["read"] else "  · ligado" + (" · vigiado" if x["watch"] else ""), DIM))

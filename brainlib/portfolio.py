@@ -76,7 +76,8 @@ def matrix(opps) -> dict[str, list]:
 def funnel(opps) -> dict[str, int]:
     out = {s: 0 for s in FUNNEL_ORDER}
     for o in opps:
-        out[o.status] = out.get(o.status, 0) + 1
+        if o.status in out:
+            out[o.status] += 1
     return out
 
 

@@ -10,7 +10,10 @@ Sem dependência de UI: só stdlib. A renderização rica (rich/Textual) fica na
 """
 from __future__ import annotations
 
+import re
 import textwrap
+
+from . import util
 
 AXES = ("impact", "confidence", "ease")
 
@@ -189,7 +192,15 @@ def options(axis: str) -> list[tuple[str, str]]:
 def describe(axis: str, n) -> str:
     """Critério completo da nota + âncora da tabela (horas, proveniência ou prazo)."""
     _axis(axis)
-    lv = RUBRIC[axis]["levels"].get(int(n))
+    if isinstance(n, bool):
+        raise util.BrainError(f"nota inválida para {axis!r}: {n!r} (use inteiro de 1 a 5)", code=2)
+    if isinstance(n, int):
+        val = n
+    elif isinstance(n, str) and re.fullmatch(r"[+-]?[0-9]+", n.strip()):
+        val = int(n.strip())
+    else:
+        raise util.BrainError(f"nota inválida para {axis!r}: {n!r} (use inteiro de 1 a 5)", code=2)
+    lv = RUBRIC[axis]["levels"].get(val)
     if lv is None:
         return ""
     return lv["criterion"] + (f" · {lv['anchor']}" if lv["anchor"] else "")

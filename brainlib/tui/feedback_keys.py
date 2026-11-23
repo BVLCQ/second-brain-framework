@@ -19,7 +19,7 @@ class FeedbackKeys:
 
     def f_feedback_push(self) -> None:
         f = self.cur().data
-        self.exec([["feedback", "push", f.id, "--approval", "tui"]])
+        self.run_cmds([["feedback", "push", f.id, "--approval", "tui"]])
 
     def f_feedback_withdraw(self) -> None:
         f = self.cur().data
@@ -36,4 +36,4 @@ class FeedbackKeys:
         self.open_form("feedback.retract", {"id": f.id, "title": f.title, "item": vars(f)})
 
     def f_feedback_sync(self) -> None:
-        self.exec([["feedback", "sync"]])
+        self.run_cmds([["feedback", "sync"]])

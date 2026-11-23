@@ -29,6 +29,37 @@ works() { "$1" --version >/dev/null 2>&1; }  # pega o stub git da Apple sem CLT
 SUDO=""
 [ "$(id -u)" = "0" ] || SUDO="sudo"
 tmpscript="$(mktemp)"
+cleanup() {
+    if [ -n "$tmpscript" ]; then
+        rm -f "$tmpscript"
+        tmpscript=""
+    fi
+}
+trap cleanup EXIT
+trap 'cleanup; exit 130' INT
+trap 'cleanup; exit 143' TERM
+trap 'cleanup; exit 129' HUP
+
+is_same_repo() {
+    _isr_url="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+    _isr_url="${_isr_url%/}"
+    _isr_url="${_isr_url%.git}"
+    _isr_want="$(printf '%s' "$REPO_URL" | tr '[:upper:]' '[:lower:]')"
+    _isr_want="${_isr_want%/}"
+    _isr_want="${_isr_want%.git}"
+    case "$_isr_url" in
+        "$_isr_want"|"git@github.com:bvlcq/second-brain-framework"|"ssh://git@github.com/bvlcq/second-brain-framework")
+            return 0 ;;
+        *)
+            return 1 ;;
+    esac
+}
+
+python_help() {
+    echo "  macOS:  brew install mise  &&  mise install   (na raiz do repo)"
+    echo "  ou:     brew install python@3.12"
+    echo "  depois rode de novo:  sh install.sh   (receita completa: setup.md §0–§1)"
+}
 
 # --- Homebrew (macOS): silencioso (ruling D1); CLT é pré-requisito da Apple --
 ensure_brew() {
@@ -45,40 +76,60 @@ ensure_brew() {
             if [ "$i" -gt 120 ]; then
                 echo "✗ Command Line Tools não concluíram em ~10 min."
                 echo "  Conclua a instalação da Apple e rode de novo:  sh install.sh"
-                exit 1
+                return 1
             fi
             sleep 5
         done
     fi
     say "Homebrew (instalador oficial — pode pedir a senha da sessão)…"
-    curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh -o "$tmpscript"
-    NONINTERACTIVE=1 /bin/bash "$tmpscript"
+    if ! curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh -o "$tmpscript" || \
+       ! NONINTERACTIVE=1 /bin/bash "$tmpscript"; then
+        echo "⚠ Homebrew não instalado — receita manual: setup.md §0."
+        return 1
+    fi
     if [ -x /opt/homebrew/bin/brew ]; then eval "$(/opt/homebrew/bin/brew shellenv)"
     elif [ -x /usr/local/bin/brew ]; then eval "$(/usr/local/bin/brew shellenv)"; fi
+    if ! ok brew; then
+        echo "⚠ Homebrew não instalado — receita manual: setup.md §0."
+        return 1
+    fi
 }
 
 # --- git: vem ANTES do clone (no macOS, binário do Homebrew — ruling D2) -----
 ensure_git() {
     works git && return 0
     if [ "$OS" = "Darwin" ]; then
-        ensure_brew
-        say "git (Homebrew)…"
-        brew install -q git
+        if ensure_brew && { say "git (Homebrew)…"; brew install -q git; }; then
+            return 0
+        fi
+        echo "⚠ não consegui instalar o git — instale manualmente (receita: setup.md §1) e rode de novo:  sh install.sh"
+        exit 1
     elif ok apt-get; then
         say "git (apt)…"
-        $SUDO apt-get update -qq
-        $SUDO apt-get install -y -qq git
+        if ! $SUDO apt-get update -qq || ! $SUDO apt-get install -y -qq git; then
+            echo "⚠ não consegui instalar o git — instale manualmente (receita: setup.md §1) e rode de novo:  sh install.sh"
+            exit 1
+        fi
     elif ok dnf; then
         say "git (dnf)…"
-        $SUDO dnf install -y -q git
+        if ! $SUDO dnf install -y -q git; then
+            echo "⚠ não consegui instalar o git — instale manualmente (receita: setup.md §1) e rode de novo:  sh install.sh"
+            exit 1
+        fi
     elif ok yum; then
         say "git (yum)…"
-        $SUDO yum install -y -q git
+        if ! $SUDO yum install -y -q git; then
+            echo "⚠ não consegui instalar o git — instale manualmente (receita: setup.md §1) e rode de novo:  sh install.sh"
+            exit 1
+        fi
     elif ok apk; then
         say "git (apk)…"
-        $SUDO apk add --quiet git
+        if ! $SUDO apk add --quiet git; then
+            echo "⚠ não consegui instalar o git — instale manualmente (receita: setup.md §1) e rode de novo:  sh install.sh"
+            exit 1
+        fi
     else
-        echo "✗ git ausente e nenhum gerenciador conhecido."
+        echo "⚠ git ausente e nenhum gerenciador conhecido."
         echo "  Instale o git (receita: setup.md §1) e rode de novo:  sh install.sh"
         exit 1
     fi
@@ -88,10 +139,21 @@ ensure_git
 
 if [ ! -f "./brain" ] || [ ! -d "./brainlib" ]; then
     if [ -d "$DEST/.git" ]; then
-        echo "✓ repo já existe em $DEST"
+        existing_origin="$(git -C "$DEST" remote get-url origin 2>/dev/null || true)"
+        if is_same_repo "$existing_origin"; then
+            echo "✓ repo já existe em $DEST"
+        else
+            echo "⚠ já existe outro repositório git em $DEST (origin: ${existing_origin:-ausente})."
+            echo "  Escolha outra pasta:  sh install.sh /caminho/da/instancia"
+            echo "  ou mova/remova $DEST antes de rodar o instalador de novo."
+            exit 1
+        fi
     else
         echo "→ clonando em $DEST"
-        git clone --quiet "$REPO_URL" "$DEST"
+        if ! git clone --quiet "$REPO_URL" "$DEST"; then
+            echo "⚠ não consegui clonar o repositório em $DEST — verifique a conexão ou o caminho e rode de novo:  sh install.sh"
+            exit 1
+        fi
     fi
     cd "$DEST"
 fi
@@ -102,13 +164,17 @@ cd "$(pwd -P)"
 # --- mise (o Python vem do pin do mise.toml — versão nunca hardcoded) --------
 if ! ok mise; then
     if [ "$OS" = "Darwin" ]; then
-        ensure_brew
-        say "mise (Homebrew)…"
-        brew install -q mise
+        if ensure_brew; then
+            say "mise (Homebrew)…"
+            brew install -q mise || echo "⚠ mise não instalado — sigo se já houver Python 3.11+ na máquina."
+        else
+            echo "⚠ mise não instalado (Homebrew indisponível) — sigo se já houver Python 3.11+ na máquina."
+        fi
     else
         say "mise (instalador oficial)…"
-        curl -fsSL https://mise.jdx.dev/install.sh -o "$tmpscript"
-        sh "$tmpscript"
+        if ! curl -fsSL https://mise.jdx.dev/install.sh -o "$tmpscript" || ! sh "$tmpscript"; then
+            echo "⚠ mise não instalado — sigo se já houver Python 3.11+ na máquina."
+        fi
     fi
     # sessão desta execução enxerga o mise mesmo sem perfil configurado
     case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) PATH="$HOME/.local/bin:$PATH"; export PATH ;; esac
@@ -124,12 +190,14 @@ if works python3 && python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3
     :
 elif ok mise; then
     say "Python (mise install — a versão vem do mise.toml)…"
-    mise install
+    if ! mise install; then
+        echo "⚠ não consegui instalar o Python 3.11+ com o mise."
+        python_help
+        exit 1
+    fi
 else
     echo "⚠ Python 3.11+ não encontrado."
-    echo "  macOS:  brew install mise  &&  mise install   (na raiz do repo)"
-    echo "  ou:     brew install python@3.12"
-    echo "  depois rode de novo:  sh install.sh   (receita completa: setup.md §0–§1)"
+    python_help
     exit 1
 fi
 
@@ -138,8 +206,11 @@ fi
 if [ "$OS" = "Darwin" ]; then
     if ! ok docker && [ ! -d /Applications/OrbStack.app ]; then
         say "OrbStack (runtime Docker)…"
-        ensure_brew
-        brew install -q --cask orbstack || echo "⚠ OrbStack não instalado — o passo Memória do wizard aponta o caminho."
+        if ensure_brew; then
+            brew install -q --cask orbstack || echo "⚠ OrbStack não instalado — o passo Memória do wizard aponta o caminho."
+        else
+            echo "⚠ OrbStack não instalado — o passo Memória do wizard aponta o caminho."
+        fi
     fi
     if ! ok docker && [ -d /Applications/OrbStack.app ]; then
         say "primeiro lançamento do OrbStack (completa o comando docker)…"
@@ -148,15 +219,16 @@ if [ "$OS" = "Darwin" ]; then
 else
     if ! ok docker; then
         say "Docker Engine (instalador oficial)…"
-        curl -fsSL https://get.docker.com -o "$tmpscript"
-        sh "$tmpscript" || echo "⚠ Docker não instalado — o passo Memória do wizard aponta o caminho."
-        if $SUDO usermod -aG docker "$USER" 2>/dev/null; then
+        if ! curl -fsSL https://get.docker.com -o "$tmpscript" || ! sh "$tmpscript"; then
+            echo "⚠ Docker não instalado — o passo Memória do wizard aponta o caminho."
+        elif $SUDO usermod -aG docker "$USER" 2>/dev/null; then
             echo "ℹ grupo docker adicionado — vale após re-login"
         fi
     fi
 fi
 
 rm -f "$tmpscript"
+tmpscript=""
 
 # Do clone ao app: semeia a instância (nunca sobrescreve), cria o app Brain e abre a configuração guiada
 # no navegador. O wizard de terminal continua existindo para quem prefere (ou para IAs): ./brain setup

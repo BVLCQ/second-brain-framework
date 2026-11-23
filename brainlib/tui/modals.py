@@ -13,11 +13,19 @@ from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.css.query import NoMatches
 from textual.screen import ModalScreen
 from textual.widgets import Input, Label, OptionList, Select, Static, TextArea
-from textual.widgets._select import SelectOverlay
 from textual.widgets.option_list import Option
 
 from .. import forms
 from . import bridge
+
+
+def _in_select_overlay(screen: ModalScreen, widget) -> bool:
+    """True quando o foco está no menu suspenso aberto de um Select (API pública)."""
+    if widget is None or isinstance(widget, Select):
+        return False
+    if any(isinstance(a, Select) and getattr(a, "expanded", False) for a in widget.ancestors):
+        return True
+    return isinstance(widget, OptionList) and any(getattr(s, "expanded", False) for s in screen.query(Select))
 
 
 def _call(fn: Callable, value: str, vals: dict) -> str:
@@ -347,7 +355,7 @@ class FormModal(ModalScreen):
 
     def check_action(self, action: str, parameters) -> bool | None:
         if action == "enter_submit":                       # lista aberta: enter escolhe a opção; caixa grande: enter quebra a linha
-            return not isinstance(self.focused, (SelectOverlay, TextArea))
+            return not isinstance(self.focused, TextArea) and not _in_select_overlay(self, self.focused)
         if action == "show_help":                          # só os formulários com orientações (ex.: ICE) pegam o ?
             return self.spec.help is not None
         return True
@@ -444,6 +452,7 @@ class PickerModal(ModalScreen):
         super().__init__()
         self.title_, self.ph, self.source, self.empty = title, placeholder, source, empty
         self.items: list[PickItem] = []
+        self._worker = None
 
     def compose(self) -> ComposeResult:
         with Vertical(id="dialog"):
@@ -454,13 +463,23 @@ class PickerModal(ModalScreen):
 
     def on_mount(self) -> None:
         self.query_one("#pq").focus()
-        self.run_worker(self._refresh(""), exclusive=True)
+        self._worker = self.run_worker(self._refresh(""), exclusive=True, exit_on_error=False)
+
+    def on_unmount(self) -> None:
+        if self._worker is not None:
+            self._worker.cancel()
+            self._worker = None
 
     async def _refresh(self, q: str) -> None:
         import asyncio
         items = await asyncio.to_thread(self.source, q)
+        if not self.is_mounted:
+            return
         self.items = items
-        ol = self.query_one("#pl", OptionList)
+        try:
+            ol = self.query_one("#pl", OptionList)
+        except NoMatches:
+            return
         ol.clear_options()
         if items:
             ol.add_options([Option(i.label, id=str(n)) for n, i in enumerate(items)])
@@ -469,7 +488,7 @@ class PickerModal(ModalScreen):
             ol.add_option(Option(Text(self.empty or "Nada encontrado. “Não consta” também é resposta.", "dim"), disabled=True))
 
     def on_input_changed(self, e: Input.Changed) -> None:
-        self.run_worker(self._refresh(e.value.strip()), exclusive=True)
+        self._worker = self.run_worker(self._refresh(e.value.strip()), exclusive=True, exit_on_error=False)
 
     def action_move(self, d: int) -> None:
         ol = self.query_one("#pl", OptionList)

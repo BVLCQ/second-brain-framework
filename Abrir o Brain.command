@@ -16,15 +16,21 @@ REPO_URL="https://github.com/BVLCQ/second-brain-framework"
 # ZIP do GitHub não traz .git (automático): inicializa o repositório e configura o origin
 # para que o `brain update` e os checks de sincronização funcionem.
 if [ ! -d ".git" ]; then
-    git init -q
-    if git remote | grep -q "^origin$"; then
-        git remote set-url origin "$REPO_URL"
+    if git --version >/dev/null 2>&1; then
+        echo "→ configurando pasta baixada como repositório git…"
+        git init -q
+        if git remote | grep -q "^origin$"; then
+            git remote set-url origin "$REPO_URL"
+        else
+            git remote add origin "$REPO_URL"
+        fi
+        git config remote.origin.fetch "+refs/heads/*:refs/remotes/origin/*"
+        git fetch --quiet || true
+        echo "✓ pasta baixada como ZIP virou repositório git (origin configurado — o \`brain update\` funciona)"
     else
-        git remote add origin "$REPO_URL"
+        echo "→ git ainda não está instalado — passando direto para o instalador (ele prepara git, Python e abre o Brain)…"
+        exec sh install.sh
     fi
-    git config remote.origin.fetch "+refs/heads/*:refs/remotes/origin/*"
-    git fetch --quiet || true
-    echo "✓ pasta baixada como ZIP virou repositório git (origin configurado — o \`brain update\` funciona)"
 fi
 
-sh install.sh
+exec sh install.sh

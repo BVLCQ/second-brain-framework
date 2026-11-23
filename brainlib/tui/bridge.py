@@ -46,6 +46,10 @@ def _parser():
     return _PARSER
 
 
+# Nota de manutenção (#81): _subcommands e safe_args inspecionam estruturas privadas do argparse
+# (_actions, _SubParsersAction, _option_string_actions) porque a stdlib não expõe introspecção
+# pública de subcomandos/opções. Aceitável: qualquer quebra em Python futuro cai no try/except
+# de safe_args e degrada silenciosamente para os argumentos originais (coberto em test_sec_bridge_hardening.py).
 def _subcommands(p) -> dict:
     return next((a.choices for a in p._actions if isinstance(a, argparse._SubParsersAction)), {})
 

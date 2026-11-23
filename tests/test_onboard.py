@@ -177,7 +177,11 @@ class StepTests(unittest.TestCase):
             self.assertIn(f'V["cfg/{step}"]', html)
 
     def test_memory_later_and_full_needs_consent(self):
-        self.assertEqual(onboard.apply_memory(self.b, {"mode": "full", "later": True}), {"later": True})
+        onboard.save_about(self.b, {"name": "Marina Demo"})   # #78: a tarefa "fazer depois" precisa do dono registrado
+        r = onboard.apply_memory(self.b, {"mode": "full", "later": True})
+        self.assertTrue(r["later"])
+        self.assertEqual(r["mode"], "full")
+        self.assertTrue(r["id"])
         self.assertEqual(onboard.progress(self.b.inst)["memory_later"], "full")
         with self.assertRaises(util.BrainError):
             onboard.apply_memory(self.b, {"mode": "full", "key": "sk-x"})

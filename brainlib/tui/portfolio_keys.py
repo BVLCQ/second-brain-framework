@@ -134,7 +134,7 @@ class PortfolioKeys:
 
             def done(ok) -> None:
                 if ok:
-                    self.exec(forced, after=lambda: self._after_new("OPP-"))
+                    self.run_cmds(forced, after=lambda: self._after_new("OPP-"))
             self.push_screen(ConfirmModal("Possível duplicata", body + "\n\nGravar mesmo assim? (Se for a mesma ideia, cancele e use v: evidência.)",
                                           forced[0]), done)
             return True
@@ -181,7 +181,7 @@ class PortfolioKeys:
         if status in OPP_REASON_STATUS:            # laterais pedem motivo: o mesmo formulário do painel
             self.open_form("opportunity.status", {"id": o["id"], "title": o["title"], "item": o}, values={"status": status})
             return
-        self.exec([["opportunity", "status", o["id"], status, "--by", "owner"]])
+        self.run_cmds([["opportunity", "status", o["id"], status, "--by", "owner"]])
 
     def f_opp_discard(self) -> None:
         self.set_status(self.cur().data, "descartada")
@@ -194,8 +194,8 @@ class PortfolioKeys:
 
     def confirm_ice(self) -> None:
         o = self.cur().data
-        self.exec([["opportunity", "score", o["id"], "--impact", str(o["impact"]), "--confidence", str(o["confidence"]),
-                    "--ease", str(o["ease"]), "--by", "owner"]])
+        self.run_cmds([["opportunity", "score", o["id"], "--impact", str(o["impact"]), "--confidence", str(o["confidence"]),
+                       "--ease", str(o["ease"]), "--by", "owner"]])
 
     def f_evidence(self) -> None:
         o = self.cur().data

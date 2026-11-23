@@ -205,7 +205,7 @@ def _ctx_for(m: dict) -> dict[str, dict]:
 SAMPLES = {   # por validação: valores que exercitam o ok, o erro e a transformação
     "date": ["", "amanhã", "sex", "+3d", "20/10", "2026-12-01", "ontem"],
     "duration": ["", "90m", "1h30", "2h", "1d", "abc"], "duration_pos": ["", "45m", "0m", "x"],
-    "num": ["", "3", "2,5", "0", "x"], "slug": ["", "growth", "Bad Slug"], "watch_key": ["", "nova-fonte", "Ruim!"],
+    "num": ["", "3", "2,5", "12,5", "0,25", "1,000", "1.000,5", "1,000.5", "0", "0,0", "-1", "x", "٣"], "slug": ["", "growth", "Bad Slug"], "watch_key": ["", "nova-fonte", "Ruim!"],
     "drive": ["", "https://docs.google.com/document/d/1AbCdEfGhIjKlMnOp/edit", "1AbCdEfGhIjKlMnOp", "nada"],
     "jira": ["", "OPS-12", "https://acme.atlassian.net/browse/OPS-12", "https://acme.atlassian.net/jira/software/projects/OPS/boards/3", "?"],
     "pairs": ["", "a=1; b=2", "ruim"], "deliv": ["", "1", "99", "PROJ-1.1", "PROJ-77.1"],
@@ -229,7 +229,7 @@ def _cases(m: dict, ctxs: dict) -> list[dict]:
             if f.choices is not None:
                 vals = [o[0] for o in forms.options(f, m, init, ctx)]
             elif f.check:
-                vals = SAMPLES.get(f.check.split(":")[0], ["", "1", "0", "200", "x"] if f.check.startswith("int") else TEXT)
+                vals = SAMPLES.get(f.check.split(":")[0], ["", "1", "0", "200", "x", "²", "٣", "१२"] if f.check.startswith("int") else TEXT)
             elif f.suggest:
                 vals = [""] + [o[0] for o in forms.options(f, m, init, ctx)][:2] + ["eu"]
             else:
@@ -256,6 +256,16 @@ def _cases(m: dict, ctxs: dict) -> list[dict]:
         ctx = ctxs["opportunity.promote"]
         out.append({"form": "opportunity.promote", "ctx": ctx,
                     "raw": {**forms.initial(forms.FORMS["opportunity.promote"], ctx, m), "level": level, "quote": "ok"}})
+    # #86: espaços no seletor, campo oculto não emite --unset/--clear e campo visível apagado emite
+    wctx = ctxs["watch.edit"]
+    winit = forms.initial(forms.FORMS["watch.edit"], wctx, m)
+    out.append({"form": "watch.edit", "ctx": wctx, "raw": {**winit, "mode": "state"}})
+    out.append({"form": "watch.edit", "ctx": wctx, "raw": {**winit, "mode": " state "}})
+    out.append({"form": "watch.edit", "ctx": wctx, "raw": {**winit, "mode": "", "window": ""}})
+    out.append({"form": "watch.edit", "ctx": wctx, "raw": {**winit, "kind": " slack "}})
+    out.append({"form": "opportunity.promote", "ctx": ctxs["opportunity.promote"],
+                "raw": {**forms.initial(forms.FORMS["opportunity.promote"], ctxs["opportunity.promote"], m),
+                        "level": " goal ", "quote": "ok"}})
     return out
 
 

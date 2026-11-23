@@ -41,14 +41,29 @@ def search(brain, query: str, limit: int = 20) -> list[dict]:
     from . import index
     hits = index.search_index(brain, query, limit)      # índice SQLite (FTS5) quando existe
     if hits is not None:
-        live = _note_hits(brain, terms, limit, any_term=all(h.get("match") == "parcial" for h in hits) and bool(hits))
-        seen = {h["id"] for h in hits}
-        merged = hits + [dict(h, score=h["score"] / 1000.0) for h in live if h["id"] not in seen]
-        if not merged and len(terms) > 1:               # índice e notas mudos: parcial nas notas
-            merged = [dict(h, score=h["score"] / 1000.0, match="parcial")
-                      for h in _note_hits(brain, terms, limit, any_term=True)]
-        merged.sort(key=lambda h: -h["score"])
-        return merged[:limit]
+        if limit <= 0:
+            return []
+        idx_hits = sorted(hits, key=lambda h: -h["score"])
+        seen = {h["id"] for h in idx_hits}
+        idx_all_partial = bool(idx_hits) and all(h.get("match") == "parcial" for h in idx_hits)
+        strong_raw = _note_hits(brain, terms, limit, any_term=False)
+        strong = [dict(h, score=h["score"] / 1000.0) for h in strong_raw if h["id"] not in seen]
+        partial: list[dict] = []
+        if idx_all_partial or (not idx_hits and not strong and len(terms) > 1):
+            seen_strong = seen | {h["id"] for h in strong}
+            partial = [
+                dict(h, score=h["score"] / 1000.0, match="parcial")
+                for h in _note_hits(brain, terms, limit, any_term=True)
+                if h["id"] not in seen_strong
+            ]
+        reserved = min(len(strong), max(1, limit // 2))
+        kept_idx = idx_hits[: limit - reserved]
+        kept_strong = strong[: limit - len(kept_idx)]
+        rem = limit - len(kept_idx) - len(kept_strong)
+        kept_partial = partial[:rem] if rem > 0 else []
+        if idx_all_partial and kept_strong:
+            return kept_strong + kept_idx + kept_partial
+        return kept_idx + kept_strong + kept_partial
     m = model.build(brain)
     cands: list[tuple] = []
 

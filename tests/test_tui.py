@@ -472,7 +472,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
         ids = self.seed_portfolio()
         app = self.app()
         got: list = []
-        app.exec = lambda cmds, **kw: got.append((cmds, kw))
+        app.run_cmds = lambda cmds, **kw: got.append((cmds, kw))
         async with app.run_test(size=(150, 46)) as pilot:
             await pilot.pause(0.4)
             await pilot.press("tab", "3")                            # Oportunidades › Triagem
@@ -552,7 +552,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
         ids = self.seed_portfolio()
         app = self.app()
         got: list = []
-        app.exec = lambda cmds, **kw: got.append((cmds, kw))
+        app.run_cmds = lambda cmds, **kw: got.append((cmds, kw))
         async with app.run_test(size=(150, 46)) as pilot:
             await pilot.pause(0.4)
             app.jump(ids["sugerida"])                                   # ICE sugerido 4×3×4
@@ -612,7 +612,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
         ids = self.seed_portfolio()
         app = self.app()
         got: list = []
-        app.exec = lambda cmds, **kw: got.append(cmds)
+        app.run_cmds = lambda cmds, **kw: got.append(cmds)
         async with app.run_test(size=(150, 46)) as pilot:
             await pilot.pause(0.4)
             await pilot.press("tab", "3", "n")
@@ -638,7 +638,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
         self.seed_portfolio()
         app = self.app()
         got: list = []
-        app.exec = lambda cmds, **kw: got.append(cmds)
+        app.run_cmds = lambda cmds, **kw: got.append(cmds)
         async with app.run_test(size=(150, 46)) as pilot:
             await pilot.pause(0.4)
             for panel in ("1", "4"):
@@ -653,7 +653,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
         app = self.app()
         got: list = []
         opened: list = []
-        app.exec = lambda cmds, **kw: got.append(cmds)
+        app.run_cmds = lambda cmds, **kw: got.append(cmds)
         async with app.run_test(size=(150, 46)) as pilot:
             await pilot.pause(0.4)
             await pilot.press("tab", "2")
@@ -686,7 +686,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
         ids = self.seed_portfolio()
         app = self.app()
         got: list = []
-        app.exec = lambda cmds, **kw: got.append(cmds)
+        app.run_cmds = lambda cmds, **kw: got.append(cmds)
         async with app.run_test(size=(150, 46)) as pilot:
             await pilot.pause(0.4)
             await pilot.press("tab", "5", "n")
@@ -1346,7 +1346,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             # com prazo digitado, não há o que sugerir
             await pilot.press("n")
             await pilot.pause(0.3)
-            await self.fill(pilot, title="Com prazo dito", due="2026-10-30")
+            await self.fill(pilot, title="Entrega agendada", due="2026-10-30")
             await pilot.press("ctrl+s")
             await self.settle(app, pilot)
             self.assertEqual(len(app.screen_stack), 1)
@@ -1408,7 +1408,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
         app = self.app()
         async with app.run_test(size=(140, 44)) as pilot:
             await pilot.pause(0.4)
-            app.exec([["action", "close", "TASK-9999", "--how", "x", "--by", "owner"]])
+            app.run_cmds([["action", "close", "TASK-9999", "--how", "x", "--by", "owner"]])
             await self.settle(app, pilot)
             log = self.log_text(app)
             self.assertIn("ERRO", log)
@@ -1702,14 +1702,16 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
         async with app.run_test(size=(140, 44)) as pilot:
             await pilot.pause(0.4)
             app.run_catalog((0, 1, 3, "enter", "sys:doctor"))
-            await self.settle_modal(app, pilot, "TextModal")
+            await self.settle_modal(app, pilot, "TextModal", sel="#mb")
             self.assertIn("ledger", self.text_of(app.screen.query_one("#mb")))
             await pilot.press("escape")
 
-    async def settle_modal(self, app, pilot, name, n=80):
+    async def settle_modal(self, app, pilot, name, n=80, sel: str | None = None):
+        """Espera o modal `name` ser a tela atual e, dado `sel`, o widget dele já estar montado: a tela entra na
+        pilha antes de montar o corpo, e sob carga a consulta chegava nesse intervalo."""
         for _ in range(n):
             await pilot.pause(0.1)
-            if type(app.screen).__name__ == name:
+            if type(app.screen).__name__ == name and (sel is None or app.screen.query(sel)):
                 return
         self.fail(f"o modal {name} não abriu")
 

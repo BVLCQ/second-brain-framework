@@ -292,10 +292,16 @@ def _promote(args, b: Brain) -> None:
         raise util.BrainError("promote --level project cria o projeto: passe só o --goal GOAL-# de destino", code=3)
     if level == "deliverable" and args.goal:
         raise util.BrainError("promote --level deliverable cria o entregável: passe só o --project PROJ-# de destino", code=3)
-    if level == "project" and args.goal not in b.plan.goals:
-        raise util.BrainError(f"goal {args.goal} não existe em PLANNING/goals.md", code=3)
-    if level == "deliverable" and args.project not in b.plan.projects:
-        raise util.BrainError(f"projeto {args.project} não existe em PLANNING/goals.md", code=3)
+    if level == "project":
+        if not args.goal:
+            raise util.BrainError("promote --level project exige --goal GOAL-# (destino do projeto)", code=3)
+        if args.goal not in b.plan.goals:
+            raise util.BrainError(f"goal {args.goal} não existe em PLANNING/goals.md", code=3)
+    if level == "deliverable":
+        if not args.project:
+            raise util.BrainError("promote --level deliverable exige --project PROJ-# (destino do entregável)", code=3)
+        if args.project not in b.plan.projects:
+            raise util.BrainError(f"projeto {args.project} não existe em PLANNING/goals.md", code=3)
     if o.promoted:
         raise util.BrainError(f"{o.id} já foi promovida ({_promo_where(o)})", code=4)
     title = args.title or o.title
@@ -351,8 +357,8 @@ def _promote(args, b: Brain) -> None:
         _append_plan_log(inst, f"{today} · {nid} entregável criado sob {args.project} "
                                f"(promoção de {o.id}): {title} · evidência: {args.evidence or '—'}"
                                f" · aprovado: \"{approval}\"")
-    except util.BrainError:
-        util.atomic_write(path, before)          # o ledger recusou: o goals.md volta ao que era
+    except BaseException:
+        util.atomic_write(path, before)          # qualquer falha entre a mutação e o log devolve o goals.md ao que era
         raise
     b.reload()
     _out(args, {"id": nid, "events": events}, f"✓ {o.id} → {nid} em {args.project} (aprovado; goals.md, log e ledger)\n  "
