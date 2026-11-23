@@ -424,21 +424,30 @@ def stack(brain) -> dict:
     return out
 
 
-_AUTH_CACHE: dict = {"at": 0.0, "value": None}
+_AUTH_CACHE: dict = {"at": 0.0, "probed": False, "value": None}
+
+
+def reset_auth_cache() -> None:
+    """Zera o cache da sonda de container (para isolamento em testes)."""
+    _AUTH_CACHE.update(at=0.0, probed=False, value=None)
 
 
 def _container_store(run=None) -> bool | None:
     """O store de credencial existe no servidor de memória? True/False; None = sem como ver
     (Docker fora ou container ausente). Resultado guardado 60 s (o painel consulta a cada passo)."""
     now = time.time()
-    if _AUTH_CACHE["value"] is None or now - _AUTH_CACHE["at"] > 60:
+    if not _AUTH_CACHE["probed"] or now - _AUTH_CACHE["at"] > 60:
         try:
             res = (run or subprocess.run)(
                 ["docker", "exec", "hindsight", "sh", "-c", "test -f $HOME/.hindsight/xai_oauth.json"],
                 capture_output=True, text=True, timeout=10, check=False)
-            _AUTH_CACHE.update(at=now, value=(res.returncode == 0) if hasattr(res, "returncode") else bool(res))
+            _AUTH_CACHE.update(
+                at=now,
+                probed=True,
+                value=(res.returncode == 0) if hasattr(res, "returncode") else bool(res),
+            )
         except Exception:                                          # noqa: BLE001 — docker ausente/lento
-            _AUTH_CACHE.update(at=now, value=None)
+            _AUTH_CACHE.update(at=now, probed=True, value=None)
     return _AUTH_CACHE["value"]
 
 

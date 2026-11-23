@@ -9,6 +9,7 @@ Par já julgado não volta: `not_dup` na ação (agente disse "não é", com mot
 """
 from __future__ import annotations
 
+from collections import OrderedDict
 import math
 import re
 from datetime import date, timedelta
@@ -118,8 +119,33 @@ def similar(st, probe: dict, threshold: float = CANDIDATE, limit: int = 5, today
     return hits[:limit]
 
 
-def pairs(st, threshold: float = CANDIDATE) -> list[dict]:
+_CACHE_MAX = 8
+_PAIRS_CACHE: OrderedDict[tuple, list[dict]] = OrderedDict()
+
+
+def _state_rev(st, vault_key: str, threshold: float) -> tuple:
+    return (
+        vault_key,
+        len(st.events),
+        st.max_seq(),
+        st.events[-1].get("ts") if st.events else "",
+        len(st.actions),
+        len(st.proposals),
+        threshold,
+    )
+
+
+def clear_cache() -> None:
+    """Limpa o cache memoizado de pares duplicados (para isolamento em testes)."""
+    _PAIRS_CACHE.clear()
+
+
+def pairs(st, threshold: float = CANDIDATE, *, cache_key: str = "") -> list[dict]:
     """Pares de ações abertas parecidas, ainda não julgados, melhores primeiro."""
+    rev = _state_rev(st, cache_key, threshold) if cache_key else None
+    if rev is not None and rev in _PAIRS_CACHE:
+        _PAIRS_CACHE.move_to_end(rev)
+        return [{**p, "why": list(p["why"])} for p in _PAIRS_CACHE[rev]]
     idx = Index(st.actions.values())
     seen = judged(st)
     opened = sorted((a for a in st.actions.values() if a.open), key=lambda a: a.id)
@@ -133,6 +159,12 @@ def pairs(st, threshold: float = CANDIDATE) -> list[dict]:
             if s >= threshold:
                 out.append({"a": a.id, "b": b.id, "a_title": a.title, "b_title": b.title, "score": s, "why": why})
     out.sort(key=lambda p: (-p["score"], p["a"], p["b"]))
+    if rev is not None:
+        _PAIRS_CACHE[rev] = out
+        _PAIRS_CACHE.move_to_end(rev)
+        while len(_PAIRS_CACHE) > _CACHE_MAX:
+            _PAIRS_CACHE.popitem(last=False)
+        return [{**p, "why": list(p["why"])} for p in out]
     return out
 
 

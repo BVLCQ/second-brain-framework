@@ -1,6 +1,7 @@
 """Fila de revisão unificada (fold derivado sobre `brain.state`) e aceite em lote com bloqueio de portas."""
 from __future__ import annotations
 
+from collections import OrderedDict
 from pathlib import Path
 
 from . import dupes, feedback, ids, util
@@ -11,6 +12,31 @@ BATCH_ACCEPTABLE_KINDS = frozenset({"proposal"})
 
 _PORT_ENTITIES = frozenset({"message", "share", "focus"})
 _ACTION_TARGET_KINDS = frozenset({"fechar-acao", "descartar-acao", "unificar-acao", "atualizar-acao", "reestimar"})
+_CACHE_MAX = 8
+_QUEUE_CACHE: OrderedDict[tuple, dict] = OrderedDict()
+
+
+def _queue_rev(brain) -> tuple:
+    st = brain.state
+    return (
+        str(brain.inst.root),
+        len(st.events),
+        st.max_seq(),
+        st.events[-1].get("ts") if st.events else "",
+    )
+
+
+def clear_cache() -> None:
+    """Limpa o cache memoizado da fila de revisão (para isolamento em testes)."""
+    _QUEUE_CACHE.clear()
+
+
+def _copy_item(it: dict) -> dict:
+    out = dict(it)
+    for k in ("options", "context", "pair", "why"):
+        if k in out:
+            out[k] = list(out[k])
+    return out
 
 
 def _proposal_diff(st, p) -> str:
@@ -43,125 +69,142 @@ def queue(brain, *, kind: str | None = None) -> dict:
     if kind is not None and kind not in KINDS:
         raise util.BrainError(f"tipo de revisão inválido: {kind!r} (use {', '.join(KINDS)})", code=4)
 
-    st = brain.state
-    meta = _opened_meta(st)
-    items: list[dict] = []
+    rev = _queue_rev(brain)
+    cached = _QUEUE_CACHE.get(rev)
+    if cached is None:
+        st = brain.state
+        meta = _opened_meta(st)
+        items: list[dict] = []
 
-    for p in sorted(st.proposals.values(), key=lambda x: x.id):
-        if p.status != "aberta":
-            continue
-        ev = meta.get(p.id, {})
-        items.append({
-            "id": p.id,
-            "kind": "proposal",
-            "subkind": p.kind,
-            "summary": p.summary,
-            "target": p.target,
-            "into": p.into,
-            "evidence": p.evidence,
-            "prov": ev.get("prov", ""),
-            "source": ev.get("source", ""),
-            "date": p.date.isoformat() if p.date else None,
-            "diff": _proposal_diff(st, p),
-            "is_port": False,
-            "batch_acceptable": True,
-        })
+        for p in sorted(st.proposals.values(), key=lambda x: x.id):
+            if p.status != "aberta":
+                continue
+            ev = meta.get(p.id, {})
+            items.append({
+                "id": p.id,
+                "kind": "proposal",
+                "subkind": p.kind,
+                "summary": p.summary,
+                "target": p.target,
+                "into": p.into,
+                "evidence": p.evidence,
+                "prov": ev.get("prov", ""),
+                "source": ev.get("source", ""),
+                "date": p.date.isoformat() if p.date else None,
+                "diff": _proposal_diff(st, p),
+                "is_port": False,
+                "batch_acceptable": True,
+            })
 
-    for m in sorted(st.messages.values(), key=lambda x: x.id):
-        if m.status != "rascunho":
-            continue
-        to_name = m.to if m.to.startswith("#") else st.person_name(m.to)
-        preview = m.text[:140] + ("…" if len(m.text) > 140 else "")
-        items.append({
-            "id": m.id,
-            "kind": "outbox",
-            "summary": f"Enviar para {to_name}: {preview}",
-            "to": m.to,
-            "to_name": to_name,
-            "body_preview": preview,
-            "channel": m.channel,
-            "ref": m.ref,
-            "why": m.why,
-            "date": m.drafted.isoformat() if m.drafted else None,
-            "is_port": True,
-            "port": "outbox",
-            "batch_acceptable": False,
-        })
+        for m in sorted(st.messages.values(), key=lambda x: x.id):
+            if m.status != "rascunho":
+                continue
+            to_name = m.to if m.to.startswith("#") else st.person_name(m.to)
+            preview = m.text[:140] + ("…" if len(m.text) > 140 else "")
+            items.append({
+                "id": m.id,
+                "kind": "outbox",
+                "summary": f"Enviar para {to_name}: {preview}",
+                "to": m.to,
+                "to_name": to_name,
+                "body_preview": preview,
+                "channel": m.channel,
+                "ref": m.ref,
+                "why": m.why,
+                "date": m.drafted.isoformat() if m.drafted else None,
+                "is_port": True,
+                "port": "outbox",
+                "batch_acceptable": False,
+            })
 
-    for s in sorted(st.shares.values(), key=lambda x: x.id):
-        if s.status != "solicitada":
-            continue
-        name = Path(s.report).name or s.report
-        items.append({
-            "id": s.id,
-            "kind": "publish",
-            "summary": f"Publicar {name} em {s.destination}",
-            "report": s.report,
-            "dest": s.destination,
-            "date": s.date.isoformat() if s.date else None,
-            "is_port": True,
-            "port": "publish",
-            "batch_acceptable": False,
-        })
+        for s in sorted(st.shares.values(), key=lambda x: x.id):
+            if s.status != "solicitada":
+                continue
+            name = Path(s.report).name or s.report
+            items.append({
+                "id": s.id,
+                "kind": "publish",
+                "summary": f"Publicar {name} em {s.destination}",
+                "report": s.report,
+                "dest": s.destination,
+                "date": s.date.isoformat() if s.date else None,
+                "is_port": True,
+                "port": "publish",
+                "batch_acceptable": False,
+            })
 
-    for q in sorted(st.questions.values(), key=lambda x: x.id):
-        if q.status != "aberta":
-            continue
-        items.append({
-            "id": q.id,
-            "kind": "ask",
-            "subkind": q.kind,
-            "summary": q.text,
-            "question": q.text,
-            "options": list(q.options),
-            "context": list(q.context),
-            "date": q.asked.isoformat() if q.asked else None,
-            "is_port": False,
-            "batch_acceptable": False,
-        })
+        for q in sorted(st.questions.values(), key=lambda x: x.id):
+            if q.status != "aberta":
+                continue
+            items.append({
+                "id": q.id,
+                "kind": "ask",
+                "subkind": q.kind,
+                "summary": q.text,
+                "question": q.text,
+                "options": list(q.options),
+                "context": list(q.context),
+                "date": q.asked.isoformat() if q.asked else None,
+                "is_port": False,
+                "batch_acceptable": False,
+            })
 
-    for f in sorted(st.focus_plans.values(), key=lambda x: x.id):
-        if f.status != "proposto":
-            continue
-        items.append({
-            "id": f.id,
-            "kind": "focus",
-            "summary": f"Plano de foco {f.id} ({len(f.blocks)} bloco(s))",
-            "blocks": len(f.blocks),
-            "plan_file": f.plan_file,
-            "date": f.created.isoformat() if f.created else None,
-            "is_port": True,
-            "port": "focus",
-            "batch_acceptable": False,
-        })
+        for f in sorted(st.focus_plans.values(), key=lambda x: x.id):
+            if f.status != "proposto":
+                continue
+            items.append({
+                "id": f.id,
+                "kind": "focus",
+                "summary": f"Plano de foco {f.id} ({len(f.blocks)} bloco(s))",
+                "blocks": len(f.blocks),
+                "plan_file": f.plan_file,
+                "date": f.created.isoformat() if f.created else None,
+                "is_port": True,
+                "port": "focus",
+                "batch_acceptable": False,
+            })
 
-    for pair in dupes.pairs(st):
-        a_id, b_id = pair["a"], pair["b"]
-        items.append({
-            "id": f"DUPE:{a_id}:{b_id}",
-            "kind": "dupe",
-            "summary": f"{a_id} ({pair['a_title']}) ↔ {b_id} ({pair['b_title']}) · {pair['score']:.2f}",
-            "pair": [a_id, b_id],
-            "score": pair["score"],
-            "why": list(pair["why"]),
-            "is_port": False,
-            "batch_acceptable": False,
-        })
+        for pair in dupes.pairs(st, cache_key=str(brain.inst.root)):
+            a_id, b_id = pair["a"], pair["b"]
+            items.append({
+                "id": f"DUPE:{a_id}:{b_id}",
+                "kind": "dupe",
+                "summary": f"{a_id} ({pair['a_title']}) ↔ {b_id} ({pair['b_title']}) · {pair['score']:.2f}",
+                "pair": [a_id, b_id],
+                "score": pair["score"],
+                "why": list(pair["why"]),
+                "is_port": False,
+                "batch_acceptable": False,
+            })
 
-    counts = {k: 0 for k in KINDS}
-    for it in items:
-        counts[it["kind"]] += 1
-    total = sum(counts.values())
-    batch_acceptable = counts["proposal"]
-    ports = sum(counts[k] for k in PORT_KINDS)
+        counts = {k: 0 for k in KINDS}
+        for it in items:
+            counts[it["kind"]] += 1
+        total = sum(counts.values())
+        batch_acceptable = counts["proposal"]
+        ports = sum(counts[k] for k in PORT_KINDS)
 
-    filtered = [it for it in items if it["kind"] == kind] if kind is not None else items
+        cached = {
+            "items": items,
+            "counts": counts,
+            "total": total,
+            "batch_acceptable": batch_acceptable,
+            "ports": ports,
+        }
+        _QUEUE_CACHE[rev] = cached
+        _QUEUE_CACHE.move_to_end(rev)
+        while len(_QUEUE_CACHE) > _CACHE_MAX:
+            _QUEUE_CACHE.popitem(last=False)
+    else:
+        _QUEUE_CACHE.move_to_end(rev)
+
+    filtered = [_copy_item(it) for it in cached["items"] if kind is None or it["kind"] == kind]
     return {
         "items": filtered,
-        "counts": counts,
-        "total": total,
-        "batch_acceptable": batch_acceptable,
-        "ports": ports,
+        "counts": dict(cached["counts"]),
+        "total": cached["total"],
+        "batch_acceptable": cached["batch_acceptable"],
+        "ports": cached["ports"],
         "kind": kind,
     }
 
