@@ -378,15 +378,20 @@ def _leak_terms(inst: config.Instance) -> list[tuple[str, str]]:
     for x in cfg.get("publish", {}).get("destinations", []):
         add("destino", str(x).split(":", 1)[-1].lstrip("#@"))
     emails: list[str] = []
-    try:
-        from .core import Brain
-        for p in Brain(inst).state.people.values():
+    from .core import Brain
+    brain = Brain(inst)
+    if brain.ledger_path.exists():
+        try:
+            people = brain.state.people.values()
+        except util.BrainError:
+            raise
+        except (OSError, UnicodeDecodeError, ValueError, TypeError, KeyError) as e:
+            raise util.BrainError(f"ledger ilegível ou corrompido: {e}", code=5) from e
+        for p in people:
             for n in p.names():
                 add("pessoa", n)
             if p.email:
                 emails.append(p.email)
-    except Exception:  # ledger ausente/corrompido: segue com o que a config deu
-        pass
     for email in emails:
         add("e-mail", email)
         domain = email.rpartition("@")[2].lower()
@@ -569,7 +574,14 @@ def scan(inst: config.Instance, ref: str | None, committed: bool = False,
         for rule, _ in _scan_line(text, term_res, home):
             if (file, line, rule) not in seen:
                 seen.add((file, line, rule))
-                findings.append({"file": file, "line": line, "rule": rule, "text": text.strip()[:110]})
+                stripped = text.strip()
+                findings.append({
+                    "file": file,
+                    "line": line,
+                    "rule": rule,
+                    "fingerprint": util.sha(stripped, 12),
+                    "length": len(stripped),
+                })
 
     if revsets is None:
         revsets = [[f"{ref}..HEAD"] if ref else ["HEAD"]]
@@ -589,7 +601,7 @@ def scan(inst: config.Instance, ref: str | None, committed: bool = False,
                     if key not in seen:
                         seen.add(key)
                         findings.append({"file": f, "line": 0, "rule": key[2],
-                                         "text": "vault/ e config pessoal nunca vão ao repo (git rm --cached + reescrever o commit)"})
+                                         "hint": "vault/ e config pessoal nunca vão ao repo (git rm --cached + reescrever o commit)"})
     else:
         _scan_diff(root, _git(root, *q, "diff", "-U0", "--no-color", ref or EMPTY_TREE).stdout, check)
     for f in ([] if committed else _lines(_git(root, *q, "ls-files", "--others", "--exclude-standard"))):
@@ -654,7 +666,7 @@ def pre_push_scan(inst: config.Instance, remote: str, stdin_text: str) -> dict:
     revsets = push_revsets(inst, remote, stdin_text)
     tracked = [f for f in _lines(_git(inst.root, "ls-files")) if _private_path(f)]
     findings = [{"file": f, "line": 0, "rule": "arquivo do dono rastreado pelo git",
-                 "text": "git rm --cached antes de enviar"} for f in tracked]
+                 "hint": "git rm --cached antes de enviar"} for f in tracked]
     findings += scan(inst, None, committed=True, revsets=revsets) if revsets else []
     return {"remote": remote, "branch": "(pre-push)", "ref": None, "ahead": 0, "behind": 0, "changed": [], "new": [],
             "local_scripts": [], "committed_only": True, "revsets": revsets, "findings": findings}
@@ -686,7 +698,10 @@ def upstream_scan(inst: config.Instance, remote: str | None = None, branch: str 
 
 def _print_findings(findings: list[dict]) -> None:
     for f in findings[:25]:
-        print(f"  ✗ {f['file']}:{f['line']} — {f['rule']}: {f['text']}")
+        if f.get("hint"):
+            print(f"  ✗ {f['file']}:{f['line']} — {f['rule']}: {f['hint']}")
+        else:
+            print(f"  ✗ {f['file']}:{f['line']} — {f['rule']} (sha:{f.get('fingerprint', '')}, {f.get('length', 0)} chars)")
     if len(findings) > 25:
         print(f"  … e mais {len(findings) - 25}")
 

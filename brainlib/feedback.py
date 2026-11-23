@@ -16,7 +16,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from . import ask, config, issues, publicguard, schema, util
+from . import ask, config, ids, issues, publicguard, schema, util
 from .cli import _fact_opts, _out
 from .core import Brain
 
@@ -51,7 +51,15 @@ def issue_body(f, body: str | None = None) -> str:
     return "\n".join(lines)
 
 
-VAULT_REF_RE = re.compile(r"\b(?:TASK|DEC|WIN|PROP|MSG|PUB|FOCUS|PROC|OPP|ASK|FB)-\d{3,}\b|\b(?:GOAL|PROJ)-\d+(?:\.\d+)?\b")
+_NEW_LONG = "|".join(ids.LONG_PREFIXES)
+_OLD_LONG = "|".join(sorted(ids.LEGACY_LONG))
+# Formas longas e GOAL/PROJ em qualquer caixa. As formas curtas legadas (P3.2, G1) só em maiúsculas, como
+# se escrevem no goals.md: "p1"/"g2"/"p10" minúsculos são texto comum (prioridade de fila, geração) — o
+# próprio `brain migrate ids` trata esses como ambíguos fora do vault.
+VAULT_REF_RE = re.compile(
+    rf"\b(?:(?i:(?:{_NEW_LONG})-\d{{3,}}|(?:{_OLD_LONG})-\d{{3,}}|(?:GOAL|PROJ)-\d+(?:\.\d+)?)"
+    r"|P\d+(?:\.\d+)?|G\d+)\b"
+)
 
 
 def refs_guard(*texts: str) -> None:
