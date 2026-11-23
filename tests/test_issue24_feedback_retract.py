@@ -80,7 +80,7 @@ class WithdrawAndRetractTests(unittest.TestCase):
         (self.brain.inst.config_dir / ".env").write_text("GITHUB_TOKEN=fake-token-teste\n", encoding="utf-8")
 
     def _publish_fb(self, title: str = "Alerta de fornada", body: str = "Texto inicial",
-                    by_add: str = "owner", by_push: str = "system", number: int = 42) -> str:
+                    by_add: str = "owner", by_push: str = "owner", number: int = 42) -> str:
         ev = feedback.add(
             self.brain, "sugestao", title, body,
             by=by_add, prov="declarado" if by_add == "owner" else "observado", source="chat",
@@ -121,7 +121,7 @@ class WithdrawAndRetractTests(unittest.TestCase):
 
         # push e revise recusam item retirado sem tentar token/rede
         with self.assertRaises(util.BrainError):
-            feedback.push(self.brain, fid_owner)
+            feedback.push(self.brain, fid_owner, approval="ok")
         with self.assertRaises(util.BrainError):
             feedback.revise(self.brain, fid_owner, title="Novo título")
 
@@ -139,7 +139,7 @@ class WithdrawAndRetractTests(unittest.TestCase):
     # ── retract --withdraw (dono & agente / Regra B) ────────────────────────
     def test_retract_withdraw_owner_e_agent_regra_b(self):
         self._token()
-        fid_agent = self._publish_fb("Fornada demora", by_add="agent", by_push="system", number=101)
+        fid_agent = self._publish_fb("Fornada demora", by_add="agent", by_push="owner", number=101)
         fid_owner = self._publish_fb("Trocar cor do botão", by_add="owner", by_push="owner", number=102)
 
         calls: list[tuple[str, str, dict]] = []
@@ -194,7 +194,7 @@ class WithdrawAndRetractTests(unittest.TestCase):
         with self.assertRaises(util.BrainError):
             feedback.retract(self.brain, fid_agent, mode="withdraw", reason="de novo", by="owner")
         with self.assertRaises(util.BrainError):
-            feedback.push(self.brain, fid_agent)
+            feedback.push(self.brain, fid_agent, approval="ok")
 
         # dono pode retratar item do dono (ou do agente) sem precisar de --evidence
         calls.clear()
@@ -293,7 +293,7 @@ class WithdrawAndRetractTests(unittest.TestCase):
 
     # ── noturno (BRAIN_NIGHTLY=1) + doctor + sync ───────────────────────────
     def test_noturno_cria_ask_e_doctor_avisa_e_sync_preserva_retratado(self):
-        fid = self._publish_fb("Item noturno", by_add="agent", by_push="system", number=88)
+        fid = self._publish_fb("Item noturno", by_add="agent", by_push="owner", number=88)
         os.environ["BRAIN_NIGHTLY"] = "1"
         with mock.patch("urllib.request.urlopen", side_effect=AssertionError("zero chamadas no noturno")):
             res = feedback.retract(

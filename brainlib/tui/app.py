@@ -84,7 +84,7 @@ CMD_CATALOG = [               # paleta de comandos: nome, linha da CLI, (face, p
     ("Aplicar foco na agenda", "brain focus apply FOCUS-#### --mode ics|google", (0, 4, 3, "a")),
     ("Pedir publicação", "brain publish request … --to slack:#canal", (0, 4, 4, "n")),
     ("Sugerir / reportar bug", 'brain feedback add "…" --kind sugestao|bug --body "…"', (0, 6, 1, "n")),
-    ("Publicar feedback pendente", "brain feedback push FB-####", (0, 6, 1, "p")),
+    ("Publicar feedback pendente", 'brain feedback push FB-#### --approval "…"', (0, 6, 1, "p")),
     ("Retirar rascunho de feedback", 'brain feedback withdraw FB-#### --reason "…"', (0, 6, 1, "d")),
     ("Retratar issue de feedback", 'brain feedback retract FB-#### --withdraw|--correct --reason "…"', (0, 6, 1, "r")),
     ("Sincronizar estado dos issues", "brain feedback sync", (0, 6, 1, "s")),

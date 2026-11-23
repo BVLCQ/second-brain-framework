@@ -10,7 +10,7 @@ import argparse
 import json
 import os
 
-from . import ice_rubric, planning, portfolio, util, watch
+from . import gates, ice_rubric, planning, portfolio, util, watch
 from .cli import _append_plan_log, _common, _create_goal, _create_project, _fact_opts, _out, _resolve_people
 from .core import Brain
 from .schema import WATCH_KINDS
@@ -314,9 +314,10 @@ def _promote(args, b: Brain) -> None:
         print(f"Proposta ({where}):\n  " + "\n  ".join(diff))
         raise util.BrainError(f"promover {o.id} no nível {level}: mudança estrutural — exige --approval com a "
                               "resposta literal do dono", code=4)
+    approval, _ = gates.verify_approval(args.approval, what=f"opportunity promote {o.id}")
     if level == "project":
         nid, events = _create_project(
-            b, args.goal, title, owner, args.approval, reason, args.evidence, why,
+            b, args.goal, title, owner, approval, reason, args.evidence, why,
             extra=lambda pid: [
                 {"type": "opportunity.promoted", "id": o.id, "by": "owner",
                  "data": {"project": pid, "goal": args.goal}},
@@ -327,7 +328,7 @@ def _promote(args, b: Brain) -> None:
         return
     if level == "goal":
         nid, events = _create_goal(
-            b, title, why, args.approval, reason, args.evidence,
+            b, title, why, approval, reason, args.evidence,
             extra=lambda gid: [
                 {"type": "opportunity.promoted", "id": o.id, "by": "owner", "data": {"goal": gid}},
                 {"type": "opportunity.status", "id": o.id, "by": "owner",
@@ -349,7 +350,7 @@ def _promote(args, b: Brain) -> None:
              "data": {"status": "em-andamento", "reason": f"promovida a {nid}"}}])
         _append_plan_log(inst, f"{today} · {nid} entregável criado sob {args.project} "
                                f"(promoção de {o.id}): {title} · evidência: {args.evidence or '—'}"
-                               f" · aprovado: \"{args.approval}\"")
+                               f" · aprovado: \"{approval}\"")
     except util.BrainError:
         util.atomic_write(path, before)          # o ledger recusou: o goals.md volta ao que era
         raise

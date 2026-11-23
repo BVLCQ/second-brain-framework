@@ -16,7 +16,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from . import ask, config, ids, issues, publicguard, schema, util
+from . import ask, config, gates, ids, issues, publicguard, schema, util
 from .cli import _fact_opts, _out
 from .core import Brain
 
@@ -229,11 +229,11 @@ def withdraw(brain: Brain, fid: str, reason: str, by: str = "owner", prov: str =
                              "source": source or "chat", "data": {"reason": reason}})
 
 
-def push(brain: Brain, fid: str) -> dict:
+def push(brain: Brain, fid: str, *, approval: str = "", by: str = "owner") -> dict:
     """Cria a issue no GitHub e grava `feedback.pushed` (número + URL). Erros de API gravam `feedback.failed`.
 
-    Pré-cheques (token, noturno, texto) falham ANTES de qualquer chamada na rede: nada é registrado como
-    falha porque nada foi tentado — o item segue pendente."""
+    Pré-cheques (aprovação, noturno, texto, token) falham ANTES de qualquer chamada na rede: nada é registrado
+    como falha porque nada foi tentado — o item segue pendente."""
     f = _need(brain, fid)
     if f.status in ("retirado", "retratado"):
         raise util.BrainError(f"{fid} está '{f.status}' — não pode ser publicado", code=4)
@@ -241,7 +241,10 @@ def push(brain: Brain, fid: str) -> dict:
         raise util.BrainError(f"{fid}: issue já criada — {f.url}", code=4)
     if util.is_nightly():
         raise util.BrainError(f"{fid}: publicar issue é do dia — no noturno a porta não abre "
-                              "(registrar ficou; `brain feedback push {fid}` amanhã)", code=4)
+                              f"(registrar ficou; `brain feedback push {fid} --approval ok` amanhã)", code=4)
+    if by != "owner":
+        raise util.BrainError(f"{fid}: publicar issue exige o dono (--by owner)", code=4)
+    quote, origin = gates.verify_approval(approval, what=f"feedback push {fid}")
     repo = brain.inst.cfg["feedback"]["repo"]
     public_text_guard(brain.inst, f.title, f.body)    # público: regra dura, sem override (título e corpo CRUS)
     title, body = issue_title(f), issue_body(f)
@@ -257,10 +260,12 @@ def push(brain: Brain, fid: str) -> dict:
         except util.BrainError:
             pass                                  # a falha original é a que importa
         raise util.BrainError(f"{fid}: {e} — ficou '{brain.state.feedbacks[fid].status}'; "
-                              f"`brain feedback push {fid}` de novo", code=4) from e
+                              f"`brain feedback push {fid} --approval ok` de novo", code=4) from e
     try:
-        ev = brain.record_one({"type": "feedback.pushed", "id": fid, "by": "system",
-                               "data": {"number": res["number"], "url": res["url"]}})
+        data: dict = {"number": res["number"], "url": res["url"], "quote": quote}
+        if origin == "surface":
+            data["surface"] = quote
+        ev = brain.record_one({"type": "feedback.pushed", "id": fid, "by": "owner", "data": data})
         want = KIND_LABEL[f.kind]
         if "labels" in res and want not in res["labels"]:       # quem não é colaborador (ou o token sem permissão) fica sem label
             ev = {**ev, "label_note": f"a issue saiu sem o label '{want}' (o GitHub só aplica label com permissão de "
@@ -293,8 +298,7 @@ def retract(brain: Brain, fid: str, *, mode: str, reason: str, body: str | None 
     if mode == "correct":
         if by != "owner":
             raise util.BrainError(f"{fid}: corrigir issue publicada (--correct) exige o dono (--by owner)", code=4)
-        if not approval:
-            raise util.BrainError(f"{fid}: --correct exige aprovação literal do dono (--approval \"ok\")", code=4)
+        approval, _ = gates.verify_approval(approval, what=f"feedback retract --correct {fid}")
         if not (body or "").strip():
             raise util.BrainError(f"{fid}: --correct exige o novo corpo (--body ou --body-file)", code=2)
     else:
@@ -368,6 +372,7 @@ def retract(brain: Brain, fid: str, *, mode: str, reason: str, body: str | None 
         data["evidence"] = evidence
     if mode == "correct":
         data["body"] = clean_body
+        data["approval"] = approval
     return brain.record_one({
         "type": "feedback.retracted",
         "id": fid,
@@ -378,12 +383,12 @@ def retract(brain: Brain, fid: str, *, mode: str, reason: str, body: str | None 
     })
 
 
-def from_proposal(brain: Brain, pid: str) -> tuple[str | None, str]:
+def from_proposal(brain: Brain, pid: str, *, approval: str = "ok") -> tuple[str | None, str]:
     """Proposta `framework` aceita → issue no repo do framework. → (FB-####, aviso).
 
     O "aceito" do dono é a aprovação do texto (ele o viu na proposta). Nunca falha o aceite: sem token,
     rede, dado do dono no texto ou título repetido, o FB fica `pendente` (ou nem nasce) e o aviso diz o
-    que falta — `brain feedback push FB-####` resolve depois."""
+    que falta — `brain feedback push FB-#### --approval ok` resolve depois."""
     p = brain.state.proposals[pid]
     if p.kind != "framework":
         return None, ""
@@ -397,7 +402,7 @@ def from_proposal(brain: Brain, pid: str) -> tuple[str | None, str]:
         return None, f"⚠ a issue não foi registrada: {e}"
     fid = fb["id"]
     try:
-        push(brain, fid)
+        push(brain, fid, approval=approval, by="owner")
     except util.BrainError as e:
         return fid, f"⚠ {fid} ficou pendente: {e}"
     return fid, ""
@@ -504,17 +509,20 @@ def cli(args, brain: Brain) -> None:
                  args.source or "", args.date, args.force)
         f = brain.state.feedbacks[ev["id"]]
         print(f"✓ {line(f)}")
+        if args.by == "agent":
+            print(f"  rascunho guardado — publicar no repo público pede aprovação do dono: `brain feedback push {f.id} --approval ok`")
+            return
         if args.no_push:
             return
         try:                                       # add empurra a issue na sequência (porta 7)
-            ev = push(brain, f.id)
+            ev = push(brain, f.id, approval=args.approval or "", by=args.by)
             print(f"✓ issue criada: {ev['data']['url']}")
             if ev.get("label_note"):
                 print(f"⚠ {ev['label_note']}")
         except util.BrainError as e:
             print(f"⚠ {e}")
     elif c == "push":
-        ev = push(brain, args.id)
+        ev = push(brain, args.id, approval=args.approval or "", by=args.by)
         print(f"✓ issue criada: {ev['data']['url']}")
         if ev.get("label_note"):
             print(f"⚠ {ev['label_note']}")
@@ -535,7 +543,7 @@ def cli(args, brain: Brain) -> None:
             _out(args, ev, f"✓ {line(brain.state.feedbacks[args.id])}")
     elif c == "pushed":
         _need(brain, args.id)
-        brain.record_one({"type": "feedback.pushed", "id": args.id, "by": "system",
+        brain.record_one({"type": "feedback.pushed", "id": args.id, "by": "owner",
                           "data": {"number": args.number, "url": args.url}})
         print(f"✓ {line(brain.state.feedbacks[args.id])}")
     elif c == "failed":
@@ -579,6 +587,7 @@ def add_parsers(sub) -> None:
     x.add_argument("--body-file", help="o mesmo, de um arquivo (headless não passa heredoc)")
     x.add_argument("--no-push", action="store_true", help="só registra (FB-#### pendente); `brain feedback push` depois")
     x.add_argument("--force", action="store_true", help="registra mesmo com título igual ao de um FB existente")
+    x.add_argument("--approval", default="", help="aprovação literal do dono (ex.: 'ok') para publicar na sequência")
     _fact_opts(x)
     x = s.add_parser("template", help="o molde (campos e dicas) da issue pública: sugestao | bug | framework")
     x.add_argument("--kind", choices=list(issues.KINDS), default="sugestao")
@@ -591,6 +600,8 @@ def add_parsers(sub) -> None:
     x.add_argument("--by", choices=["owner", "agent"], default="owner")
     x = s.add_parser("push", help="cria a issue de um FB pendente/falhou no GitHub e registra número+URL")
     x.add_argument("id")
+    x.add_argument("--approval", default="", help="aprovação literal do dono (ex.: 'ok')")
+    x.add_argument("--by", choices=["owner", "agent"], default="owner")
     x = s.add_parser("withdraw", help="retira um rascunho pendente/falhou antes de publicar")
     x.add_argument("id")
     x.add_argument("--reason", required=True, help="motivo da retirada")
@@ -611,7 +622,7 @@ def add_parsers(sub) -> None:
     x.add_argument("id")
     x.add_argument("--number", type=int, required=True)
     x.add_argument("--url", required=True)
-    x.set_defaults(by="system")
+    x.set_defaults(by="owner")
     x = s.add_parser("failed", help="registra falha de tentativa (uso manual)")
     x.add_argument("id")
     x.add_argument("--error", required=True)

@@ -19,7 +19,7 @@ class FeedbackKeys:
 
     def f_feedback_push(self) -> None:
         f = self.cur().data
-        self.exec([["feedback", "push", f.id]])
+        self.exec([["feedback", "push", f.id, "--approval", "tui"]])
 
     def f_feedback_withdraw(self) -> None:
         f = self.cur().data

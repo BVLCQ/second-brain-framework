@@ -10,7 +10,7 @@ import os
 import sys
 from pathlib import Path
 
-from . import __version__, config, dupes, ids, people, planning, schema, util
+from . import __version__, config, dupes, gates, ids, people, planning, schema, util
 from .core import Brain
 
 
@@ -429,16 +429,22 @@ def cmd_proposal(args, b: Brain) -> None:
              + ("\n  se aceita, vira issue no GitHub: " + args.issue_title if args.kind == "framework" else ""))
     elif args.rcmd in ("accept", "reject"):
         t = "proposal.accepted" if args.rcmd == "accept" else "proposal.rejected"
-        ev = b.record_one({"type": t, "id": args.id, "by": "owner", "data": {"quote": args.quote}})
+        if args.rcmd == "accept":
+            quote, _ = gates.verify_approval(args.quote, what=f"proposal accept {args.id}")
+        else:
+            quote = (args.quote or "").strip()
+            if not quote:
+                raise util.BrainError(f"proposal reject {args.id}: --quote vazio — informe o motivo", code=4)
+        ev = b.record_one({"type": t, "id": args.id, "by": "owner", "data": {"quote": quote}})
         extra, warn = "", ""
         if args.rcmd == "accept" and b.state.proposals[args.id].kind == "framework":
             from . import feedback
-            fid, warn = feedback.from_proposal(b, args.id)
+            fid, warn = feedback.from_proposal(b, args.id, approval=quote)
             if fid:
                 f = b.state.feedbacks[fid]
                 extra = f" → {fid} ({f.status})" + (f" {f.url}" if f.url else "")
                 ev = {**ev, "feedback": fid}
-        _out(args, ev, f"✓ {args.id} {'aceita' if args.rcmd == 'accept' else 'rejeitada'} ({args.quote!r}){extra}")
+        _out(args, ev, f"✓ {args.id} {'aceita' if args.rcmd == 'accept' else 'rejeitada'} ({quote!r}){extra}")
         if warn:
             print(warn, file=sys.stderr)
     elif args.rcmd == "list":
@@ -519,12 +525,11 @@ def cmd_plan(args, b: Brain) -> None:
     elif args.plcmd == "edit":
         _plan_edit(args, b)
     elif args.plcmd == "log":
-        if not args.approval.strip():          # como nos outros gates: aprovação em branco não é aprovação
-            raise util.BrainError("plan log: --approval vazio — exige a resposta literal do dono", code=4)
+        approval, _ = gates.verify_approval(args.approval, what="plan log")
         ev = b.record_one({"type": "plan.changed", "by": "owner", "data": {
-            "diff": args.diff, "reason": args.reason, "evidence": args.evidence, "approval": args.approval}})
+            "diff": args.diff, "reason": args.reason, "evidence": args.evidence, "approval": approval}})
         _append_plan_log(inst, f"{util.today().isoformat()} · {args.diff} · {args.reason} · "
-                               f"evidência: {args.evidence or '—'} · aprovado: \"{args.approval}\"")
+                               f"evidência: {args.evidence or '—'} · aprovado: \"{approval}\"")
         _out(args, ev, "✓ mudança registrada em PLANNING/log.md e no ledger")
 
 
@@ -537,8 +542,7 @@ def _create_project(b: Brain, goal: str, title: str, owner: str, approval: str, 
         raise util.BrainError("plan add-project: proibido no noturno — a árvore é do dono, que precisa estar presente", code=4)
     if goal not in b.plan.goals:
         raise util.BrainError(f"goal {goal} não existe em PLANNING/goals.md", code=3)
-    if not (approval or "").strip():
-        raise util.BrainError("criar project é mudança estrutural: exige --approval com a resposta literal do dono", code=4)
+    approval, _ = gates.verify_approval(approval, what="plan add-project")
     path, today = inst.planning_file, util.today().isoformat()
     before = path.read_text(encoding="utf-8") if path.exists() else ""
     nid = planning.add_project(path, goal, title, owner, why)
@@ -564,8 +568,7 @@ def _create_goal(b: Brain, title: str, why: str, approval: str, reason: str,
     inst = b.inst
     if util.is_nightly():
         raise util.BrainError("plan add-goal: proibido no noturno — a árvore é do dono, que precisa estar presente", code=4)
-    if not (approval or "").strip():
-        raise util.BrainError("criar goal é mudança estrutural: exige --approval com a resposta literal do dono", code=4)
+    approval, _ = gates.verify_approval(approval, what="plan add-goal")
     path, today = inst.planning_file, util.today().isoformat()
     before = path.read_text(encoding="utf-8") if path.exists() else ""
     nid = planning.add_goal(path, title, horizon, why)
@@ -634,8 +637,9 @@ def _plan_edit(args, b: Brain) -> None:
         fields["owner"] = _resolve_people(b, [args.owner])[0]
     if not any(v is not None for v in fields.values()):
         raise util.BrainError("plan edit: nada para mudar (use --title, --status, --horizon, --why, --owner, --due, --weight)", code=3)
-    if kind != "deliverable" and not (args.approval or "").strip():
-        raise util.BrainError(f"editar {kind} é mudança estrutural: exige --approval com a resposta literal do dono", code=4)
+    approval = ""
+    if kind != "deliverable":
+        approval, _ = gates.verify_approval(args.approval, what=f"plan edit {kind}")
     path = inst.planning_file
     before = path.read_text(encoding="utf-8")
     changes = planning.edit_node(path, args.id, **fields)
@@ -648,9 +652,9 @@ def _plan_edit(args, b: Brain) -> None:
         if kind != "deliverable":
             reason = args.reason or f"edição de {args.id}"
             ev = b.record_one({"type": "plan.changed", "by": "owner", "data": {
-                "diff": f"{args.id} editado · {what}", "reason": reason, "evidence": args.evidence, "approval": args.approval}})
+                "diff": f"{args.id} editado · {what}", "reason": reason, "evidence": args.evidence, "approval": approval}})
             _append_plan_log(inst, f"{today} · {args.id} editado · {what} · {reason} · evidência: {args.evidence or '—'}"
-                                   f" · aprovado: \"{args.approval}\"")
+                                   f" · aprovado: \"{approval}\"")
         else:
             ev = None
             _append_plan_log(inst, f"{today} · {args.id} entregável editado · {what} · sem gate (não é goal nem projeto)")

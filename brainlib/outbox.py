@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 
-from . import util
+from . import gates, util
 
 
 def _allowed(brain, to: str) -> bool:
@@ -53,6 +53,7 @@ def approve(brain, mid: str, quote: str) -> dict:
     if m.status != "rascunho":
         raise util.BrainError(f"{mid} está '{m.status}' — só rascunho pode ser aprovado", code=4)
     _require_allowed(brain, m)
+    quote, _ = gates.verify_approval(quote, what=f"outbox approve {mid}", pattern=gates.OUTBOX_RE)
     return brain.record_one({"type": "message.approved", "id": mid, "by": "owner",
                              "data": {"quote": quote, "text_sha": m.text_sha}})
 

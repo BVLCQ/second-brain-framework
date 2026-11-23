@@ -1714,7 +1714,7 @@ function wireP0(){
   document.querySelectorAll("#view [data-progress]").forEach(b => b.onclick = () => progressForm(b.dataset.progress));
   document.querySelectorAll("#view [data-pub]").forEach(b => { const parts = b.dataset.pub.split(":"); b.onclick = () => pubAction(parts[0], parts[1]); });
   document.querySelectorAll("#view [data-fb]").forEach(b => { const id0 = b.dataset.fb; b.onclick = () => {
-    runCommand("brain feedback push " + id0); }});
+    runCommand("brain feedback push " + id0 + " --approval painel"); }});   // gate: resposta do dono (a mesma convenção da TUI)
   document.querySelectorAll("#view [data-fbwithdraw]").forEach(b => { const id0 = b.dataset.fbwithdraw; b.onclick = () => {
     const fb = (window.BRAIN.M.feedback || []).find(x => x.id === id0); if (fb) feedbackWithdrawForm(fb); }; });
   document.querySelectorAll("#view [data-fbretract]").forEach(b => { const id0 = b.dataset.fbretract; b.onclick = () => {
@@ -2928,7 +2928,7 @@ function ctxKeys(k){
     const fid = selId() || "";
     const fb = fid.startsWith("FB-") ? M.feedback.find(x => x.id === fid) : null;
     if (k === "p") {
-      if (fb && (fb.status === "pendente" || fb.status === "falhou")) runCommand("brain feedback push " + fb.id);
+      if (fb && (fb.status === "pendente" || fb.status === "falhou")) runCommand("brain feedback push " + fb.id + " --approval painel");
       else if (!fb) needSel();
       else toast(fb.id + " está " + fb.status + " — publicar vale para pendente ou falhou");
       return true; }

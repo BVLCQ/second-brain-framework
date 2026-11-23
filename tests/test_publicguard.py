@@ -210,7 +210,7 @@ class FlowTest(unittest.TestCase):
         feedback.create_issue = lambda *a, **k: called.append(1) or {"number": 1, "url": "u"}
         try:
             with self.assertRaises(util.BrainError) as cm:
-                feedback.push(self.brain, "FB-0001")
+                feedback.push(self.brain, "FB-0001", approval="ok")
         finally:
             feedback.create_issue = orig
         self.assertIn("imagem ou print", str(cm.exception))
@@ -246,7 +246,7 @@ class FlowTest(unittest.TestCase):
         rc, _o, e = self.run_cli("feedback", "revise", "FB-0001", "--body", "fale com a Rosana Silveira")
         self.assertNotEqual(rc, 0)
         self.assertIn("dado pessoal", e)
-        self.brain.record_one({"type": "feedback.pushed", "id": "FB-0001", "by": "system",
+        self.brain.record_one({"type": "feedback.pushed", "id": "FB-0001", "by": "owner",
                                "data": {"number": 3, "url": "https://github.com/o/r/issues/3"}})
         with self.assertRaises(util.BrainError):
             feedback.revise(self.brain, "FB-0001", body="outro texto")

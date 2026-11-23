@@ -147,7 +147,7 @@ class ReviewQueueTests(unittest.TestCase):
         p2 = _seed_proposal(self.b, "descartar-acao", "Duplicada de " + t3, target=t2, into=t3)
 
         before = len(self.b.read_events())
-        res = review.accept_batch(self.b, [p1, "R-1", p2], quote="aprovo lote")
+        res = review.accept_batch(self.b, [p1, "R-1", p2], quote="aprovo")
 
         self.assertEqual(res["summary"], {"requested": 2, "accepted": 2, "failed": 0})
         self.assertEqual([x["id"] for x in res["accepted"]], [p1, p2])
@@ -157,7 +157,7 @@ class ReviewQueueTests(unittest.TestCase):
         prop_events = [e for e in new_events if e["type"] == "proposal.accepted"]
         self.assertEqual([e["id"] for e in prop_events], [p1, p2])
         self.assertNotEqual(prop_events[0]["seq"], prop_events[1]["seq"])
-        self.assertEqual(prop_events[0]["data"]["quote"], "aprovo lote")
+        self.assertEqual(prop_events[0]["data"]["quote"], "aprovo")
 
         st = self.b.state
         self.assertEqual(st.proposals[p1].status, "aceita")
