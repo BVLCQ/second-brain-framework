@@ -41,7 +41,8 @@ _SECRET_RES = [
     ("chave de API do Google", re.compile(r"AIza[0-9A-Za-z_-]{30,}")),
     ("chave sk-", re.compile(r"\bsk-[A-Za-z0-9_-]{20,}")),
     ("chave privada", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")),
-    ("segredo do Google", re.compile(r"GOOGLE_(?:CLIENT_SECRET|REFRESH_TOKEN)\s*=\s*[^\s#]{8,}")),
+    # ≥ 24 chars: segredo (35) e refresh token (100+) do Google nunca são curtos; template de código (`={refresh}")`) não é achado.
+    ("segredo do Google", re.compile(r"GOOGLE_(?:CLIENT_SECRET|REFRESH_TOKEN)\s*=\s*[^\s#]{24,}")),
 ]
 _SLACK_WS_RE = re.compile(r"\b([a-z0-9-]+)\.slack\.com/(?:archives|team|files|docs)\b", re.I)
 SLACK_PLACEHOLDERS = {"seu-workspace", "workspace", "example", "acme", "empresa", "team"}

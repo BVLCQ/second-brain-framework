@@ -25,15 +25,18 @@ GOOGLE_CLIENT_SECRET=…
 ```
 
 4. Na raiz da instância: `python3 scripts/google_auth.py`
-5. Autorize no navegador. O script imprime o refresh token **uma vez** no
-   terminal. Cole:
+5. Autorize no navegador. O script grava o `GOOGLE_REFRESH_TOKEN` direto no
+   `config/.env` (0600) e mostra só a confirmação com a impressão digital curta —
+   o token não aparece no terminal. Cole à mão só o que falta:
 
 ```
-GOOGLE_REFRESH_TOKEN=…
 GOOGLE_BACKUP_FOLDER_ID=…   # só se for usar backup no Drive
 ```
 
-6. `chmod 600 config/.env`
+   Numa máquina remota, sem o `config/.env` desta instância, use
+   `python3 scripts/google_auth.py --print` (opt-in explícito): aí ele imprime o
+   `GOOGLE_REFRESH_TOKEN=…` uma vez para você levar.
+6. `chmod 600 config/.env` (o script já grava assim; vale para o que você colou à mão)
 7. Foco: em `config/brain.toml`, `[focus] mode = "google"`.
 8. `./brain doctor --online` — calendário some da lista de erros.
 
