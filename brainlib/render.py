@@ -171,7 +171,7 @@ def ensure_bridge(brain, port: int = 8787, wait_s: float = 3.0) -> str | None:
         live = None
     if live:
         return live
-    import os, subprocess, sys, time, socket
+    import os, subprocess, sys, time
     from .tui.bridge import FRAMEWORK                        # o script `brain` mora no FRAMEWORK, não na instância
     log = brain.inst.logs / "serve.log"
     brain.inst.logs.mkdir(parents=True, exist_ok=True)
@@ -187,11 +187,10 @@ def ensure_bridge(brain, port: int = 8787, wait_s: float = 3.0) -> str | None:
     deadline = time.time() + wait_s
     while time.time() < deadline:
         try:
-            with socket.create_connection(("127.0.0.1", port), timeout=0.3):
-                from .serve import live_panel_url as _lpu
-                url = _lpu(brain.inst)
-                if url:
-                    return url
+            from .serve import live_panel_url as _lpu
+            url = _lpu(brain.inst)
+            if url:
+                return url
         except Exception:                                  # noqa: BLE001
             pass
         time.sleep(0.15)

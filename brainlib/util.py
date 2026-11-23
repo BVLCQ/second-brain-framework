@@ -221,6 +221,20 @@ def days_between(a: date, b: date) -> int:
     return (b - a).days
 
 
+def pid_alive(pid: int) -> bool:
+    """O processo existe? Sondagem sem sinal. No Windows `os.kill(pid, 0)` TERMINA o processo (TerminateProcess),
+    então ali a resposta é "não sei" (True) e quem decide é outra evidência — ex.: o ping autenticado da ponte."""
+    if sys.platform.startswith("win"):
+        return True
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True                                   # existe, mas é de outro usuário
+    return True
+
+
 def is_nightly() -> bool:
     """`BRAIN_NIGHTLY` ligado? Única leitura do modo noturno (o agente headless roda sem dono presente).
 

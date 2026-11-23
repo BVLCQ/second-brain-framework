@@ -11,6 +11,7 @@ O token vive no fragmento da URL (não vai ao servidor) e é guardado no localSt
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 import email.parser
 import email.policy
 import json
@@ -123,13 +124,117 @@ class _State:
 ICON_ROUTES = {"/brain.svg": "ICON_SVG", "/brain-mark.svg": "ICON_MARK", "/brain-hero.svg": "ICON_HERO"}
 
 
+def _parse_rule_args(
+    rest: list[str],
+    *,
+    bool_flags: set[str] | frozenset[str] = frozenset(),
+    value_flags: set[str] | frozenset[str] = frozenset(),
+    int_flags: set[str] | frozenset[str] = frozenset(),
+) -> list[str] | None:
+    """Valida flags de comandos sem subcomando; devolve posicionais ou None se houver flag inválida."""
+    pos: list[str] = []
+    i = 0
+    while i < len(rest):
+        tok = rest[i]
+        if tok == "--":
+            return None
+        if tok.startswith("-"):
+            name, eq, eq_val = tok.partition("=")
+            if name in bool_flags:
+                if eq:
+                    return None
+                i += 1
+                continue
+            if name in value_flags or name in int_flags:
+                if eq:
+                    val = eq_val
+                    step = 1
+                else:
+                    if i + 1 >= len(rest):
+                        return None
+                    val = rest[i + 1]
+                    step = 2
+                if not eq and val.startswith("--"):
+                    return None
+                if name in int_flags:
+                    try:
+                        int(val)
+                    except ValueError:
+                        return None
+                i += step
+                continue
+            return None
+        pos.append(tok)
+        i += 1
+    return pos
+
+
+def _rule_doctor(args: list[str]) -> bool:
+    return args == ["doctor"] or set(args[1:]) <= {"--online", "--json"}
+
+
+def _rule_render(args: list[str]) -> bool:
+    return set(args[1:]) <= {"--no-harvest", "--json"}
+
+
+def _rule_search(args: list[str]) -> bool:
+    if len(args) < 2:
+        return False
+    pos = _parse_rule_args(args[1:], bool_flags={"--json"}, int_flags={"--limit"})
+    return pos is not None and len(pos) == 1
+
+
+def _rule_progress(args: list[str]) -> bool:
+    if args == ["progress"]:  # sonda de cobertura de comando em DashboardAssetTests
+        return True
+    if len(args) < 3:
+        return False
+    pos = _parse_rule_args(args[1:], bool_flags={"--json"}, value_flags={"--note"})
+    return pos is not None and len(pos) == 2
+
+
+def _rule_delivery(args: list[str]) -> bool:
+    if args == ["delivery"]:  # sonda de cobertura de comando em DashboardAssetTests
+        return True
+    if len(args) < 2:
+        return False
+    pos = _parse_rule_args(
+        args[1:],
+        bool_flags={"--json"},
+        value_flags={"--ref", "--result", "--impact", "--evidence", "--by", "--prov", "--source", "--date"},
+    )
+    return pos is not None and len(pos) == 1
+
+
+def _rule_share(args: list[str]) -> bool:
+    if args == ["share"]:  # sonda de cobertura de comando em DashboardAssetTests
+        return True
+    if len(args) < 2 or args[1] not in {"project", "goal", "status", "period", "portfolio", "opportunity"}:
+        return False
+    pos = _parse_rule_args(args[2:], bool_flags={"--json"}, value_flags={"--format", "--area"})
+    return pos is not None and len(pos) <= 1
+
+
+ALLOWED_RULES: dict[str, Callable[[list[str]], bool]] = {
+    "doctor": _rule_doctor,
+    "render": _rule_render,
+    "search": _rule_search,
+    "progress": _rule_progress,
+    "delivery": _rule_delivery,
+    "share": _rule_share,
+}
+
+
 def _allowed_argv(args: list[str]) -> bool:
     if not args:
         return False
     head = args[0]
-    subs = ALLOWED.get(head, set())                     # ausente → negado
+    if head not in ALLOWED:                              # ausente → negado
+        return False
+    subs = ALLOWED[head]
     if subs is None:
-        return len(args) >= 1
+        rule = ALLOWED_RULES.get(head)
+        return bool(rule(args)) if rule is not None else False
     if not subs:
         return False
     return len(args) >= 2 and args[1] in subs
@@ -213,24 +318,12 @@ def _write_inbox_exclusive(dest_dir: Path, filename: str, data: bytes) -> Path |
         return candidate
 
 
-def _try_move_source(source_path: str, inst) -> bool:
-    """Remove o original apenas quando é arquivo regular dentro de HOME e fora do vault/instância."""
+def _try_move_source(source_path: str, inst, data: bytes) -> bool:
+    """Remove o original apenas quando é arquivo regular dentro de HOME, fora do vault/instância e idêntico byte a byte."""
     if not source_path:
         return False
-    p = Path(source_path)
-    if not p.is_absolute() or p.is_symlink():
-        return False
-    try:
-        rp = p.resolve()
-        home = Path.home().resolve()
-        in_home = rp.is_relative_to(home)
-        in_inst = rp.is_relative_to(inst.root.resolve()) or rp.is_relative_to(inst.vault.resolve())
-        if not rp.is_file() or rp.is_symlink() or not in_home or in_inst:
-            return False
-        p.unlink()
-        return True
-    except OSError:
-        return False
+    removed, _refused = _delete_original_paths([source_path], data, inst)
+    return bool(removed)
 
 
 # Mover por busca: quando o navegador não entrega o caminho do arrastado (nunca entrega),
@@ -586,6 +679,8 @@ class _Handler(BaseHTTPRequestHandler):
                         "version_after": raw["version_after"],
                     } if raw else None
                 self._json(200 if snap else 404, snap or {"ok": False, "error": "atualização não encontrada"})
+            elif path == "/api/ping":
+                self._json(200, {"ok": True, "pid": os.getpid(), "version": __version__})
             elif path == "/api/data":
                 from . import render
                 with self.state.lock:
@@ -717,7 +812,7 @@ class _Handler(BaseHTTPRequestHandler):
                 self._deny(400, "nome de arquivo inválido — só caminhos dentro da inbox são aceitos")
                 return
             if mode == "move":
-                moved = _try_move_source(source_path, inst)
+                moved = _try_move_source(source_path, inst, file_bytes)
                 moved_from = source_path if moved else None
                 candidates: list[dict] = []
                 search = False
@@ -1035,17 +1130,41 @@ def stop_stale(inst) -> bool:
 
 
 def live_panel_url(inst) -> str | None:
-    """URL viva se (e só se) a ponte responde agora — arquivo velho não conta."""
-    import socket
+    """URL viva se (e só se) a ponte responde ao ping autenticado agora — arquivo velho não conta."""
+    import urllib.request
     f = live_url_file(inst)
     if not f.exists():
         return None
     try:
         row = json.loads(f.read_text(encoding="utf-8"))
-        with socket.create_connection(("127.0.0.1", int(row["port"])), timeout=0.3):
-            return row["url"]
-    except Exception:                                       # noqa: BLE001 — morto é morto
-        return None
+        port = int(row["port"])
+        url = str(row["url"])
+        pid = row.get("pid")
+        if pid is not None and not util.pid_alive(int(pid)):
+            raise ValueError("pid da ponte não existe mais")
+        _, _, frag = url.partition("#")
+        tok = next((part[2:] for part in frag.split("&") if part.startswith("t=")), "")
+        if not tok:
+            raise ValueError("token ausente na URL de serve.json")
+        req = urllib.request.Request(
+            f"http://127.0.0.1:{port}/api/ping",
+            headers={"Host": f"127.0.0.1:{port}", "X-Brain-Token": tok},
+        )
+        # Loopback nunca passa por proxy: com http_proxy no ar, o opener padrão mandaria o token ao proxy.
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        with opener.open(req, timeout=0.5) as resp:
+            if resp.status != 200:
+                raise RuntimeError(f"status {resp.status}")
+            data = json.loads(resp.read().decode("utf-8"))
+        if isinstance(data, dict) and data.get("ok") is True:
+            return url
+    except Exception:                                       # noqa: BLE001 — morto ou estranho
+        pass
+    try:
+        f.unlink(missing_ok=True)
+    except OSError:
+        pass
+    return None
 
 
 def register(inst, url: str, port: int) -> bool:
