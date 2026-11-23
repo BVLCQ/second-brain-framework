@@ -115,32 +115,56 @@ def _github_request(inst: config.Instance, method: str, path: str, payload: dict
         raise util.BrainError(f"sem contato com {API} ({e})", code=4) from e
 
 
+class _InvalidResponseUrl(util.BrainError):
+    """URL devolvida pela API externa falhou na validação de esquema/host após a chamada HTTP."""
+
+    def __init__(self, msg: str, *, number=None):
+        super().__init__(msg, code=5)
+        self.number = number
+
+
+def _http_url_or_blank(url) -> str:
+    """URL devolvida pela API depois de uma escrita que JÁ aconteceu (comentário postado, issue atualizado).
+    Inválida vira vazia, não vira erro: o ledger precisa registrar a escrita, e não pode guardar um link de
+    esquema arbitrário para o painel abrir."""
+    try:
+        return util.require_http_url(url, "html_url")
+    except util.BrainError:
+        return ""
+
+
 def create_issue(inst: config.Instance, repo: str, title: str, body: str, labels: list[str], *,
                  urlopen=None) -> dict:
     """POST /repos/<repo>/issues → {number, url}. Falha é dura: quem chama decide o que registrar."""
     data = _github_request(inst, "POST", f"/repos/{repo}/issues",
                            {"title": title, "body": body, "labels": labels},
                            urlopen=urlopen, err_prefix="GitHub recusou o issue", err_suffix=f" — repo {repo}")
-    return {"number": data["number"], "url": data["html_url"],
+    number = data["number"]
+    try:
+        url = util.require_http_url(data.get("html_url", ""), "html_url")
+    except util.BrainError as e:
+        raise _InvalidResponseUrl(str(e), number=number) from e
+    return {"number": number, "url": url,
             "labels": [x.get("name", "") for x in data.get("labels", []) if isinstance(x, dict)]}
 
 
 def add_comment(inst: config.Instance, repo: str, number: int, body: str, *, urlopen=None) -> dict:
-    """POST /repos/<repo>/issues/<n>/comments → {html_url}."""
+    """POST /repos/<repo>/issues/<n>/comments → {html_url} (vazia se a API devolver link inválido)."""
     data = _github_request(inst, "POST", f"/repos/{repo}/issues/{number}/comments",
                            {"body": body}, urlopen=urlopen,
                            err_prefix=f"GitHub recusou comentar o issue #{number}", err_suffix=f" — repo {repo}")
-    return {"html_url": data.get("html_url", "")}
+    return {"html_url": _http_url_or_blank(data.get("html_url", ""))}
 
 
 def update_issue(inst: config.Instance, repo: str, number: int, *, body: str | None = None,
                  state: str | None = None, state_reason: str | None = None, urlopen=None) -> dict:
-    """PATCH /repos/<repo>/issues/<n> → {number, url, state, state_reason}."""
+    """PATCH /repos/<repo>/issues/<n> → {number, url, state, state_reason} (url vazia se a API devolver link inválido)."""
     payload = {k: v for k, v in (("body", body), ("state", state), ("state_reason", state_reason)) if v is not None}
     data = _github_request(inst, "PATCH", f"/repos/{repo}/issues/{number}",
                            payload, urlopen=urlopen,
                            err_prefix=f"GitHub recusou atualizar o issue #{number}", err_suffix=f" — repo {repo}")
-    return {"number": data.get("number", number), "url": data.get("html_url", ""),
+    return {"number": data.get("number", number),
+            "url": _http_url_or_blank(data.get("html_url", "")),
             "state": data.get("state", ""), "state_reason": data.get("state_reason") or ""}
 
 
@@ -254,6 +278,13 @@ def push(brain: Brain, fid: str, *, approval: str = "", by: str = "owner") -> di
                               "issues no repo de [feedback] e tente de novo (o valor nunca aparece no chat)", code=4)
     try:
         res = create_issue(brain.inst, repo, title, body, [KIND_LABEL[f.kind]])
+    except _InvalidResponseUrl as e:
+        num = e.number if e.number is not None else "<n>"
+        raise util.BrainError(
+            f"{fid}: a issue pode já existir no GitHub mas a URL devolvida é inválida ({e}) — "
+            f"confira e registre com `brain feedback pushed {fid} --number {num} --url <url>`",
+            code=5,
+        ) from e
     except util.BrainError as e:
         try:
             brain.record_one({"type": "feedback.failed", "id": fid, "by": "system", "data": {"error": str(e)}})
@@ -262,7 +293,17 @@ def push(brain: Brain, fid: str, *, approval: str = "", by: str = "owner") -> di
         raise util.BrainError(f"{fid}: {e} — ficou '{brain.state.feedbacks[fid].status}'; "
                               f"`brain feedback push {fid} --approval ok` de novo", code=4) from e
     try:
-        data: dict = {"number": res["number"], "url": res["url"], "quote": quote}
+        url = util.require_http_url(res.get("url", ""), "url")
+    except util.BrainError as e:
+        num = res.get("number")
+        num_hint = num if num is not None else "<n>"
+        raise util.BrainError(
+            f"{fid}: a issue pode já existir no GitHub mas a URL devolvida é inválida ({e}) — "
+            f"confira e registre com `brain feedback pushed {fid} --number {num_hint} --url <url>`",
+            code=5,
+        ) from e
+    try:
+        data: dict = {"number": res["number"], "url": url, "quote": quote}
         if origin == "surface":
             data["surface"] = quote
         ev = brain.record_one({"type": "feedback.pushed", "id": fid, "by": "owner", "data": data})
@@ -272,8 +313,8 @@ def push(brain: Brain, fid: str, *, approval: str = "", by: str = "owner") -> di
                                       "triagem no repo) — o dono do repo aplica na triagem"}
         return ev
     except util.BrainError:
-        raise util.BrainError(f"{fid}: a issue {res['url']} foi criada mas o registro falhou — "
-                              f"`brain feedback pushed {fid} --number {res['number']} --url {res['url']}`",
+        raise util.BrainError(f"{fid}: a issue {url} foi criada mas o registro falhou — "
+                              f"`brain feedback pushed {fid} --number {res['number']} --url {url}`",
                               code=5)
 
 
@@ -361,12 +402,13 @@ def retract(brain: Brain, fid: str, *, mode: str, reason: str, body: str | None 
         raise util.BrainError(f"{fid}: {e}", code=4) from e
 
     use_prov = prov or ("declarado" if by == "owner" else "observado")
+    comment_url = cm.get("html_url") or ""
     data: dict = {
         "mode": mode,
         "reason": reason,
         "number": f.number,
         "url": f.url,
-        "comment_url": cm.get("html_url", ""),
+        "comment_url": comment_url,
     }
     if evidence:
         data["evidence"] = evidence
@@ -543,8 +585,9 @@ def cli(args, brain: Brain) -> None:
             _out(args, ev, f"✓ {line(brain.state.feedbacks[args.id])}")
     elif c == "pushed":
         _need(brain, args.id)
+        url = util.require_http_url(args.url, "--url")
         brain.record_one({"type": "feedback.pushed", "id": args.id, "by": "owner",
-                          "data": {"number": args.number, "url": args.url}})
+                          "data": {"number": args.number, "url": url}})
         print(f"✓ {line(brain.state.feedbacks[args.id])}")
     elif c == "failed":
         _need(brain, args.id)

@@ -10,6 +10,7 @@ import tempfile
 import threading
 import sys
 import unicodedata
+import urllib.parse
 import webbrowser
 from collections.abc import Iterator
 from datetime import date, datetime, timedelta
@@ -338,6 +339,25 @@ def _default_browser() -> tuple[str, str] | None:
         if h.get("LSHandlerURLScheme") in ("https", "http") and h.get("LSHandlerRoleAll"):
             return _SCRIPTABLE.get(str(h["LSHandlerRoleAll"]).lower())
     return None
+
+
+def require_http_url(url: str, field: str) -> str:
+    """Aceita apenas URL http:// ou https:// com host não vazio e sem espaços nem caracteres de controle.
+    Levanta `BrainError` (code=4) nomeando `field`. É o validador único de URL que vem de fora e vai para o ledger
+    (formulário, `--link`, `--url`, resposta da API): o painel abre o que estiver gravado, então o esquema é
+    conferido na porta de entrada, não só no cliente."""
+    if not isinstance(url, str) or not url:
+        raise BrainError(f"{field}: URL inválida — esperado http:// ou https:// com host", code=4)
+    if any(ch.isspace() or ord(ch) < 32 or ord(ch) == 127 for ch in url):
+        raise BrainError(f"{field}: URL inválida — não pode conter espaços nem caracteres de controle", code=4)
+    try:
+        parts = urllib.parse.urlsplit(url)
+        _ = parts.port
+    except ValueError as e:
+        raise BrainError(f"{field}: URL inválida — esperado http:// ou https:// com host", code=4) from e
+    if parts.scheme.lower() not in ("http", "https") or not parts.netloc or not parts.hostname:
+        raise BrainError(f"{field}: URL inválida — esperado http:// ou https:// com host", code=4)
+    return url
 
 
 def _tab_prefix(url: str) -> str | None:

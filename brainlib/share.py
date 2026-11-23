@@ -332,10 +332,11 @@ def cli_publish(args, brain) -> None:
         s = st.shares.get(args.id)
         if s is None or s.status != "aprovada":
             raise util.BrainError(f"{args.id} não está aprovada — publicação exige aprovação explícita", code=4)
+        link = util.require_http_url(args.link, "--link")
         _, h = _file_sha(brain, s.report)
         if h != s.content_sha:
             raise util.BrainError(f"{s.report} mudou depois da aprovação — não publique; refaça o pedido", code=4)
-        brain.record_one({"type": "share.published", "id": args.id, "by": "system", "data": {"link": args.link}})
+        brain.record_one({"type": "share.published", "id": args.id, "by": "system", "data": {"link": link}})
         print(f"✓ {args.id} registrada como publicada")
     elif c == "cancel":
         brain.record_one({"type": "share.cancelled", "id": args.id, "by": "owner", "data": {}})
