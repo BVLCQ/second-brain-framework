@@ -371,8 +371,13 @@ def _leak_terms(inst: config.Instance) -> list[tuple[str, str]]:
             terms.setdefault(value.lower(), kind)
 
     cfg = inst.cfg
-    add("dono", cfg["owner"]["id"])
-    add("dono", cfg["owner"]["name"])
+    owner = cfg["owner"]
+    # Nome ainda igual ao placeholder público dos DEFAULTS não é dado de ninguém: sem config de instância
+    # (worktree, clone recém-feito) ele voltava como termo e a varredura acusava toda fixture que o escreve.
+    placeholder = config.DEFAULTS["owner"]["name"].strip().casefold()
+    if (owner.get("name") or "").strip().casefold() != placeholder:
+        add("dono", owner.get("name", ""))
+    add("dono", owner.get("id", ""))
     for x in cfg.get("outbound", {}).get("allow", []):
         add("destinatário", str(x).lstrip("#@"))
     for x in cfg.get("publish", {}).get("destinations", []):
