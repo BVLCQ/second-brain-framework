@@ -1499,16 +1499,19 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
             Path(name).unlink(missing_ok=True)
 
     def edit_plan(self) -> None:
-        """Gate estrutural: edita goals.md, mostra o diff e só mantém ao confirmar."""
+        """Gate estrutural: edita uma cópia temporária de goals.md, mostra o diff e só grava no arquivo real ao aprovar."""
         path = self.inst.planning_file
         before = path.read_text(encoding="utf-8") if path.exists() else ""
         editor = _editor_argv()
         try:
-            self.external([*editor, str(path)])
+            with tempfile.TemporaryDirectory(prefix="brain-plan-") as td:
+                tmp_path = Path(td) / "goals.md"
+                tmp_path.write_text(before, encoding="utf-8")
+                self.external([*editor, str(tmp_path)])
+                after = tmp_path.read_text(encoding="utf-8") if tmp_path.exists() else ""
         except OSError as e:
             self.log_line(f"não consegui abrir o editor: {e}", "red")
             return
-        after = path.read_text(encoding="utf-8") if path.exists() else ""
         if after == before:
             self.log_line("PLANNING/goals.md: nada mudou", "dim")
             return
@@ -1524,18 +1527,35 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
         path = self.inst.planning_file
         pre = pre or {}
 
-        def restore() -> None:
-            # escrita direta deliberada: é o rollback da edição que o próprio dono fez no editor (não dado de
-            # entidade novo) — relê o arquivo e recusa se ele andou de novo, para não pisar terceiros
+        def rollback() -> None:
+            # só desfaz se `plan log` falhou depois de gravar `after`; se outro processo mexeu no meio, não pisa
             now = path.read_text(encoding="utf-8") if path.exists() else ""
-            if now != after:                      # outro processo mexeu depois do editor: não sobrescreve às cegas
+            if now != after:
                 self.log_line("goals.md mudou de novo fora do TUI: não desfiz a edição; confira e registre com E (gate)", "red")
                 return
             util.atomic_write(path, before)
-            self.log_line("mudança do PLANNING descartada: goals.md voltou ao que era", "yellow")
+            self.log_line("registro do gate falhou: goals.md voltou ao que era", "yellow")
+
+        def apply_and_log(vals: dict) -> bool:
+            from .. import forms
+            now = path.read_text(encoding="utf-8") if path.exists() else ""
+            if now != before:
+                self.log_line("goals.md mudou fora do TUI enquanto o gate estava aberto: edição abortada para não sobrescrever", "red")
+                return True
+            cmds = forms.build("plan.log", vals, {}, self.form_model(), surface="tui")
+            try:
+                util.atomic_write(path, after)
+            except OSError as e:
+                self.log_line(f"não consegui gravar PLANNING/goals.md: {e}", "red")
+                return True
+            self.exec(cmds, on_fail=rollback)
+            return True
+
+        def cancelled() -> None:
+            self.log_line("mudança do PLANNING descartada (goals.md não foi alterado)", "yellow")
 
         self.open_form("plan.log", {"diff": pre.get("diff", ""), "reason": pre.get("reason", ""), "ev": pre.get("ev", "")},
-                       extra=extra, on_cancel=restore, on_fail=restore)
+                       extra=extra, intercept=apply_and_log, on_cancel=cancelled)
 
     def f_accept(self) -> None:
         r = self.cur().data

@@ -1201,9 +1201,24 @@ const BRAIN_FORMS = (function(){
     return "";
   }
   const fmt = (s, ctx) => str(s).replace(/\{(\w+)\}/g, (_, k) => str((ctx || {})[k]));
-  const display = cmds => cmds.map(c => "brain " + shjoin(c)).join("\n");
+  const SECRET_FLAGS = new Set(["--key", "--emb-key", "--reranker-key"]);
+  function redactArgv(args, secretFlags){
+    const flags = secretFlags ? new Set(secretFlags) : SECRET_FLAGS;
+    const out = [];
+    let maskNext = false;
+    for (const raw of args) {
+      const a = str(raw);
+      if (maskNext) { out.push("***"); maskNext = false; continue; }
+      if (flags.has(a)) { out.push(a); maskNext = true; continue; }
+      const eq = a.indexOf("=");
+      if (eq > 0 && flags.has(a.slice(0, eq))) { out.push(a.slice(0, eq) + "=***"); continue; }
+      out.push(a);
+    }
+    return out;
+  }
+  const display = (cmds, secretFlags) => cmds.map(c => "brain " + shjoin(redactArgv(c, secretFlags))).join("\n");
   return {formArgv, missing, initial, baseline, values, hidden, options, filterOptions, filter_options: filterOptions,
-    SUGGEST_LIMIT, label, check, hint, fmt, display, shjoin, cond,
+    SUGGEST_LIMIT, label, check, hint, fmt, display, redactArgv, shjoin, cond,
     FILL, SOURCES, INIT, IFMT, PRED, CHECKS, HINTS, XF, parseDue, describeDate, parseDuration, normId};
 })();
 if (typeof window !== "undefined") window.BRAIN_FORMS = BRAIN_FORMS;

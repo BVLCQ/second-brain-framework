@@ -1334,9 +1334,36 @@ def _fmt(s: str, ctx: dict) -> str:
     return re.sub(r"\{(\w+)\}", lambda g: "" if ctx.get(g.group(1)) is None else str(ctx.get(g.group(1))), s)
 
 
+def secret_flags() -> frozenset[str]:
+    """Opções de CLI cujo valor é segredo (derivado dos campos `secret=True` dos formulários)."""
+    return frozenset(f.arg for fm in FORMS.values() for f in fm.fields if f.secret and f.arg)
+
+
+def redact_args(args: list[str], flags: set[str] | frozenset[str] | None = None) -> list[str]:
+    """Substitui o valor de opções secretas (`--key <v>`, `--key=<v>`) por `***` antes de exibir ou logar."""
+    sflags = secret_flags() if flags is None else flags
+    out: list[str] = []
+    mask_next = False
+    for a in args:
+        if mask_next:
+            out.append("***")
+            mask_next = False
+            continue
+        if a in sflags:
+            out.append(a)
+            mask_next = True
+            continue
+        flag, sep, _ = a.partition("=")
+        if sep and flag in sflags:
+            out.append(f"{flag}=***")
+            continue
+        out.append(a)
+    return out
+
+
 def display(cmds: list[list[str]]) -> str:
     """A linha como as duas pontas mostram (`shlex.join`, a mesma do bridge.display sem encurtar)."""
-    return "\n".join("brain " + shlex.join(c) for c in cmds)
+    return "\n".join("brain " + shlex.join(redact_args(c)) for c in cmds)
 
 
 # ── exportação para o painel ────────────────────────────────────────────────
@@ -1365,7 +1392,8 @@ def static(brain=None) -> dict:
                                      ("openai", "OpenAI — text-embedding-3-small")],
                            "full": [("fireworks", "Fireworks — Qwen3-Embedding-8B"),
                                     ("openai", "OpenAI — text-embedding-3-small")]},
-           "reports": [], "destinations": [], "re": _patterns(), "weekdays": util.WEEKDAYS_PT, "date_help": dates.HELP}
+           "reports": [], "destinations": [], "re": _patterns(), "weekdays": util.WEEKDAYS_PT, "date_help": dates.HELP,
+           "secret_flags": sorted(secret_flags())}
     if brain is not None:
         d = brain.inst.reports / "share"
         out["reports"] = sorted((brain.inst.rel(p) for p in d.glob("*.*") if p.is_file()), reverse=True) if d.exists() else []
@@ -1400,4 +1428,4 @@ def export() -> dict:
 
 __all__ = ["F", "Form", "FORMS", "SOURCES", "INIT", "IFMT", "PRED", "CHECKS", "HINTS", "XF", "FILL", "PY_ONLY",
            "SUGGEST_LIMIT", "build", "missing", "required", "initial", "baseline", "values", "hidden", "options",
-           "filter_options", "label", "title", "sub", "display", "export", "static"]
+           "filter_options", "label", "title", "sub", "secret_flags", "redact_args", "display", "export", "static"]
