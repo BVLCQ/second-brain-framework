@@ -71,6 +71,13 @@ def _lines(r: subprocess.CompletedProcess) -> list[str]:
     return [ln for ln in r.stdout.splitlines() if ln.strip()]
 
 
+def _paths(r: subprocess.CompletedProcess) -> list[str]:
+    """Caminhos de um `git … -z`: separados por NUL, nunca entre aspas. Sem o -z o git entrega entre aspas e com
+    escapes o nome com acento, aspas ou barra invertida (`"ol\\303\\241.py"`) — não é caminho de arquivo nenhum:
+    não casa como pathspec, não abre, não casa com prefixo. `core.quotePath=false` só tira o caso do acento."""
+    return [f for f in r.stdout.split("\0") if f]
+
+
 def _prepare(inst: config.Instance, remote: str | None, branch: str | None, fetch: bool = True,
              require_ref: bool = True) -> tuple[str, str, str | None]:
     """Valida o repo e devolve (remote, branch, ref). Faz fetch; sem rede, ref pode ser None se não for exigida."""
@@ -84,7 +91,7 @@ def _prepare(inst: config.Instance, remote: str | None, branch: str | None, fetc
         branch = _git(root, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
         if branch == "HEAD":
             raise util.BrainError("HEAD solto (detached): entre num branch antes de sincronizar", 1)
-    private = [f for f in _lines(_git(root, "ls-files")) if f in PRIVATE_FILES or f.startswith(PRIVATE_PREFIXES)]
+    private = [f for f in _paths(_git(root, "ls-files", "-z")) if f in PRIVATE_FILES or f.startswith(PRIVATE_PREFIXES)]
     if private:
         raise util.BrainError("arquivos do dono estão rastreados pelo git (nunca devem): "
                               + ", ".join(private[:5]) + " — `git rm --cached` neles antes de continuar", 4)
@@ -109,8 +116,8 @@ def _ahead_behind(root: Path, ref: str) -> tuple[int, int]:
 
 def _pending_files(root: Path, ref: str) -> tuple[list[str], list[str]]:
     """(rastreados que diferem do remoto, novos não rastreados e não ignorados)."""
-    tracked = _lines(_git(root, "diff", "--name-only", ref))
-    untracked = _lines(_git(root, "ls-files", "--others", "--exclude-standard"))
+    tracked = _paths(_git(root, "diff", "--name-only", "-z", ref))
+    untracked = _paths(_git(root, "ls-files", "-z", "--others", "--exclude-standard"))
     return tracked, untracked
 
 
@@ -440,6 +447,7 @@ def _scan_line(text: str, term_res: list[tuple[str, re.Pattern]], home: str) -> 
 
 
 EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+LITERAL = "--literal-pathspecs"     # caminho de arquivo como pathspec: sem isso, nome com `*` casa vizinhos e um que começa com `:` é mágica
 
 
 MAX_BLOB_BYTES = 50 * 2**20          # binário maior que isto não é varrido (o framework não carrega blobs assim)
@@ -561,13 +569,16 @@ def _private_path(path: str) -> bool:
 
 
 def scan(inst: config.Instance, ref: str | None, committed: bool = False,
-         revsets: list[list[str]] | None = None) -> list[dict]:
+         revsets: list[list[str]] | None = None, keep: list[str] | None = None) -> list[dict]:
     """Procura dado pessoal/segredo no que subiria: linhas adicionadas, nomes de arquivo, binários,
     arquivos novos e mensagens de commit.
 
     committed=True olha só commits (o que um push envia); False inclui working tree e arquivos novos.
-    `revsets` (só com committed): os conjuntos de commits que o push envia, um por ref atualizada
-    (ex.: [["<sha local>", "^<sha remoto>"]]) — é o que o hook pre-push recebe do git.
+    `revsets`: os conjuntos de commits cujas mensagens entram, um por ref atualizada (ex.:
+    [["<sha local>", "^<sha remoto>"]] — é o que o hook pre-push recebe do git); None = `ref..HEAD`.
+    `keep` (só sem committed): restringe o diff da árvore de trabalho a esses caminhos; None = todos,
+    lista vazia = nada a varrer. Os caminhos entram como pathspec LITERAL: cru, nome que começa com `:` é
+    mágica para o git e o diff vinha vazio, em silêncio.
     """
     root = inst.root
     term_res = [(kind, re.compile(r"(?<![\w])" + re.escape(t) + r"(?![\w])", re.I)) for t, kind in _leak_terms(inst)]
@@ -600,7 +611,7 @@ def scan(inst: config.Instance, ref: str | None, committed: bool = False,
                 continue
             diff = _git(root, *q, "log", "-p", "-U0", "--no-color", "--cc", "--reverse", "--format=%x01%H", *revs)
             _scan_diff(root, diff.stdout, check)
-            for f in _lines(_git(root, *q, "log", "--name-only", "--format=", *revs)):
+            for f in _paths(_git(root, *q, "log", "--name-only", "-z", "--format=", *revs)):
                 if _private_path(f):
                     key = (f, 0, "arquivo do dono no histórico")
                     if key not in seen:
@@ -608,8 +619,11 @@ def scan(inst: config.Instance, ref: str | None, committed: bool = False,
                         findings.append({"file": f, "line": 0, "rule": key[2],
                                          "hint": "vault/ e config pessoal nunca vão ao repo (git rm --cached + reescrever o commit)"})
     else:
-        _scan_diff(root, _git(root, *q, "diff", "-U0", "--no-color", ref or EMPTY_TREE).stdout, check)
-    for f in ([] if committed else _lines(_git(root, *q, "ls-files", "--others", "--exclude-standard"))):
+        # `keep` deixa de fora o que já é público; lista vazia = nada a varrer na árvore de trabalho
+        groups = [()] if keep is None else [("--", *keep[i:i + 400]) for i in range(0, len(keep), 400)]
+        for scope in groups:
+            _scan_diff(root, _git(root, LITERAL, *q, "diff", "-U0", "--no-color", ref or EMPTY_TREE, *scope).stdout, check)
+    for f in ([] if committed else _paths(_git(root, *q, "ls-files", "-z", "--others", "--exclude-standard"))):
         p = root / f
         check(f, 0, f)
         try:
@@ -669,7 +683,7 @@ def pre_push_scan(inst: config.Instance, remote: str, stdin_text: str) -> dict:
     """O que o hook pre-push roda: varre exatamente os commits que este push envia (qualquer branch,
     tag, HEAD solto ou ref nova), sem depender do branch atual."""
     revsets = push_revsets(inst, remote, stdin_text)
-    tracked = [f for f in _lines(_git(inst.root, "ls-files")) if _private_path(f)]
+    tracked = [f for f in _paths(_git(inst.root, "ls-files", "-z")) if _private_path(f)]
     findings = [{"file": f, "line": 0, "rule": "arquivo do dono rastreado pelo git",
                  "hint": "git rm --cached antes de enviar"} for f in tracked]
     findings += scan(inst, None, committed=True, revsets=revsets) if revsets else []
@@ -688,17 +702,69 @@ def _ref_offline(inst: config.Instance, remote: str | None, branch: str | None) 
     return remote, branch, ref
 
 
+def _unpushed_range(root: Path, remote: str) -> tuple[int, str, list[list[str]]] | None:
+    """Branch ainda sem referência no remoto: o que um push enviaria são os commits só locais — a mesma
+    conta do hook (`push_revsets`). Devolve (quantos, base para o diff da árvore de trabalho, conjuntos de
+    commits). None quando não dá para saber (push direto para URL). Sem isso a varredura caía no histórico
+    inteiro, que já é público, e transformava placeholder de commit antigo em achado.
+
+    A base é o pai do commit só-local mais antigo: cobre o branch linear. Num branch que mergeou outra ref
+    do remoto ela é só um candidato — o diff contra ela traz de volta o conteúdo da ref mergeada, que já é
+    público; `_public_paths` tira esse conteúdo do diff e da lista de pendentes."""
+    if remote not in _git(root, "remote").stdout.split():
+        return None
+    local = _lines(_git(root, "rev-list", "HEAD", "--not", f"--remotes={remote}"))
+    parent = (_git(root, "rev-parse", "--verify", "--quiet", f"{local[-1]}^", check=False).stdout.strip()
+              if local else "")
+    base = parent or (EMPTY_TREE if local else "HEAD")
+    return len(local), base, [["HEAD", "--not", f"--remotes={remote}"]]
+
+
+def _public_paths(root: Path, remote: str, candidates: list[str]) -> list[str]:
+    """Entre os caminhos alterados, os que estão byte-idênticos na ponta de alguma ref do remoto — já são
+    públicos. Compara pelo mesmo `git diff` da varredura (árvore de trabalho × ponta), então edição local de
+    um arquivo público continua indo ao scan: decide o conteúdo, não o caminho."""
+    public: set[str] = set()
+    todo = list(candidates)
+    q = (LITERAL, "-c", "core.quotePath=false")
+    for tip in _lines(_git(root, "for-each-ref", "--format=%(objectname)", f"refs/remotes/{remote}")):
+        if not todo:
+            break
+        differing: set[str] = set()
+        for i in range(0, len(todo), 400):
+            differing.update(_paths(_git(root, *q, "diff", "--name-only", "-z", tip, "--", *todo[i:i + 400])))
+        public.update(p for p in todo if p not in differing)
+        todo = [p for p in todo if p in differing]
+    return sorted(public)
+
+
 def upstream_scan(inst: config.Instance, remote: str | None = None, branch: str | None = None,
                   committed: bool = False, fetch: bool = False) -> dict:
     if fetch:
         remote, branch, ref = _prepare(inst, remote, branch)
     else:
         remote, branch, ref = _ref_offline(inst, remote, branch)
-    ahead, behind = _ahead_behind(inst.root, ref) if ref else (0, 0)
-    tracked, untracked = _pending_files(inst.root, ref) if ref else ([], [])
+    unpushed = None
+    keep = None
+    if ref:
+        ahead, behind = _ahead_behind(inst.root, ref)
+        tracked, untracked = _pending_files(inst.root, ref)
+    else:
+        unpushed = _unpushed_range(inst.root, remote)
+        if unpushed:
+            ahead, behind = unpushed[0], 0
+            tracked, untracked = _pending_files(inst.root, unpushed[1])
+            public = set(_public_paths(inst.root, remote, tracked))
+            tracked = [p for p in tracked if p not in public]      # byte-idêntico ao remoto: já é público
+            keep = tracked
+        else:
+            ahead, behind, tracked, untracked = 0, 0, [], []
+    revsets = unpushed[2] if unpushed else None                   # mensagens dos commits só locais, nos dois modos
+    base = unpushed[1] if unpushed else ref                  # árvore de trabalho × último commit já no remoto
     return {"remote": remote, "branch": branch, "ref": ref, "ahead": ahead, "behind": behind,
             "changed": tracked, "new": untracked, "local_scripts": _local_scripts(inst.root),
-            "committed_only": committed, "findings": scan(inst, ref, committed=committed)}
+            "committed_only": committed, "unpushed_base": bool(unpushed),
+            "findings": scan(inst, base, committed=committed, revsets=revsets, keep=keep)}
 
 
 def _print_findings(findings: list[dict]) -> None:
@@ -714,6 +780,9 @@ def _print_findings(findings: list[dict]) -> None:
 def _print_scan(st: dict) -> None:
     if "revsets" in st:
         print(f"pre-push → {st['remote']}: {len(st['revsets'])} ref(s) com commits a varrer")
+    elif st.get("unpushed_base"):
+        print(f"{st['remote']}/{st['branch']} ainda sem referência no {st['remote']} — o que um push enviaria: "
+              f"{st['ahead']} commit(s)")
     else:
         ref = st["ref"] or f"{st['remote']}/{st['branch']} (ainda sem referência local)"
         print(f"{ref}: {st['ahead']} commit(s) à frente · {st['behind']} atrás (sem rede; `--fetch` atualiza)")
