@@ -27,6 +27,14 @@ OPP_STATUS = {"ideia", "triagem", "em-espera", "descartada", "priorizada", "em-a
               "validando", "entregue"}
 OPP_REASON_STATUS = {"em-espera", "descartada"}            # laterais: exigem motivo
 OPP_KINDS = {"melhoria-de-processo", "novo-processo", "estruturante"}
+OPP_KIND_LABELS = {"melhoria-de-processo": "Melhoria de processo",
+                   "novo-processo": "Novo processo",
+                   "estruturante": "Estruturante"}
+
+
+def opp_kind_label(kind: str) -> str:
+    """Rótulo humano do tipo de oportunidade (#99) — o slug segue como valor no CLI/ledger."""
+    return OPP_KIND_LABELS.get(kind, kind)
 DOC_KINDS = {"playbook", "one-pager", "planilha", "artefato", "apresentacao", "pasta", "fontes", "fonte", "outro"}
 WATCH_KINDS = {"playbook", "one-pager"}       # doc do Drive que o /update relê quando o modifiedTime muda
 

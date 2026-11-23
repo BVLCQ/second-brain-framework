@@ -137,6 +137,11 @@ ul.feed{list-style:none;padding:0;margin:0}
 ul.feed li{padding:8px 2px;border-bottom:1px solid var(--line2);display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
 .card-title,ul.feed li{overflow-wrap:anywhere}
 ul.feed li:last-child{border:0}
+/* #96: alvos de clique ≥24px (WCAG 2.5.8) — links de ação do feed, chips-âncora e chips de ID */
+.feed li>a,a.chip,a.idchip{min-height:24px;display:inline-flex;align-items:center}
+/* #100: ações do feed (decidir/ver/revisar) com classe própria — varrer e ajustar sem pegar links de texto corrido */
+.feed a.feed-act{color:var(--accent);text-decoration:none}
+.feed a.feed-act:hover{text-decoration:underline}
 ul.feed li.warn{background:linear-gradient(90deg,color-mix(in srgb,var(--warn) 7%,transparent),transparent);border-radius:8px;padding-left:8px}
 ul.feed li.info{background:linear-gradient(90deg,color-mix(in srgb,var(--info) 6%,transparent),transparent);border-radius:8px;padding-left:8px}
 .health li{padding:8px 2px}.health .hicon{display:inline-block;width:20px;font-weight:700}
@@ -168,12 +173,15 @@ tbody tr.src-problem:hover td{background:color-mix(in srgb,var(--riskbg) 55%,tra
 .col h2, .col h3{margin:2px 4px 10px;font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;font-weight:700;
   display:flex;justify-content:space-between;align-items:center}
 .col .count{background:var(--panel);border-radius:999px;padding:0 8px;font-size:11.5px}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px;box-shadow:var(--shadow);
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:8px;box-shadow:var(--shadow);
   transition:transform .12s ease, box-shadow .12s ease}
 .card:hover{transform:translateY(-1px);box-shadow:var(--shadow-lg)}
 .card.is-late{border-left:3px solid var(--risk)}
 .card header{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .card-title{font-weight:600;margin:5px 0 3px;font-size:14px}
+/* #98: <small> explícito na escala fechada — sem isto o UA aplica 13,33×0,833 e cada pai gera um tamanho
+   diferente (11,11px no pill do console, 11,67px no card de goal) */
+small{font-size:11.5px}
 .card-meta{font-size:12.5px;color:var(--muted);margin:0}
 .card-block{font-size:12.5px;color:var(--risk);margin:6px 0 0}
 .card .qa{margin-top:8px;display:none;gap:6px}
@@ -211,7 +219,7 @@ a.card:hover{text-decoration:none;border-color:var(--accent)}
 .dmark.is-done{border-color:var(--ok);color:var(--ok)}
 .dmark.is-doing{border-color:var(--info);color:var(--info)}
 .dmark.is-cancel{opacity:.5}
-.btn.tiny{font-size:11.5px;min-height:24px;padding:3px 9px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center}
+.btn.tiny{font-size:11.5px;min-height:29px;padding:3px 9px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center}
 
 /* ── perguntas e propostas ── */
 .ask-opts{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 4px}
@@ -268,6 +276,9 @@ a.card:hover{text-decoration:none;border-color:var(--accent)}
 
 /* ── teclado (mesmas teclas da TUI) ── */
 .kbd-sel{outline:2px solid var(--accent);outline-offset:1px}
+/* #97: um só idioma de foco no painel — :focus-visible usa o mesmo anel accent do j/k (.kbd-sel);
+   campos de formulário mantêm o contorno suave próprio (.fld input:focus, especificidade maior) */
+:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .khelp td,.khelp th{padding:4px 10px}
 .khelp td:first-child{font:12.5px ui-monospace,monospace;color:var(--accent);white-space:nowrap}
 .khelp .grp td{border-top:1px solid var(--line);padding-top:8px;color:var(--muted);font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;font-weight:700}
@@ -513,6 +524,12 @@ html[data-live="1"] .only-portrait,html:not([data-live="1"]) .only-live{display:
 /* ── #54 chip motivo do goal ── */
 .chip.h-reason{background:var(--chip);color:var(--ink);border:1px solid var(--line);text-decoration:none;max-width:100%;overflow:hidden;text-overflow:ellipsis;margin-left:6px}
 .chip.h-reason:hover{border-color:var(--accent);color:var(--accent);text-decoration:none}
+/* #95: tela estreita — o chip de motivo ganha linha própria no cabeçalho do goal e clampa em 2 linhas
+   (scrollHeight == clientHeight: o texto inteiro cabe; antes ~56% ficava no ellipsis) */
+@media (max-width:600px){
+  h2.sec{flex-wrap:wrap}
+  .chip.h-reason{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;white-space:normal;line-height:1.35}
+}
 .projcard.just-moved{animation:justmoved 1.2s ease}
 
 /* ── frescor (pílula no rodapé + faixa na home) e cartão 'Seu dia' (#57w2 #60w2) ── */
@@ -940,6 +957,8 @@ const BRAIN_FORMS = (function(){
   const NODE = ["ativo", "congelado", "depois", "finalizado"];
   const OPP_STATUS = ["ideia", "triagem", "priorizada", "em-andamento", "piloto", "validando", "entregue", "em-espera", "descartada"];
   const OPP_LATERAL = ["em-espera", "descartada"];
+  // #99: espelho de schema.OPP_KIND_LABELS — o teste de paridade (tests/test_issue99_kind_labels.py) pina o drift
+  const OPP_KIND_LABELS = {"melhoria-de-processo": "Melhoria de processo", "novo-processo": "Novo processo", "estruturante": "Estruturante"};
   const st = M => M.form_static || {};
   const withCurrent = (opts, cur) => cur && !opts.some(o => o[0] === cur) ? [[cur, cur + " (atual)"]].concat(opts) : opts.slice();
   const DOT_NUM_RE = /^[0-9]+(?:\.[0-9]+)?$/;
@@ -968,7 +987,7 @@ const BRAIN_FORMS = (function(){
     ask_options: (M, v, ctx) => (((ctx && ctx.item) || {}).options || []).map(o => [o, o]),
     node_status: (M, v, ctx) => { const cur = ((ctx && ctx.item) || {}).status; return NODE.concat(cur && !NODE.includes(cur) ? [cur] : []).map(s => [s, s]); },
     recurrence: M => [[NONE, NONE]].concat((st(M).recurrence || []).map(r => [r, r])),
-    opp_kinds: M => (st(M).opp_kinds || []).map(k => [k, k]),
+    opp_kinds: M => (st(M).opp_kinds || []).map(k => [k, OPP_KIND_LABELS[k] || k]),
     doc_kinds: M => (M.doc_kinds || []).map(k => [k, k]),
     source_kinds: (M, v, ctx) => { const ks = (M.source_kinds || []).map(k => [k[0], k[1]]), cur = ((ctx && ctx.item) || {}).kind;
       return ks.concat(cur && !ks.some(k => k[0] === cur) ? [[cur, cur]] : []); },
@@ -5256,7 +5275,13 @@ const donut = (pct, size) => { size = size || 44; const r = (size - 6) / 2, c = 
     '<circle cx="' + size/2 + '" cy="' + size/2 + '" r="' + r + '" fill="none" stroke="var(--accent)" stroke-width="5" stroke-linecap="round" stroke-dasharray="' +
     (c * (pct || 0) / 100).toFixed(1) + " " + c.toFixed(1) + '" transform="rotate(-90 ' + size/2 + " " + size/2 + ')"/>' +
     '<text x="50%" y="50%" dominant-baseline="central" text-anchor="middle">' + (pct == null ? "—" : pct) + "</text></svg>"; };
-const chip = (level, label) => '<span class="chip h-' + esc(level) + '">' + esc(label) + "</span>";
+// #100: modificador vazio não gera mais "chip h-" morto (chip neutro segue válido);
+// nível fora do vocabulário avisa no console em vez de cair no estilo base em silêncio.
+// (CHIP_LEVELS é construído junto de STAGES, mais abaixo — chip() só lê na hora do render.)
+const chip = (level, label) => {
+  if (level && !CHIP_LEVELS.has(level)) console.warn("[chip] modificador sem estilo mapeado:", level);
+  return '<span class="chip' + (level ? " h-" + esc(level) : "") + '">' + esc(label) + "</span>";
+};
 const goalReasonChip = g => (g.health_from && g.health !== "em-dia" && g.health !== "concluido")
   ? '<a class="chip h-reason" href="#projects?focus=' + esc(g.health_from) + '" data-proj-jump="' + esc(g.health_from) + '" title="' + esc(g.health_reason || g.health_from) + '">↳ ' + esc(g.health_from) + (g.health_reason ? " · " + esc(g.health_reason) : "") + "</a>"
   : "";
@@ -5493,10 +5518,10 @@ V.home = () => {
     ["Aguardando outros", c.waiting_open, ""], ["Conquistas 30d", c.wins_30d, "ok"], ["Decisões 30d", c.decisions_30d, ""]]
     .map(k => '<div class="kpi ' + k[2] + '"><span>' + k[0] + "</span><b>" + k[1] + "</b></div>").join("") + "</div>";
   const needs = [];
-  (M.questions || []).filter(q => q.status === "aberta").forEach(q => needs.push('<li class="info">' + chip("info", q.id) + " " + esc(q.text.slice(0, 100)) + '… — <a href="#ask">responder</a></li>'));
-  M.proposals.forEach(p => needs.push('<li class="warn">' + chip("atencao", "proposta " + p.id) + " " + esc(p.summary) + (p.target ? " · alvo " + (A[p.target] ? aL(p.target) : esc(p.target)) : "") + ' — <a href="#ask">decidir</a></li>'));
-  if (M.focus && M.focus.status === "proposto") needs.push('<li class="info">' + chip("info", "foco " + M.focus.id) + " plano com " + M.focus.blocks.length + ' blocos aguardando seu "ok" — <a href="#focus">ver</a></li>');
-  M.outbox.filter(m => m.status === "rascunho").forEach(m => needs.push('<li class="info">' + chip("info", "rascunho " + m.id) + " para " + esc(m.to_name) + ': "' + esc(m.text.slice(0, 90)) + '" — <a href="#outbox">revisar</a></li>'));
+  (M.questions || []).filter(q => q.status === "aberta").forEach(q => needs.push('<li class="info">' + chip("info", q.id) + " " + esc(q.text.slice(0, 100)) + '… — <a class="feed-act" href="#ask">responder</a></li>'));
+  M.proposals.forEach(p => needs.push('<li class="warn">' + chip("atencao", "proposta " + p.id) + " " + esc(p.summary) + (p.target ? " · alvo " + (A[p.target] ? aL(p.target) : esc(p.target)) : "") + ' — <a class="feed-act" href="#ask">decidir</a></li>'));
+  if (M.focus && M.focus.status === "proposto") needs.push('<li class="info">' + chip("info", "foco " + M.focus.id) + " plano com " + M.focus.blocks.length + ' blocos aguardando seu "ok" — <a class="feed-act" href="#focus">ver</a></li>');
+  M.outbox.filter(m => m.status === "rascunho").forEach(m => needs.push('<li class="info">' + chip("info", "rascunho " + m.id) + " para " + esc(m.to_name) + ': "' + esc(m.text.slice(0, 90)) + '" — <a class="feed-act" href="#outbox">revisar</a></li>'));
   const pl = (n, s, p) => n === 1 ? s : p;
   if (c.mine_no_due) needs.push('<li class="warn">' + chip("atencao", "prazo") + " " + c.mine_no_due + " " + pl(c.mine_no_due, "ação sua sem prazo", "ações suas sem prazo") + " — o foco não consegue agendá-las</li>");
   if (c.mine_no_effort) needs.push('<li class="warn">' + chip("atencao", "esforço") + " " + c.mine_no_effort + " " + pl(c.mine_no_effort, "ação sua sem estimativa", "ações suas sem estimativa") + " de esforço</li>");
@@ -6073,6 +6098,8 @@ function docUrl(ref){                                 // URL do doc: http direto
 // ── face Portfólio: pf/visao · pf/opps (kanban) · pf/matrix · pf/procs · pf/areas ──
 const STAGES_PIPE = ["ideia", "triagem", "priorizada", "em-andamento", "piloto", "validando", "entregue"];
 const STAGES_LAT = ["em-espera", "descartada"];
+const CHIP_LEVELS = new Set(["em-risco","travado","atencao","em-dia","concluido","congelado","depois","fechado","info","reason",
+  ...STAGES_PIPE, ...STAGES_LAT, ...STAGES_PIPE.map(s => "s-" + s), ...STAGES_LAT.map(s => "s-" + s)]);
 const enc = encodeURIComponent;
 const oL = (id, long) => '<a href="#pf/opp/' + enc(id) + '">' + idc(id) + (long ? " " + esc(OPP[id].title) : "") + "</a>";
 const stChip = s => chip("s-" + s, s);
@@ -6197,7 +6224,7 @@ V["pf/opp"] = (q, id) => {
   const o = OPP[id]; if (!o) return empty("Oportunidade não encontrada");
   const proc = PROC[o.process];
   let h = '<p class="crumb muted"><a href="#pf/opps">← oportunidades</a></p><div class="pagehead"><div><h1>' + esc(o.id) + " · " + esc(o.title) + "</h1>" +
-    '<div class="sub">' + stChip(o.status) + chip("", o.kind) + "<span>" + esc(areaName(o.area)) + "</span>" + (o.quadrant ? chip("", o.quadrant) : "") +
+    '<div class="sub">' + stChip(o.status) + chip("", o.kind_label || o.kind) + "<span>" + esc(areaName(o.area)) + "</span>" + (o.quadrant ? chip("", o.quadrant) : "") +
     "<span>ICE " + iceTxt(o) + "</span></div></div></div>";
   h += '<div class="grid g2">' + panel("Resumo", '<ul class="feed"><li><b>Ganho esperado:</b> ' + esc(o.gain || "não consta") + (o.hours_saved ? " · " + hrs(o.hours_saved) : "") + "</li>" +
     (o.score != null ? ["impact", "confidence", "ease"].map(k => {       // leitura do ICE: rótulo de cada eixo (rubric)

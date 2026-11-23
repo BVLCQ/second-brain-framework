@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import re
 
-from . import ice_rubric, util
+from . import ice_rubric, schema, util
 
 STOPWORDS = {"a", "o", "as", "os", "de", "da", "do", "das", "dos", "e", "em", "no", "na", "nos", "nas",
              "para", "pra", "por", "com", "um", "uma", "que", "se", "ao", "ou", "sem", "mais", "como"}
@@ -153,6 +153,7 @@ def build(state, plan, today) -> dict:
     for o in sorted(opps, key=lambda o: o.id):
         out_opps.append({
             "id": o.id, "title": o.title, "area": o.area, "process": o.process, "kind": o.kind,
+            "kind_label": schema.opp_kind_label(o.kind),
             "problem": o.problem, "suggestion": o.suggestion, "gain": o.gain, "hours_saved": gain_hours(o, state),
             "status": o.status, "impact": o.impact, "confidence": o.confidence, "ease": o.ease,
             "score": o.score, "ice_suggested": o.ice_suggested, "ice_reason": o.ice_reason,

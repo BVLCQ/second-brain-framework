@@ -23,7 +23,7 @@ import shlex
 from dataclasses import asdict, dataclass, replace
 from datetime import date
 
-from . import dates, ids, util
+from . import dates, ids, schema, util
 from . import providers as _providers
 
 # LLM por assinatura não tem chave de API: o campo some (autenticação é `brain memory auth`).
@@ -712,7 +712,7 @@ SOURCES = {
                                          if ((ctx or {}).get("item") or {}).get("status") not in
                                          (None, "", "ativo", "congelado", "depois", "finalizado") else [])],
     "recurrence": lambda m, v, ctx: [(NONE, NONE)] + [(r, r) for r in (m.get("form_static") or {}).get("recurrence", [])],
-    "opp_kinds": lambda m, v, ctx: [(k, k) for k in (m.get("form_static") or {}).get("opp_kinds", [])],
+    "opp_kinds": lambda m, v, ctx: [(k, schema.opp_kind_label(k)) for k in (m.get("form_static") or {}).get("opp_kinds", [])],
     "doc_kinds": lambda m, v, ctx: [(k, k) for k in m.get("doc_kinds", [])],
     "source_kinds": _src_source_kinds,
     "opp_status": _src_opp_status,
