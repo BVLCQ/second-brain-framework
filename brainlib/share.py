@@ -14,7 +14,7 @@ import re
 from datetime import date
 from pathlib import Path
 
-from . import model, planning, util
+from . import gates, model, planning, util
 
 # IDs internos que podem vir embutidos em textos calculados (ex.: motivo da saúde do projeto).
 _ID = re.compile(r"\b(?:(?:TASK|DEC|WIN|PROP|MSG|PUB|FOCUS|PROC|OPP|ASK)-\d{4,}|PROJ-\d+(?:\.\d+)?|GOAL-\d+)\b")
@@ -323,8 +323,9 @@ def cli_publish(args, brain) -> None:
         _, h = _file_sha(brain, s.report)
         if h != s.content_sha:
             raise util.BrainError(f"{s.report} mudou depois do pedido — refaça o pedido", code=4)
+        quote, _ = gates.verify_approval(args.quote, what=f"publish approve {args.id}")
         brain.record_one({"type": "share.approved", "id": args.id, "by": "owner",
-                          "data": {"quote": args.quote, "content_sha": h}})
+                          "data": {"quote": quote, "content_sha": h}})
         print(f"✓ {args.id} aprovada — publique o conteúdo de vault/{s.report} em {s.destination} e rode "
               f"`brain publish done {args.id} --link <url>`")
     elif c == "done":

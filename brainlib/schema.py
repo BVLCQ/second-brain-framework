@@ -110,8 +110,12 @@ LIST_FIELDS = ("blocked_by", "unblocks", "people", "people_add", "decided_by", "
                "executors", "executors_add", "tools", "tools_add", "pains", "pains_add", "options",
                "blocks", "created", "removed", "not_dup", "not_dup_add")
 # aprovações e gates: a fala é do dono — só by=owner grava (o noturno recusa owner; ver core.NIGHT_FORBIDDEN)
-OWNER_ONLY = {"proposal.accepted", "proposal.rejected", "message.approved", "share.approved", "focus.approved",
+OWNER_ONLY = {"proposal.accepted", "proposal.rejected", "message.approved", "focus.approved",
               "plan.changed", "opportunity.promoted"}
+# atos que nunca são do agente. `feedback.pushed` nasce do dono desde o gate de aprovação (`feedback.push`);
+# `system` segue válido como HISTÓRICO — instâncias com eventos anteriores à regra não podem ficar inválidas
+# no `brain validate`/`doctor` (o ledger é append-only, nada é reescrito).
+NEVER_AGENT = {"feedback.pushed": {"owner", "system"}}
 
 # campos de `data` que guardam IDs (um, ou uma lista); valores que não são ID (URL, texto) passam intactos
 REF_FIELDS = ("project", "deliverable", "goal", "ref", "link", "target", "blocked_by", "unblocks", "supersedes", "by",
@@ -191,6 +195,8 @@ def validate(ev: dict, state, plan) -> None:
         _need(f not in data or isinstance(data[f], list), f"{t}: data.{f} deve ser lista")
     if t in OWNER_ONLY:
         _need(ev.get("by") == "owner", f"{t}: aprovação/gate é do dono (by=owner), com a fala literal dele")
+    if t in NEVER_AGENT:
+        _need(ev.get("by") in NEVER_AGENT[t], f"{t}: não é ato do agente (by=owner)")
     if ev.get("actor"):
         _person(state, ev["actor"], "actor")
 

@@ -16,7 +16,7 @@ import os
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 
-from . import util
+from . import gates, util
 
 Interval = tuple[datetime, datetime]
 
@@ -423,9 +423,10 @@ def cli(args, brain) -> None:
             raise util.BrainError(f"plano {args.id} não existe", code=3)
         if f.status != "proposto":
             raise util.BrainError(f"plano {args.id} está '{f.status}' — só plano proposto pode ser aprovado", code=4)
+        quote, _ = gates.verify_approval(args.quote, what=f"focus approve {args.id}")
         brain.record_one({"type": "focus.approved", "id": args.id, "by": "owner",
-                          "data": {"quote": args.quote, "sha": f.sha}})
-        print(f"✓ plano {args.id} aprovado (\"{args.quote}\") — aplique com `brain focus apply {args.id}`")
+                          "data": {"quote": quote, "sha": f.sha}})
+        print(f"✓ plano {args.id} aprovado (\"{quote}\") — aplique com `brain focus apply {args.id}`")
     elif c == "apply":
         res = apply(brain, args.id, args.mode)
         if res["mode"] == "ics":

@@ -985,7 +985,8 @@ def apply_planning(brain, data: dict) -> dict:
         raise util.BrainError("nenhum goal para criar", code=4)
     if not data.get("approved"):
         raise util.BrainError("confirme a aprovação para criar os goals", code=4)
-    approval = "ok (aprovado no onboarding)"
+    # atestado de superfície (o wizard é o painel): o clique de confirmar acima é a aprovação do dono
+    approval = "painel"
     same = lambda a, b: util.fold(a).strip() == util.fold(b).strip()          # noqa: E731
     created = []
     # idempotente por título: repetir depois de uma falha no meio não duplica o que já nasceu

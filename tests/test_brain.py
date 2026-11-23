@@ -3060,15 +3060,15 @@ class AskTests(unittest.TestCase):
             self.assertIn("ASK-0001", r.stdout)
             self.assertIn("= já aberta", run("ask", "add", "quem é a mari?", "--option", "marina-demo", "--option", "outra",
                                              "--context", "TASK-0001,marina-demo", "--prov", "observado", "--source", "chat").stdout)
-            self.assertEqual(run("ask", "answer", "ASK-0001", "marina-demo", env={"BRAIN_NIGHTLY": "1"}).returncode, 4)   # noturno não responde
-            self.assertEqual(run("ask", "answer", "ASK-0001", "nenhuma das duas").returncode, 0)                           # texto livre vira free
+            self.assertEqual(run("ask", "answer", "ASK-0001", "marina-demo", "--by", "owner", env={"BRAIN_NIGHTLY": "1"}).returncode, 4)   # noturno não responde
+            self.assertEqual(run("ask", "answer", "ASK-0001", "nenhuma das duas", "--by", "owner").returncode, 0)                           # texto livre vira free
             listed = json.loads(run("ask", "list", "--answered", "--json").stdout)
             self.assertEqual([(q["id"], q["answer"], q["free"]) for q in listed], [("ASK-0001", "nenhuma das duas", True)])
             self.assertEqual(run("ask", "list", "--open").stdout.strip(), "(nenhuma)")
             self.assertEqual(run("ask", "applied", "ASK-0001", "--how", "alias criado", "--prov", "observado", "--source", "chat").returncode, 0)
             self.assertEqual(run("ask", "list").stdout.strip(), "(nenhuma)")
             self.assertIn("ASK-0001", run("ask", "list", "--all").stdout)
-            self.assertEqual(run("ask", "answer", "ASK-9999", "x").returncode, 3)
+            self.assertEqual(run("ask", "answer", "ASK-9999", "x", "--by", "owner").returncode, 3)
 
     def test_skills_ask_through_the_cli_and_batch_goes_through_a_file(self):
         for name in ("dump", "update"):

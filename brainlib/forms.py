@@ -448,8 +448,10 @@ def _forms() -> list[Form]:
             F("pub", "publicar", choices=(("agora", "agora — cria a issue já"), ("depois", "depois — só registra (--no-push)")),
               value="agora", flag={"depois": ["--no-push"]}),
             F("force", "criar mesmo assim", choices=(("nao", "não"), ("sim", "sim (--force)")), value="nao",
-              show="fb_dup", flag={"sim": ["--force"]})),
-            sub="porta 7 — vira issue pública no repo do framework; sem dados pessoais (a porta recusa)", tail=OWNER),
+              show="fb_dup", flag={"sim": ["--force"]}),
+            replace(APPROVAL, show={"pub": ["agora"]})),
+            sub="porta 7 — vira issue pública no repo do framework; sem dados pessoais (a porta recusa)",
+            gate=True, tail=OWNER),
         Form("feedback.withdraw", "Retirar {id}", ("feedback", "withdraw", "{id}"), (
             _reason(ph="duplicado, não faz mais sentido…", req=True),),
             sub="{title} — rascunho ainda não publicado; fica no ledger como retirado.", tail=OWNER),

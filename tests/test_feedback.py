@@ -87,7 +87,7 @@ class FeedbackFlowTests(unittest.TestCase):
     def test_push_sem_token_fica_pendente_sem_evento_de_falha(self):
         feedback.add(self.brain, "bug", "Painel demora")
         with self.assertRaises(util.BrainError) as cm:
-            feedback.push(self.brain, "FB-0001")
+            feedback.push(self.brain, "FB-0001", approval="ok")
         self.assertIn("GITHUB_TOKEN", str(cm.exception))
         f = self.brain.state.feedbacks["FB-0001"]
         self.assertEqual(f.status, "pendente")           # pré-checagem: nada foi tentado na rede
@@ -109,7 +109,7 @@ class FeedbackFlowTests(unittest.TestCase):
         orig = feedback.create_issue
         feedback.create_issue = fake
         try:
-            ev = feedback.push(self.brain, "FB-0001")
+            ev = feedback.push(self.brain, "FB-0001", approval="ok")
         finally:
             feedback.create_issue = orig
         self.assertEqual(ev["type"], "feedback.pushed")
@@ -122,7 +122,7 @@ class FeedbackFlowTests(unittest.TestCase):
         self.assertEqual(labels, ["sugestão"])
         self.assertNotIn("FB-0001", body)                   # id local nunca sobe
         with self.assertRaises(util.BrainError):          # issue já criada: não empurra duas vezes
-            feedback.push(self.brain, "FB-0001")
+            feedback.push(self.brain, "FB-0001", approval="ok")
 
     def test_push_avisa_quando_a_issue_sai_sem_o_label(self):
         feedback.add(self.brain, "bug", "Sem permissão de label")
@@ -130,7 +130,7 @@ class FeedbackFlowTests(unittest.TestCase):
         orig = feedback.create_issue
         try:
             feedback.create_issue = lambda *a, **k: {"number": 5, "url": "https://github.com/o/r/issues/5", "labels": []}
-            ev = feedback.push(self.brain, "FB-0001")
+            ev = feedback.push(self.brain, "FB-0001", approval="ok")
         finally:
             feedback.create_issue = orig
         self.assertIn("label 'bug'", ev["label_note"])
@@ -143,11 +143,11 @@ class FeedbackFlowTests(unittest.TestCase):
         try:
             feedback.create_issue = lambda *a, **k: (_ for _ in ()).throw(util.BrainError("GitHub recusou o issue (502)"))
             with self.assertRaises(util.BrainError) as cm:
-                feedback.push(self.brain, "FB-0001")
+                feedback.push(self.brain, "FB-0001", approval="ok")
             self.assertIn("de novo", str(cm.exception))
             self.assertEqual(self.brain.state.feedbacks["FB-0001"].status, "falhou")
             feedback.create_issue = lambda *a, **k: {"number": 9, "url": "https://github.com/x/issues/9"}
-            feedback.push(self.brain, "FB-0001")
+            feedback.push(self.brain, "FB-0001", approval="ok")
         finally:
             feedback.create_issue = orig
         self.assertEqual(self.brain.state.feedbacks["FB-0001"].status, "criado")
@@ -160,7 +160,7 @@ class FeedbackFlowTests(unittest.TestCase):
         feedback.create_issue = lambda *a, **k: (_ for _ in ()).throw(boom)
         try:
             with self.assertRaises(util.BrainError) as cm:
-                feedback.push(self.brain, "FB-0001")
+                feedback.push(self.brain, "FB-0001", approval="ok")
         finally:
             feedback.create_issue = orig
         self.assertIn("pública", str(cm.exception))
@@ -175,10 +175,10 @@ class FeedbackFlowTests(unittest.TestCase):
         feedback.create_issue = lambda *a, **k: called.append(1) or {"number": 1, "url": "u"}
         try:
             with self.assertRaises(util.BrainError) as cm:
-                feedback.push(self.brain, "FB-0001")
+                feedback.push(self.brain, "FB-0001", approval="ok")
             # e o ledger também recusa o evento direto
             with self.assertRaises(util.BrainError):
-                self.brain.record_one({"type": "feedback.pushed", "id": "FB-0001", "by": "system",
+                self.brain.record_one({"type": "feedback.pushed", "id": "FB-0001", "by": "owner",
                                        "data": {"number": 1, "url": "u"}})
         finally:
             feedback.create_issue = orig
@@ -189,7 +189,7 @@ class FeedbackFlowTests(unittest.TestCase):
 
     def test_pushed_manual(self):
         feedback.add(self.brain, "bug", "Issue criada na mão por gh")
-        self.brain.record_one({"type": "feedback.pushed", "id": "FB-0001", "by": "system",
+        self.brain.record_one({"type": "feedback.pushed", "id": "FB-0001", "by": "owner",
                                "data": {"number": 12, "url": "https://github.com/x/issues/12"}})
         f = self.brain.state.feedbacks["FB-0001"]
         self.assertEqual((f.status, f.number), ("criado", 12))
@@ -200,7 +200,7 @@ class FeedbackFlowTests(unittest.TestCase):
     def test_number_precisa_ser_inteiro_positivo(self):
         feedback.add(self.brain, "bug", "Nº estranho")
         with self.assertRaises(util.BrainError):
-            self.brain.record_one({"type": "feedback.pushed", "id": "FB-0001", "by": "system",
+            self.brain.record_one({"type": "feedback.pushed", "id": "FB-0001", "by": "owner",
                                    "data": {"number": "12", "url": "u"}})
 
     # ── render do issue + dobra do estado ──────────────────────────────────
@@ -236,7 +236,7 @@ class FeedbackFlowTests(unittest.TestCase):
 
     def test_sync_registra_mudanca_e_e_idempotente(self):
         feedback.add(self.brain, "sugestao", "Modo escuro", force=True)
-        self.brain.record_one({"type": "feedback.pushed", "id": "FB-0001", "by": "system",
+        self.brain.record_one({"type": "feedback.pushed", "id": "FB-0001", "by": "owner",
                                "data": {"number": 3, "url": "https://github.com/x/issues/3"}})
         self._fake_env()
         orig = feedback.issue_state
@@ -272,7 +272,7 @@ class FeedbackFlowTests(unittest.TestCase):
     def test_sync_erro_por_item_continua_os_demais(self):
         for i, t in enumerate(("Primeira", "Segunda"), 1):
             feedback.add(self.brain, "sugestao", t)
-            self.brain.record_one({"type": "feedback.pushed", "id": f"FB-000{i:04d}", "by": "system",
+            self.brain.record_one({"type": "feedback.pushed", "id": f"FB-000{i:04d}", "by": "owner",
                                    "data": {"number": i, "url": f"https://github.com/x/issues/{i}"}})
         self._fake_env()
         orig = feedback.issue_state
@@ -296,7 +296,7 @@ class FeedbackFlowTests(unittest.TestCase):
 
     def test_sync_issue_apagada_vira_estado_gone(self):
         feedback.add(self.brain, "sugestao", "Issue removida a mão")
-        self.brain.record_one({"type": "feedback.pushed", "id": "FB-0001", "by": "system",
+        self.brain.record_one({"type": "feedback.pushed", "id": "FB-0001", "by": "owner",
                                "data": {"number": 9, "url": "https://github.com/x/issues/9"}})
         self._fake_env()
         orig, calls = feedback.issue_state, []

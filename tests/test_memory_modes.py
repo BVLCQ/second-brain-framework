@@ -488,14 +488,14 @@ class ApplyModeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             b = _brain(Path(td))
             with self.assertRaises(util.BrainError) as cm:
-                memory._apply_mode(b, "full")
+                memory._apply_mode(b, "full", approval="ok")
             self.assertIn("config/.env", str(cm.exception))
 
     def test_full_with_key_writes_config(self):
         with tempfile.TemporaryDirectory() as td:
             b = _brain(Path(td))
             (b.inst.config_dir / ".env").write_text("HINDSIGHT_API_LLM_API_KEY=demo-key\n", encoding="utf-8")
-            memory._apply_mode(b, "full")
+            memory._apply_mode(b, "full", approval="ok")
             b.reload()
             mem = b.inst.cfg["memory"]
             self.assertEqual(memory.mode(mem), "full")

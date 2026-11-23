@@ -4,7 +4,7 @@ from __future__ import annotations
 from collections import OrderedDict
 from pathlib import Path
 
-from . import dupes, feedback, ids, util
+from . import dupes, feedback, gates, ids, util
 
 KINDS = ("proposal", "outbox", "publish", "ask", "focus", "dupe")
 PORT_KINDS = frozenset({"outbox", "publish", "focus"})
@@ -318,7 +318,7 @@ def _accept_one_proposal(brain, pid: str, quote: str) -> dict:
     if p.target:
         out["target"] = p.target
     if p.kind == "framework":
-        fid, warn = feedback.from_proposal(brain, pid)
+        fid, warn = feedback.from_proposal(brain, pid, approval=quote)
         if fid:
             f = brain.state.feedbacks[fid]
             out["feedback"] = fid
@@ -340,8 +340,7 @@ def _normalize_review_id(raw_id: str) -> str:
 
 def accept_batch(brain, item_ids: list[str], *, quote: str) -> dict:
     """Aceita um lote de propostas (`PROP-*`) gravando eventos individuais e barrando portas/individuais."""
-    if not isinstance(quote, str) or not quote.strip():
-        raise util.BrainError("review accept: --quote obrigatório (não pode ser vazio)", code=4)
+    quote, _ = gates.verify_approval(quote, what="review accept")
 
     deduped = list(dict.fromkeys(_normalize_review_id(x) for x in item_ids if isinstance(x, str) and x.strip()))
     accepted: list[dict] = []

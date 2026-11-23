@@ -34,7 +34,9 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
-from . import config, util
+from . import config, gates, util
+
+_ENV_KEY_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 FRAMEWORK = Path(__file__).resolve().parent.parent
 
@@ -111,14 +113,19 @@ def set_env(inst, updates: dict[str, str]) -> list[str]:
             out.append(ln)
     changed = []
     for k, v in updates.items():
+        if not isinstance(k, str) or any(c in k for c in ("\n", "\r", "\x00")) or not _ENV_KEY_RE.match(k):
+            raise util.BrainError(f"config/.env: chave inválida ({k!r})", code=4)
         if v is None or v == "":
             continue
+        sv = str(v)
+        if any(c in sv for c in ("\n", "\r", "\x00")):
+            raise util.BrainError(f"config/.env: valor inválido para {k!r} (contém quebra de linha ou caractere nulo)", code=4)
         if k in have:
-            if have[k] != f"{k}={v}":
-                out[out.index(have[k])] = f"{k}={v}"
+            if have[k] != f"{k}={sv}":
+                out[out.index(have[k])] = f"{k}={sv}"
                 changed.append(k)
         else:
-            out.append(f"{k}={v}")
+            out.append(f"{k}={sv}")
             changed.append(k)
     if changed:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -1002,10 +1009,11 @@ def _run_memoria(brain, ui, mode_hint: str | None = None) -> None:
                    "está narrado acima; `brain setup --only memoria` tenta de novo. Os demais passos seguem.")
             if not ui.interactive:
                 return
+    gate = ""
     if mode == "full":
         gate = ui.ask('Modo full: texto do vault (reuniões, Slack, documentos) irá para a API de LLM '
                       'com a SUA chave (plano da memória §4.3). Digite "ok" para aceitar', "")
-        if gate.strip().lower() != "ok":
+        if gate.strip().lower() not in gates.ACCEPTED_WORDS:
             ui.say("✗ sem o \"ok\" literal o modo full não é gravado — nada mudou")
             return
     env_file = brain.inst.env_file if brain.inst.env_file.exists() else None
@@ -1041,7 +1049,7 @@ def _run_memoria(brain, ui, mode_hint: str | None = None) -> None:
                          cwd=brain.inst.root, timeout=180)
         ui.say(("✓ sync de validação: " + out.splitlines()[-1]) if code == 0 else f"⚠ sync de validação: {out[:200]}")
     else:
-        memory._apply_mode(brain, "full")
+        memory._apply_mode(brain, "full", approval=gate)
         memory.setup(brain)
         ui.say(f"✓ memória full pronta (banco único {mem['bank']})")
         try:
@@ -1160,7 +1168,7 @@ def validate_memory_setup(data: dict) -> dict:
     if dec not in prov.PROVIDERS["decision"]:
         raise util.BrainError("decisão inválida (off|hindsight)", code=4)
 
-    consent = bool(data.get("consent")) or str(data.get("approval") or "").strip().lower() == "ok"
+    consent = bool(data.get("consent")) or str(data.get("approval") or "").strip().lower() in gates.ACCEPTED_WORDS
     if mode == "full" and not consent:
         raise util.BrainError('o modo full precisa do seu aceite ("ok"/consent): o texto do vault vai para a API',
                               code=4)

@@ -797,7 +797,7 @@ def d_fb(store, it) -> Doc:
                          ("r", "bold cyan"), (" retrata issue; ", DIM), ("s", "bold cyan"),
                          (" relê o estado dos issues no GitHub.", DIM))
     doc.sec("Equivalente na CLI")
-    doc.cmd(f"brain feedback push {f.id}" if f.status in ("pendente", "falhou") else f"brain feedback show {f.id}")
+    doc.cmd(f'brain feedback push {f.id} --approval "ok"' if f.status in ("pendente", "falhou") else f"brain feedback show {f.id}")
     return doc
 
 

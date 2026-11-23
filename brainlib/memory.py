@@ -26,7 +26,7 @@ import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from . import config, model, recall_rank, util
+from . import config, gates, model, recall_rank, util
 
 STATE_NAME = ".memory-state.json"
 SUPERSEDES_NAME = ".memory-supersedes.json"
@@ -899,9 +899,9 @@ def _cost_text(c: dict) -> str:
     return "\n".join(lines)
 
 
-def _apply_mode(brain, new_mode: str) -> None:
+def _apply_mode(brain, new_mode: str, *, approval: str = "") -> None:
     """`memory setup --mode` — grava as chaves do [memory] do modo pedido e valida os contratos.
-    O modo full exige a chave do dono no config/.env (decisão 2: chave aprovada + nada público)."""
+    O modo full exige consentimento digitado do dono (sem noturno e sem bypass de superfície) e a chave no config/.env."""
     if new_mode == "none":
         changed = config.set_keys(brain.inst, "memory", {"engine": "none"})
         print("✓ memória desligada" + (f" ({', '.join(changed)})" if changed else " (já estava)"))
@@ -910,6 +910,9 @@ def _apply_mode(brain, new_mode: str) -> None:
     if new_mode == "embed":
         updates.update({"extract": False, "cloud_llm": False, "mental_models": False, "raw_awaiting_dump": "degraded"})
     elif new_mode == "full":
+        if util.is_nightly():
+            raise util.BrainError("o noturno não liga o modo full (gate de egress pede o dono presente)", code=4)
+        gates.verify_approval(approval, what="memory setup --mode full", allow_surface=False)
         from . import providers as _prov
         llm_prov = brain.inst.cfg["memory"].get("llm_provider", "")
         is_sub = _prov.PROVIDERS["llm"].get(llm_prov, {}).get("family") == "subscription"
@@ -1151,15 +1154,15 @@ def cli(args, brain) -> None:
         run_llm_auth(brain, _SayOnly(), args.provider)
         return
     if c == "setup":
-        _headless = ("provider", "embeddings", "reranker", "key", "emb_key", "reranker_key", "model", "approval")
+        _headless = ("provider", "embeddings", "reranker", "key", "emb_key", "reranker_key", "model")
         if any(getattr(args, k, None) for k in _headless):
             # fluxo roteirizado (mesma fonte do painel e do formulário memory.mode da TUI)
             from .setup import configure_memory
-            final = configure_memory(brain, {k: getattr(args, k, None) for k in _headless + ("mode",)})
+            final = configure_memory(brain, {k: getattr(args, k, None) for k in _headless + ("mode", "approval")})
             print(f"✓ memória {final}")
             return
         if getattr(args, "mode", None):
-            _apply_mode(brain, args.mode)      # grava [memory] e valida os contratos do modo
+            _apply_mode(brain, args.mode, approval=getattr(args, "approval", "") or "")
             brain.reload()
         banks = setup(brain)
         print(f"✓ bancos prontos ({mode(brain.inst.cfg['memory'])}): {', '.join(banks)}")

@@ -57,6 +57,8 @@ def cmd_ask(args, b: Brain) -> None:
         q = b.state.questions[qid]
         _out(args, {"id": qid, "created": created}, (f"✓ {line(q)}" if created else f"= já aberta: {line(q)}"))
     elif c == "answer":
+        if getattr(args, "by", None) != "owner":
+            raise util.BrainError("ask answer: exige --by owner explícito (quem responde é o dono)", code=4)
         q = _need(b, args.id)
         ev = b.record_one(_common({"type": "question.answered", "id": args.id, "data": {
             "answer": args.answer, "free": bool(q.options and args.answer not in q.options) or None}}, args))
@@ -91,7 +93,7 @@ def add_parsers(sub) -> None:
     x.add_argument("id")
     x.add_argument("answer")
     _fact_opts(x)
-    x.set_defaults(by="owner")
+    x.set_defaults(by=None)
     x = s.add_parser("applied", help="o agente registra o efeito da resposta")
     x.add_argument("id")
     x.add_argument("--how", required=True)
