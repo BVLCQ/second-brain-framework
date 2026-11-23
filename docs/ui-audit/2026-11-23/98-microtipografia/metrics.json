@@ -1,0 +1,35 @@
+{
+ "base": {
+  "clidot": "11.1111px",
+  "clidotBtn": "13.3333px",
+  "proj": "11.6667px",
+  "census_small": {
+   "11.1111px": 1,
+   "11.6667px": 4
+  }
+ },
+ "A": {
+  "clidot": "11.5px",
+  "clidotBtn": "13.3333px",
+  "proj": "11.5px",
+  "census_small": {
+   "11.5px": 5
+  }
+ },
+ "B": {
+  "clidot": "11.5px",
+  "clidotBtn": "13.3333px",
+  "proj": "11.5px",
+  "census_small": {
+   "11.5px": 5
+  }
+ },
+ "C": {
+  "clidot": "10.5px",
+  "clidotBtn": "13.3333px",
+  "proj": "10.5px",
+  "census_small": {
+   "10.5px": 5
+  }
+ }
+}

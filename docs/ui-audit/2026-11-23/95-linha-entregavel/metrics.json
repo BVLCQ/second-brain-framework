@@ -1,0 +1,46 @@
+{
+ "base": {
+  "text": "↳ PROJ-2 · PROJ-2.2 venceu há 1d (Cardápio e precificação)",
+  "w": 200,
+  "h": 23,
+  "clientW": 198,
+  "scrollW": 448,
+  "clientH": 21,
+  "scrollH": 21,
+  "innerW": 500,
+  "hidden_lines": false
+ },
+ "A": {
+  "text": "↳ PROJ-2 · PROJ-2.2 venceu há 1d (Cardápio e precificação)",
+  "w": 200,
+  "h": 37,
+  "clientW": 198,
+  "scrollW": 198,
+  "clientH": 35,
+  "scrollH": 51,
+  "innerW": 500,
+  "hidden_lines": true
+ },
+ "B": {
+  "text": "↳ PROJ-2 · PROJ-2.2 venceu há 1d (Cardápio e precificação)",
+  "w": 200,
+  "h": 53,
+  "clientW": 198,
+  "scrollW": 198,
+  "clientH": 51,
+  "scrollH": 51,
+  "innerW": 500,
+  "hidden_lines": false
+ },
+ "C": {
+  "text": "↳ PROJ-2 · PROJ-2.2 venceu há 1d (Cardápio e precificação)",
+  "w": 443,
+  "h": 37,
+  "clientW": 441,
+  "scrollW": 441,
+  "clientH": 35,
+  "scrollH": 35,
+  "innerW": 500,
+  "hidden_lines": false
+ }
+}

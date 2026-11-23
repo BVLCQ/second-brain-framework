@@ -1,0 +1,56 @@
+{
+ "base_light": {
+  "focused": true,
+  "outlineColor": "rgb(0, 95, 204)",
+  "outlineStyle": "auto",
+  "outlineWidth": "1px",
+  "outlineOffset": "1px",
+  "accent": "#3b5bdb",
+  "boxShadow": "none"
+ },
+ "base_dark": {
+  "focused": true,
+  "outlineColor": "rgb(153, 200, 255)",
+  "outlineStyle": "auto",
+  "outlineWidth": "1px",
+  "outlineOffset": "1px",
+  "accent": "#748ffc",
+  "boxShadow": "none"
+ },
+ "A": {
+  "focused": true,
+  "outlineColor": "rgb(59, 91, 219)",
+  "outlineStyle": "solid",
+  "outlineWidth": "2px",
+  "outlineOffset": "1px",
+  "accent": "#3b5bdb",
+  "boxShadow": "none"
+ },
+ "A_dark": {
+  "focused": true,
+  "outlineColor": "rgb(116, 143, 252)",
+  "outlineStyle": "solid",
+  "outlineWidth": "2px",
+  "outlineOffset": "1px",
+  "accent": "#748ffc",
+  "boxShadow": "none"
+ },
+ "B": {
+  "focused": true,
+  "outlineColor": "rgb(59, 91, 219)",
+  "outlineStyle": "none",
+  "outlineWidth": "3px",
+  "outlineOffset": "1px",
+  "accent": "#3b5bdb",
+  "boxShadow": "rgb(255, 255, 255) 0px 0px 0px 2px, rgb(59, 91, 219) 0px 0px 0px 4px"
+ },
+ "C": {
+  "focused": true,
+  "outlineColor": "rgb(25, 28, 34)",
+  "outlineStyle": "solid",
+  "outlineWidth": "2px",
+  "outlineOffset": "1px",
+  "accent": "#3b5bdb",
+  "boxShadow": "none"
+ }
+}

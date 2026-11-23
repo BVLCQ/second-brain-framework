@@ -1,0 +1,64 @@
+{
+ "base_ficha": {
+  "ficha": [
+   "priorizada",
+   "melhoria-de-processo",
+   "ganho rápido"
+  ],
+  "slug_chips": [
+   "melhoria-de-processo"
+  ],
+  "raw_left": 1
+ },
+ "base_board": {
+  "ficha": [],
+  "slug_chips": [],
+  "raw_left": 0
+ },
+ "base_visao": {
+  "ficha": [],
+  "slug_chips": [
+   "em-andamento",
+   "em-espera",
+   "em-andamento"
+  ],
+  "raw_left": 3
+ },
+ "A_ficha": {
+  "ficha": [
+   "priorizada",
+   "Melhoria de processo",
+   "ganho rápido"
+  ],
+  "slug_chips": [],
+  "raw_left": 0
+ },
+ "A_board": {
+  "ficha": [],
+  "slug_chips": [],
+  "raw_left": 0
+ },
+ "A_visao": {
+  "ficha": [],
+  "slug_chips": [
+   "em-andamento",
+   "em-espera",
+   "em-andamento"
+  ],
+  "raw_left": 3
+ },
+ "B_ficha": {
+  "ficha": [
+   "priorizada",
+   "Melhoria de processo",
+   "ganho rápido"
+  ],
+  "slug_chips": [],
+  "raw_left": 0
+ },
+ "B_board": {
+  "ficha": [],
+  "slug_chips": [],
+  "raw_left": 0
+ }
+}

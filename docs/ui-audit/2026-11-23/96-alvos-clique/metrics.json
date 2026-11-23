@@ -1,0 +1,134 @@
+{
+ "base": {
+  "links": [
+   {
+    "t": "TASK-0003",
+    "h": 21,
+    "w": 78
+   },
+   {
+    "t": "decidir",
+    "h": 21,
+    "w": 44
+   },
+   {
+    "t": "ver",
+    "h": 21,
+    "w": 20
+   },
+   {
+    "t": "revisar",
+    "h": 21,
+    "w": 43
+   }
+  ],
+  "chips": [
+   {
+    "t": "↳ PROJ-2 · PROJ-",
+    "h": 23,
+    "w": 366
+   }
+  ],
+  "hitTest": {
+   "y_offset": -3,
+   "hits": false
+  },
+  "link_heights": [
+   21,
+   21,
+   {
+    "n": 27,
+    "min": 21,
+    "max": 21
+   }
+  ]
+ },
+ "A": {
+  "links": [
+   {
+    "t": "TASK-0003",
+    "h": 24,
+    "w": 78
+   },
+   {
+    "t": "decidir",
+    "h": 24,
+    "w": 44
+   },
+   {
+    "t": "ver",
+    "h": 24,
+    "w": 20
+   },
+   {
+    "t": "revisar",
+    "h": 24,
+    "w": 43
+   }
+  ],
+  "chips": [
+   {
+    "t": "↳ PROJ-2 · PROJ-",
+    "h": 24,
+    "w": 366
+   }
+  ],
+  "hitTest": {
+   "y_offset": -3,
+   "hits": false
+  },
+  "link_heights": [
+   24,
+   24,
+   {
+    "n": 27,
+    "min": 24,
+    "max": 24
+   }
+  ]
+ },
+ "B": {
+  "links": [
+   {
+    "t": "TASK-0003",
+    "h": 21,
+    "w": 78
+   },
+   {
+    "t": "decidir",
+    "h": 21,
+    "w": 44
+   },
+   {
+    "t": "ver",
+    "h": 21,
+    "w": 20
+   },
+   {
+    "t": "revisar",
+    "h": 21,
+    "w": 43
+   }
+  ],
+  "chips": [
+   {
+    "t": "↳ PROJ-2 · PROJ-",
+    "h": 23,
+    "w": 366
+   }
+  ],
+  "hitTest": {
+   "y_offset": -3,
+   "hits": true
+  },
+  "link_heights": [
+   21,
+   21,
+   {
+    "n": 27,
+    "min": 21,
+    "max": 21
+   }
+  ]
+ }
+}

@@ -1,0 +1,198 @@
+{
+ "base_home": {
+  "view": "#home",
+  "pad": {
+   "card.brief-card": {
+    "14px 16px": 1
+   },
+   "panel": {
+    "16px 18px": 5
+   },
+   "panel.goal": {
+    "16px 18px": 3
+   }
+  },
+  "hgt": {
+   "clidot": {
+    "24px": 1
+   },
+   "btn": {
+    "29px": 1
+   },
+   "A": {
+    "21px": 27
+   },
+   "btn.ghost.tiny": {
+    "25px": 3
+   }
+  },
+  "cells": {}
+ },
+ "base_todo": {
+  "view": "#todo",
+  "pad": {
+   "card": {
+    "10px 12px": 4
+   },
+   "card.is-blocked": {
+    "10px 12px": 1
+   },
+   "panel": {
+    "16px 18px": 1
+   }
+  },
+  "hgt": {
+   "clidot": {
+    "24px": 1
+   },
+   "btn": {
+    "29px": 1
+   }
+  },
+  "cells": {
+   "8px 10px": 0
+  }
+ },
+ "base_matrix": {
+  "view": "#pf/matrix",
+  "pad": {
+   "panel": {
+    "16px 18px": 1
+   },
+   "card.mini": {
+    "8px 10px": 5
+   }
+  },
+  "hgt": {
+   "clidot": {
+    "24px": 1
+   }
+  },
+  "cells": {}
+ },
+ "A_home": {
+  "view": "#home",
+  "pad": {
+   "card.brief-card": {
+    "14px 16px": 1
+   },
+   "panel": {
+    "16px 18px": 5
+   },
+   "panel.goal": {
+    "16px 18px": 3
+   }
+  },
+  "hgt": {
+   "clidot": {
+    "24px": 1
+   },
+   "btn": {
+    "29px": 1
+   },
+   "A": {
+    "21px": 27
+   },
+   "btn.ghost.tiny": {
+    "29px": 3
+   }
+  },
+  "cells": {}
+ },
+ "A_todo": {
+  "view": "#todo",
+  "pad": {
+   "card": {
+    "12px 14px": 4
+   },
+   "card.is-blocked": {
+    "12px 14px": 1
+   },
+   "panel": {
+    "16px 18px": 1
+   }
+  },
+  "hgt": {
+   "clidot": {
+    "24px": 1
+   },
+   "btn": {
+    "29px": 1
+   }
+  },
+  "cells": {
+   "8px 10px": 0
+  }
+ },
+ "A_matrix": {
+  "view": "#pf/matrix",
+  "pad": {
+   "panel": {
+    "16px 18px": 1
+   },
+   "card.mini": {
+    "8px 10px": 5
+   }
+  },
+  "hgt": {
+   "clidot": {
+    "24px": 1
+   }
+  },
+  "cells": {}
+ },
+ "B_home": {
+  "view": "#home",
+  "pad": {
+   "card.brief-card": {
+    "12px 14px": 1
+   },
+   "panel": {
+    "16px 18px": 5
+   },
+   "panel.goal": {
+    "16px 18px": 3
+   }
+  },
+  "hgt": {
+   "clidot": {
+    "24px": 1
+   },
+   "btn": {
+    "24px": 1
+   },
+   "A": {
+    "21px": 27
+   },
+   "btn.ghost.tiny": {
+    "24px": 3
+   }
+  },
+  "cells": {}
+ },
+ "B_todo": {
+  "view": "#todo",
+  "pad": {
+   "card": {
+    "12px 14px": 4
+   },
+   "card.is-blocked": {
+    "12px 14px": 1
+   },
+   "panel": {
+    "16px 18px": 1
+   }
+  },
+  "hgt": {
+   "clidot": {
+    "24px": 1
+   },
+   "btn": {
+    "24px": 1
+   }
+  },
+  "cells": {
+   "8px 10px": 0
+  }
+ }
+}
