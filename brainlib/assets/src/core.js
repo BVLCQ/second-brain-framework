@@ -1056,7 +1056,7 @@ V["pf/opp"] = (q, id) => {
   const o = OPP[id]; if (!o) return empty("Oportunidade não encontrada");
   const proc = PROC[o.process];
   let h = '<p class="crumb muted"><a href="#pf/opps">← oportunidades</a></p><div class="pagehead"><div><h1>' + esc(o.id) + " · " + esc(o.title) + "</h1>" +
-    '<div class="sub">' + stChip(o.status) + chip("", o.kind) + "<span>" + esc(areaName(o.area)) + "</span>" + (o.quadrant ? chip("", o.quadrant) : "") +
+    '<div class="sub">' + stChip(o.status) + chip("", o.kind_label || o.kind) + "<span>" + esc(areaName(o.area)) + "</span>" + (o.quadrant ? chip("", o.quadrant) : "") +
     "<span>ICE " + iceTxt(o) + "</span></div></div></div>";
   h += '<div class="grid g2">' + panel("Resumo", '<ul class="feed"><li><b>Ganho esperado:</b> ' + esc(o.gain || "não consta") + (o.hours_saved ? " · " + hrs(o.hours_saved) : "") + "</li>" +
     (o.score != null ? ["impact", "confidence", "ease"].map(k => {       // leitura do ICE: rótulo de cada eixo (rubric)

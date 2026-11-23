@@ -110,6 +110,8 @@ const BRAIN_FORMS = (function(){
   const NODE = ["ativo", "congelado", "depois", "finalizado"];
   const OPP_STATUS = ["ideia", "triagem", "priorizada", "em-andamento", "piloto", "validando", "entregue", "em-espera", "descartada"];
   const OPP_LATERAL = ["em-espera", "descartada"];
+  // #99: espelho de schema.OPP_KIND_LABELS — o teste de paridade (tests/test_issue99_kind_labels.py) pina o drift
+  const OPP_KIND_LABELS = {"melhoria-de-processo": "Melhoria de processo", "novo-processo": "Novo processo", "estruturante": "Estruturante"};
   const st = M => M.form_static || {};
   const SOURCES = {
     people: M => (M.people || []).map(p => [p.id, p.name]),
@@ -134,7 +136,7 @@ const BRAIN_FORMS = (function(){
     ask_options: (M, v, ctx) => (((ctx && ctx.item) || {}).options || []).map(o => [o, o]),
     node_status: (M, v, ctx) => { const cur = ((ctx && ctx.item) || {}).status; return NODE.concat(cur && !NODE.includes(cur) ? [cur] : []).map(s => [s, s]); },
     recurrence: M => [[NONE, NONE]].concat((st(M).recurrence || []).map(r => [r, r])),
-    opp_kinds: M => (st(M).opp_kinds || []).map(k => [k, k]),
+    opp_kinds: M => (st(M).opp_kinds || []).map(k => [k, OPP_KIND_LABELS[k] || k]),
     doc_kinds: M => (M.doc_kinds || []).map(k => [k, k]),
     source_kinds: (M, v, ctx) => { const ks = (M.source_kinds || []).map(k => [k[0], k[1]]), cur = ((ctx && ctx.item) || {}).kind;
       return ks.concat(cur && !ks.some(k => k[0] === cur) ? [[cur, cur]] : []); },

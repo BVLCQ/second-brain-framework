@@ -10,7 +10,7 @@ from datetime import date
 from rich.style import Style
 from rich.text import Text
 
-from .. import ice_rubric, util
+from .. import ice_rubric, schema, util
 from . import dates
 
 RED, AMB, GRN, CYN, VIO, DIM, FAINT = "red", "yellow", "green", "cyan", "magenta", "dim", "dim italic"
@@ -879,7 +879,7 @@ def d_opp(store, it) -> Doc:
     o = it.data
     g, gs = OPP_GLYPH.get(o["status"], ("○", DIM))
     doc = Doc().h(Text(o["id"] + " · ", "bold"), (o["title"], "bold"))
-    doc.p(Text(g + " ", gs), (o["status"], gs), (f" · {o['kind']}", DIM), (f" · {_area_name(store, o['area'])}", DIM))
+    doc.p(Text(g + " ", gs), (o["status"], gs), (f" · {schema.opp_kind_label(o['kind'])}", DIM), (f" · {_area_name(store, o['area'])}", DIM))
     if o["score"] is None:
         ice = T(("sem ICE", AMB), ("  (i define · o agente pode sugerir)", DIM))
     else:
