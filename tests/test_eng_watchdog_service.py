@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 import plistlib
 import re
+import shlex
 import shutil
 import stat
 import subprocess
@@ -194,6 +195,50 @@ class TestWatchdogPlistAndGuide(unittest.TestCase):
         self.assertIn("services/com.segundo-cerebro.watchdog.plist", guide)
         self.assertIn("sed ", guide)
         self.assertIn("launchctl kickstart gui/$(id -u)/com.segundo-cerebro.watchdog", guide)
+
+
+class TestGuideLaunchAgentRecipes(unittest.TestCase):
+    """As receitas de LaunchAgent de guides/commands.md têm que rodar como estão no arquivo cru.
+
+    O guia também é lido cru (terminal, agente), não só renderizado: numa célula de tabela o `|` pede escape
+    (`\\|`), e um `sed` copiado com esse escape não roda no BSD sed do macOS — o único sistema onde LaunchAgent
+    existe. Delimitador `#` dispensa o escape e dá o mesmo resultado cru e renderizado."""
+
+    ROW = re.compile(r"^\| Instalar o (watchdog|descarregador) \|(.*)$", re.MULTILINE)
+    SED = re.compile(r'sed ("[^"]*") (services/[\w.\-]+) >')
+
+    def _recipes(self) -> list[tuple[str, str]]:
+        rows = self.ROW.findall(COMMANDS_MD.read_text(encoding="utf-8"))
+        self.assertEqual([name for name, _ in rows], ["watchdog", "descarregador"],
+                         "receitas do watchdog e do descarregador ausentes ou fora de ordem em guides/commands.md")
+        return rows
+
+    def test_recipe_reads_the_same_raw(self) -> None:
+        for name, row in self._recipes():
+            self.assertNotIn("\\|", row, f"'Instalar o {name}': pipe escapado não roda como está no arquivo cru")
+            self.assertIn('sed "s#__BRAIN_DIR__#$PWD#g"', row)
+            self.assertIn("mkdir -p ~/Library/LaunchAgents", row,
+                          "'Instalar o " + name + "': sem a pasta, o redirecionamento falha antes do launchctl")
+
+    @unittest.skipUnless(shutil.which("sed"), "sed ausente")
+    def test_documented_substitution_runs_on_the_local_sed(self) -> None:
+        sed = shutil.which("sed") or "sed"           # (sem sed no PATH a classe já pula)
+        for name, row in self._recipes():
+            m = self.SED.search(row)
+            assert m is not None, f"'Instalar o {name}': comando sed não encontrado na receita"
+            expr, src = shlex.split(m.group(1))[0], m.group(2)
+            self.assertTrue((ROOT / src).is_file(), f"{src} ausente no repo")
+            sample = plistlib.loads((ROOT / src).read_bytes())
+            self.assertIn("__BRAIN_DIR__", " ".join(sample["ProgramArguments"]),
+                           f"{src} deveria trazer o placeholder __BRAIN_DIR__")
+            proc = subprocess.run([sed, expr.replace("$PWD", "/caminho/da/instancia"), str(ROOT / src)],
+                                  capture_output=True, text=True, timeout=30)
+            self.assertEqual(proc.returncode, 0,
+                             f"'Instalar o {name}': o sed recusou a receita como está no guia: {proc.stderr.strip()}")
+            rendered = plistlib.loads(proc.stdout.encode("utf-8"))
+            self.assertEqual(rendered["Label"], sample["Label"])
+            self.assertNotIn("__BRAIN_DIR__", proc.stdout)
+            self.assertIn("/caminho/da/instancia/", proc.stdout)
 
 
 class TestGuideStepsParity(unittest.TestCase):
