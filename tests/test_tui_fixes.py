@@ -107,10 +107,10 @@ class TuiFixesTest(unittest.IsolatedAsyncioTestCase):
             "id": "TASK-0002", "status": "aberta",
             "blocked_by": [], "blocked_by_all": ["TASK-0001"],
         })
-        app.exec = mock.Mock()
+        app.run_cmds = mock.Mock()
         app.cycle_status()
         self.assertEqual(
-            app.exec.call_args[0][0],
+            app.run_cmds.call_args[0][0],
             [["action", "update", "TASK-0002", "--status", "fazendo", "--by", "owner"]],
         )
         # Contra-caso: bloqueador ainda aberto em blocked_by impede o avanço
@@ -118,9 +118,9 @@ class TuiFixesTest(unittest.IsolatedAsyncioTestCase):
             "id": "TASK-0002", "status": "aberta",
             "blocked_by": ["TASK-0001"], "blocked_by_all": ["TASK-0001"],
         })
-        app.exec = mock.Mock()
+        app.run_cmds = mock.Mock()
         app.cycle_status()
-        app.exec.assert_not_called()
+        app.run_cmds.assert_not_called()
 
     def test_model_blocked_by_open_only(self):
         self.assertTrue(bridge.run_brain(self.inst, ["action", "open", "Bloqueadora", "--by", "owner"]).ok)

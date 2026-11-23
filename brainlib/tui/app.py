@@ -800,7 +800,7 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
         elif k == "]":
             self.tab_move(1)
         elif k == "?":
-            self.help()
+            self.show_help()
         elif k in (":", "ctrl+p"):
             self.palette()
         elif k == "g":
@@ -1109,8 +1109,8 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
         return K
 
     # ── execução ───────────────────────────────────────────────────────────
-    def exec(self, cmds: list[list[str]], render: bool = True, after: Callable[[], None] | None = None,
-             show: str | None = None, on_fail: Callable[[], None] | None = None) -> None:
+    def run_cmds(self, cmds: list[list[str]], render: bool = True, after: Callable[[], None] | None = None,
+                 show: str | None = None, on_fail: Callable[[], None] | None = None) -> None:
         """Roda comandos `brain` em sequência (para no primeiro erro). `show` abre a saída inteira num modal;
         `on_fail` roda se algum comando falhar (ex.: desfazer a edição do goals.md que o gate não registrou)."""
         self.run_worker(self._exec(cmds, render, after, show, self.face, on_fail), exclusive=False)
@@ -1197,7 +1197,7 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
             self.log_line(f"ERRO ao reler o ledger: {e}", "red")
 
     def do_render(self) -> None:
-        self.exec([["render"]], render=False)
+        self.run_cmds([["render"]], render=False)
 
     def form(self, spec: FormSpec) -> None:
         def done(vals) -> None:
@@ -1207,7 +1207,7 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
                 return
             if spec.intercept and spec.intercept(vals):
                 return
-            self.exec(spec.build(vals), render=spec.render, after=spec.after, show=spec.show, on_fail=spec.on_fail)
+            self.run_cmds(spec.build(vals), render=spec.render, after=spec.after, show=spec.show, on_fail=spec.on_fail)
         self.push_screen(FormModal(spec), done)
 
     # ── formulários: a especificação mora em brainlib/forms.py (a MESMA do painel) ──────────────────────────
@@ -1271,7 +1271,7 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
 
             def done(ok) -> None:
                 if ok:
-                    self.exec(cmds, render=render, after=after, show=show)
+                    self.run_cmds(cmds, render=render, after=after, show=show)
             self.push_screen(ConfirmModal(forms.title(form_id, ctx), forms.sub(form_id, ctx), cmds[0]), done)
             return
         fields = [Field(f.id, forms.label(f, m, ctx), value=init[f.id], ph=forms._fmt(f.ph, ctx), req=forms.required(f, ctx),
@@ -1308,7 +1308,7 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
 
     def toggle_park(self) -> None:
         a = self.cur().data
-        self.exec([["action", "update", a["id"], "--unpark" if a["parked"] else "--park", "--by", "owner"]])
+        self.run_cmds([["action", "update", a["id"], "--unpark" if a["parked"] else "--park", "--by", "owner"]])
 
     def toggle_collapse(self) -> None:
         it = self.cur()
@@ -1370,14 +1370,59 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
                     "Sem base para sugerir, diz 'não consta' e deixa a ação sem prazo"], f"/todo prazo {hit[-1]}")
 
         def remember(cmds, v):
-            # o aviso de parecida já apareceu no campo título: gravar é a decisão do dono de que é outra ação (--force)
             self._suggest_for = v["title"] if not v["due"] and v["list"] != "watching" else None
             return cmds
 
         deliv, proj = pre.get("deliv", ""), pre.get("project", "—")
-        self.open_form("action.new", {"list": lst, "owner": "eu" if lst == "mine" else "", "deliv": deliv, "project": proj,
-                                      "item": {"project": proj}, "in_deliv": f" em {deliv}" if deliv else ""},
-                       wrap=remember, after=after_suggest)
+        ctx = {"list": lst, "owner": "eu" if lst == "mine" else "", "deliv": deliv, "project": proj,
+               "item": {"project": proj}, "in_deliv": f" em {deliv}" if deliv else ""}
+
+        def check_dup(v: dict) -> bool:
+            title = (v.get("title") or "").strip()
+            if not title:
+                return False
+            from .. import forms
+            project = v.get("project") or ""
+            if project == forms.NONE:
+                project = ""
+            raw_deliv = (v.get("deliv") or "").strip()
+            deliverable = forms._deliv_full(raw_deliv, project) if raw_deliv else ""
+            ppl: list[str] = []
+            for tok in util.split_csv(v.get("people") or ""):
+                if tok in self.store.brain.state.people:
+                    ppl.append(tok)
+                else:
+                    cands = people_mod.resolve(self.store.brain.state, tok)
+                    ppl.append(cands[0] if len(cands) == 1 else tok)
+            prof = dupes.profile_from_data({
+                "title": title,
+                "link": (v.get("link") or "").strip(),
+                "project": project,
+                "deliverable": deliverable,
+                "people": ppl,
+            })
+            idx = self.store.dup_index()
+            hits = dupes.similar(self.store.brain.state, prof, threshold=dupes.STRONG, idx=idx)
+            if not hits:
+                near = dupes.similar(self.store.brain.state, prof, threshold=dupes.CANDIDATE, idx=idx)
+                if near:
+                    self.log_line("↳ parecidas (confira se não é a mesma): " + " · ".join(
+                        f"{h['id']} {h['title']} ({h['score']:.2f})" for h in near[:3]), "yellow")
+                return False
+            lines = "\n".join(f"• {h['id']} · {h['title']} ({h['score']:.2f})" for h in hits[:3])
+            body = f"Já existem ações parecidas:\n{lines}\n\nCriar mesmo assim?"
+            cmds = forms.build("action.new", v, ctx, self.form_model(), surface="tui")
+            forced = [c + (["--force"] if "--force" not in c else []) for c in cmds]
+
+            def done(ok) -> None:
+                if ok:
+                    remember(forced, v)
+                    self.run_cmds(forced, render=True, after=after_suggest)
+
+            self.push_screen(ConfirmModal("Possível duplicata", body, forced[0]), done)
+            return True
+
+        self.open_form("action.new", ctx, intercept=check_dup, wrap=remember, after=after_suggest)
 
     def clear_log(self) -> None:
         self.query_one("#log", RichLog).clear()
@@ -1405,7 +1450,7 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
                 if c == "edit":
                     self.f_note_edit(ex, v["text"])
                 elif c == "new":
-                    self.exec(forms.build("note.add", v, ctx, self.form_model()), render=False)
+                    self.run_cmds(forms.build("note.add", v, ctx, self.form_model()), render=False)
                 else:
                     self.f_note(pre=v)
             self.push_screen(ChoiceModal("Editar a nota de hoje ou criar outra?", body, [
@@ -1441,7 +1486,7 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
             self.log_line(f"{a['id']} segue bloqueada por {', '.join(blk)} — resolva o bloqueio para movê-la", "yellow")
             return
         nxt = {"aberta": "fazendo", "fazendo": "aguardando", "aguardando": "aberta"}.get(a["status"], "fazendo")
-        self.exec([["action", "update", a["id"], "--status", nxt, "--by", "owner"]])
+        self.run_cmds([["action", "update", a["id"], "--status", nxt, "--by", "owner"]])
 
     def f_drop(self) -> None:
         a = self.cur().data
@@ -1465,7 +1510,7 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
         it = self.cur()
         d = it.data
         if d["status"] == "feito":
-            self.exec([["plan", "deliverable", d["id"], "--status", "nao-iniciado", "--by", "owner"]])
+            self.run_cmds([["plan", "deliverable", d["id"], "--status", "nao-iniciado", "--by", "owner"]])
             return
         self.open_form("deliverable.done", {"id": d["id"], "title": d["title"], "item": d})
 
@@ -1554,7 +1599,7 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
             except OSError as e:
                 self.log_line(f"não consegui gravar PLANNING/goals.md: {e}", "red")
                 return True
-            self.exec(cmds, on_fail=rollback)
+            self.run_cmds(cmds, on_fail=rollback)
             return True
 
         def cancelled() -> None:
@@ -1637,7 +1682,7 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
         self.open_form("publish.approve", {"id": s["id"], "report": s["report"], "destination": s["destination"]})
 
     def pub_cancel(self) -> None:
-        self.exec([["publish", "cancel", self.cur().data["id"]]])
+        self.run_cmds([["publish", "cancel", self.cur().data["id"]]])
 
     def f_decision(self) -> None:
         self.open_form("decision.new")
@@ -1692,6 +1737,16 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
                 return (face, tabs.index(label))
         return None
 
+    def _locate_go_face(self, panel: int, tab: int) -> int | None:
+        """Encontra em qual face mora um destino (painel, aba) do doctor.fix_for."""
+        for face, (_, panels) in enumerate(FACES):
+            if panel in panels and 0 <= tab < len(panels[panel][1]):
+                return face
+        for face, (_, panels) in enumerate(FACES):
+            if panel in panels:
+                return face
+        return None
+
     def fix_doc(self) -> None:
         it = self.cur()
         fix = it.extra.get("fix") if it else None
@@ -1711,12 +1766,21 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
                 self.face_to(face)
             self.p = 1
             self.tab[1] = tab
-            self.set_sel(1, [o["id"] for o in SYS_OPS].index(fix["sys"]))
+            idx = next((i for i, o in enumerate(SYS_OPS) if o["id"] == fix["sys"]), None)
+            if idx is not None:
+                self.set_sel(1, idx)
             self.redraw()
         elif fix.get("go"):
             gp, gt = fix["go"]
-            if gp in self.panels:
-                gt = min(gt, len(self.panels[gp][1]) - 1)
+            face = fix.get("face")
+            if face is None:
+                face = self._locate_go_face(gp, gt)
+            if face is None or not (0 <= face < len(FACES)) or gp not in FACES[face][1]:
+                self.log_line(f"⚠ destino desconhecido no doctor.fix_for: painel {gp}", "yellow")
+                return
+            if face != self.face:
+                self.face_to(face)
+            gt = max(0, min(gt, len(self.panels[gp][1]) - 1))
             self.p, self.tab[gp] = gp, gt
             self.redraw()
 
@@ -1743,7 +1807,7 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
         if op.get("info"):
             self.log_line("$ brain mcp  (fica ouvindo em stdio; registre-o na outra IA: claude mcp add segundo-cerebro -- brain mcp)", "dim")
             return
-        run = lambda: self.exec([args], render=False, show=op.get("show"))  # noqa: E731
+        run = lambda: self.run_cmds([args], render=False, show=op.get("show"))  # noqa: E731
         if op.get("door") or op.get("confirm") or apply:
             def done(ok) -> None:
                 if ok:
@@ -1901,8 +1965,8 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
             return
         key = it.data["key"]
         nxt = "false" if it.data.get("enabled", True) else "true"
-        self.exec([["watch", "edit", key, "--set", f"enabled={nxt}"]], render=False,
-                  after=lambda: self._source_after(lambda: key))
+        self.run_cmds([["watch", "edit", key, "--set", f"enabled={nxt}"]], render=False,
+                      after=lambda: self._source_after(lambda: key))
 
     def f_source_edit(self) -> None:
         it = self.cur()
@@ -1981,8 +2045,6 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
             self.redraw()
             self.run_sys(go[4])
             return
-        if len(go) > 4:
-            self.set_sel(p, [o["id"] for o in SYS_OPS].index(go[4]))
         self.redraw()
         if k:
             self.press(k)
@@ -2010,7 +2072,7 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
             self.redraw()
         self.push_screen(FilterModal("", change, base=base))
 
-    def help(self) -> None:
+    def show_help(self) -> None:
         name, tabs = self.panels.get(self.p, (f"painel {self.p} (fora desta face)", ["—"]))
         tab_label = tabs[min(self.tab[self.p], len(tabs) - 1)]
         body = Text()
