@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 
@@ -112,9 +113,25 @@ def parse_busy(raw, cfg) -> list[Interval]:
     return [(s - buffer, e + buffer) for s, e, _ in _iter_busy(raw, cfg)]
 
 
+_GCAL_STAMP_RE = re.compile(r"(\d{4}-\d{2}-\d{2})(?:[T_-](\d{2})[:-]?(\d{2})(?:[:-]?(\d{2}))?)?")
+
+
+def _snapshot_sort_key(path: Path) -> tuple[int, str, str, float, str]:
+    try:
+        mtime = path.stat().st_mtime
+    except OSError:
+        mtime = 0.0
+    m = _GCAL_STAMP_RE.search(path.stem)
+    if m:
+        date_s = m.group(1)
+        time_s = f"{m.group(2)}{m.group(3)}{m.group(4) or '00'}" if m.group(2) else ""
+        return (1, date_s, time_s, mtime, path.name)
+    return (0, "", "", mtime, path.name)
+
+
 def latest_calendar_snapshot(vault: Path) -> Path | None:
     cands = list((vault / "RAW" / "inbox").glob("gcal-*.json")) + list((vault / "RAW").glob("*/*/**/gcal-*.json"))
-    return max(cands, key=lambda p: p.name.rsplit("-", 1)[-1]) if cands else None
+    return max(cands, key=_snapshot_sort_key) if cands else None
 
 
 def _spent(brain, aid: str, now: datetime) -> int:
