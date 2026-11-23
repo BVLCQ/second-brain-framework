@@ -149,6 +149,9 @@ body.obmode #faces, body.obmode #tabs, body.obmode #openpal { display: none; }
 .obw .opt p { margin: 0; color: var(--muted); font-size: 12.5px; line-height: 1.45; }
 .obw .slot { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin-top: 10px; background: var(--bg); }
 .obw .slot .sh { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 13px; font-weight: 650; }
+/* termo com tooltip nativo (title) — as operações do LLM no header do slot: o pontilhado diz "passe o mouse",
+   o Tab alcança (tabindex) e o anel de foco global do painel marca; sem caixa própria, sem JS. */
+.obw .sh .op { text-decoration: underline dotted; text-decoration-color: var(--muted); text-underline-offset: 4px; cursor: help; }
 .obw .egress { display: flex; gap: 8px; align-items: flex-start; background: var(--warnbg); color: var(--warn);
   border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent); border-radius: 9px; padding: 9px 12px;
   font-size: 12.5px; margin-top: 12px; }

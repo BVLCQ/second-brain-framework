@@ -10,7 +10,7 @@ from datetime import date
 from rich.style import Style
 from rich.text import Text
 
-from .. import ice_rubric, schema, util
+from .. import ice_rubric, providers, schema, util
 from . import dates
 
 RED, AMB, GRN, CYN, VIO, DIM, FAINT = "red", "yellow", "green", "cyan", "magenta", "dim", "dim italic"
@@ -1141,6 +1141,10 @@ def d_prov(store, it) -> Doc:
          else (Text(f"ausente — brain memory providers set {d['slot']} --provider {d['provider']} --key …", RED)
                if d.get("key_env") else Text("não usa", DIM))),
     ])
+    if d["slot"] == "llm":      # o que cada operação faz — o mesmo texto do tooltip do slot no painel (LLM_OPS_INFO)
+        doc.sec("O que o LLM faz")
+        for name, tip in providers.LLM_OPS_INFO.values():
+            doc.p((name, "bold"), " — " + tip)
     doc.blank().p(Text("Tecla m muda modo e provedores · s troca um provedor · w abre o wizard da memória.", DIM))
     doc.p(Text("Trocou embeddings? brain memory rebuild re-deriva os vetores do vault.", DIM))
     return doc

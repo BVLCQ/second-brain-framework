@@ -1060,6 +1060,24 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             await pilot.press("shift+tab")
             self.assertEqual(app.face, 0)
 
+    async def test_ficha_do_slot_llm_explica_as_operacoes(self):
+        """O slot LLM não é só "extração": o rótulo nomeia as três operações e a ficha explica cada uma,
+        com o mesmo texto do tooltip do painel (fonte única: providers.LLM_OPS_INFO)."""
+        from brainlib import providers
+        from brainlib.tui import rows
+        app = self.app()
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause(0.4)
+            await pilot.press("tab", "tab")                                 # Configurações: Memória › Provedores
+            llm, emb = app.items(1)[0], app.items(1)[1]
+            self.assertEqual((llm.id, emb.id), ("prov:llm", "prov:embeddings"))
+            self.assertIn("Retain · Consolidação · Reflexão", llm.data["icon"])
+            txt = rows.detail(app.store, llm).plain
+            self.assertIn("O que o LLM faz", txt)
+            for nome, tip in providers.LLM_OPS_INFO.values():
+                self.assertIn(nome + " — " + tip, txt)
+            self.assertNotIn("O que o LLM faz", rows.detail(app.store, emb).plain)
+
     async def test_filter_and_zoom_are_saved_on_the_face_of_origin(self):
         app = self.app()
         async with app.run_test(size=(140, 44)) as pilot:

@@ -3134,6 +3134,16 @@ OBV.conectores = () => {
   });
 };
 
+// O que o LLM faz no modo full — nome e tooltip de cada operação. É a MESMA lista de providers.LLM_OPS_INFO
+// (tests/test_onboarding_panel.py confere as duas cópias): o header do slot nomeia as três, a explicação
+// fica no hover (title) — no header, só a extração vendia o slot curto.
+const LLM_OPS = [
+  ["Retain", "Quando um documento entra no vault, o LLM lê o texto e extrai os fatos duráveis: decisões e quem decidiu, compromissos com dono e prazo, entregas e números."],
+  ["Consolidação", "Em segundo plano, o LLM revisa os fatos já retidos e forma observações — padrões e preferências estáveis sobre pessoas e projetos. Se mental models estiver ligado, também os atualiza quando você pede."],
+  ["Reflexão", "Na hora da pergunta: em vez de devolver só trechos, o LLM raciocina sobre as memórias recuperadas e redige a resposta."],
+];
+const opTerm = ([name, tip]) => '<span class="op" tabindex="0" title="' + esc(tip) + '">' + esc(name) + "</span>";
+
 // 6. Memória
 OBV.memoria = () => {
   const m = OBS.memory || {};
@@ -3228,7 +3238,7 @@ OBV.memoria = () => {
     if (a.state === "pending") return '<span class="pill warn" style="margin-left:6px">autenticar</span>';
     return "";
   };
-  const renderSlot = (slot, title) => {
+  const renderSlot = (slot, title, ops) => {
     const list = listFor(slot);
     const curKey = chosen[slot];
     const p = getProv(slot, curKey) || {};
@@ -3236,7 +3246,8 @@ OBV.memoria = () => {
     const needModelUrl = needModel;
     const modelPh = slot === "llm" && p.model ? "vazio = " + p.model : "ex.: gpt-4o-mini";
     return '<div class="slot" data-slot="' + slot + '">' +
-      '<div class="sh"><span>' + esc(title) + "</span>" + (p.recommended ? '<span class="pill rec">✓ recomendado</span>' : "") + "</div>" +
+      '<div class="sh"><span>' + esc(title) + (ops ? " — " + ops.map(opTerm).join("&nbsp;· ") : "") + "</span>" +
+        (p.recommended ? '<span class="pill rec">✓ recomendado</span>' : "") + "</div>" +
       '<select id="prov-' + slot + '">' +
         list.map(it => '<option value="' + esc(it.key) + '" ' + (it.key === curKey ? "selected" : "") + ">" + esc(it.label) + (it.recommended ? " — ✓ recomendado" : "") + "</option>").join("") +
       "</select>" +
@@ -3279,7 +3290,7 @@ OBV.memoria = () => {
       "</div></div>";
     $("#det").innerHTML = "<h2>Motores</h2>" +
       '<p class="sub">Escolha os provedores por slot — os itens recomendados já vêm selecionados.</p>' +
-      (sel === "full" ? renderSlot("llm", "LLM — extração de fatos") : "") +
+      (sel === "full" ? renderSlot("llm", "LLM", LLM_OPS) : "") +
       renderSlot("embeddings", "Embeddings") +
       renderSlot("reranker", "Reranker") +
       (sel === "full" ? renderSlot("decision", "Decisão — juiz rápido (opcional)") : "") +

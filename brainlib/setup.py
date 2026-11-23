@@ -860,7 +860,7 @@ def _providers_step(brain, ui, slots: list[str]) -> bool:
     from . import providers as prov
     st = prov.stack(brain)
     env_keys = config.load_env(brain.inst)
-    labels = {"llm": "LLM (extração · consolidação · mental models)",
+    labels = {"llm": prov.SLOT_LABELS["llm"],      # as operações vêm de LLM_OPS_INFO — mesma lista do painel
               "embeddings": "embeddings", "reranker": "reranker",
               "decision": "decisão (juiz rápido System-1 — opcional)"}
     changed = False

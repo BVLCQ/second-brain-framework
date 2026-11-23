@@ -3,7 +3,9 @@ mesmo HTML do painel, transição sem recarregar, rota antiga virando atalho."""
 from __future__ import annotations
 
 import http.client
+import json
 import re
+import subprocess
 import sys
 import tempfile
 import threading
@@ -64,6 +66,87 @@ class WizardPanelParityTests(unittest.TestCase):
         extra = EXTRA.read_text(encoding="utf-8")
         self.assertNotIn('location.href = "/onboarding"', extra)
         self.assertIn('location.hash = "onboarding"', extra)
+
+
+ONBOARD_CSS = ROOT / "brainlib" / "assets" / "src" / "onboard.css"
+
+_RENDER_STUB = """
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const chosen = {llm: "x", embeddings: "y", reranker: "z", decision: "off"};
+const listFor = slot => [{key: chosen[slot], label: "L-" + slot, recommended: true, cloud: true, model: "m"}];
+const getProv = (slot, key) => listFor(slot).find(p => p.key === key) || null;
+"""
+
+
+def _slice(text: str, start: str, end: str) -> str:
+    a = text.index(start)
+    b = text.index(end, a) + len(end)
+    return text[a:b]
+
+
+def _line(text: str, start: str) -> str:
+    a = text.index(start)
+    return text[a:text.index("\n", a)]
+
+
+def _render_header(text: str) -> dict:
+    """Roda o `renderSlot` REAL da cópia (painel ou página própria) no node, com o mínimo de stubs."""
+    harness = (_RENDER_STUB + _slice(text, "const LLM_OPS = [", "];\n") + "\n"
+               + _line(text, "const opTerm = ") + "\n"
+               + _slice(text, "const renderSlot = (slot, title, ops) => {", "\n  };\n") + "\n"
+               'process.stdout.write(JSON.stringify({llm: renderSlot("llm", "LLM", LLM_OPS),'
+               ' emb: renderSlot("embeddings", "Embeddings")}));')
+    proc = subprocess.run(["node", "-e", harness], capture_output=True, text=True, timeout=30)
+    if proc.returncode != 0:
+        raise AssertionError(proc.stderr)
+    return json.loads(proc.stdout)
+
+
+class LlmSlotHeaderTests(unittest.TestCase):
+    """O slot LLM do wizard nomeia as operações e explica cada uma no tooltip — o header dizia só "extração de fatos".
+    As DUAS cópias do JS (painel e página própria) carregam a mesma lista de `providers.LLM_OPS_INFO`."""
+
+    @classmethod
+    def setUpClass(cls):
+        from brainlib import providers
+        cls.ops = list(providers.LLM_OPS_INFO.values())
+        cls.sources = {"painel": EXTRA.read_text(encoding="utf-8"), "página": OB_HTML.read_text(encoding="utf-8")}
+
+    def test_as_operacoes_sao_as_mesmas_nas_duas_copias_e_no_registro(self):
+        from brainlib import providers
+        self.assertEqual(set(providers.LLM_OPS_INFO), {"retain", "consolidation", "reflect"})
+        self.assertLessEqual(set(providers.LLM_OPS_INFO), {op for op, _ in providers.LLM_OPS})   # só operação que o servidor tem
+        for onde, texto in self.sources.items():
+            with self.subTest(onde=onde):
+                self.assertEqual(_steps_literal(texto, "const LLM_OPS"), self.ops)
+                self.assertNotIn("LLM — extração de fatos", texto)
+        for nome, tip in self.ops:                                                # prosa: `brain <cmd>` no JS do painel
+            self.assertNotRegex(tip, r"\bbrain \w")                               # conta como gesto emitido (allowlist)
+
+    def test_rotulo_do_slot_sai_da_lista(self):
+        from brainlib import providers
+        self.assertEqual(providers.SLOT_LABELS["llm"], "LLM (Retain · Consolidação · Reflexão)")
+        self.assertEqual(providers.SLOT_LABELS["llm"],
+                         "LLM (" + " · ".join(n for n, _ in providers.LLM_OPS_INFO.values()) + ")")
+
+    def test_cada_operacao_vira_um_termo_com_tooltip(self):
+        esperado = "LLM — " + "&nbsp;· ".join(                                    # &nbsp: na quebra de linha o "·" fica no fim, não no começo
+            f'<span class="op" tabindex="0" title="{tip}">{nome}</span>' for nome, tip in self.ops)
+        for onde, texto in self.sources.items():
+            with self.subTest(onde=onde):
+                r = _render_header(texto)
+            self.assertIn('<div class="sh"><span>' + esperado + "</span>", r["llm"])
+            self.assertIn('class="pill rec"', r["llm"])
+            self.assertIn('<div class="sh"><span>Embeddings</span>', r["emb"])       # slot sem operações: header intacto
+            self.assertNotIn('class="op"', r["emb"])
+
+    def test_afordancia_de_hover_existe_nas_duas_casas_de_css(self):
+        css = ONBOARD_CSS.read_text(encoding="utf-8")
+        self.assertRegex(css, re.compile(r"\.obw \.sh \.op \{[^}]*text-decoration: underline dotted[^}]*cursor: help; \}"))
+        self.assertRegex(self.sources["página"], re.compile(r"\.sh \.op\{[^}]*text-decoration:underline dotted[^}]*cursor:help\}"))
+        built = BUILT.read_text(encoding="utf-8")                                   # o painel construído carrega os dois
+        self.assertIn(".obw .sh .op {", built)
+        self.assertIn("const LLM_OPS", built)
 
 
 class ViewModelFlagTests(unittest.TestCase):

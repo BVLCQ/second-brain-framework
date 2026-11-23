@@ -21,15 +21,33 @@ from . import config, util
 
 SLOTS = ("llm", "embeddings", "reranker", "decision")
 
-# Rótulo curto de cada slot — fonte ÚNICA para TUI (store) e CLI (icons): lista que espelha
-# registro na mão vive do drift (o slot decisão enterrou o painel de provedores da TUI).
-SLOT_LABELS = {"llm": "LLM (extração/consolidação/mental models)", "embeddings": "Embeddings",
-               "reranker": "Reranker", "decision": "Decisão (System-1, opcional — corta ~40% das chamadas do LLM)"}
-
 # LLM por operação (cenário B do plano da memória): barato no alto volume, maior na síntese.
 LLM_OPS = (("retain", "RETAIN_LLM_MODEL"), ("consolidation", "CONSOLIDATION_LLM_MODEL"),
            ("mental_models", "MENTAL_MODEL_REFRESH_LLM_MODEL"), ("reflect", "REFLECT_LLM_MODEL"),
            ("default", "LLM_MODEL"))
+
+# O que o LLM faz no modo full: nome e explicação de uma frase por operação, na ordem do wizard.
+# `tip` é o tooltip do slot LLM no painel (extra.js e onboarding.html carregam a MESMA lista —
+# test_onboarding_panel confere) e a ficha da TUI (rows.d_prov). Mental models não é termo próprio: é
+# opcional (`mental_models = false` até o dono ligar) e manual, então entra como ressalva do tooltip da
+# Consolidação. `tip` é PROSA: nunca o literal `brain <comando>` — o teste da allowlist lê esse bigrama
+# no JS do painel como gesto emitido.
+LLM_OPS_INFO = {
+    "retain": ("Retain", "Quando um documento entra no vault, o LLM lê o texto e extrai os fatos duráveis: "
+                        "decisões e quem decidiu, compromissos com dono e prazo, entregas e números."),
+    "consolidation": ("Consolidação", "Em segundo plano, o LLM revisa os fatos já retidos e forma observações — "
+                                      "padrões e preferências estáveis sobre pessoas e projetos. "
+                                      "Se mental models estiver ligado, também os atualiza quando você pede."),
+    "reflect": ("Reflexão", "Na hora da pergunta: em vez de devolver só trechos, o LLM raciocina sobre as memórias "
+                            "recuperadas e redige a resposta."),
+}
+
+# Rótulo curto de cada slot — fonte ÚNICA para TUI (store) e CLI (icons): lista que espelha
+# registro na mão vive do drift (o slot decisão enterrou o painel de provedores da TUI).
+# O do LLM sai de LLM_OPS_INFO (no header do wizard, só a extração vendia o slot curto: ele faz três coisas).
+SLOT_LABELS = {"llm": "LLM (" + " · ".join(n for n, _ in LLM_OPS_INFO.values()) + ")",
+               "embeddings": "Embeddings",
+               "reranker": "Reranker", "decision": "Decisão (System-1, opcional — corta ~40% das chamadas do LLM)"}
 
 _EMB = "HINDSIGHT_API_EMBEDDINGS_"
 _RER = "HINDSIGHT_API_RERANKER_"
