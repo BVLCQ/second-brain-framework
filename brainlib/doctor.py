@@ -279,10 +279,20 @@ def checks(brain, online: bool = False, probe_agent: bool = False, docker_probe=
     no_due = [a for a in mine if not a.due]
     if no_due:
         out.append(_c("warn", "ações sem prazo", f"{len(no_due)} suas — o foco não agenda o que não tem data"))
-    rs = util.read_json(inst.fresh / ".render-state.json", {})
-    if rs.get("rendered_at"):
-        age = (util.now() - util.parse_dt(rs["rendered_at"])).total_seconds() / 3600
-        out.append(_c("ok" if age < 26 else "warn", "views", f"último render há {max(age, 0):.0f}h"))
+    rs_path = inst.fresh / ".render-state.json"
+    if not rs_path.exists():
+        out.append(_c("warn", "views", "nunca renderizado (.render-state.json ausente) — rode `brain render`"))
+    else:
+        try:
+            rs_raw = json.loads(rs_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            rs_raw = None
+        rdt = _parse_dt_safe(rs_raw.get("rendered_at")) if isinstance(rs_raw, dict) else None
+        if rdt is None:
+            out.append(_c("warn", "views", ".render-state.json corrompido ou sem rendered_at — rode `brain render`"))
+        else:
+            age = (util.now() - rdt).total_seconds() / 3600
+            out.append(_c("ok" if age < 26 else "warn", "views", f"último render há {max(age, 0):.0f}h"))
     if cfg["memory"]["engine"] == "hindsight":
         from . import memory
         if online:
@@ -535,11 +545,13 @@ def freshness(brain, *, now: datetime | None = None) -> dict:
     th = dict(FRESHNESS_THRESHOLDS)
 
     # Último /dump (maior ts de artifact.added no ledger)
+    dump_reason: str | None = None
     last_dump_dt: datetime | None = None
     try:
         events = brain.state.events
     except util.BrainError:
         events = []
+        dump_reason = "ledger ilegível"
     for ev in events:
         if ev.get("type") == "artifact.added":
             dt = _parse_dt_safe(ev.get("ts"))
@@ -553,6 +565,8 @@ def freshness(brain, *, now: datetime | None = None) -> dict:
         last_dump_at = None
         raw_dump_age_h = None
         last_dump_age_h = None
+        if dump_reason is None:
+            dump_reason = "nunca dumpado"
 
     # Último render (FRESH/.render-state.json)
     rs = util.read_json(inst.fresh / ".render-state.json", {})
@@ -593,7 +607,7 @@ def freshness(brain, *, now: datetime | None = None) -> dict:
         inbox_oldest_age_h = None
 
     stale = {
-        "dump": raw_dump_age_h is not None and raw_dump_age_h >= th["dump_warn_h"],
+        "dump": raw_dump_age_h is None or raw_dump_age_h >= th["dump_warn_h"],
         "render": raw_render_age_h is None or raw_render_age_h >= th["render_warn_h"],
         "memory_sync": mem_enabled and (raw_mem_age_h is None or raw_mem_age_h >= th["memory_sync_warn_h"]),
         "inbox": (inbox_backlog >= th["inbox_warn_count"]
@@ -604,6 +618,7 @@ def freshness(brain, *, now: datetime | None = None) -> dict:
     return {
         "last_dump_at": last_dump_at,
         "last_dump_age_h": last_dump_age_h,
+        "dump_reason": dump_reason,
         "last_render_at": last_render_at,
         "last_render_age_h": last_render_age_h,
         "last_memory_sync_at": last_memory_sync_at,
@@ -616,15 +631,9 @@ def freshness(brain, *, now: datetime | None = None) -> dict:
 
 
 def _default_pid_alive(pid: int) -> bool:
-    if pid <= 0:
-        return False
+    # sondagem portátil: no Windows `os.kill(pid, 0)` encerra o processo em vez de sondar
     try:
-        os.kill(pid, 0)
-        return True
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
+        return pid > 0 and util.pid_alive(pid)
     except (OSError, ValueError, TypeError):
         return False
 
@@ -993,8 +1002,11 @@ def cli(args, brain) -> None:
         return
 
     res = apply_fix(brain)
+    post = checks(brain, online=False, probe_agent=False)
+    remaining_errors = sum(1 for c in post if c["level"] == "error")
     if args.json:
-        print(json.dumps(res, ensure_ascii=False, indent=2))
+        out = {**res, "remaining_errors": remaining_errors}
+        print(json.dumps(out, ensure_ascii=False, indent=2))
     else:
         if not res["actions"] and not res["suggestions"]:
             print("✓ nada a corrigir")
@@ -1007,7 +1019,7 @@ def cli(args, brain) -> None:
                     print(f"✗ [{a['kind']}] {a['command']} -> {targets}: {a.get('error', 'falhou')}")
             for s in res["suggestions"]:
                 print(f"! [{s['title']}] {s['command']} ({s['reason']})")
-    if any(a["status"] == "failed" for a in res["actions"]):
+    if any(a["status"] == "failed" for a in res["actions"]) or remaining_errors > 0:
         raise SystemExit(1)
 
 
