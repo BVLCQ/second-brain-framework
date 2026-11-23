@@ -179,6 +179,12 @@ def install_brain_command(root: Path, ui: ConsoleUI, *, replace: bool = False) -
     other = cur.parent if (cur and cur.exists() and cur != (root / "brain").resolve()) else None
     if other and other.exists() and not replace:
         return None
+    if link.exists() and not link.is_symlink():
+        ui.say(
+            f"⚠ {link} já existe e não é link simbólico — não vou apagar; "
+            "remova ou mova o arquivo e rode `brain setup --only comando`"
+        )
+        return None
     if link.exists() or link.is_symlink():
         link.unlink()
     link.symlink_to(root / "brain")

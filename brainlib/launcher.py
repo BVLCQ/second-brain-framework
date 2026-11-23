@@ -21,6 +21,7 @@ import struct
 import subprocess
 import sys
 import tempfile
+import urllib.parse
 from pathlib import Path
 
 from . import __version__, util
@@ -135,9 +136,44 @@ def _search_dests(platform: str) -> list[Path]:
     return [d, Path.home() / "Applications"] if platform == "darwin" and d == Path("/Applications") else [d]
 
 
+def _owner_matches(target: Path, root: Path) -> bool:
+    owner = owner_of(target)
+    if not owner:
+        return False
+    try:
+        return Path(owner).resolve() == Path(root).resolve()
+    except OSError:
+        return False
+
+
 def _find_ours(name: str, platform: str) -> list[Path]:
     return [t for t in (_target(d, name, platform) for d in _search_dests(platform))
             if (t.exists() or t.is_symlink()) and owner_of(t) is not None]
+
+
+def find_for_instance(root: Path, *, platform: str | None = None) -> list[Path]:
+    """Devolve todos os launchers desta instância nos destinos padrão (independente do nome),
+    com eventual entrada de nome padrão primeiro e as demais em ordem lexicográfica."""
+    platform = platform or _platform()
+    pattern = "*.app" if platform == "darwin" else "*.desktop"
+    default_name = _target(Path("."), DEFAULT_NAME, platform).name
+    found: list[Path] = []
+    seen: set[Path] = set()
+    for d in _search_dests(platform):
+        if not d.is_dir():
+            continue
+        for entry in sorted(d.glob(pattern)):
+            try:
+                resolved = entry.resolve()
+            except OSError:
+                resolved = entry
+            if resolved in seen:
+                continue
+            if _owner_matches(entry, root):
+                seen.add(resolved)
+                found.append(entry)
+    found.sort(key=lambda p: (0 if p.name == default_name else 1, str(p)))
+    return found
 
 
 def _safe_name(name: str) -> str:
@@ -203,9 +239,10 @@ def install(inst, dest: Path | None = None, name: str = DEFAULT_NAME, *, framewo
         else:
             print(f"⚠ o app Brain já abre outra instância ({owner}) — mantido; rode `brain app install` num terminal para trocar")
             return target
-    extra = {k: os.environ[k] for k in ("BRAIN_VAULT", "BRAIN_CONFIG") if os.environ.get(k)}
-    script = launcher_script(inst.root, framework, inst.logs, python or sys.executable, platform=platform,
-                             extra_env=extra)
+    for k in ("BRAIN_VAULT", "BRAIN_CONFIG"):
+        if os.environ.get(k):
+            print(f"⚠ {k} está definida nesta sessão e foi ignorada no app — o ícone aponta para {inst.root}")
+    script = launcher_script(inst.root, framework, inst.logs, python or sys.executable, platform=platform)
     tmp = dest / f".{target.name}.tmp"
     _remove(tmp)
     if platform == "darwin":
@@ -240,9 +277,26 @@ def install(inst, dest: Path | None = None, name: str = DEFAULT_NAME, *, framewo
         tmp.chmod(0o755)
         _swap(tmp, target)
     if default:                  # mudou de ~/Applications para /Applications, ou do nome antigo: não deixa cópia velha
+        target_resolved = target.resolve()
+        inst_root_resolved = Path(inst.root).resolve()
         for old in [t for n in (name, *LEGACY_NAMES) for t in _find_ours(n, platform)]:
-            if old != target:
+            try:
+                if old.resolve() == target_resolved:
+                    continue
+            except OSError:
+                if old == target:
+                    continue
+            old_owner = owner_of(old)
+            if not old_owner:
+                continue  # dono desconhecido ou não é nosso: nunca tocar
+            try:
+                same_owner = Path(old_owner).resolve() == inst_root_resolved
+            except OSError:
+                continue
+            if same_owner:
                 _remove(old)
+            else:
+                print(f"⚠ cópia em {old} abre outra instância ({old_owner}) — mantida")
     return target
 
 
@@ -289,60 +343,120 @@ def _dock_tiles() -> list:
         return []
 
 
-def _docked(name: str) -> bool:
+def _dock_tile_path(tile: dict) -> Path | None:
+    if tile.get("tile-type") != "file-tile":
+        return None
+    raw = str(((tile.get("tile-data") or {}).get("file-data") or {}).get("_CFURLString") or "")
+    if not raw:
+        return None
+    if raw.startswith("file://"):
+        raw = urllib.parse.unquote(raw.removeprefix("file://"))
+    raw = raw.rstrip("/")
+    return Path(raw) if raw else None
+
+
+def _docked(name: str, *, root: Path | None = None) -> bool:
     """O app está no Dock como tile BEM-FORMADO (file-tile apontando pro nosso .app)?
     Aceita as duas grafias: caminho puro (a que escrevemos) e file:// URL normalizada
     pelo próprio Dock depois de um reload."""
     want = f"{name}.app"
     for tile in _dock_tiles():
-        data = tile.get("tile-data") or {}
-        url = str((data.get("file-data") or {}).get("_CFURLString") or "")
-        url = url.removeprefix("file://").rstrip("/")
-        if url.endswith(f"/{want}") and tile.get("tile-type") == "file-tile":
+        p = _dock_tile_path(tile)
+        if p is None:
+            continue
+        if root is not None:
+            if _owner_matches(p, root):
+                return True
+        elif str(p).endswith(f"/{want}"):
             return True
     return False
 
 
-def pin_status(name: str = DEFAULT_NAME, *, platform: str | None = None) -> bool:
+def docked_other(root: Path, *, platform: str | None = None) -> str | None:
+    """Se o atalho pregado (Dock no macOS · Desktop no Linux) pertence a OUTRA instância, devolve a raiz dela."""
+    try:
+        platform = platform or _platform()
+    except util.BrainError:
+        return None
+    inst_root = Path(root).resolve()
+    if platform == "darwin":
+        candidates = [p for tile in _dock_tiles() if (p := _dock_tile_path(tile)) is not None]
+    else:
+        desktop = Path.home() / "Desktop"
+        candidates = sorted(desktop.glob("*.desktop")) if desktop.is_dir() else []
+    for p in candidates:
+        owner = owner_of(p)
+        if not owner:
+            continue
+        try:
+            if Path(owner).resolve() != inst_root:
+                return str(owner)
+        except OSError:
+            continue
+    return None
+
+
+def pin_status(name: str = DEFAULT_NAME, *, root: Path | None = None, platform: str | None = None) -> bool:
     """O atalho de um clique já existe? (Dock no macOS · .desktop na área de trabalho no Linux.)"""
     try:
         platform = platform or _platform()
     except util.BrainError:
         return False
     if platform == "darwin":
-        return _docked(_safe_name(name))
-    return (Path.home() / "Desktop" / f"{_safe_name(name).lower().replace(' ', '-')}.desktop").exists()
+        return _docked(_safe_name(name), root=root)
+    desktop = Path.home() / "Desktop"
+    if root is not None:
+        return desktop.is_dir() and any(_owner_matches(p, root) for p in desktop.glob("*.desktop"))
+    return (desktop / f"{_safe_name(name).lower().replace(' ', '-')}.desktop").exists()
 
 
-def pin_shortcut(name: str = DEFAULT_NAME, *, platform: str | None = None) -> str:
+def pin_shortcut(name: str = DEFAULT_NAME, *, root: Path | None = None, platform: str | None = None, run=None) -> str:
     """Prega o Brain onde o dono encontra com um clique. Idempotente; devolve a linha pro log do job."""
+    _run = run or subprocess.run
     platform = platform or _platform()
     name = _safe_name(name)
-    ours = _find_ours(name, platform)
+    ours = find_for_instance(root, platform=platform) if root is not None else _find_ours(name, platform)
     if platform == "darwin":
-        if not ours:
-            raise util.BrainError("instale o app primeiro (`brain app install`) — sem o Brain.app não há o que pregar no Dock", code=4)
-        if _docked(name):
-            return f"✓ {name} já está no Dock"
-        subprocess.run(["/usr/bin/defaults", "write", "com.apple.dock", "persistent-apps", "-array-add",
-                        _DOCK_TILE.format(app=str(ours[0]))], check=True, timeout=10)
-        subprocess.run(["/usr/bin/killall", "Dock"], check=False, timeout=10)
-        return f"✓ {name} pregado no Dock — a um clique, como qualquer app"
+        if root is not None:
+            if not ours:
+                other = docked_other(root, platform=platform)
+                if other:
+                    raise util.BrainError(
+                        f"o ícone no Dock abre outra instância ({other}) — instale o app desta instância com "
+                        "`brain app install` (use `--name` para manter ambos)", code=4)
+                raise util.BrainError(
+                    "instale o app desta instância primeiro (`brain app install`) — "
+                    "sem o .app desta instância não há o que pregar no Dock", code=4)
+            label = ours[0].stem
+        else:
+            if not ours:
+                raise util.BrainError("instale o app primeiro (`brain app install`) — sem o Brain.app não há o que pregar no Dock", code=4)
+            label = name
+        if _docked(name, root=root):
+            return f"✓ {label} já está no Dock"
+        _run(["/usr/bin/defaults", "write", "com.apple.dock", "persistent-apps", "-array-add",
+              _DOCK_TILE.format(app=str(ours[0]))], check=True, timeout=10)
+        _run(["/usr/bin/killall", "Dock"], check=False, timeout=10)
+        return f"✓ {label} pregado no Dock — a um clique, como qualquer app"
     # Linux/WSLg: o menu de aplicativos já ganha o .desktop no install; o extra é a área de trabalho
     if not ours:
-        raise util.BrainError("instale o launcher primeiro (`brain app install`) — depois eu copio pra área de trabalho", code=4)
+        msg = ("instale o launcher desta instância primeiro (`brain app install`) — depois eu copio pra área de trabalho"
+               if root is not None else
+               "instale o launcher primeiro (`brain app install`) — depois eu copio pra área de trabalho")
+        raise util.BrainError(msg, code=4)
     src = ours[0]
     desktop = Path.home() / "Desktop"
     if not desktop.is_dir():
         return "– sem pasta Desktop: o Brain já está no menu de aplicativos (tecla Super)"
-    dst = desktop / f"{name.lower().replace(' ', '-')}.desktop"
+    dst = desktop / (src.name if root is not None else f"{name.lower().replace(' ', '-')}.desktop")
     if src != dst:
         shutil.copy2(src, dst)
     dst.chmod(0o755)
     gio = shutil.which("gio")                                    # GNOME exige confiança explícita no .desktop
     if gio:                                                      # (KDE/WSLg ignoram; sem gio o dono clica-direito → Permitir)
-        subprocess.run([gio, "set", str(dst), "metadata::trusted", "true"], check=False, timeout=5)
-    return f"✓ atalho do {name} na área de trabalho"
+        _run([gio, "set", str(dst), "metadata::trusted", "true"], check=False, timeout=5)
+    label = src.stem if root is not None else name
+    return f"✓ atalho do {label} na área de trabalho"
 
 
 def is_installed(root: Path, dest: Path | None = None, name: str = DEFAULT_NAME) -> bool:
@@ -353,8 +467,7 @@ def is_installed(root: Path, dest: Path | None = None, name: str = DEFAULT_NAME)
         return False
     targets = [_target(Path(dest).expanduser(), name, platform)] if dest else \
         [_target(d, name, platform) for d in _search_dests(platform)]
-    owner = next((o for o in (owner_of(t) for t in targets) if o is not None), None)
-    return owner is not None and Path(owner or "/nonexistent").resolve() == Path(root).resolve()
+    return any(_owner_matches(t, root) for t in targets)
 
 
 def other_owner(root: Path, dest: Path | None = None, name: str = DEFAULT_NAME, *,
