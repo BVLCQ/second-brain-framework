@@ -163,9 +163,9 @@ docker compose --env-file config/.env -f services/compose.yaml -f services/compo
 ```
 
 **Caminho guiado:** `./brain setup --only memoria` sobe o runtime, prepara o LM
-Studio (no modo `embed` local) e levanta o container sozinho; no CLI direto,
-use `./brain memory setup --mode embed` (ou `--mode full --approval "ok"` com as
-chaves já em `config/.env`).
+Studio (no modo `embed` local) e levanta o container sozinho;
+no CLI direto (com o container já de pé), use `./brain memory setup --mode embed`
+(ou `--mode full --approval "ok"` com as chaves já em `config/.env`).
 
 ### 4.3 Verificar saúde
 

@@ -26,6 +26,7 @@ class TestSetupDocAlignment(unittest.TestCase):
             "--env-file",
             "./brain memory setup",
             "./brain setup --only memoria",
+            "com o container já de pé",             # o CLI direto não sobe o container; só o caminho guiado sobe
             fallback_url,
             f"lms get {fallback_url}",
             "./brain schedule install",
@@ -89,6 +90,8 @@ class TestSetupDocAlignment(unittest.TestCase):
         )
         legacy_block = "\n".join(lines[first_legacy_idx:next_h2])
         self.assertIn("8888", legacy_block, "seção legada deve avisar sobre conflito na porta 8888")
+        # o bloco também traz o curl de health na mesma porta: quem precisa estar lá é o aviso de conflito
+        self.assertIn("disputam a porta `8888`", legacy_block, "seção legada deve avisar sobre o conflito na porta 8888")
 
         literal_dates = re.findall(r"\b20\d{2}-\d{2}-\d{2}\b", text)
         self.assertEqual(literal_dates, [], f"setup.md não deve conter datas literais: {literal_dates}")
