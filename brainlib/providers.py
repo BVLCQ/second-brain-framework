@@ -253,12 +253,27 @@ def _guard_env_updates(env_updates: dict) -> None:
             raise util.BrainError(f"valor vazio para a variável de ambiente {k} — nada gravado no .env", code=4)
 
 
+def _clean(value):
+    """Texto vazio ou só espaços = `""` (não informado) — a regra da chave, em todo campo de texto."""
+    return value.strip() if isinstance(value, str) else value
+
+
+def _clean_models(models: dict | None) -> dict | None:
+    """`_clean` em cada modelo por operação; o que fica vazio sai do dicionário."""
+    if not models:
+        return None
+    kept = {op: _clean(m) for op, m in models.items()}
+    kept = {op: m for op, m in kept.items() if m is not None and m != ""}
+    return kept or None
+
+
 def _emb_env(p: dict, model: str, base_url: str, dimensions: int, key: str | None) -> dict:
     env: dict[str, str] = {}
     wire = p.get("wire", "openai")
     env[_EMB + "PROVIDER"] = wire
     pref = _EMB + ("OPENAI_" if wire == "openai" else wire.upper() + "_")
-    env[pref + "MODEL"] = model
+    if model:                                # não informado = a variável nem entra (nada vazio chega ao .env)
+        env[pref + "MODEL"] = model
     url = base_url or p.get("base_url", "")
     if wire == "openai" and url:
         env[pref + "BASE_URL"] = url
@@ -276,7 +291,8 @@ def _rer_env(p: dict, model: str, base_url: str, candidates: int, key: str | Non
         return {_RER + "PROVIDER": "rrf"}
     env = {_RER + "PROVIDER": p["wire"]}
     pref = _RER + p["wire"].upper().replace("-", "_") + "_"
-    env[pref + "MODEL"] = model
+    if model:                                # `custom` sem --model gravava antes da guarda de .env vazio
+        env[pref + "MODEL"] = model
     url = base_url or p.get("base_url", "")
     if p["wire"] == "litellm-sdk" and url:
         env[_RER + "LITELLM_SDK_API_BASE"] = url
@@ -298,6 +314,7 @@ def slot_env(slot: str, provider: str, *, model: str = "", models: dict | None =
     _validate_key(provider, p, key)
     if isinstance(key, str):
         key = key.strip() or None            # vazia ou só espaços = não informada, em todo slot (nada vazio chega ao .env)
+    model, base_url, models = _clean(model), _clean(base_url), _clean_models(models)   # mesma regra nos demais textos
     if slot == "llm":
         if p.get("family") == "subscription":
             env = {"HINDSIGHT_API_LLM_PROVIDER": p.get("wire", provider)}
@@ -353,6 +370,7 @@ def set_slot(brain, slot: str, provider: str, *, model: str = "", models: dict |
         raise util.BrainError(f"provedor inválido para {slot}: {provider!r} — "
                               f"{', '.join(PROVIDERS[slot])}", code=4)
     p = PROVIDERS[slot][provider]
+    model, base_url, models = _clean(model), _clean(base_url), _clean_models(models)   # mesma regra da chave
     is_sub = slot == "llm" and p.get("family") == "subscription"
     if slot == "embeddings" and provider == "local":
         from .memory import mode as _mem_mode                   # lazy: evita ciclo em tempo de import

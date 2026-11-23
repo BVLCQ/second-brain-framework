@@ -264,6 +264,37 @@ class TestProvidersHygiene(unittest.TestCase):
             self.assertEqual(again.secret_prompts, [])
             self.assertTrue(config.load_env(b.inst).get(kenv))
 
+    def test_empty_model_and_url_mean_not_given_on_every_slot(self):
+        """Modelo, modelos por operação e base-url seguem a regra da chave: vazio ou só espaços = não informado.
+        Nada vazio chega ao .env e o reranker `custom` sem --model volta a gravar (regressão: BrainError 4
+        `valor vazio` desde que entrou a guarda de .env vazio)."""
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            rer = providers.PROVIDERS["reranker"]["custom"]
+            rpref = "HINDSIGHT_API_RERANKER_" + rer["wire"].upper() + "_"
+            self.assertNotIn(rpref + "MODEL", providers.slot_env("reranker", "custom", key="rk-" + "demo" + "1"))
+            for blank in ("", "   "):
+                got = providers.slot_env("reranker", "custom", model=blank, base_url=blank, key="rk-" + "demo" + "1")
+                self.assertNotIn(rpref + "MODEL", got, blank)
+                self.assertNotIn(rpref + "BASE_URL", got, blank)
+            res = providers.set_slot(b, "reranker", "custom", key="rk-" + "demo" + "1")      # antes da lane: gravava
+            self.assertIn(rer["key_env"], res["env"])
+            self.assertNotIn(rpref + "MODEL", res["env"])
+            self.assertEqual(config.load_env(b.inst).get(rer["key_env"]), "rk-" + "demo" + "1")
+            self.assertNotIn(rpref + "MODEL", config.load_env(b.inst))
+
+            oai = providers.PROVIDERS["embeddings"]["openai"]
+            opref = "HINDSIGHT_API_EMBEDDINGS_" + oai["wire"].upper() + "_"
+            for blank in ("", "   "):
+                got = providers.slot_env("embeddings", "openai", model=blank, base_url=blank, key="ok-" + "demo" + "1")
+                self.assertEqual(got[opref + "MODEL"], oai["model"], blank)       # vazio = modelo da tabela
+                self.assertNotIn(opref + "BASE_URL", got, blank)
+                providers.set_slot(b, "embeddings", "openai", model=blank, base_url=blank, key="ok-" + "demo" + "1")
+                self.assertEqual(config.load_env(b.inst).get(opref + "MODEL"), oai["model"], blank)   # gravado limpo
+
+            providers.set_slot(b, "llm", "anthropic", models={"default": "   "}, key="ak-" + "demo" + "1")
+            self.assertTrue(any(k.endswith("LLM_MODEL") and v for k, v in config.load_env(b.inst).items()))
+
     def test_rebuild_notice_spelling(self):
         with tempfile.TemporaryDirectory() as td:
             tmp = Path(td)
