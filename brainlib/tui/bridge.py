@@ -151,7 +151,6 @@ def _agent_name(cfg: dict) -> str | None:
 def agent_argv(cfg: dict, prompt: str, run_id: str | None = None, extra_allow: list[str] | None = None) -> list[str] | None:
     """Comando headless do agente configurado ([runner] em brain.toml), com o prompt dado. `run_id` entra no prompt."""
     r = cfg["runner"]
-    extra = runner.read_allow(cfg) + runner.door_allow(cfg) + [t for t in cfg.get("tui", {}).get("agent_allow", []) if t] + list(extra_allow or [])
     full = run_prefix(run_id) + prompt
     if r.get("command"):
         return [part.replace("{prompt}", full) for part in shlex.split(r["command"])]
@@ -160,8 +159,10 @@ def agent_argv(cfg: dict, prompt: str, run_id: str | None = None, extra_allow: l
         return None
     argv = [p.replace("{prompt}", full) for p in runner.PRESETS[name]]
     if name == "claude":
-        argv[3:3] = _claude_flags(cfg)     # antes de --allowedTools (variádico): as opções não viram nome de ferramenta
-        argv += list(dict.fromkeys(extra))
+        disallowed = runner.disallowed_tools(cfg)
+        flags = _claude_flags(cfg) + (["--disallowedTools", *disallowed] if disallowed else [])
+        argv[3:3] = flags                  # antes de --allowedTools (variádico): as opções não viram nome de ferramenta
+        argv += runner.filtered_mcp_allow(cfg, include_tui=True, extra=extra_allow)
     return argv
 
 

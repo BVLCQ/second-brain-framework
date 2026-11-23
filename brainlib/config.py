@@ -251,8 +251,8 @@ def check_allow_rule(rule: str) -> str:
     m = re.fullmatch(r"Bash\((.+)\)", rule)
     if m:
         body = m.group(1).strip()
-        if body in {"*", ":*", "**"}:
-            raise util.BrainError("Bash(*) liberaria qualquer comando — escreva o prefixo, ex.: Bash(./brain:*)", code=4)
+        if not body or ("*" in body and not re.fullmatch(r"[A-Za-z0-9_./-][A-Za-z0-9_./ -]*:\*", body)):
+            raise util.BrainError("Bash(*) ou curinga amplo liberaria qualquer comando — escreva o prefixo literal, ex.: Bash(./brain:*)", code=4)
         return rule
     if re.fullmatch(r"mcp__[A-Za-z0-9_.-]+(__[A-Za-z0-9_.*-]+)?", rule):
         if is_external_write(rule):
