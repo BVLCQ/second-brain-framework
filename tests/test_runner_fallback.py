@@ -111,30 +111,27 @@ class RunnerFallbackTests(unittest.TestCase):
             self.assertEqual(claude_argv[m_idx + 1], "claude-haiku-5-5")
             self.assertLess(m_idx, a_idx)
 
-    def test_nightly_fallback_on_early_auth_error(self):
+    def test_nightly_fallback_skips_bypass_presets_on_early_auth_error(self):
         b = _brain(self.tmp / "inst")
         bins = {"claude": "/bin/claude", "codex": "/bin/codex"}
         calls: list[list[str]] = []
 
         def fake_run(cmd, **kw):
             calls.append(list(cmd))
-            if len(calls) == 1:
-                kw["stdout"].write("Error: Authentication required\n")
-                kw["stdout"].flush()
-                return subprocess.CompletedProcess(cmd, 1)
-            return subprocess.CompletedProcess(cmd, 0)
+            kw["stdout"].write("Error: Authentication required\n")
+            kw["stdout"].flush()
+            return subprocess.CompletedProcess(cmd, 1)
 
         with mock.patch.object(runner.shutil, "which", side_effect=bins.get), \
              mock.patch.object(runner.subprocess, "run", side_effect=fake_run):
             res = runner.nightly(b)
 
-        self.assertEqual(len(calls), 2)
+        self.assertEqual(len(calls), 1)
         self.assertEqual(calls[0][0], "claude")
-        self.assertEqual(calls[1][0], "codex")
-        self.assertTrue(res["steps"]["agente"].startswith("codex ok"))
+        self.assertFalse(res["ok"])
         self.assertIn("Authentication required", res["steps"]["agente"])
-        self.assertTrue(res["ok"])
-        self.assertTrue(b.state.runs["nightly"]["ok"])
+        self.assertIn("preset codex não tem modo restrito — noturno não sobe com bypass", res["steps"]["agente"])
+        self.assertFalse(b.state.runs["nightly"]["ok"])
 
     def test_no_fallback_after_footprint(self):
         b = _brain(self.tmp / "inst")
