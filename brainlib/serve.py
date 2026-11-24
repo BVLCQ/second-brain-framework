@@ -997,8 +997,9 @@ class _Handler(BaseHTTPRequestHandler):
         self._json(200, {"ok": True, "id": job_id, "action": action_name, "status": "running"})
 
     def _update_post(self):
-        # Sem bloqueio por BRAIN_NIGHTLY: `brain update` sincroniza só o código do framework
-        # (não grava eventos como dono nem toca o mundo exterior); serve já exige dono no boot.
+        if util.is_nightly():
+            self._deny(403, "o noturno nunca aplica atualização pelo painel")
+            return
         from . import upstream
         from .tui.bridge import FRAMEWORK
         with self.state.lock:

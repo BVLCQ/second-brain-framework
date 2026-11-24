@@ -245,6 +245,11 @@ def is_nightly() -> bool:
     return os.environ.get("BRAIN_NIGHTLY", "").strip().lower() in {"1", "true", "yes", "on"}
 
 
+def is_agent() -> bool:
+    """`BRAIN_AGENT` ligado? Sinaliza execução por agente (`BRAIN_AGENT=1`), que não aplica `brain update`."""
+    return os.environ.get("BRAIN_AGENT", "").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def split_csv(value: str | list | None) -> list[str]:
     if value in (None, ""):
         return []
