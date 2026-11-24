@@ -55,7 +55,8 @@ jobs:
         run: |
           git init -q
           git config http.extraheader "AUTHORIZATION: basic $(echo -n "x-access-token:$GITHUB_TOKEN" | base64 -w0)"
-          git remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
+          # o workspace vem do job anterior, com o remote dele já configurado: troca a URL ou cria
+          git remote set-url origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git" 2>/dev/null || git remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
           git fetch -q --no-tags origin "+refs/heads/main:refs/remotes/origin/main" "$TARGET_SHA"
           git checkout -q --force origin/main
           git clean -ffdxq # o que o job anterior deixou sem rastrear não entra nesta varredura
@@ -97,7 +98,8 @@ jobs:
         run: |
           git init -q
           git config http.extraheader "AUTHORIZATION: basic $(echo -n "x-access-token:$GITHUB_TOKEN" | base64 -w0)"
-          git remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
+          # o workspace vem do job anterior, com o remote dele já configurado: troca a URL ou cria
+          git remote set-url origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git" 2>/dev/null || git remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
           git fetch -q --depth=1 --no-tags origin "+$GITHUB_SHA:refs/remotes/origin/ci"
           git checkout -q --force refs/remotes/origin/ci
           git config --unset http.extraheader

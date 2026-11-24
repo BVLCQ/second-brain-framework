@@ -77,6 +77,8 @@ class WorkflowHardeningTest(unittest.TestCase):
     def test_data_gate_scans_with_the_scripts_from_main(self):
         gate = self.jobs["data-gate"]
         self.assertIn("+refs/heads/main:refs/remotes/origin/main", gate)
+        # o remote do job anterior continua no workspace: `git remote add` puro mata o segundo job
+        self.assertRegex(gate, r"git remote set-url origin .* \|\| git remote add origin ")
         self.assertIn("git checkout -q --force origin/main", gate)
         self.assertIn("--root /tmp/entrada", gate)
         self.assertIn("git worktree add --detach /tmp/entrada", gate)
