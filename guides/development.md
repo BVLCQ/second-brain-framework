@@ -39,7 +39,7 @@ esse job monta, como só leitura — nunca vai ao repositório, nem como segredo
 scripts e a configuração da `main`, num worktree do PR: o PR traz os commits, não as regras. Sem a
 lista (ausente ou vazia) o portão falha: ele não atesta nada.
 
-Para rodar na máquina, com a sua cópia da lista:
+Para rodar na máquina, da pasta do checkout, com a sua cópia da lista:
 
     python3 scripts/dev/public_gate.py gate --base origin/main --denylist ~/.config/brain/public-denylist
 

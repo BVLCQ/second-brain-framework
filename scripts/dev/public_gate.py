@@ -10,7 +10,8 @@ repo.
 
     public_gate.py gate --base <ref|sha> [--root <repo>] --denylist <arquivo>
 
-Varre `<base>..HEAD` do repositório `--root` (padrão: o deste script), commit a commit. A lista
+Varre `<base>..HEAD` do repositório `--root` (padrão: a pasta de onde se chama — nunca a do script,
+que chamado de outro checkout varria o lugar errado e dá "limpo"), commit a commit. A lista
 privada é um termo por linha (ou separado por vírgula). No CI o `--root` é um worktree do PR: os
 scripts e a configuração da varredura vêm do checkout da main — o PR nunca diz quais são os termos.
 
@@ -91,7 +92,7 @@ def main(argv: list[str] | None = None, trusted: Path | None = None) -> int:
     sub = p.add_subparsers(dest="cmd", required=True)
     g = sub.add_parser("gate", help="varre <base>..HEAD; código 4 se achar algo")
     g.add_argument("--base", required=True, help="ref ou sha do último commit já público")
-    g.add_argument("--root", default=str(ROOT), help="repositório a varrer (padrão: o deste script)")
+    g.add_argument("--root", default=".", help="repositório a varrer (padrão: a pasta de onde se chama)")
     g.add_argument("--denylist", required=True, help="arquivo com a lista privada de termos (um por linha)")
     a = p.parse_args(argv)
     try:

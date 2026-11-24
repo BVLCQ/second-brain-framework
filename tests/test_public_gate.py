@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import importlib.util
 import io
+import os
 import subprocess
 import sys
 import tempfile
@@ -137,6 +138,22 @@ class GateTests(unittest.TestCase):
         (self.repo / "config").mkdir()
         (self.repo / "config" / "brain.toml").write_text("isto nao é toml =\n", encoding="utf-8")
         self.assertEqual(self._gate()[0], self.mod.CLEAN)
+
+    def test_sem_root_varre_a_pasta_de_onde_foi_chamado(self):
+        # o padrão antigo era o repositório do script: chamado de outro checkout, varria o lugar
+        # errado — o alcance ficava vazio e o portão dava "limpo" sem olhar o commit
+        _commit(self.repo, "instalacao.md", f"roda em {MACHINE_PATH}/brain\n")
+        deny = _denylist(self.tmp, "acme-corp\n")
+        out = io.StringIO()
+        cwd = os.getcwd()
+        os.chdir(self.repo)
+        try:
+            with mock.patch("sys.stdout", out):
+                code = self.mod.main(["gate", "--base", self.base, "--denylist", str(deny)],
+                                     trusted=self.tmp / "confiavel")
+        finally:
+            os.chdir(cwd)
+        self.assertEqual(code, self.mod.FOUND, out.getvalue())
 
     def test_base_invalida_e_erro_nao_limpo(self):
         code, out = self._gate(base="ref-que-nao-existe")
