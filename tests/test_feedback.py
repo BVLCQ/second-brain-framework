@@ -542,9 +542,23 @@ class FeedbackClientTests(unittest.TestCase):
     def setUp(self):
         self._td = tempfile.TemporaryDirectory()
         self.inst = _inst(Path(self._td.name))
+        # Em isolado de verdade: um GITHUB_TOKEN no ambiente (o de um CI, o de um shell do mantenedor)
+        # vence o config/.env em `config.load_env` e trocaria o token falso pelo real.
+        self._tok = os.environ.pop("GITHUB_TOKEN", None)
 
     def tearDown(self):
+        if self._tok is not None:
+            os.environ["GITHUB_TOKEN"] = self._tok
         self._td.cleanup()
+
+    def test_token_do_ambiente_vence_o_env_file(self):
+        # É por isso que o setUp tira o GITHUB_TOKEN do ar: no ambiente, ele vence o config/.env.
+        os.environ["GITHUB_TOKEN"] = "token-do-ambiente"
+        try:
+            (self.inst.config_dir / ".env").write_text("GITHUB_TOKEN=segredo-fake\n", encoding="utf-8")
+            self.assertEqual(config.load_env(self.inst)["GITHUB_TOKEN"], "token-do-ambiente")
+        finally:
+            os.environ.pop("GITHUB_TOKEN", None)
 
     def test_sem_token(self):
         import brainlib.feedback as fb
