@@ -74,6 +74,7 @@ DEFAULTS: dict = {
         "decision_base_url": "",
         "decision_recall": False,              # true = decisor julga candidatos no recall (só full + hindsight)
         "decision_max_candidates": 0,          # teto explícito de candidatos quando decision_recall = true
+        "decision_recall_saved_reranker_cap": "",  # cap do reranker guardado enquanto o recall usa o decisor
         "cloud_decision": False,               # true = trechos de memória vão à nuvem do Hindsight para julgamento
     },
     "runner": {"agent": "auto", "command": "", "prompt": "/update", "timeout_min": 45, "fallback": True,

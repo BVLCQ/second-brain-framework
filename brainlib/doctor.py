@@ -535,7 +535,7 @@ def checks(brain, online: bool = False, probe_agent: bool = False, docker_probe=
                                   "--key … --recall on --candidates N`"))
                 else:
                     cands = (cfg["memory"].get("decision_max_candidates")
-                             or env.get("HINDSIGHT_API_RECALL_DECISION_MODEL_MAX_CANDIDATES") or "?")
+                             or env.get("HINDSIGHT_API_RERANKER_MAX_CANDIDATES") or "?")
                     out.append(_c("warn", "memória · decisão",
                                   f"{dec_s['label']} (chave presente · cloud_decision = true · top-{cands} candidatos) — "
                                   f"{recall_warn_msg}"))

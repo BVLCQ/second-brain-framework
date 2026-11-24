@@ -418,7 +418,7 @@ def state(brain) -> dict:
                    "dec_recall": bool(cfg["memory"].get("decision_recall")
                                       or env.get("HINDSIGHT_API_RECALL_DECISION_MODEL_PROVIDER") == "hindsight"),
                    "dec_candidates": int(cfg["memory"].get("decision_max_candidates")
-                                         or env.get("HINDSIGHT_API_RECALL_DECISION_MODEL_MAX_CANDIDATES") or 0),
+                                         or env.get("HINDSIGHT_API_RERANKER_MAX_CANDIDATES") or 0),
                    "providers": {slot: [{"key": k, "label": v["label"], "recommended": bool(v.get("recommended")),
                                          "cloud": not (v.get("local") or k == "off"),
                                          "local": bool(v.get("local")),

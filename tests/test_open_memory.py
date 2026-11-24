@@ -202,7 +202,7 @@ class DecisionRecallAndLocalTests(unittest.TestCase):
             mem = config.load(b.inst.root).cfg["memory"]
             self.assertEqual(env.get("HINDSIGHT_API_DECISION_MODEL_PROVIDER"), "hindsight")
             self.assertEqual(env.get("HINDSIGHT_API_RECALL_DECISION_MODEL_PROVIDER"), "hindsight")
-            self.assertEqual(env.get("HINDSIGHT_API_RECALL_DECISION_MODEL_MAX_CANDIDATES"), "25")
+            self.assertEqual(env.get("HINDSIGHT_API_RERANKER_MAX_CANDIDATES"), "25")
             self.assertTrue(mem.get("decision_recall"))
             self.assertEqual(mem.get("decision_max_candidates"), 25)
             self.assertTrue(mem.get("cloud_decision"))
@@ -213,6 +213,7 @@ class DecisionRecallAndLocalTests(unittest.TestCase):
             mem_off = config.load(b.inst.root).cfg["memory"]
             self.assertEqual(env_off.get("HINDSIGHT_API_RECALL_DECISION_MODEL_PROVIDER"), "none")
             self.assertNotIn("HINDSIGHT_API_RECALL_DECISION_MODEL_MAX_CANDIDATES", env_off)
+            self.assertNotIn("HINDSIGHT_API_RERANKER_MAX_CANDIDATES", env_off)
             self.assertFalse(mem_off.get("decision_recall"))
 
     def test_recall_on_preserves_existing_reranker_env(self):

@@ -458,7 +458,7 @@ def slot_env(slot: str, provider: str, *, model: str = "", models: dict | None =
                 env["HINDSIGHT_API_DECISION_MODEL_BASE_URL"] = url
             env["HINDSIGHT_API_DECISION_MODEL_MAX_CONCURRENT"] = str(p.get("max_concurrent", 1))
         if rec_on and candidates:
-            env["HINDSIGHT_API_RECALL_DECISION_MODEL_MAX_CANDIDATES"] = str(int(candidates))
+            env["HINDSIGHT_API_RERANKER_MAX_CANDIDATES"] = str(int(candidates))
         if key and p.get("key_env"):
             env[p["key_env"]] = key
         return env
@@ -517,7 +517,14 @@ def set_slot(brain, slot: str, provider: str, *, model: str = "", models: dict |
                 "HINDSIGHT_API_DECISION_MODEL_BASE_URL",
                 "HINDSIGHT_API_DECISION_MODEL_MAX_CONCURRENT",
             ])
-        if not rec_on:
+        if not rec_on and mem.get("decision_recall"):
+            saved = str(mem.get("decision_recall_saved_reranker_cap") or "")
+            if saved:
+                env_updates["HINDSIGHT_API_RERANKER_MAX_CANDIDATES"] = saved
+            else:
+                unset_env.append("HINDSIGHT_API_RERANKER_MAX_CANDIDATES")
+            unset_env.append("HINDSIGHT_API_RECALL_DECISION_MODEL_MAX_CANDIDATES")
+        elif not rec_on:
             unset_env.append("HINDSIGHT_API_RECALL_DECISION_MODEL_MAX_CANDIDATES")
     from .setup import set_env                     # lazy: setup importa memory em tempo de execução
     changed_env = set_env(brain.inst, env_updates, unset=unset_env)
@@ -535,6 +542,11 @@ def set_slot(brain, slot: str, provider: str, *, model: str = "", models: dict |
         cfg_updates["decision_base_url"] = (base_url or p.get("base_url", "")) if provider == "local" else ""
         cfg_updates["decision_recall"] = rec_on
         cfg_updates["decision_max_candidates"] = int(candidates) if (rec_on and candidates) else 0
+        if rec_on and not mem.get("decision_recall"):
+            cfg_updates["decision_recall_saved_reranker_cap"] = cur_env.get(
+                "HINDSIGHT_API_RERANKER_MAX_CANDIDATES", "")
+        elif not rec_on:
+            cfg_updates["decision_recall_saved_reranker_cap"] = ""
     else:
         if model or p.get("model"):
             cfg_updates[f"{slot}_model"] = model or p.get("model", "")
@@ -613,7 +625,7 @@ def stack(brain) -> dict:
             rec_on = (bool(mem.get("decision_recall"))
                       or env.get("HINDSIGHT_API_RECALL_DECISION_MODEL_PROVIDER") == "hindsight")
             rec_cands = int(mem.get("decision_max_candidates")
-                            or env.get("HINDSIGHT_API_RECALL_DECISION_MODEL_MAX_CANDIDATES") or 0)
+                            or env.get("HINDSIGHT_API_RERANKER_MAX_CANDIDATES") or 0)
             base_u = (env.get("HINDSIGHT_API_DECISION_MODEL_BASE_URL")
                       or mem.get("decision_base_url", "")
                       or (p.get("base_url", "") if provider == "local" else ""))
