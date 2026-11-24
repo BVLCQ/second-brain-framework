@@ -89,18 +89,22 @@ somente-leitura para o mundo.
    `commands/`, `guides/`, `template/`, `tests/`, `services/`, `scripts/` —
    volta ao repo para as outras instâncias se beneficiarem:
    - **Mesma sessão.** Ao terminar uma mudança de framework, rode
-     `./brain upstream scan`. Pendência não dorme: o agente propõe ao dono,
-     no fim da sessão, os arquivos, a mensagem do commit e o resultado da
-     varredura.
+     `./brain upstream scan`. Pendência não dorme: o agente sobe o branch e
+     abre o pull request ainda na sessão, com o que muda e o resultado da
+     varredura no corpo do PR.
    - **Generalize antes de subir.** O repo é público. Nada do dono vai pra lá:
      nomes, e-mails, pessoas do ledger, canais do Slack, caminhos da máquina,
      segredos. Use exemplos genéricos (`marina-demo`, `example.com`, `#seu-canal`) ou
      deixe em `scripts/local/` / `config/`. A varredura não substitui ler o
      diff.
-   - **Gate.** O dono aprova com "ok"; só então `git add` dos arquivos
-     específicos, `commit` e `push`. O hook `pre-push` roda a varredura e
-     barra achados. Nunca `--force`, nunca `--no-verify`, nunca `vault/` ou
-     `config/.env`. O noturno nunca sobe.
+   - **Gate.** A mudança vai por branch e pull request: `git add` dos
+     arquivos específicos, `commit`, push do branch e PR não esperam
+     aprovação. O **"ok" do dono é o merge** — sem ele o PR fica aberto. O
+     hook `pre-push` roda a varredura em todo push, e o CI repete a varredura
+     no PR (portão de dados, com uma lista privada de termos que nunca vai ao
+     repo) antes da suíte. Nunca `--force`, nunca `--no-verify`, nunca
+     `vault/` ou `config/.env`. O noturno nunca sobe. Fluxo completo:
+     `guides/development.md`.
    - **Descer.** `./brain update` traz melhorias do framework (`--check`
      antes, se quiser). Se o upstream andou, `update` vem antes do push.
 6. **Pastas de oportunidade (Google Drive)** — `brain oppdrive`. Ligada em

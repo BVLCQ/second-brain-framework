@@ -1,0 +1,34 @@
+name: 'Mudança de tela'
+description: 'Ajuste de interface: prints das variantes e a recomendação'
+title: '[UI] '
+labels: ['ui-ux']
+body:
+  - type: markdown
+    attributes:
+      value: 'Este repositório é público. Prints só do vault de demonstração (a padaria fictícia: `marina-demo`, "Padaria Pão Quente"): nenhum dado real de pessoas, empresas ou da sua instância.'
+  - type: textarea
+    id: atual
+    attributes:
+      label: 'O que está ruim'
+      description: 'Print do estado atual e o que incomoda nele. Arraste a imagem para cá: o GitHub anexa à issue.'
+    validations:
+      required: true
+  - type: textarea
+    id: variantes
+    attributes:
+      label: 'Variantes'
+      description: 'Uma imagem por variante, nomeadas (A, B, C…).'
+    validations:
+      required: true
+  - type: textarea
+    id: recomendacao
+    attributes:
+      label: 'Recomendação'
+      description: 'Qual variante (ou combinação) e por quê.'
+    validations:
+      required: true
+  - type: textarea
+    id: aceite
+    attributes:
+      label: 'Critérios de aceite'
+      value: '- [ ] '
