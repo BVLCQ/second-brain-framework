@@ -47,11 +47,11 @@ DEFAULTS: dict = {
         "max_file_mb": 25,
         "timeout_s": 120,
         "recall_half_life_days": 45,       # meia-vida (dias) do decaimento temporal no recall (0 = desliga)
-        # modos (guides/memory.md): embed = dois bancos de chunks, zero LLM, zero egress.
-        # full = banco único com extração de fatos, observações e (futuro) mental models.
+        # modos (guides/memory.md): embed = banco único de chunks, zero LLM, zero egress.
+        # full = banco único com extração de fatos, observações e mental models.
         "extract": False,                  # full: extração de fatos do RAW com contexto do ledger
         "cloud_llm": False,                # true = o dono ativou o envio à própria API (chave no .env)
-        "mental_models": False,            # Fase 8 do plano da memória — ainda não aterrissado
+        "mental_models": False,            # true = liga os mental models (só full; brain memory models)
         "raw_awaiting_dump": "degraded",   # embed: "degraded" · full: "hold" (nada nasce sem identidade)
         "degraded_after_days": 7,          # embed: RAW sem /dump entra degradado após N dias (0 = envia já)
         "exclude_types": ["connectors", "github"],   # tipos do RAW que não vão ao banco (§3.2 do plano)

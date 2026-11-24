@@ -69,7 +69,7 @@ repo = "BVLCQ/second-brain-framework"
 # allow_hosts = []
 
 [memory]
-# Modos (guides/memory.md): none · embed (dois bancos de chunks, zero LLM, nada sai da máquina)
+# Modos (guides/memory.md): none · embed (banco único de chunks, zero LLM, nada sai da máquina)
 # · full (banco único com extração de fatos, observações e mental models — envia texto do vault
 # à API de LLM com a CHAVE DO DONO no config/.env; exige cloud_llm = true).
 engine = "none"                 # "hindsight" quando o servidor estiver no ar
@@ -82,7 +82,7 @@ max_file_mb = 25
 recall_half_life_days = 45      # meia-vida (dias) do decaimento temporal no recall (0 = desliga)
 extract = false                 # full: extração de fatos do RAW com contexto do ledger
 cloud_llm = false               # true = o dono ativou o envio à própria API (plano da memória §4.3)
-mental_models = false           # Fase 8 do plano — ainda não aterrissado
+mental_models = false           # true = liga os mental models (só full; brain memory models)
 raw_awaiting_dump = "degraded"  # embed: entra com contexto degradado · full: "hold" (espera o /dump)
 degraded_after_days = 7          # embed: RAW sem /dump espera N dias antes de entrar degradado
 exclude_types = ["connectors", "github"]   # tipos do RAW que nunca vão ao banco
