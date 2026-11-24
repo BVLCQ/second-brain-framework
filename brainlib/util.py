@@ -237,12 +237,21 @@ def pid_alive(pid: int) -> bool:
     return True
 
 
+def _env_flag(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def is_nightly() -> bool:
     """`BRAIN_NIGHTLY` ligado? Única leitura do modo noturno (o agente headless roda sem dono presente).
 
     Aceita qualquer valor truthy óbvio (``1``/``true``/``yes``/``on``, qualquer caixa): comparação exata com
     ``"1"`` fazia ``BRAIN_NIGHTLY=true`` desarmar as recusas de gate em silêncio (#134)."""
-    return os.environ.get("BRAIN_NIGHTLY", "").strip().lower() in {"1", "true", "yes", "on"}
+    return _env_flag("BRAIN_NIGHTLY")
+
+
+def is_agent() -> bool:
+    """`BRAIN_AGENT` ligado? Subprocesso do agente não pode aprovar nem responder pelo dono."""
+    return _env_flag("BRAIN_AGENT")
 
 
 def is_agent() -> bool:

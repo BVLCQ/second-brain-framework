@@ -225,21 +225,21 @@ class ReviewQueueTests(unittest.TestCase):
         old_nightly = os.environ.get("BRAIN_NIGHTLY")
         os.environ["BRAIN_NIGHTLY"] = "1"
         try:
-            res = review.accept_batch(self.b, [p1], quote="ok")
+            with self.assertRaises(util.BrainError) as cm:
+                review.accept_batch(self.b, [p1], quote="ok")
         finally:
             if old_nightly is None:
                 os.environ.pop("BRAIN_NIGHTLY", None)
             else:
                 os.environ["BRAIN_NIGHTLY"] = old_nightly
 
-        self.assertEqual(res["accepted"], [])
-        self.assertEqual(len(res["failed"]), 1)
-        self.assertIn("noturno", res["failed"][0]["error"])
+        self.assertEqual(cm.exception.code, 4)
+        self.assertIn("noturno", str(cm.exception))
         self.assertEqual(len(self.b.read_events()), before)
         self.assertEqual(self.b.state.proposals[p1].status, "aberta")
 
         r = _run(self.root, "review", "accept", p1, "--quote", "ok", "--json", nightly=True)
-        self.assertNotEqual(r.returncode, 0)
+        self.assertEqual(r.returncode, 4, r.stderr)
         self.assertEqual(len(self.b.read_events()), before)
 
     def test_cli_json_and_view_model_badge(self):
