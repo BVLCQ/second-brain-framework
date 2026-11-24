@@ -433,6 +433,38 @@ class NameGoesBackToGitAsBytes(unittest.TestCase):
                                  text=True).stdout.strip()[:9]      # no modo committed o rótulo traz o commit
             self.assertEqual(self._achados(upstream.upstream_scan(config.load(repo), committed=True)),
                              [self.ANL_BIN.decode("utf-8", "surrogateescape") + f" (commit {sha}) [binário]"])
+    @unittest.skipUnless(ACEITA_BYTE_INVALIDO, SEM_BYTE_INVALIDO)
+    def test_committed_binary_is_still_read_when_the_command_line_drops_the_byte(self):
+        """A linha de comando que troca o byte por U+FFFD (o que o Windows faz) não pode fazer o binário sair sem
+        acusação. O pedido do blob vai no stdin, que essa emulação não mexe."""
+        with tempfile.TemporaryDirectory() as td, _linha_de_comando_somente_ascii():
+            repo = Path(td)
+            self._git(repo, "init", "-q", "-b", "main")
+            self._git(repo, "remote", "add", "origin", "/tmp/origin-que-nao-existe")
+            self._por_bytes(repo, self.ANL_BIN, b"\x00\xffk = '" + SEG_AWS + b"'\x00")
+            self._git(repo, "add", "-A")
+            self._git(repo, "commit", "-q", "-m", "com segredo")
+            sha = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], check=True, capture_output=True,
+                                 text=True).stdout.strip()[:9]
+            self.assertEqual(self._achados(upstream.upstream_scan(config.load(repo), committed=True)),
+                             [self.ANL_BIN.decode("utf-8", "surrogateescape") + f" (commit {sha}) [binário]"])
+    def test_a_name_the_command_line_cannot_carry_is_asked_for_on_stdin(self):
+        """Função pura. Nome com surrogate: o blob é pedido no stdin (`cat-file --batch`), nunca no argv."""
+        nome = self.ANL_BIN.decode("utf-8", "surrogateescape")
+        visto: dict = {}
+
+        def falso(cmd, *a, **kw):
+            visto["cmd"], visto["input"] = cmd, kw.get("input")
+            corpo = b"segredo"
+            return subprocess.CompletedProcess(cmd, 0, stdout=b"deadbeef blob %d\n" % len(corpo) + corpo + b"\n",
+                                               stderr=b"")
+
+        with mock.patch.object(subprocess, "run", falso):
+            self.assertEqual(upstream._blob(Path("/tmp"), "deadbeef", nome), b"segredo")
+        argv = b" ".join(c if isinstance(c, bytes) else str(c).encode() for c in visto["cmd"])
+        self.assertIn(b"--batch", argv)
+        self.assertNotIn(nome.encode("utf-8", "surrogateescape"), argv)
+        self.assertIn(nome.encode("utf-8", "surrogateescape"), visto["input"] or b"")
     def test_the_quoted_name_keeps_its_byte_whatever_git_prints(self):
         """Função pura — roda também onde o sistema de arquivos recusa o arquivo (APFS). Medido no contêiner Linux
         (git 2.54): com `core.quotePath=false`, como a varredura pede, o git imprime o nome entre aspas com o byte

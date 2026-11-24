@@ -580,6 +580,26 @@ def _binary_lines(data: bytes) -> list[str]:
     return [m.group(0).decode("utf-8", errors="replace") for m in _PRINTABLE_RUN.finditer(data)]
 
 
+def _blob_via_stdin(root: Path, sha: str, path: str) -> bytes | None:
+    """Blob de um nome que a linha de comando pode não carregar. O pedido vai no stdin, em bytes — no Windows
+    o argv é UTF-16 e o byte não chega, e o `cat-file` falhava em silêncio: o binário saía sem acusação."""
+    pedido = f"{sha}:{path}".encode("utf-8", "surrogateescape") + b"\n"
+    r = subprocess.run(_cmd(root, "cat-file", "--batch"), input=pedido, capture_output=True, timeout=120)
+    if r.returncode != 0 or not r.stdout:
+        return None
+    nl = r.stdout.find(b"\n")
+    if nl < 0 or r.stdout[:nl].endswith(b" missing"):
+        return None
+    try:
+        size = int(r.stdout[:nl].rsplit(b" ", 1)[-1])
+    except ValueError:
+        return None
+    if size > MAX_BLOB_BYTES:
+        return None
+    body = r.stdout[nl + 1:nl + 1 + size]
+    return body if len(body) == size else None
+
+
 def _blob(root: Path, sha: str, path: str) -> bytes | None:
     """Conteúdo de `path` no commit `sha` (ou da working tree, sem sha) — para varrer binários. O nome entra no
     `cat-file` e no disco pelo par da leitura (`_cmd`, `_fs_path`): como `str`, num locale de byte único, o
@@ -591,6 +611,8 @@ def _blob(root: Path, sha: str, path: str) -> bytes | None:
                 return None
             with open(p, "rb") as fh:
                 return fh.read()
+        if _untrustworthy(path):
+            return _blob_via_stdin(root, sha, path)       # o nome não vai no argv: no Windows ele não chegaria
         size = subprocess.run(_cmd(root, "cat-file", "-s", f"{sha}:{path}"),
                               capture_output=True, text=True, timeout=60)
         if size.returncode != 0 or int(size.stdout.strip() or 0) > MAX_BLOB_BYTES:

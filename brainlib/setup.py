@@ -1456,6 +1456,9 @@ def configure_memory(brain, data: dict, say=print) -> str:
     recall_efet = bool(v["dec_recall"]) if v["recall_named"] else bool(
         salvo["recall"] and salvo["provider"] == dec_final)
     cands_efet = int(v["dec_candidates"]) if v["cands_named"] else (int(salvo["candidates"]) if recall_efet else 0)
+    if v["cands_named"] and recall_efet and cands_efet <= 0:
+        raise util.BrainError("o decisor no recall ligado exige um teto de candidatos positivo — "
+                              "o valor pedido não serve", code=4)
     if v["cands_named"] and not recall_efet:
         raise util.BrainError("o teto de candidatos só vale com o recall do decisor ligado — ligue `recall` no mesmo "
                               "payload (antes o valor era aceito e descartado em silêncio)", code=4)

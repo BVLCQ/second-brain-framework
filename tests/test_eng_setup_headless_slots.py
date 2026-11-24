@@ -460,6 +460,16 @@ class MemorySetupRecallFollowsTheSavedState(unittest.TestCase):
             with self.assertRaises(util.BrainError):
                 self._configure(b, {**self.BASE, "decision": {"candidates": 50}})
             self.assertEqual(self._recall(b), ("hindsight", False, 0))
+    def test_a_non_positive_ceiling_is_refused_while_the_saved_recall_is_on(self):
+        """Teto pedido sozinho, com o recall já ligado: -5 e ' 0' passavam. O 0 literal não é pedido — o gravado fica."""
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            self._recall_salvo(b, ligado=True)
+            for ruim in (-5, " 0", "00"):
+                with self.subTest(ruim=ruim):
+                    with self.assertRaises(util.BrainError):
+                        self._configure(b, {**self.BASE, "decision": {"candidates": ruim}})
+                    self.assertEqual(self._recall(b), ("hindsight", True, 30))
     def test_reranker_named_without_recall_in_the_payload_stays_untouched(self):
         """Achado 4: recall ligado E gravado; o payload nomeia o reranker e não fala de recall."""
         with tempfile.TemporaryDirectory() as td:
