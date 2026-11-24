@@ -33,16 +33,17 @@ PANELS_EXEC = {
     6: ("Log de comandos", ["Log", "Feedback"]),
 }
 
-# Vistas do painel Ações (tecla v): Todas · Esta semana (+ atrasadas) · Depois · Não agora (adiadas de propósito).
-ACTION_VIEWS = ["Todas", "Esta semana", "Depois", "Não agora"]
+# Vistas do painel Ações (tecla v): Todas · Esta semana (+ atrasadas) · Mais adiante · Depois (adiadas de propósito).
+# "Depois" é a coluna homônima do painel HTML: o dono adiou (parked); não conta como atrasada.
+ACTION_VIEWS = ["Todas", "Esta semana", "Mais adiante", "Depois"]
 ACTION_SORTS = ["Prazo", "ID"]
 
 
 def action_view(a: dict, today) -> int:
-    """Em qual vista uma ação aberta cai: 1 esta semana · 2 depois · 3 não agora. Fechadas só aparecem em "Todas" (0).
+    """Em qual vista uma ação aberta cai: 1 esta semana · 2 mais adiante · 3 depois (adiada). Fechadas só aparecem em "Todas" (0).
 
     Esta semana = até o domingo corrente, incluindo o que já está atrasado; sem prazo só entra se já está em andamento.
-    Depois = semana que vem em diante e o que não tem data."""
+    Mais adiante = semana que vem em diante e o que não tem data."""
     if not a["open"]:
         return 0
     if a.get("parked"):

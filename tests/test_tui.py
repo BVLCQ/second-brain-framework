@@ -1823,7 +1823,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             all_n = len(app.items(2))
             self.assertIn("v", {k.k for k in app.ctx_keys(every=True)})
             seen = []
-            for _ in range(4):                                       # Todas → semana → depois → não agora → Todas
+            for _ in range(4):                                       # Todas → semana → mais adiante → depois → Todas
                 await pilot.press("v")
                 seen.append((app.view, len(app.items(2))))
             self.assertEqual([v for v, _ in seen], [1, 2, 3, 0])
@@ -1834,7 +1834,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
             await pilot.press("z")
             await self.settle(app, pilot)
             self.assertTrue(self.state(app).actions[target].parked)
-            await pilot.press("v", "v", "v")                         # não agora
+            await pilot.press("v", "v", "v")                         # depois (adiadas)
             self.assertEqual([i.id for i in app.items(2)], [target])
             await pilot.press("z")                                   # volta
             await self.settle(app, pilot)

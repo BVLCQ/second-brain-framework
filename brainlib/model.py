@@ -56,7 +56,8 @@ class ModelBuilder:
     def action(self, a: Action) -> dict:
         eff = self.st.effective_status(a)
         project = a.project or self.plan.project_of(a.deliverable)
-        overdue = (self.today - a.due).days if a.open and a.due and a.due < self.today else 0
+        # "depois" (parked): o dono adiou de propósito — prazo vencido não conta como atraso
+        overdue = (self.today - a.due).days if a.open and not a.parked and a.due and a.due < self.today else 0
         last = a.last_activity or a.opened
         return {
             "id": a.id, "title": a.title, "owner": a.owner, "owner_name": self.st.person_name(a.owner),
@@ -316,7 +317,7 @@ class ModelBuilder:
             "counts": {
                 "mine_open": len(mine_open),
                 "mine_overdue": sum(1 for a in mine_open if a["overdue_days"]),
-                "mine_due_7d": sum(1 for a in mine_open if a["due_in"] is not None and 0 <= a["due_in"] <= 7),
+                "mine_due_7d": sum(1 for a in mine_open if not a["parked"] and a["due_in"] is not None and 0 <= a["due_in"] <= 7),
                 "mine_blocked": sum(1 for a in mine_open if a["status"] == "bloqueada"),
                 "waiting_open": len(waiting),
                 "watching_open": sum(1 for a in actions if a["open"] and a["list"] == "watching"),

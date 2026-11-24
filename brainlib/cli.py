@@ -164,7 +164,7 @@ def _action_line(b: Brain, aid: str) -> str:
     if a.effort_min:
         bits.append(f"esforço {util.fmt_duration(a.effort_min)}")
     if a.parked and a.open:
-        bits.append("não agora")
+        bits.append("depois (adiada)")
     if a.project:
         bits.append(a.project)
     if a.list != "mine":
@@ -1113,8 +1113,8 @@ def build_parser() -> argparse.ArgumentParser:
                    help="dono aceita o prazo sugerido como está (--by owner)")
     x.add_argument("--clear-due", action="store_true")
     x.add_argument("--park", action="store_true",
-                   help='"não agora": adia de propósito (--by owner); sai do foco e da vista "esta semana"')
-    x.add_argument("--unpark", action="store_true", help='tira da vista "não agora" (--by owner)')
+                   help='"depois": adia de propósito (--by owner); sai do foco e da vista "esta semana" e não conta como atrasada')
+    x.add_argument("--unpark", action="store_true", help='tira de "depois" (--by owner)')
     x.add_argument("--effort")
     x.add_argument("--project")
     x.add_argument("--deliverable")

@@ -1,3 +1,10 @@
+## 2.41.0 — TODO: coluna "Depois" para o que você adiou, e visão geral recolhível
+
+- **Coluna "Depois", à esquerda do quadro.** Arrastar um cartão para lá adia a ação de propósito (`--park`, só o dono). Arrastar para fora, ou clicar em "↩ voltar", traz a ação de volta (`--unpark`, com o status da coluna onde ela cair). Ação que estava em "fazendo" volta para "a fazer" ao ser adiada. Bloqueada também pode ir para Depois.
+- **O que está em Depois não atrasa.** Prazo vencido de ação adiada não entra em "atrasadas", nem em "vencem em 7 dias", nem na saúde do projeto, no índice (`brain query actions --overdue`) ou no roteamento. O cartão mostra a data apagada, sem ⚠. A ação segue aberta e continua em "abertas".
+- **Visão geral no TODO.** Os cartões do quadro (abertas, atrasadas, vencem em 7 dias, fazendo, bloqueadas, depois, aguardando outros, feitas 14d) ficam no topo do TODO e seguem o filtro de projeto. Um clique recolhe tudo em uma linha, e o painel lembra a escolha neste navegador.
+- **Um nome para cada coisa.** "Não agora" passa a se chamar **Depois** em todas as superfícies (CLI, TUI, `todo.md`, guias). A antiga vista "depois" (semana que vem em diante) agora se chama **Mais adiante**. A vista "não agora" do painel saiu, porque a coluna faz esse papel.
+
 ## 2.40.0 — o aviso de atualização checa o repositório a cada 2h e não afirma "em dia" sem ter conferido
 
 - **Poll do upstream a cada 2h.** Um LaunchAgent opcional (`services/com.segundo-cerebro.updatecheck.plist`) roda `brain update --check` no login e de 2 em 2 horas. `update --check` passa a perguntar ao remoto de verdade, em vez de reaproveitar um cache de 24h; a validade do cache cai para 2h.

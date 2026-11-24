@@ -1026,7 +1026,7 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
             if w(it and not it.data["open"]):
                 add("o", "reabrir", self.f_reopen)
             if w(it and it.data["open"]):
-                add("z", "voltar" if it and it.data["parked"] else "não agora", self.toggle_park)
+                add("z", "voltar" if it and it.data["parked"] else "depois", self.toggle_park)
             add("v", f"vista: {ACTION_VIEWS[self.view].lower()}", self.cycle_view)
             add("O", f"ordem: {ACTION_SORTS[self.sort].lower()}", self.cycle_sort)
             # aba Minhas: fechadas ≤14d sempre visíveis (coluna Feita do painel) — voltar é "só recentes"
@@ -1297,7 +1297,7 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
         self.redraw()
 
     def cycle_view(self) -> None:
-        """v: Todas → Esta semana (e o que está atrasado) → Depois → Não agora."""
+        """v: Todas → Esta semana (e o que está atrasado) → Mais adiante → Depois (adiadas)."""
         self.view = (self.view + 1) % len(ACTION_VIEWS)
         self.redraw()
 

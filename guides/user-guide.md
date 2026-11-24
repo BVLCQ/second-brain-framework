@@ -748,7 +748,7 @@ por uma versão.
   feita) com **arrastar-e-soltar**: soltar roda o comando (marcar fazendo,
   fechar, reabrir); bloqueadas recusam citando o `blocked_by`. Abaixo, a
   lista de aguardando-de-outros. Teclas: `n` nova, `e` editar, `c` fechar,
-  `s` status, `t` prazo, `d` descartar, `z` não agora, `o` reabrir,
+  `s` status, `t` prazo, `d` descartar, `z` depois (adiar), `o` reabrir,
   `m` rascunhar cobrança, `M` mescla duplicada (`action merge`), `v`/`O`/`T`
   vista · ordem · todas. A ficha da ação tem os mesmos botões.
 - **Projetos** — ficha por projeto: entregáveis com peso, próximos marcos,
@@ -814,9 +814,11 @@ instala o Textual numa venv à parte.
 
 **Vistas do painel Ações (`v`).** A tecla `v` gira entre quatro vistas: **Todas** → **Esta semana**
 (até o domingo corrente, mais tudo que já está atrasado; sem prazo só entra se estiver em andamento) →
-**Depois** (semana que vem em diante e o que não tem data) → **Não agora**. `z` põe a ação selecionada em
-"não agora" (adiada de propósito; é decisão sua, o agente não marca) e `z` de novo a traz de volta. Ação em
-"não agora" sai do planejador de foco e ganha seção própria no `todo.md`. Nas vistas de prazo só as abertas.
+**Mais adiante** (semana que vem em diante e o que não tem data) → **Depois**. `z` põe a ação selecionada em
+"depois" (adiada de propósito; é decisão sua, o agente não marca) e `z` de novo a traz de volta. Ação em
+"depois" sai do planejador de foco, **não conta como atrasada** e ganha seção própria no `todo.md`; no painel
+HTML é a coluna **Depois**, à esquerda do quadro (arrastar para lá adia, arrastar para fora traz de volta).
+Nas vistas de prazo só as abertas.
 
 **Fechadas recentes sempre à vista (`T`).** Na aba **Minhas**, as ações fechadas nos últimos 14 dias
 ficam sempre no fim da lista — a mesma regra da coluna "Feita" do painel. `T` alterna entre

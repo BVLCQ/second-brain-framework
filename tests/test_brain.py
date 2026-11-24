@@ -305,6 +305,34 @@ class LedgerTests(unittest.TestCase):
             self.assertFalse(b.state.actions[a].parked)
             self.assertEqual(b.validate_all(), [])
 
+    def test_parked_overdue_is_not_late(self):
+        """Coluna "Depois" do painel = parked: prazo vencido não conta como atraso (modelo, contagens, índice)."""
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            past = (util.today() - timedelta(days=5)).isoformat()
+            soon = (util.today() + timedelta(days=2)).isoformat()
+            late = b.record_one({"type": "action.opened", "by": "owner",
+                                 "data": {"title": "Vencida adiada", "owner": "eu", "due": past}})["id"]
+            near = b.record_one({"type": "action.opened", "by": "owner",
+                                 "data": {"title": "Perto adiada", "owner": "eu", "due": soon}})["id"]
+            m = model.build(b)
+            self.assertEqual(m["counts"]["mine_overdue"], 1)
+            self.assertEqual(m["counts"]["mine_due_7d"], 1)
+            for a in (late, near):
+                b.record_one({"type": "action.updated", "id": a, "by": "owner", "data": {"parked": True}})
+            m = model.build(b)
+            row = next(x for x in m["actions"] if x["id"] == late)
+            self.assertTrue(row["parked"])
+            self.assertEqual(row["overdue_days"], 0)
+            self.assertEqual(m["counts"]["mine_overdue"], 0)
+            self.assertEqual(m["counts"]["mine_due_7d"], 0)
+            self.assertEqual(m["counts"]["mine_open"], 2)         # segue aberta: só não pressiona
+            from brainlib import index
+            index.rebuild(b)
+            with index.connect(index.db_path(b.inst), ro=True) as con:
+                self.assertEqual(index.query_actions(con, overdue=True), [])
+                self.assertEqual(con.execute("SELECT is_overdue FROM actions WHERE id = ?", (late,)).fetchone()[0], 0)
+
     def test_park_flags_on_cli(self):
         with tempfile.TemporaryDirectory() as td:
             _brain(Path(td))
@@ -314,11 +342,11 @@ class LedgerTests(unittest.TestCase):
                 return subprocess.run([sys.executable, str(ROOT / "brain"), *a], capture_output=True, text=True, env=env)
             self.assertEqual(run("action", "open", "Depois eu vejo", "--by", "owner").returncode, 0)
             aid = json.loads(run("action", "list", "--json").stdout)[-1]["id"]
-            self.assertIn("não agora", run("action", "update", aid, "--park", "--by", "owner").stdout)
+            self.assertIn("depois (adiada)", run("action", "update", aid, "--park", "--by", "owner").stdout)
             self.assertTrue(json.loads(run("action", "show", aid, "--json").stdout)["parked"])
             self.assertNotEqual(run("action", "update", aid, "--unpark", "--by", "agent", "--prov", "observado",
                                     "--source", "chat").returncode, 0)
-            self.assertNotIn("não agora", run("action", "update", aid, "--unpark", "--by", "owner").stdout)
+            self.assertNotIn("depois (adiada)", run("action", "update", aid, "--unpark", "--by", "owner").stdout)
             self.assertFalse(json.loads(run("action", "show", aid, "--json").stdout)["parked"])
 
     def test_decision_supersede(self):

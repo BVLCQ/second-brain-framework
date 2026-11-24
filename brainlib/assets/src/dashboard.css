@@ -160,7 +160,24 @@ tr.src-problem td{background:color-mix(in srgb,var(--riskbg) 35%,transparent)}
 tbody tr.src-problem:hover td{background:color-mix(in srgb,var(--riskbg) 55%,transparent)}
 
 /* ── kanban ── */
-.kanban{display:grid;grid-template-columns:repeat(4,minmax(220px,1fr));gap:12px;align-items:start}
+/* 5 colunas: Depois (adiadas, mais estreita) · A fazer · Fazendo · Bloqueada/aguardando · Feita */
+.kanban{display:grid;grid-template-columns:minmax(0,.8fr) repeat(4,minmax(0,1fr));gap:12px;align-items:start}
+@media (max-width:1300px) and (min-width:901px){.kanban{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.col.col-later{background:transparent;border:1px dashed var(--line)}
+.card.is-parked{opacity:.82}
+.card.is-parked:hover{opacity:1}
+/* visão geral do TODO: aberta = cartões; recolhida = uma linha */
+.todo-ov{margin:0 0 12px}
+.todo-ov-bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.todo-ov-line{display:flex;gap:4px 14px;flex-wrap:wrap;color:var(--muted);font-size:12.5px}
+.todo-ov-line b{color:var(--ink);font-variant-numeric:tabular-nums}
+.ovp.risk b{color:var(--risk)}.ovp.ok b{color:var(--ok)}
+.todo-ov.is-open .todo-ov-line{display:none}
+.todo-ov #todo-ov-cards{display:none;margin:10px 0 0}
+.todo-ov.is-open #todo-ov-cards{display:grid}
+.todo-ov .kpis{grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:10px}
+.todo-ov .kpi{padding:10px 12px}.todo-ov .kpi b{font-size:20px}
+.kpi.later b{color:var(--muted)}
 .col{background:var(--chip);border-radius:var(--r);padding:10px;min-height:120px}
 .col h2, .col h3{margin:2px 4px 10px;font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;font-weight:700;
   display:flex;justify-content:space-between;align-items:center}

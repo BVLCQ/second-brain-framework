@@ -226,7 +226,7 @@ def ledger_lines(question: str, db: Path | None = None, limit: int = 3) -> list[
                 for pid in dict.fromkeys(c["people"]):
                     overdue = con.execute(
                         "SELECT id, title, due FROM actions WHERE owner = ? AND is_open = 1 "
-                        "AND due < date('now', 'localtime') ORDER BY due LIMIT ?",
+                        "AND parked = 0 AND due < date('now', 'localtime') ORDER BY due LIMIT ?",
                         (pid, limit - len(lines))).fetchall()
                     for r in overdue:
                         if len(lines) >= limit:
@@ -235,7 +235,7 @@ def ledger_lines(question: str, db: Path | None = None, limit: int = 3) -> list[
             if len(lines) < limit and not c["ids"]:
                 for r in con.execute(
                         "SELECT id, title, due FROM actions WHERE is_open = 1 "
-                        "AND due < date('now', 'localtime') ORDER BY due LIMIT ?", (limit - len(lines),)):
+                        "AND parked = 0 AND due < date('now', 'localtime') ORDER BY due LIMIT ?", (limit - len(lines),)):
                     lines.append(f"{r[0]} · {r[1]} · atrasada (vence {r[2]}) ⟶ ledger/{r[0]}")
     except sqlite3.Error:
         return []

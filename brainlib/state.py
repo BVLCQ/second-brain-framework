@@ -52,7 +52,7 @@ class Action:
     unblocks: _new_list[str] = field(default_factory=_new_list)
     people: _new_list[str] = field(default_factory=_new_list)
     priority: str = "normal"
-    parked: bool = False             # "não agora": o dono adiou de propósito (só o dono marca); sai do foco e da vista da semana
+    parked: bool = False             # "depois": o dono adiou de propósito (só o dono marca); sai do foco e da vista da semana, não atrasa
     link: str = ""
     origin: str = ""
     source: str = ""

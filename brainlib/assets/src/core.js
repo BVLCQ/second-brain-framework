@@ -206,6 +206,7 @@ document.addEventListener("keydown", e => {
 function dueTxt(a){
   if (!a.open) return '<span class="muted">' + (a.status === "fechada" ? "✓ feita " : "× descartada ") + fmtD(a.closed) + "</span>";
   if (!a.due) return '<span class="muted">sem prazo</span>';
+  if (a.parked) return '<span class="muted" title="adiada de propósito — não conta como atrasada">' + fmtDW(a.due) + (a.due_suggested ? " <em>sugerido</em>" : "") + "</span>";
   if (a.due_suggested) return '<span class="dsug" title="' + esc(a.due_reason || "prazo sugerido pelo agente") + '">' + (a.overdue_days ? "⚠ " : "") + fmtDW(a.due) + ' <em>sugerido</em>' +
     (a.overdue_days ? " · " + a.overdue_days + "d atrasada" : a.due_in != null && a.due_in <= 7 ? " · " + (a.due_in ? "em " + a.due_in + "d" : "hoje") : "") + "</span>";
   if (a.overdue_days) return '<span class="late">⚠ ' + fmtDW(a.due) + " · " + a.overdue_days + "d atrasada</span>";
@@ -215,7 +216,7 @@ function dueTxt(a){
 
 // ── cartão de ação (kanban) ─────────────────────────────────────────────
 function card(a){
-  return '<article class="card' + (a.overdue_days ? " is-late" : "") + (a.status === "bloqueada" ? " is-blocked" : "") + '">' +
+  return '<article class="card' + (a.overdue_days && !a.parked ? " is-late" : "") + (a.parked ? " is-parked" : "") + (a.status === "bloqueada" ? " is-blocked" : "") + '">' +
     '<header><span class="ids">' + aL(a.id) + "</span>" +
     (a.priority === "alta" ? " " + chip("em-risco", "alta") : "") +
     (a.list !== "mine" || !a.mine ? " " + chip("info", a.owner_name) : "") + "</header>" +
@@ -686,30 +687,54 @@ V.home = () => {
   });
   return h;
 };
+// ── visão geral do quadro (TODO): recolhível; aberta = cartões, recolhida = uma linha ──
+const TODO_KPI_KEY = "brain.todo.overview";
+function todoKpisOpen(){ try { return localStorage.getItem(TODO_KPI_KEY) !== "0"; } catch (e) { return true; } }
+function setTodoKpisOpen(v){ try { localStorage.setItem(TODO_KPI_KEY, v ? "1" : "0"); } catch (e) {} }
+function todoOverview(list, waitingN){
+  const open = list.filter(a => a.open), act = open.filter(a => !a.parked);
+  const recent = new Date(M.today + "T12:00:00"); recent.setDate(recent.getDate() - 14);
+  const late = act.filter(a => a.overdue_days).length;
+  const blk = act.filter(a => (a.blocked_by && a.blocked_by.length) || a.status === "bloqueada" || a.status === "aguardando").length;
+  const k = [["Abertas", act.length, ""], ["Atrasadas", late, late ? "risk" : "ok"],
+    ["Vencem em 7 dias", act.filter(a => !a.overdue_days && a.due_in != null && a.due_in >= 0 && a.due_in <= 7).length, ""],
+    ["Fazendo", act.filter(a => a.status === "fazendo").length, ""], ["Bloqueadas / aguardando", blk, blk ? "risk" : ""],
+    ["Depois", open.length - act.length, "later"], ["Aguardando outros", waitingN, ""],
+    ["Feitas 14d", list.filter(a => a.status === "fechada" && a.closed && new Date(a.closed + "T12:00:00") >= recent).length, "ok"]];
+  const on = todoKpisOpen();
+  return '<div id="todo-ov" class="todo-ov' + (on ? " is-open" : "") + '">' +
+    '<div class="todo-ov-bar"><button class="btn ovtoggle" id="kpitoggle" aria-expanded="' + (on ? "true" : "false") + '" aria-controls="todo-ov-cards">' + (on ? "▾" : "▸") + " visão geral</button>" +
+    '<span class="todo-ov-line">' + k.map(x => '<span class="ovp ' + x[2] + '">' + esc(x[0].toLowerCase()) + " <b>" + esc(x[1]) + "</b></span>").join("") + "</span></div>" +
+    '<div class="kpis" id="todo-ov-cards">' + k.map(x => '<div class="kpi ' + x[2] + '"><span>' + esc(x[0]) + "</span><b>" + esc(x[1]) + "</b></div>").join("") + "</div></div>";
+}
 V.todo = (q) => {
   const proj = q.get("p") || "", showWatch = q.get("w") === "1";
   const view = q.get("v") || "todas", sortK = q.get("o") || "prazo", showAll = q.get("a") === "1";
   const end = new Date(M.today + "T12:00:00"); { const d = end.getDay(); end.setDate(end.getDate() + (d === 0 ? 0 : 7 - d)); }
   const endS = end.toISOString().slice(0, 10);
   let mine = M.actions.filter(a => a.list === "mine" && (!proj || a.project === proj));      // a lista mine é a sua; o dono não filtra
-  if (view === "semana") mine = mine.filter(a => a.open && ((a.due && a.due <= endS) || a.status === "fazendo"));
-  else if (view === "depois") mine = mine.filter(a => a.open && !a.parked && !((a.due && a.due <= endS) || a.status === "fazendo"));
-  else if (view === "nao-agora") mine = mine.filter(a => a.open && a.parked);
+  const all = mine;                                                                           // a visão geral segue o projeto, não a vista
+  if (view === "semana") mine = mine.filter(a => a.open && !a.parked && ((a.due && a.due <= endS) || a.status === "fazendo"));
+  else if (view === "adiante") mine = mine.filter(a => a.open && !a.parked && !((a.due && a.due <= endS) || a.status === "fazendo"));
   const recent = new Date(M.today + "T12:00:00");
   recent.setDate(recent.getDate() - 14);
-  const cols = [["A fazer", a => a.open && a.status === "aberta", "aberta"],
-    ["Fazendo", a => a.open && a.status === "fazendo", "fazendo"],
-    ["Bloqueada / aguardando", a => a.open && ((a.blocked_by && a.blocked_by.length) || a.status === "bloqueada" || a.status === "aguardando"), "aguardando"],
+  // "Depois": adiada de propósito (parked, só o dono) — à esquerda, fora do atraso; arrastar para lá/de lá = --park/--unpark
+  const isBlk = a => (a.blocked_by && a.blocked_by.length) || a.status === "bloqueada" || a.status === "aguardando";
+  const cols = [["Depois", a => a.open && a.parked, "depois"],
+    ["A fazer", a => a.open && !a.parked && !isBlk(a) && a.status === "aberta", "aberta"],
+    ["Fazendo", a => a.open && !a.parked && !isBlk(a) && a.status === "fazendo", "fazendo"],
+    ["Bloqueada / aguardando", a => a.open && !a.parked && isBlk(a), "aguardando"],
     ["Feita" + (showAll ? "" : " (14 dias)"), a => a.status === "fechada" && a.closed && (showAll || new Date(a.closed + "T12:00:00") >= recent), "fechada"]];
   const sortA = l => l.sort((x, y) => sortK === "id" ? x.id.localeCompare(y.id)
     : ((x.due || "9999").localeCompare(y.due || "9999") || (x.priority === "alta" ? -1 : 0)));
-  const VIEWS = [["todas", "todas"], ["semana", "esta semana"], ["depois", "depois"], ["nao-agora", "não agora"]];
-  let h = '<div class="pagehead"><div><h1>TODO</h1><p class="sub">Suas ações em quadro. Feche pelo chat (/done), marcando em FRESH/todo.md — ou pelo painel, se a ponte CLI estiver ligada.</p></div></div>' +
+  const VIEWS = [["todas", "todas"], ["semana", "esta semana"], ["adiante", "mais adiante"]];
+  let h = '<div class="pagehead"><div><h1>TODO</h1><p class="sub">Suas ações em quadro. Feche pelo chat (/done), marcando em FRESH/todo.md — ou pelo painel, se a ponte CLI estiver ligada. Arraste para Depois o que você adiou de propósito: lá não conta como atrasada.</p></div></div>' +
+    todoOverview(all, (M.actions || []).filter(a => a.open && a.list === "waiting" && (!proj || a.project === proj)).length) +
     '<div class="filters">' + dd("fp", M.projects.map(p => [p.id, p.id + " " + p.title]), proj, "todos os projetos") +
     dd("fv", VIEWS, view, "todas as vistas") + dd("fo", [["prazo", "por prazo"], ["id", "por id"]], sortK, "por prazo") +
     '<label class="chk"><input type="checkbox" id="fa"' + (showAll ? " checked" : "") + "> todas (fechadas além de 14d)</label>" +
     '<label class="chk"><input type="checkbox" id="fw"' + (showWatch ? " checked" : "") + "> mostrar observando</label></div>";
-  h += '<div class="kanban">' + cols.map(([t, f, key]) => { const l = sortA(mine.filter(f)); return '<div class="col" data-col="' + key + '"><h2>' + t + ' <span class="count">' + l.length + "</span></h2>" + (l.map(card).join("") || empty("—")) + "</div>"; }).join("") + "</div>";
+  h += '<div class="kanban">' + cols.map(([t, f, key]) => { const l = sortA(mine.filter(f)); return '<div class="col' + (key === "depois" ? " col-later" : "") + '" data-col="' + key + '"><h2>' + t + ' <span class="count">' + l.length + "</span></h2>" + (l.map(card).join("") || empty("—")) + "</div>"; }).join("") + "</div>";
   const waiting = M.actions.filter(a => a.open && a.list === "waiting" && (!proj || a.project === proj));
   h += panel("Aguardando de outros · " + waiting.length, actionTable(sortA(waiting).map(a => a.id), ["owner", "age", "project"]), ' style="margin-top:16px"');
   if (showWatch) {
@@ -717,6 +742,10 @@ V.todo = (q) => {
     h += panel("Observando — contexto, não cobra · " + w.length, actionTable(w.map(a => a.id), ["owner", "project"]), ' style="margin-top:14px"');
   }
   setTimeout(() => {
+    const kt = document.querySelector("#kpitoggle");
+    if (kt) kt.onclick = () => { const open = !todoKpisOpen(); setTodoKpisOpen(open);
+      const ov = document.querySelector("#todo-ov"); if (ov) ov.classList.toggle("is-open", open);
+      kt.setAttribute("aria-expanded", open ? "true" : "false"); kt.textContent = open ? "▾ visão geral" : "▸ visão geral"; };
     [["fp", "p"], ["fv", "v"], ["fo", "o"]].forEach(([id0, key]) => {
       const b = document.querySelector('[data-dd="' + id0 + '"] .dd-btn');
       if (b) b.addEventListener("ddchange", e => go("todo", {p: proj, w: showWatch ? "1" : "",
