@@ -46,21 +46,59 @@ def _slot(key: str, repo: str) -> str:
     return f"repos:{key}#{repo}"
 
 
-def _git(repo: Path, *args: str, timeout: int = GIT_TIMEOUT, stdin: str | None = None) -> str:
+def _git(repo: Path, *args: str, timeout: int = GIT_TIMEOUT, stdin: str | None = None,
+         raw: bool = False) -> str | bytes:
+    """`raw=True`: a saída vem em BYTES, para lista de NOME de arquivo (`ls-tree -z`, `diff-tree -z`). Nome de
+    arquivo não é texto: lido como texto, o byte que não é UTF-8 válido vira outro nome (`_names`)."""
     env = {**os.environ, "GIT_TERMINAL_PROMPT": "0", "GIT_OPTIONAL_LOCKS": "0", "GIT_PAGER": "cat"}
     try:
-        r = subprocess.run(["git", "-C", str(repo), "-c", "core.fsmonitor=false", *args], input=stdin,
-                           capture_output=True, text=True, encoding="utf-8", errors="replace",
-                           timeout=timeout, env=env)
+        r = subprocess.run(["git", "-C", str(repo), "-c", "core.fsmonitor=false", *args],
+                           input=None if stdin is None else (stdin.encode("utf-8") if raw else stdin),
+                           capture_output=True, timeout=timeout, env=env,
+                           **({} if raw else {"text": True, "encoding": "utf-8", "errors": "replace"}))
     except FileNotFoundError as e:
         raise util.BrainError("git não encontrado no PATH", code=5) from e
     except subprocess.TimeoutExpired as e:
         raise util.BrainError(f"git {args[0]} passou de {timeout}s", code=5) from e
     if r.returncode != 0:
-        msg = (r.stderr or r.stdout).strip().splitlines()
+        err = r.stderr or r.stdout
+        if isinstance(err, bytes):                   # leitura em bytes: a mensagem de erro continua sendo texto
+            err = err.decode("utf-8", "replace")
+        msg = err.strip().splitlines()
         last = _CRED_RE.sub(r"\1", msg[-1]) if msg else "falhou"
         raise util.BrainError(f"git {args[0]}: {last}", code=5)
     return r.stdout
+
+
+_END_B = _END.encode("ascii")
+_CTRL_RE = re.compile(r"[\x00-\x1f\x7f]")
+
+
+def _git_bytes(repo: Path, *args: str, stdin: str | None = None, timeout: int = GIT_TIMEOUT) -> bytes:
+    """`_git(…, raw=True)` já tipado como bytes, para quem lê lista de NOME de arquivo (`_names`, `_files_batch`)."""
+    out = _git(repo, *args, stdin=stdin, timeout=timeout, raw=True)
+    if not isinstance(out, bytes):             # não acontece: `raw=True` não decodifica. Falha alta, nunca outro nome.
+        raise util.BrainError(f"git {args[0]}: leitura em bytes esperada", code=5)
+    return out
+
+
+def _names(out: bytes) -> list[str]:
+    """Nomes de um `git … -z` lido em bytes (`_git_bytes`): separados por NUL, nunca entre aspas, e
+    decodificados como NOME de arquivo (`os.fsdecode`) — a decodificação que o próprio Python usa: o byte que não
+    é UTF-8 válido fica guardado (surrogate) e volta byte a byte quando o nome entra de novo no git
+    (`show <rev>:<nome>`). Sem o `-z` o git entrega entre aspas e com escapes o nome com acento, aspas, barra
+    invertida ou tabulação (`"docs/relat\\303\\263rio.md"`): o sufixo passa a ser `.md"`, e o documento sai da
+    leitura sem erro nenhum."""
+    return [os.fsdecode(p) for p in out.split(b"\0") if p]
+
+
+def _show(name: str) -> str:
+    """Nome de arquivo para o SNAPSHOT: o byte que não é UTF-8 válido (guardado como surrogate) e o caractere de
+    controle aparecem como escape (`caf\\udce9.md`, `a\\x09b.md`). O snapshot é arquivo UTF-8 — um surrogate
+    derrubaria a leitura do repositório inteiro — e cada linha é estrutura do Markdown: a tabulação e a quebra
+    de linha de dentro de um nome não podem passar a ser separadores."""
+    esc = name.encode("utf-8", "backslashreplace").decode("utf-8")
+    return _CTRL_RE.sub(lambda m: f"\\x{ord(m.group(0)):02x}", esc)
 
 
 def source(inst, key: str) -> dict:
@@ -150,15 +188,24 @@ def _commits(repo: Path, tips: list[str], old: list[str] | None) -> list[dict]:
 def _files_batch(repo: Path, shas: list[str]) -> dict[str, list[str]]:
     if not shas:
         return {}
-    out = _git(repo, "diff-tree", "--stdin", "--name-status", "-r", "-M", "--root", f"--format={_END}%H",
-               stdin="\n".join(shas) + "\n", timeout=GIT_TIMEOUT * 4)
+    # `-z`: cada commit abre com `<marcador><sha> NUL`; cada registro é `status NUL nome NUL` (nome antigo e
+    # nome novo numa renomeação ou cópia), com o nome de verdade — nunca entre aspas nem com escape
+    out = _git_bytes(repo, "diff-tree", "--stdin", "--name-status", "-r", "-M", "--root", "-z",
+                     f"--format={_END}%H", stdin="\n".join(shas) + "\n", timeout=GIT_TIMEOUT * 4)
     res: dict[str, list[str]] = {sha: [] for sha in shas}
-    for block in out.split(_END):
-        lines = [ln for ln in block.splitlines() if ln.strip()]
-        if not lines:
-            continue
-        sha = lines[0].strip()
-        res[sha] = [" ".join(ln.split("\t")) for ln in lines[1:]]
+    toks, i, sha = out.split(b"\0"), 0, None
+    while i < len(toks):
+        t = toks[i].lstrip(b"\n")                      # depois do NUL do cabeçalho o git ainda põe uma quebra de linha
+        if t.startswith(_END_B):                       # só cai aqui quem vem logo depois de um registro completo
+            sha, i = t[len(_END_B):].decode("ascii", "replace").strip(), i + 1
+        elif not t:
+            i += 1
+        else:
+            n = 2 if t[:1] in (b"R", b"C") else 1        # renomeação e cópia trazem dois nomes
+            nomes = [_show(os.fsdecode(p)) for p in toks[i + 1:i + 1 + n]]
+            if sha in res:
+                res[sha].append(" ".join([t.decode("ascii", "replace"), *nomes]))
+            i += 1 + n
     return res
 
 
@@ -169,9 +216,9 @@ def _is_doc(path: str) -> bool:
 
 def _overview(repo: Path, ref: str) -> list[str]:
     """Primeira leitura: árvore de arquivos e conteúdo dos documentos no `ref`."""
-    tree = [ln for ln in _git(repo, "ls-tree", "-r", "--name-only", ref).splitlines() if ln.strip()]
+    tree = _names(_git_bytes(repo, "ls-tree", "-r", "-z", "--name-only", ref))
     lines = [f"## Árvore de arquivos ({ref}, {len(tree)} arquivos)", ""]
-    lines += [f"- {t}" for t in tree[:MAX_TREE]]
+    lines += [f"- {_show(t)}" for t in tree[:MAX_TREE]]
     if len(tree) > MAX_TREE:
         lines.append(f"- … (+{len(tree) - MAX_TREE})")
     docs = sorted((t for t in tree if _is_doc(t)), key=lambda t: (not Path(t).name.lower().startswith("readme"), t))
@@ -179,7 +226,7 @@ def _overview(repo: Path, ref: str) -> list[str]:
     budget = DOC_TOTAL_LINES
     for d in docs:
         if budget <= 0:
-            lines.append(f"### {d}\n\n(omitido: teto de {DOC_TOTAL_LINES} linhas de documentos atingido)\n")
+            lines.append(f"### {_show(d)}\n\n(omitido: teto de {DOC_TOTAL_LINES} linhas de documentos atingido)\n")
             continue
         try:
             body = _git(repo, "show", f"{ref}:{d}").splitlines()
@@ -187,7 +234,7 @@ def _overview(repo: Path, ref: str) -> list[str]:
             continue
         take = body[:min(DOC_MAX_LINES, budget)]
         budget -= len(take)
-        lines += [f"### {d}", "", "````", *take, "````"]
+        lines += [f"### {_show(d)}", "", "````", *take, "````"]
         if len(body) > len(take):
             lines.append(f"(… +{len(body) - len(take)} linhas)")
         lines.append("")
