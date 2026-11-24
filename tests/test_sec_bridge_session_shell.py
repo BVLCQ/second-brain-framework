@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import importlib.util
 import io
 import json
 import re
@@ -155,7 +156,7 @@ function runEnv(opts) {
     protocol: opts.protocol || "http:",
     hostname: opts.hostname || "127.0.0.1",
     pathname: "/",
-    search: "",
+    search: opts.search || "",
     get hash() { return currentHash; },
     set hash(v) { currentHash = String(v).startsWith("#") ? String(v) : ("#" + v); },
     href: "",
@@ -261,30 +262,36 @@ function runEnv(opts) {
     if (env.loc.hash !== "") throw new Error("hash deveria estar vazio, veio: " + env.loc.hash);
     if (!env.replaceCalls.includes("/")) throw new Error("replaceState não chamado com /");
 
-    // 3. aba reaproveitada (util.focus_open_tab / app Brain): o `#t=` novo chega SÓ no fragmento (hashchange, sem reload).
-    //    A página guarda o token novo no sessionStorage (com validade), devolve a rota ao que era e recarrega — senão a
-    //    aba fica com o token antigo e a ponte nova responde 401. Mesmo nível de confiança do boot: quem entrega um `#t=`
-    //    pelo fragmento consegue entregá-lo por uma navegação completa, que o boot precisa aceitar.
+    // 3. hashchange com #t= NÃO guarda token nem recarrega; apenas remove t= da URL mantendo outras partes do fragmento
     env.fireHashChange("#t=newtok42", "#inbox");
-    const afterReuse = JSON.parse(env.sessionStorage.getItem("brain-serve-token"));
-    if (afterReuse.tok !== "newtok42") throw new Error("hashchange não guardou o token novo: " + afterReuse.tok);
-    if (typeof afterReuse.exp !== "number" || afterReuse.exp <= 1700000000000) throw new Error("exp inválido depois do hashchange");
+    const afterHash = JSON.parse(env.sessionStorage.getItem("brain-serve-token"));
+    if (afterHash.tok !== "abc123") throw new Error("hashchange guardou token indevidamente: " + afterHash.tok);
     if (env.localStorage.getItem("brain-serve-token") !== null) throw new Error("hashchange escreveu em localStorage");
-    if (!env.replaceCalls.includes("/#inbox")) throw new Error("replaceState não devolveu a rota: " + JSON.stringify(env.replaceCalls));
-    if (env.loc.hash === "#t=newtok42") throw new Error("#t= ficou na URL: " + env.loc.hash);
-    if (!env.loc.reloadCalled) throw new Error("token diferente não recarregou a página");
+    if (env.loc.hash !== "") throw new Error("#t= ficou na URL após hashchange: " + env.loc.hash);
+    if (env.loc.reloadCalled) throw new Error("hashchange disparou reload");
 
-    // 3b. mesmo token: só devolve a URL, sem recarregar
-    const sameEnv = runEnv({
+    env.fireHashChange("#todo&t=evil99", "#home");
+    if (JSON.parse(env.sessionStorage.getItem("brain-serve-token")).tok !== "abc123") {
+      throw new Error("hashchange #todo&t= alterou token guardado");
+    }
+    if (env.loc.hash !== "#todo") throw new Error("#todo&t= deveria virar #todo, veio: " + env.loc.hash);
+    if (env.loc.reloadCalled) throw new Error("hashchange #todo&t= disparou reload");
+
+    // 3b. navegação completa com ?n=…#t= (aba reaproveitada via util.focus_open_tab) consome no boot e remove só o fragmento
+    const reusedEnv = runEnv({
       kind: "dashboard",
-      hash: "#t=same1",
+      search: "?n=a1b2c3d4",
+      hash: "#t=reused99",
       fetchImpl: async () => ({ ok: true, status: 200, json: async () => ({ ok: true, model: { owner: { id: "eu", name: "Você (demo)" }, today: "2026-10-10", counts: { mine_open: 0 }, agenda: [], portfolio: { areas: [], processes: [], opportunities: [], gaps: [] } } }) }),
     });
     await new Promise(r => setTimeout(r, 20));
-    sameEnv.fireHashChange("#t=same1", "#goals");
-    if (sameEnv.loc.reloadCalled) throw new Error("token igual disparou reload");
-    if (JSON.parse(sameEnv.sessionStorage.getItem("brain-serve-token")).tok !== "same1") throw new Error("token igual foi alterado");
-    if (!sameEnv.replaceCalls.includes("/#goals")) throw new Error("token igual não devolveu a rota: " + JSON.stringify(sameEnv.replaceCalls));
+    if (JSON.parse(reusedEnv.sessionStorage.getItem("brain-serve-token")).tok !== "reused99") {
+      throw new Error("boot com ?n=…#t= não guardou o token");
+    }
+    if (reusedEnv.loc.hash !== "") throw new Error("boot com ?n=…#t= não limpou o hash: " + reusedEnv.loc.hash);
+    if (!reusedEnv.replaceCalls.includes("/?n=a1b2c3d4")) {
+      throw new Error("replaceState não preservou ?n=: " + JSON.stringify(reusedEnv.replaceCalls));
+    }
 
     // 4. 401 clears token & resets LIVE
     statusToReturn = 401;
@@ -561,11 +568,16 @@ class BridgeSessionShellSecurityTests(unittest.TestCase):
 
     @unittest.skipUnless(shutil.which("node"), "node ausente")
     def test_token_sessionstorage_ttl_oneshot_and_401_clear_in_node(self):
+        spec = importlib.util.spec_from_file_location("build_assets", ROOT / "scripts" / "build_assets.py")
+        build_mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(build_mod)
         with tempfile.TemporaryDirectory() as td:
+            dash_built = Path(td) / "dashboard.html"
+            dash_built.write_text(build_mod.assemble(False, "Brain"), encoding="utf-8")
             harness = Path(td) / "harness.js"
             harness.write_text(NODE_TOKEN_HARNESS, encoding="utf-8")
             proc = subprocess.run(
-                ["node", str(harness), "token-lifecycle", str(DASH_HTML), str(OB_HTML)],
+                ["node", str(harness), "token-lifecycle", str(dash_built), str(OB_HTML)],
                 capture_output=True, text=True, timeout=20, check=False,
             )
             self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)

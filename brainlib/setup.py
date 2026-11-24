@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import getpass
+import hashlib
 import html
 import json
 import os
@@ -98,8 +99,8 @@ class AutoUI(ConsoleUI):
 
 
 # ── helpers ─────────────────────────────────────────────────────────────────
-def set_env(inst, updates: dict[str, str]) -> list[str]:
-    """Grava chaves no config/.env preservando as existentes (0600). Nunca imprime valores."""
+def set_env(inst, updates: dict[str, str], *, unset: tuple[str, ...] | list[str] = ()) -> list[str]:
+    """Grava chaves no config/.env preservando as existentes (0600). `unset` remove chaves obsoletas. Nunca imprime valores."""
     path = inst.env_file
     lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
     out: list[str | None] = list(lines)
@@ -110,6 +111,11 @@ def set_env(inst, updates: dict[str, str]) -> list[str]:
         if sep and ks and not ks.startswith("#"):
             indices.setdefault(ks, []).append(idx)
     changed: list[str] = []
+    for k in unset:
+        if k in indices and k not in updates:
+            for idx in indices.pop(k):
+                out[idx] = None
+            changed.append(k)
     for k, v in updates.items():
         if not isinstance(k, str) or any(c in k for c in ("\n", "\r", "\x00")) or not _ENV_KEY_RE.match(k):
             raise util.BrainError(f"config/.env: chave inválida ({k!r})", code=4)
@@ -240,7 +246,8 @@ def docker_state(up: bool | None = None, which=shutil.which, exists=None) -> str
     return "installed" if docker_installed(which, exists) else "missing"
 
 
-def docker_ensure(ui, run=_run, which=shutil.which) -> bool:
+def docker_ensure(ui, run=_run, which=shutil.which, fetch=None,
+                  pins: dict[str, str] | None = None) -> bool:
     """Traz o runtime de contêiner ao estado que o Brain precisa — instala se faltar e sobe o
     daemon — narrando cada passo (mesma regra do LM Studio: o dono fica ciente, não executa).
     macOS: OrbStack (cask oficial do Homebrew; `orb start` sobe). Linux/WSL: Docker Engine
@@ -278,9 +285,10 @@ def docker_ensure(ui, run=_run, which=shutil.which) -> bool:
             import tempfile
             with tempfile.TemporaryDirectory() as td:
                 script = Path(td) / "get-docker.sh"
-                err = _fetch(DOCKER_INSTALL_URL, script, timeout=120)
+                err = _fetch_verified(DOCKER_INSTALL_URL, script, "docker",
+                                      timeout=120, fetch=fetch, pins=pins)
                 if err:
-                    ui.say(f"✗ não consegui baixar o instalador do Docker ({err}) — manual: "
+                    ui.say(f"✗ não consegui baixar/verificar o instalador do Docker ({err}) — manual: "
                            "curl -fsSL https://get.docker.com | sh")
                     return False
                 code, out = run(["sh", str(script)], timeout=1800)
@@ -404,6 +412,28 @@ def lmstudio_model_present(bin_: str, model: str, run=_run) -> bool:
     return code == 0 and model in out
 
 
+INSTALLER_PINS_PATH = FRAMEWORK / "scripts" / "installer-pins.json"
+
+
+def _load_installer_pins(path: Path | None = None) -> dict[str, str]:
+    """Carrega mapa {nome: sha256} de scripts/installer-pins.json."""
+    p = path or INSTALLER_PINS_PATH
+    try:
+        raw = json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    pins = raw.get("pins") if isinstance(raw, dict) else None
+    if not isinstance(pins, dict):
+        return {}
+    out: dict[str, str] = {}
+    for k, v in pins.items():
+        if isinstance(v, dict) and isinstance(v.get("sha256"), str) and v["sha256"].strip():
+            out[str(k)] = v["sha256"].strip().lower()
+        elif isinstance(v, str) and v.strip():
+            out[str(k)] = v.strip().lower()
+    return out
+
+
 def _fetch(url: str, dest: Path, timeout: int = 120) -> str | None:
     """Baixa a url para dest (arquivo temporário, nunca `curl | sh`). Devolve erro ou None."""
     try:
@@ -414,7 +444,30 @@ def _fetch(url: str, dest: Path, timeout: int = 120) -> str | None:
         return str(e)
 
 
-def lmstudio_ensure(ui, model: str = "", run=_run, which=shutil.which) -> bool:
+def _fetch_verified(url: str, dest: Path, pin_name: str, *, timeout: int = 120,
+                    fetch=None, pins: dict[str, str] | None = None) -> str | None:
+    """Baixa url para dest e confere sha256 contra scripts/installer-pins.json antes de executar."""
+    downloader = _fetch if fetch is None else fetch
+    err = downloader(url, dest, timeout=timeout)
+    if err:
+        return err
+    try:
+        got = hashlib.sha256(dest.read_bytes()).hexdigest().lower()
+    except OSError as e:
+        return f"não consegui ler o instalador baixado ({e})"
+    pin_table = _load_installer_pins() if pins is None else pins
+    entry = pin_table.get(pin_name)
+    expected = (entry.get("sha256") if isinstance(entry, dict) else entry) or ""
+    expected = str(expected).strip().lower()
+    if not expected:
+        return f"pin sha256 ausente para '{pin_name}' (esperado: <ausente>, obtido: {got})"
+    if got != expected:
+        return f"sha256 divergente para '{pin_name}' (esperado: {expected}, obtido: {got})"
+    return None
+
+
+def lmstudio_ensure(ui, model: str = "", run=_run, which=shutil.which,
+                    fetch=None, pins: dict[str, str] | None = None) -> bool:
     """Traz o LM Studio ao estado que o Brain especifica — instalação, servidor :1234 e modelo
     de embeddings — narrando cada passo (o dono fica ciente, não executa nada à mão). Devolve
     True quando o servidor responde com o modelo no disco (carregar é best-effort: o JIT cobre).
@@ -434,9 +487,9 @@ def lmstudio_ensure(ui, model: str = "", run=_run, which=shutil.which) -> bool:
         import tempfile
         with tempfile.TemporaryDirectory() as td:
             script = Path(td) / "install.sh"
-            err = _fetch(LMS_INSTALL_URL, script)
+            err = _fetch_verified(LMS_INSTALL_URL, script, "lmstudio", fetch=fetch, pins=pins)
             if err:
-                ui.say(f"✗ não consegui baixar o instalador do LM Studio ({err}) — baixe em "
+                ui.say(f"✗ não consegui baixar/verificar o instalador do LM Studio ({err}) — baixe em "
                        "https://lmstudio.ai e rode `brain setup --only memoria` de novo")
                 return False
             code, out = run(["bash", str(script)], timeout=900)
@@ -874,22 +927,28 @@ def _providers_step(brain, ui, slots: list[str], going_full: bool | None = None)
         pre = preset(slot)
         cur = st[slot]["provider"]
         reg = prov.PROVIDERS[slot]
-        opts = list(reg)
-        if slot == "embeddings" and going_full:
-            opts = [o for o in opts if o != "local"]
-            if cur == "local":
-                ui.say("  ☁ modo full é só-nuvem: embeddings locais (bge-m3 no LM Studio) ficam para o embed")
+        opts = [k for k, _ in prov.menu_providers(
+            slot, include_custom=True, include_unavailable=False,
+            mode="full" if going_full else "embed",
+        )]
+        if slot == "embeddings" and going_full and cur == "local":
+            ui.say("  ☁ modo full é só-nuvem: embeddings locais (bge-m3 no LM Studio) ficam para o embed")
         default = cur if cur in opts else ("off" if slot in ("reranker", "decision") else
                                            "fireworks" if (slot == "embeddings" and going_full) else
                                            "local" if slot == "embeddings" else "anthropic")
         p = ui.choice(f"Provedor de {labels[slot]}", opts, default)
         info = reg[p]
-        if p in ("local", "off"):
+        if slot == "llm" and info.get("docker_auth") == "manual":
+            if info.get("setup_hint"):
+                ui.say(f"  ⚠ {info['setup_hint']}")
+            if info.get("auth_command"):
+                ui.say(f"  comando: {info['auth_command']}")
+        if p == "off" or (p == "local" and not info.get("key_env")):
             res = prov.set_slot(brain, slot, p)
             ui.say(f"✓ {slot}: {info['label']}")
             changed = changed or bool(res["env"])
             continue
-        if slot != "llm":
+        if slot != "llm" and not info.get("local"):
             ui.say(f"  ☁ nuvem: o texto do vault vai à API do provedor para "
                    f"{'vetorizar' if slot == 'embeddings' else 'julgar' if slot == 'decision' else 'reranquear'}"
                    " — mesmo gate de egress do plano §4.3")
@@ -901,7 +960,7 @@ def _providers_step(brain, ui, slots: list[str], going_full: bool | None = None)
         if key_env and not (env_keys.get(key_env) and not replace(key_env)):
             key = ui.secret(f"API key ({key_env})")
         rec = info.get("models") or (info.get("model") and {"default": info["model"]}) or {}
-        models, model, base_url = None, "", ""
+        models, model, base_url, recall, candidates = None, "", "", None, 0
         if slot == "llm" and rec and ui.confirm("Usar os modelos recomendados por operação (cenário B do plano)?", True):
             models = dict(rec)
         elif slot == "llm":
@@ -911,10 +970,18 @@ def _providers_step(brain, ui, slots: list[str], going_full: bool | None = None)
                 models = {"retain": cheap, "consolidation": cheap}
         elif p == "custom":                       # slot que não é o LLM: a pergunta nomeia o slot…
             model = ui.ask(f"Modelo ({slot})", pre.get("model", ""))      # …para a UI roteirizada não responder com o modelo do LLM
-        if p == "custom" or (slot == "llm" and p in ("zai", "fireworks")):
+        if p == "custom" or (slot == "llm" and p in ("zai", "fireworks")) or (slot == "decision" and p == "local"):
             base_url = ui.ask("Base URL" if slot == "llm" else f"Base URL ({slot})",
                               pre.get("base_url") or info.get("base_url", ""))
-        res = prov.set_slot(brain, slot, p, model=model, models=models, base_url=base_url, key=key)
+        if slot == "decision" and p == "hindsight":
+            if ui.confirm("Usar o decisor também no recall?", False):
+                recall = "on"
+                raw_cands = ui.ask("Teto de candidatos no recall (--candidates)", "")
+                candidates = int(raw_cands) if str(raw_cands).strip().isdigit() else 0
+            else:
+                recall = "off"
+        res = prov.set_slot(brain, slot, p, model=model, models=models, base_url=base_url,
+                            candidates=candidates, key=key, recall=recall)
         ui.say(f"✓ {slot} → {res['label']}" + (" (chave gravada no config/.env)" if key else ""))
         if res["rebuild_needed"]:
             ui.say("⚠ embeddings mudaram: vetores antigos são incompatíveis — `brain memory rebuild` "
@@ -1020,6 +1087,8 @@ def run_llm_auth(brain, ui, provider: str) -> bool:
     if flow == "xai-device":
         return _auth_xai_device(brain, ui)
     ui.say(f"• {reg['label']}: ainda sem fluxo automático nesta instalação — {reg.get('setup_hint', '')}")
+    if reg.get("auth_command"):
+        ui.say(f"  comando: {reg['auth_command']}")
     return False
 
 
@@ -1059,8 +1128,13 @@ def _run_memoria(brain, ui, mode_hint: str | None = None, only: list[str] | None
             ui.say("✗ sem o \"ok\" literal o modo full não é gravado — nada mudou")
             return
     env_file = brain.inst.env_file if brain.inst.env_file.exists() else None
-    slots = only if only is not None else (
-        ["llm", "embeddings", "reranker", "decision"] if mode == "full" else ["embeddings", "reranker"])
+    # decisor ligado no recall: o reranker fica inerte. No wizard ele sai da lista; no roteiro (`only`) o payload pode
+    # nomeá-lo — e ainda assim o slot não é regravado (o .env atual é preservado)
+    skip_rer = bool(getattr(ui, "decision_recall", False))
+    full_slots = ["llm", "embeddings", "decision"] if skip_rer else ["llm", "embeddings", "reranker", "decision"]
+    slots = only if only is not None else (full_slots if mode == "full" else ["embeddings", "reranker"])
+    if skip_rer:
+        slots = [s for s in slots if s != "reranker"]
     env_changed = env_dirty or _providers_step(brain, ui, slots, going_full=mode == "full")
     mem = brain.inst.cfg["memory"]                       # set_slot recarregou a config
     if mode == "embed" and mem.get("embeddings_provider") == "local" and not lmstudio_up():
@@ -1118,11 +1192,15 @@ class ScriptedMemoriaUI:
 
     def __init__(self, out, choices: dict[str, str], keys: dict[str, str], model: str, consent: bool,
                  base_url: str = "", models_override: bool = False,
-                 slot_models: dict[str, dict[str, str]] | None = None):
+                 slot_models: dict[str, dict[str, str]] | None = None,
+                 decision_recall: bool = False, decision_candidates: int = 0, decision_base_url: str = ""):
         self.out, self.choices, self.keys = out, choices, keys
         self.model, self.consent, self.base_url = model, consent, base_url
         self.models_override = models_override
         self.slot_models = slot_models or {}       # slot → {model, base_url}: o que o payload trouxe para ELE
+        self.decision_recall = decision_recall
+        self.decision_candidates = decision_candidates
+        self.decision_base_url = decision_base_url
 
     def say(self, msg: str) -> None:
         self.out.say(msg)
@@ -1137,15 +1215,20 @@ class ScriptedMemoriaUI:
             return "ok" if self.consent else ""
         if (prompt.startswith("Modelo default") or prompt == "Modelo") and self.model:
             return self.model                      # openai/zai/custom: modelo explícito do dono
-        if prompt == "Base URL" and self.base_url:      # só o prompt do LLM; o dos outros slots nomeia o slot
-            return self.base_url
+        if prompt.startswith("Teto de candidatos") and self.decision_candidates:
+            return str(self.decision_candidates)
+        if prompt.startswith("Base URL"):
+            if self.decision_base_url and default == prov_default_decision_url():
+                return self.decision_base_url               # slot decisão (local): o endpoint veio no payload
+            if prompt == "Base URL" and self.base_url:      # só o prompt do LLM; o dos outros slots nomeia o slot
+                return self.base_url
         return default
 
     def choice(self, prompt: str, options: list[str], default: str) -> str:
         # o rótulo do passo diz "decisão": casando só "decision", a escolha do payload para o slot era ignorada
         for slot, word in (("LLM", "LLM"), ("embeddings", "embeddings"), ("reranker", "reranker"),
                            ("decision", "decisão")):
-            if word in prompt and self.choices.get(slot) in options:
+            if (word in prompt or slot in prompt) and self.choices.get(slot) in options:
                 return self.choices[slot]
         return default
 
@@ -1154,6 +1237,8 @@ class ScriptedMemoriaUI:
         # o modelo explícito vira o default de todas as operações
         if self.models_override and "cenário B" in prompt:
             return False
+        if "recall" in prompt.lower():
+            return bool(self.decision_recall)
         return default
 
     def secret(self, prompt: str) -> str:
@@ -1165,6 +1250,11 @@ class ScriptedMemoriaUI:
     def replace_key(self, key_env: str) -> bool:
         """Chave veio no payload para esta variável: SUBSTITUI a gravada no .env (vazio = mantém)."""
         return bool(self.keys.get(key_env))
+
+
+def prov_default_decision_url() -> str:
+    from . import providers as prov
+    return prov.PROVIDERS["decision"].get("local", {}).get("base_url", "")
 
 
 def _key_ok(v) -> str:
@@ -1224,9 +1314,30 @@ def validate_memory_setup(data: dict) -> dict:
 
     raw_dec = data.get("decision")
     dec_in = raw_dec if isinstance(raw_dec, dict) else {}
-    dec = str(dec_in.get("provider") or "off").strip()          # opcional: pular = só os tokens do LLM
+    dec_flat = "" if isinstance(raw_dec, dict) else str(raw_dec or data.get("dec") or "")
+    dec = str(dec_in.get("provider") or dec_flat or "off").strip()          # opcional: pular = só os tokens do LLM
     if dec not in prov.PROVIDERS["decision"]:
-        raise util.BrainError("decisão inválida (off|hindsight)", code=4)
+        raise util.BrainError("decisão inválida (off|hindsight|local)", code=4)
+    if mode != "full" and dec != "off":
+        raise util.BrainError("o slot decisão só vale no modo full (no embed não há LLM nem decisor)", code=4)
+    dec_reg = prov.PROVIDERS["decision"][dec]
+    dec_model = str(dec_in.get("model") or dec_reg.get("model", "")).strip()
+    dec_base_url = str(dec_in.get("base_url") or dec_reg.get("base_url", "")).strip()
+    dec_rec_raw = dec_in.get("recall") if "recall" in dec_in else data.get("decision_recall")
+    dec_recall = bool(prov._parse_recall(dec_rec_raw))
+    dec_cands_raw = dec_in.get("candidates") if "candidates" in dec_in else data.get("decision_candidates")
+    try:
+        dec_cands = int(dec_cands_raw) if dec_cands_raw not in (None, "") else 0
+    except (TypeError, ValueError) as e:
+        raise util.BrainError("teto de candidatos inválido (use um inteiro positivo)", code=4) from e
+    if dec_recall:
+        if mode != "full" or dec != "hindsight":
+            raise util.BrainError(
+                "decisor no recall só está disponível no modo full com o provedor hindsight (não disponível no local)",
+                code=4,
+            )
+        if dec_cands <= 0:
+            raise util.BrainError("ligar o decisor no recall exige o teto de candidatos (--candidates N)", code=4)
 
     consent = bool(data.get("consent")) or str(data.get("approval") or "").strip().lower() in gates.ACCEPTED_WORDS
     if mode == "full" and not consent:
@@ -1239,7 +1350,7 @@ def validate_memory_setup(data: dict) -> dict:
     k_llm = _key_ok(llm_in.get("key"))
     k_emb = _key_ok(emb_in.get("key")) or _key_ok(data.get("emb_key"))
     k_rer = _key_ok(rer_in.get("key")) or _key_ok(data.get("reranker_key")) or _key_ok(data.get("rer_key"))
-    k_dec = _key_ok(dec_in.get("key"))
+    k_dec = _key_ok(dec_in.get("key")) or _key_ok(data.get("dec_key"))
 
     if mode == "embed":
         emb_key = k_emb or k_top
@@ -1255,15 +1366,20 @@ def validate_memory_setup(data: dict) -> dict:
     named = {"llm": bool(llm_in.get("provider") or data.get("provider")),
              "embeddings": bool(emb_in.get("provider") or emb_flat),
              "reranker": bool(rer_in.get("provider") or rer_flat),
-             "decision": bool(dec_in.get("provider"))}
+             "decision": bool(dec_in.get("provider") or dec_flat)}
     model_given = {"llm": bool(llm_in.get("model") or data.get("model") or llm_in.get("base_url")
                                or data.get("base_url")),
                    "embeddings": bool(emb_in.get("model") or emb_in.get("base_url")),
-                   "reranker": bool(rer_in.get("model") or rer_in.get("base_url")), "decision": False}
+                   "reranker": bool(rer_in.get("model") or rer_in.get("base_url")),
+                   # decisão: além de modelo/endpoint, o payload pode trazer o decisor no recall (ligar ou
+                   # desligar, teto de candidatos) SEM mudar o provedor — aí o slot não fica como está,
+                   # senão o pedido era engolido (kept)
+                   "decision": bool(dec_in.get("model") or dec_in.get("base_url")
+                                    or "recall" in dec_in or "candidates" in dec_in)}
     given = {"llm": named["llm"] or model_given["llm"] or bool(llm_key),
              "embeddings": named["embeddings"] or model_given["embeddings"] or bool(emb_key),
              "reranker": named["reranker"] or model_given["reranker"] or bool(k_rer),
-             "decision": named["decision"] or bool(k_dec)}
+             "decision": named["decision"] or model_given["decision"] or bool(k_dec)}
 
     slots: dict[str, dict] = {}
     if mode == "full":
@@ -1271,9 +1387,12 @@ def validate_memory_setup(data: dict) -> dict:
     slots["embeddings"] = {"provider": emb, "key": emb_key, "model": emb_model, "base_url": emb_base_url}
     slots["reranker"] = {"provider": rer, "key": k_rer, "model": rer_model, "base_url": rer_base_url}
     if mode == "full":
-        slots["decision"] = {"provider": dec, "key": k_dec}
+        slots["decision"] = {"provider": dec, "key": k_dec, "model": dec_model, "base_url": dec_base_url,
+                             "recall": dec_recall, "candidates": dec_cands}
 
-    return {"mode": mode, "provider": provider, "emb": emb, "rer": rer, "dec": dec, "model": model, "consent": consent,
+    return {"mode": mode, "provider": provider, "emb": emb, "rer": rer, "dec": dec,
+            "dec_recall": dec_recall, "dec_candidates": dec_cands, "dec_base_url": dec_base_url,
+            "model": model, "consent": consent,
             "key": key, "emb_key": emb_key, "rer_key": k_rer, "dec_key": k_dec, "slots": slots,
             "given": given, "named": named, "model_given": model_given}
 
@@ -1336,10 +1455,12 @@ def configure_memory(brain, data: dict, say=print) -> str:
     for slot, s in v["slots"].items():
         if slot not in todo:
             continue                                    # fica como está: só a chave, se veio no payload
+        if slot == "reranker" and v.get("dec_recall"):
+            continue                    # recall do decisor ligado: reranker fica inerte e o .env atual é preservado
         p = s["provider"]
         reg = prov.PROVIDERS[slot][p]
         key_env = reg.get("key_env", "")
-        if not key_env or reg.get("local") or p in ("local", "off"):
+        if not key_env or p == "off":
             continue
         k = s.get("key", "")
         if not k and slot == "embeddings" and mode == "full" and provider == emb and key:
@@ -1355,6 +1476,8 @@ def configure_memory(brain, data: dict, say=print) -> str:
     # passo de provedores) — e o container é recriado, como em qualquer troca de chave
     rotate: dict[str, str] = {}
     for slot in kept:
+        if slot == "reranker" and v.get("dec_recall"):
+            continue                        # recall do decisor ligado: o .env do reranker fica como está
         key_env = prov.PROVIDERS[slot][v["slots"][slot]["provider"]].get("key_env", "")
         k = v["slots"][slot].get("key", "")
         if key_env and k and k != cur_env.get(key_env):
@@ -1371,7 +1494,11 @@ def configure_memory(brain, data: dict, say=print) -> str:
                    for slot in ("embeddings", "reranker") if isinstance(data.get(slot), dict)}
     ui = ScriptedMemoriaUI(_SayOnly(say), {"LLM": provider, "embeddings": emb, "reranker": rer, "decision": dec},
                            keys, v["model"], v["consent"], base_url=llm_base,
-                           models_override=bool(v["model"]), slot_models=slot_models)
+                           models_override=bool(v["model"]),
+                           decision_recall=bool(v.get("dec_recall")),
+                           decision_candidates=int(v.get("dec_candidates") or 0),
+                           decision_base_url=str(v.get("dec_base_url") or ""),
+                           slot_models=slot_models)
     _run_memoria(brain, ui, mode_hint=mode, only=todo, env_dirty=bool(rotate))
     final = memory.mode(config.reload(brain.inst).cfg["memory"])
     if final == "none":

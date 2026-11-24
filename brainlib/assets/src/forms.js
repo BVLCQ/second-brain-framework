@@ -229,6 +229,11 @@ const BRAIN_FORMS = (function(){
     prop_effort: (v, ctx) => ctx.kind === "reestimar" && !!ctx.target,
     prop_merge: (v, ctx) => ctx.kind === "unificar-acao" && !!ctx.target && !!ctx.into,
     prop_drop: (v, ctx) => ctx.kind === "descartar-acao" && !!ctx.target && !!ctx.into,
+    need_base_url: v => v.provider === "custom" || (v.slot === "decision" && v.provider === "local"),
+    need_provider_key: v => !["off", "", "claude-code", "xai-oauth", "chatgpt", "nous", "github-copilot", "cursor"].includes(v.provider || "")
+      && !(v.slot === "embeddings" && v.provider === "local"),
+    show_candidates: v => (v.slot === "reranker" && !["", "off"].includes(v.provider || ""))
+      || (v.slot === "decision" && v.provider === "hindsight" && v.recall === "on"),
   };
   function cond(c, v, ctx, M){
     if (c === undefined || c === null) return true;
@@ -301,6 +306,7 @@ const BRAIN_FORMS = (function(){
       const plan = new Set((M.goals || []).map(g => g.id).concat((M.projects || []).map(p => p.id), Object.keys(allDelivs(M))));
       return plan.has(l) ? "" : l + ": não existe em PLANNING/goals.md"; },
     no_dot: x => x.includes("·") ? "O título não pode ter “·”." : "",
+    recall_candidates: (x, v) => (x === "on" && !str(v.candidates).trim()) ? 'Preencha "top-N candidatos" (exigido ao ligar o decisor no recall).' : "",
   };
   function check(name, x, v, ctx, M){
     if (!name || !x) return "";
@@ -324,6 +330,7 @@ const BRAIN_FORMS = (function(){
     ice_impact: (x, v, ctx, M) => { let out = hIce("impact")(x, v, ctx, M); const h = (ctx.item || {}).hours_saved;
       if (/^[0-9]+$/.test(x) && h) { const hint = hHours(+h); out += "\nhoras declaradas: " + num(+h) + " h/mês → faixa sugerida " + hint;
         if (+x > hint) out += " · ⚠ escopo e horas divergem: vale a menor nota"; } return out; },
+    recall_note: x => x === "on" ? "Cada candidato é uma requisição própria ao decisor; sem fallback para RRF nesta versão (1.2.0) — se o decisor cair, o recall falha fechado." : "",
   };
   function hint(name, x, v, ctx, M){ return (!name || !x || !HINTS[name]) ? "" : HINTS[name](x, v, ctx || {}, M); }
   const XF = {

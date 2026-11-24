@@ -98,7 +98,7 @@ class SetSlotAndStackTests(unittest.TestCase):
 
             env = config.load_env(b.inst)
             self.assertEqual(env["HINDSIGHT_API_LLM_PROVIDER"], "claude-code")
-            self.assertEqual(env["HINDSIGHT_API_LLM_REASONING_EFFORT"], "max")
+            self.assertEqual(env["HINDSIGHT_API_LLM_REASONING_EFFORT"], "high")
             self.assertNotIn("HINDSIGHT_API_LLM_API_KEY", env)
 
             st = providers.stack(b)["llm"]
@@ -434,13 +434,13 @@ class ModelDefaultsTests(unittest.TestCase):
             env = config.load_env(b.inst)
             self.assertEqual(env.get("HINDSIGHT_API_LLM_MODEL"), "gpt-6-luna")
 
-    def test_haiku_effort_max_written_for_both_claude_lanes(self):
+    def test_haiku_effort_high_written_for_both_claude_lanes(self):
         with tempfile.TemporaryDirectory() as td:
             b = _brain(Path(td))
             for provider in ("anthropic", "claude-code"):
                 providers.set_slot(b, "llm", provider)
                 env = config.load_env(b.inst)
-                self.assertEqual(env.get("HINDSIGHT_API_LLM_REASONING_EFFORT"), "max")
+                self.assertEqual(env.get("HINDSIGHT_API_LLM_REASONING_EFFORT"), "high")
                 self.assertEqual(env.get("HINDSIGHT_API_RETAIN_LLM_MODEL"), "claude-haiku-5-5")
                 self.assertEqual(env.get("HINDSIGHT_API_MENTAL_MODEL_REFRESH_LLM_MODEL"),
                                  "claude-haiku-5-5")   # Sonnet saiu: régua do dono é Haiku em tudo

@@ -403,6 +403,8 @@ body.con-open .clidot{display:none}
   #burger{display:inline-flex}
 }
 @media (max-width:640px){
+  .bd-tag{padding-right:7px}
+  .bd-tag-m{max-width:100%}
   .kanban{grid-template-columns:minmax(0,1fr)}
   .mx{grid-template-columns:minmax(0,1fr)}
 }
@@ -541,6 +543,55 @@ html[data-live="1"] .only-portrait,html:not([data-live="1"]) .only-live{display:
 .brief-card:hover{transform:none;box-shadow:var(--shadow)}
 .brief-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin:0 0 8px}
 .brief-head h2{margin:0;font-size:16px}
-.brief-body{white-space:pre-wrap;font-size:14px;line-height:1.5;color:var(--ink)}
+/* ── Seu dia: corpo em Markdown mínimo (#160) ─────────────────────────────
+   Estrutura sobre texto já escapado pelo renderizador; cores só por token do tema. */
+.brief-body{font-size:14px;line-height:1.5;color:var(--ink)}
+.brief-body p{margin:0 0 8px;text-wrap:balance}
+.brief-body>:last-child{margin-bottom:0}
+.brief-body>:first-child{margin-top:0}
+.bd-h{margin:14px 0 4px;font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em}
+.bd-h4{margin:10px 0 2px;font-size:14px;font-weight:600}
+.bd-h .bd-code,.bd-h .idchip,.bd-h .bd-tag{text-transform:none;letter-spacing:0}
+.bd-ul,.bd-ol{margin:0 0 8px;padding:0;list-style:none}
+.bd-li{position:relative;padding:1px 0 1px 16px;text-wrap:pretty}
+.bd-li::before{content:"";position:absolute;left:4px;top:.72em;width:5px;height:5px;border-radius:50%;background:color-mix(in srgb,var(--muted) 45%,transparent)}
+.bd-ol{counter-reset:bd}
+.bd-ol>.bd-li::before{content:counter(bd);counter-increment:bd;left:0;top:.1em;width:auto;height:auto;background:none;color:var(--muted);font-size:12.5px;font-weight:600}
+.bd-sub{margin:2px 0 2px}
+.bd-quote{margin:6px 0 8px;padding:2px 0 2px 12px;border-left:3px solid var(--line);color:var(--muted)}
+.bd-hr{border:0;border-top:1px solid var(--line);margin:10px 0}
+/* chip de id dentro do brief: um pouco menos de respiro lateral, para a pontuação da frase não parecer solta */
+.brief-body .idchip{padding-left:5px;padding-right:5px}
+.bd-code{font:11.5px ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--chip);color:var(--muted);padding:1px 6px;border-radius:6px;overflow-wrap:anywhere;margin:0 1px}
+.bd-nb{white-space:nowrap}
+a.bd-id{display:inline-flex;align-items:center;min-height:24px;vertical-align:middle}
+/* entidade citada: etiqueta = id + título + situação lidos do modelo */
+.bd-tag{display:inline-flex;align-items:center;gap:6px;max-width:100%;min-height:24px;margin:4px 2px 4px 0;padding:1px 8px 1px 3px;
+  border:1px solid color-mix(in srgb,var(--ink) 16%,transparent);border-radius:8px;font-size:12.5px;line-height:1.4;color:var(--ink);vertical-align:middle}
+a.bd-tag:hover{border-color:var(--accent);text-decoration:none}
+.bd-tag-t{min-width:0;max-width:36ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* situação = o chip de estado do painel (h-em-risco · h-atencao · h-info …): delimita o fim do título em vez de só mudar a cor da letra */
+.bd-tag .bd-tag-s{line-height:1.25;padding:1px 7px;vertical-align:0}
+.bd-tag>*{flex:none}
+.bd-tag .bd-tag-t{flex:0 1 auto}
+.bd-tag.is-done{color:var(--muted)}
+.bd-tag.is-late .idchip{background:var(--riskbg);color:var(--risk)}
+.bd-tag.is-soon .idchip,.bd-tag.is-prop .idchip,.bd-tag.is-block .idchip{background:var(--warnbg);color:var(--warn)}
+.bd-tag.is-ask .idchip{background:var(--infobg);color:var(--info)}
+/* várias entidades no mesmo item: duas por linha — chip e situação nunca encolhem, o título cede com reticências */
+.bd-tag-m{max-width:calc(50% - 6px)}
+.bd-tag-m .bd-tag-t{max-width:340px}
+/* brief recolhido: além de 3 seções mostra as primeiras e um controle para abrir tudo.
+   Sem gradiente: o corte cai no espaço em branco entre a última seção visível e o rótulo da seguinte (bdFitClamp). */
+.brief-body.is-clamped{max-height:340px;overflow:hidden}
+.brief-body.is-open{max-height:none}
+.bd-more{display:inline-flex;align-items:center;gap:6px;min-height:32px;margin:4px 0 0;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--accent);
+  font:600 12.5px/1 system-ui,-apple-system,"Segoe UI",Roboto,Ubuntu,sans-serif;cursor:pointer}
+.bd-more:hover{border-color:var(--accent)}
+.bd-more-n{color:var(--muted);font-weight:500}
+/* lado direito do cabeçalho: atalho dos avisos de saúde (sem ocupar linha) + "atualizado HH:MM" */
+.brief-when{display:inline-flex;align-items:center;gap:8px;color:var(--muted);font-size:12.5px;white-space:nowrap}
+a.bd-hl{display:inline-flex;align-items:center;min-height:24px;font-weight:600;color:var(--warn)}
+a.bd-hl:hover{color:var(--accent);text-decoration:underline}
 .brief-quiet{margin:0;font-size:14px;color:var(--muted)}
 .brief-card.is-quiet .brief-head{margin-bottom:4px}

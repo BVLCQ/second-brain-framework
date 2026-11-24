@@ -1,3 +1,51 @@
+## 2.38.0 — as 12 issues abertas: painel, memória e os buracos de segurança que ainda estavam abertos
+
+- **O fim do assistente abre a Home (#164).** O botão "Abrir meu Brain" troca o endereço para `#home` antes de redesenhar o painel. Antes a página continuava em `#onboarding` e o assistente reabria no último passo.
+- **O token da ponte só entra no carregamento (#114).** Um `#t=` que aparece só no fragmento, sem recarregar a página, é descartado. Reaproveitar a aba no macOS força uma navegação completa (`?n=`), para o token novo entrar no boot e não ficar eterno na sessão.
+- **Noturno e ações ⚡ sem shell livre (#101).** O Claude headless só lê e roda `./brain`. Flags de bypass (`--force`, `--yolo`, `--full-auto`) não sobem no noturno. A sessão interativa do dono não muda.
+- **O noturno não aplica atualização (#107).** `brain update` no noturno ou no agente só pode checar. O doctor e o hook só rodam se o commit puxado é o que o fetch prometeu.
+- **Agente não aprova no lugar do dono (#102, #109, #110).** Com `BRAIN_AGENT` ou `BRAIN_NIGHTLY`, gate e resposta de pergunta são recusados. Confirmar o formulário na TUI ou no painel continua valendo.
+- **Instalador remoto só roda com sha256 (#141, #142).** Homebrew, mise, Docker e LM Studio são conferidos contra um pin antes de executar. Divergência aborta e aponta a receita manual.
+- **Esforço padrão da memória é `high` (#159).** Claude Code e Anthropic novos gravam `high`, não `max`. Um `.env` que já tem `max` fica como está; o doctor avisa que difere do padrão.
+- **Login manual aparece antes da escolha (#158).** ChatGPT, Nous e Copilot ficam no fim da lista, com o rótulo do que falta. Cursor sai do wizard (indisponível neste Docker) e o doctor não mostra verde sem login no servidor.
+- **Decisor no recall e decisor local (#163).** O slot Decisão ganha `local` (nada sai da máquina) e, no provedor hospedado, a opção de julgar o recall — desligada por padrão, com teto de candidatos explícito no que o servidor pinado realmente lê. O recall local fica de fora até haver medição de latência.
+
+## 2.37.1 — wizard: o seletor de Tipo na mesma caixa dos campos, e sem opção que o formulário não sabe preencher
+
+- **Corrigido o seletor menor que o campo ao lado.** No passo "Fontes observadas", os seletores (Tipo e
+  Janela) apareciam mais baixos que o campo de texto ao lado, com a seta e o texto fora do eixo: o
+  navegador desenha `<select>` com o tema nativo do sistema e não respeita o padding de cima e de
+  baixo. Agora seletor e campo têm a mesma altura e a mesma borda, nos dois temas (claro e escuro), com
+  a seta desenhada na cor do tema.
+- **Fora a opção "slack-dm · DMs e grupos do Slack".** Escolher esse tipo abria um campo com o rótulo
+  "undefined" e descartava o que fosse digitado: o formulário do wizard não sabe preencher esse tipo
+  (ele nasce pelo `brain watch add --kind slack-dm`, opt-in do dono). O Tipo só lista o que o
+  formulário sabe preencher — e um teste guarda isso: tipo novo no servidor sem receita no formulário
+  reprova até a decisão ser tomada de propósito.
+- **Rótulo longo cabe inteiro.** A coluna do Tipo ganhou largura ("drive-doc · doc, planilha ou slides"
+  aparece inteiro, em vez de cortado no meio da letra); quando o tipo não tem janela, Tipo e Key
+  ocupam a linha inteira em vez de deixar um buraco à direita.
+
+## 2.37.0 — o brief do dia vira cartão de verdade (#160)
+
+- **Cartão "Seu dia" renderizado (#160):** o brief do agente deixa de aparecer
+  em Markdown cru. Seção vira rótulo, lista vira lista, e cada id citado
+  (`TASK-`, `DEC-`, `PROP-`, `ASK-`, `GOAL-`…) vira etiqueta com link para a
+  ficha — o título e a situação (vence hoje, atrasada 3d, fechada, aguarda
+  decisão) vêm do painel, não do texto. Mais de 3 seções ficam recolhidas atrás
+  de "Mostrar tudo"; aviso de saúde vira link no cabeçalho para a tela de saúde.
+- **Título e "(noturno)" fora:** a primeira linha `# Brief do dia — … (noturno)`
+  não aparece (o cartão já tem data e horário) e a skill `/brief` passa a definir
+  o formato — Markdown mínimo, sem linha de título, sem seção de saúde, ids
+  soltos, gravado com `./brain note write brief --file`.
+- **Notas do agente:** o painel renderiza `FRESH/notes/*.md` pelo mesmo caminho
+  (o `/week` ganha seções e etiquetas) e o brief de hoje não aparece duas vezes;
+  o de outro dia continua legível quando o cartão está quieto.
+- **Entrada não confiável:** o brief é texto do agente, que leu a inbox. Tudo
+  passa por `esc()` antes de qualquer marca; HTML, imagem, `javascript:`/`data:`
+  e atributo vindo do texto nunca entram. Seção vazia não aparece nem conta
+  para recolher. Regressão: `tests/test_panel_brief_render.py`.
+
 ## 2.36.0 — lote de polimento da interface (#95–#100)
 
 - **Projetos no celular (#95):** o chip de motivo do goal ("↳ …") ganha linha

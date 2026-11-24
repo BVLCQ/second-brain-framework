@@ -8,7 +8,7 @@ Só o agente pergunta; só o dono responde (e nunca no noturno).
 from __future__ import annotations
 
 
-from . import ids, schema, util
+from . import gates, ids, schema, util
 from .cli import _common, _fact_opts, _out
 from .core import Brain
 
@@ -59,6 +59,7 @@ def cmd_ask(args, b: Brain) -> None:
     elif c == "answer":
         if getattr(args, "by", None) != "owner":
             raise util.BrainError("ask answer: exige --by owner explícito (quem responde é o dono)", code=4)
+        gates.require_owner_present(what="ask answer")
         q = _need(b, args.id)
         ev = b.record_one(_common({"type": "question.answered", "id": args.id, "data": {
             "answer": args.answer, "free": bool(q.options and args.answer not in q.options) or None}}, args))

@@ -1886,7 +1886,7 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
                                               "Extrai decisões, ações e fatos com proveniência", "Grava tudo pelo ./brain e regenera as views"], "/dump")
 
     def agent_brief(self) -> None:
-        self.ask_agent("Brief do dia", ["Lê FRESH/home.md e todo.md", "Escreve a narrativa em FRESH/notes/ (o painel exibe como está)"], "/brief")
+        self.ask_agent("Brief do dia", ["Lê FRESH/home.md e todo.md", "Escreve a narrativa em FRESH/notes/ no formato do painel (Markdown mínimo, ids soltos)"], "/brief")
 
     MCP_NOTE = "Precisa de permissão para as ferramentas MCP de leitura ([runner].allow ou [runner].command no brain.toml)"
 

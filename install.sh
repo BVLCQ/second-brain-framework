@@ -23,9 +23,69 @@ REPO_URL="https://github.com/BVLCQ/second-brain-framework"
 DEST="${1:-$HOME/Apps/second-brain-framework}"
 
 OS="$(uname -s)"
+SCRIPT_DIR=$(
+    if cd "$(dirname -- "$0")" 2>/dev/null; then
+        pwd -P
+    else
+        pwd -P
+    fi
+)
 say() { printf '→ %s\n' "$1"; }
 ok() { command -v "$1" >/dev/null 2>&1; }
 works() { "$1" --version >/dev/null 2>&1; }  # pega o stub git da Apple sem CLT
+
+file_sha256() {
+    _fs_out=""
+    if ok sha256sum; then
+        _fs_out="$(sha256sum "$1")" || return 1
+    elif ok shasum; then
+        _fs_out="$(shasum -a 256 "$1")" || return 1
+    else
+        return 1
+    fi
+    [ -n "${_fs_out:-}" ] || return 1
+    printf '%s\n' "${_fs_out%% *}" | tr '[:upper:]' '[:lower:]'
+}
+
+read_installer_pin() {
+    _rip_name="$1"
+    _rip_file=""
+    if [ -n "${BRAIN_INSTALLER_PINS:-}" ]; then
+        [ -f "$BRAIN_INSTALLER_PINS" ] || return 1
+        _rip_file="$BRAIN_INSTALLER_PINS"
+    elif [ -f "$PWD/scripts/installer-pins.json" ]; then
+        _rip_file="$PWD/scripts/installer-pins.json"
+    elif [ -f "$SCRIPT_DIR/scripts/installer-pins.json" ]; then
+        _rip_file="$SCRIPT_DIR/scripts/installer-pins.json"
+    else
+        return 1
+    fi
+    _rip_compact="$(tr -d '[:space:]' < "$_rip_file")" || return 1
+    _rip_obj="$(printf '%s' "$_rip_compact" | sed -n 's/.*"'"$_rip_name"'":{\([^}]*\)}.*/\1/p')"
+    _rip_hash="$(printf '%s' "$_rip_obj" | sed -n 's/.*"sha256":"\([^"]*\)".*/\1/p' | tr '[:upper:]' '[:lower:]')"
+    [ -n "$_rip_hash" ] || return 1
+    printf '%s\n' "$_rip_hash"
+}
+
+verify_installer_pin() {
+    _vip_name="$1"
+    _vip_file="$2"
+    _vip_got="$(file_sha256 "$_vip_file" || true)"
+    if [ -z "$_vip_got" ]; then
+        echo "⚠ não consegui calcular o sha256 de $_vip_name (sha256sum/shasum ausente) — execução recusada."
+        return 1
+    fi
+    _vip_expected="$(read_installer_pin "$_vip_name" || true)"
+    if [ -z "$_vip_expected" ]; then
+        echo "⚠ pin sha256 ausente para '$_vip_name' (esperado: <ausente>, obtido: $_vip_got) — execução recusada."
+        return 1
+    fi
+    if [ "$_vip_got" != "$_vip_expected" ]; then
+        echo "⚠ sha256 divergente para '$_vip_name' (esperado: $_vip_expected, obtido: $_vip_got) — execução recusada."
+        return 1
+    fi
+    return 0
+}
 SUDO=""
 [ "$(id -u)" = "0" ] || SUDO="sudo"
 tmpscript="$(mktemp)"
@@ -83,6 +143,7 @@ ensure_brew() {
     fi
     say "Homebrew (instalador oficial — pode pedir a senha da sessão)…"
     if ! curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh -o "$tmpscript" || \
+       ! verify_installer_pin homebrew "$tmpscript" || \
        ! NONINTERACTIVE=1 /bin/bash "$tmpscript"; then
         echo "⚠ Homebrew não instalado — receita manual: setup.md §0."
         return 1
@@ -172,7 +233,9 @@ if ! ok mise; then
         fi
     else
         say "mise (instalador oficial)…"
-        if ! curl -fsSL https://mise.jdx.dev/install.sh -o "$tmpscript" || ! sh "$tmpscript"; then
+        if ! curl -fsSL https://mise.jdx.dev/install.sh -o "$tmpscript" || \
+           ! verify_installer_pin mise "$tmpscript" || \
+           ! sh "$tmpscript"; then
             echo "⚠ mise não instalado — sigo se já houver Python 3.11+ na máquina."
         fi
     fi
@@ -219,7 +282,9 @@ if [ "$OS" = "Darwin" ]; then
 else
     if ! ok docker; then
         say "Docker Engine (instalador oficial)…"
-        if ! curl -fsSL https://get.docker.com -o "$tmpscript" || ! sh "$tmpscript"; then
+        if ! curl -fsSL https://get.docker.com -o "$tmpscript" || \
+           ! verify_installer_pin docker "$tmpscript" || \
+           ! sh "$tmpscript"; then
             echo "⚠ Docker não instalado — o passo Memória do wizard aponta o caminho."
         elif $SUDO usermod -aG docker "$USER" 2>/dev/null; then
             echo "ℹ grupo docker adicionado — vale após re-login"

@@ -121,6 +121,40 @@ class MemorySetupKeepsUnaddressedSlots(unittest.TestCase):
             self._configure(b, {**base, "decision": {"provider": "off"}})
             self.assertEqual(config.load(b.inst.root).cfg["memory"]["decision_provider"], "off")
 
+    def test_decision_recall_flag_is_applied_with_the_same_provider(self):
+        """Confluência com o #163 (merge): o payload liga — ou desliga — o decisor no recall SEM trocar o provedor.
+        "Mesmo provedor" não quer dizer "slot fica como está": sem isso o pedido era engolido pelo kept."""
+        base = {"mode": "full", "consent": True, "provider": "openai", "model": "gpt-prova", "key": "sk-" + "1",
+                "embeddings": "fireworks", "emb_key": "fw-" + "1"}
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            providers.set_slot(b, "decision", "hindsight", key="hs-" + "1")            # recall desligado
+            self.assertFalse(config.load(b.inst.root).cfg["memory"].get("decision_recall"))
+            self._configure(b, {**base, "decision": {"provider": "hindsight", "recall": "on", "candidates": 30}})
+            mem = config.load(b.inst.root).cfg["memory"]
+            self.assertEqual((mem["decision_provider"], mem.get("decision_recall"), mem.get("decision_max_candidates")),
+                             ("hindsight", True, 30))
+            self.assertIn("hs-" + "1", config.load_env(b.inst).values())                # a chave não se perdeu
+            self._configure(b, {**base, "decision": {"provider": "hindsight", "recall": "off"}})
+            mem = config.load(b.inst.root).cfg["memory"]
+            self.assertEqual((mem["decision_provider"], mem.get("decision_recall")), ("hindsight", False))
+
+    def test_reranker_key_is_ignored_while_the_recall_decider_is_on(self):
+        """Confluência com o #163 (merge): com o decisor ligado no recall o reranker fica inerte e o .env dele é
+        preservado — nem a chave que o payload traga para ele é gravada (a rotação dos slots que ficam como estão
+        vale para os outros slots)."""
+        base = {"mode": "full", "consent": True, "provider": "openai", "model": "gpt-prova", "key": "sk-" + "1",
+                "embeddings": "fireworks", "emb_key": "fw-" + "1",
+                "decision": {"provider": "hindsight", "key": "hs-" + "1", "recall": "on", "candidates": 30}}
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            providers.set_slot(b, "reranker", "cohere", key="ck-" + "1")
+            self._configure(b, {**base, "reranker": {"provider": "cohere", "key": "ck-" + "NOVA"}})
+            env = config.load_env(b.inst)
+            self.assertEqual((env.get("HINDSIGHT_API_RERANKER_PROVIDER"), env.get("HINDSIGHT_API_RERANKER_COHERE_API_KEY")),
+                             ("cohere", "ck-" + "1"))
+            self.assertTrue(providers.stack(b)["reranker"]["inert"])
+
     @staticmethod
     def _slots_view(b: Brain) -> tuple[dict, dict]:
         """O que diz respeito a provedor/modelo/chave de cada slot: a configuração e o .env inteiros."""
@@ -362,9 +396,11 @@ class MemorySetupAppliesCustomSlotValues(unittest.TestCase):
         js = (ROOT / "brainlib" / "assets" / "src" / "extra.js").read_text(encoding="utf-8")
         self.assertRegex(js, r"""\{key: "custom",[^\n]*m\.emb_key\}""")              # menu de embeddings
         self.assertRegex(js, r"""\{key: "custom",[^\n]*m\.rer_key\}""")              # menu de reranker
-        self.assertIn('const needModel = slot === "llm" || curKey === "custom";', js)
+        # modelo só para o LLM e para `custom`; a Base URL, para `custom` e para o decisor local (#163) — `needUrl`
+        self.assertIn('const needUrl = curKey === "custom" || (slot === "decision" && curKey === "local");', js)
+        self.assertIn('const needModel = slot === "llm" || needUrl;', js)
         self.assertIn("id=\"model-' + slot + '\"", js)
-        self.assertRegex(js, r"""curKey === "custom" \? '<label[^>]*><span>Base URL</span><input[^>]*id="url-' \+ slot""")
+        self.assertRegex(js, r"""needUrl \? '<label[^>]*><span>Base URL</span><input[^>]*id="url-' \+ slot""")
         self.assertIn("if (mEl && mEl.value.trim()) obj.model = mEl.value.trim();", js)
         self.assertIn("if (uEl && uEl.value.trim()) obj.base_url = uEl.value.trim();", js)
         self.assertIn('body.embeddings = readSlot("embeddings");', js)

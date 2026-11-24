@@ -268,10 +268,10 @@ Três slots independentes, escolhidos no wizard e re-editáveis a qualquer momen
 
 | Slot | Default | Nuvem recomendada | Onde muda |
 |---|---|---|---|
-| **LLM** (só `full`) | — | Anthropic ✓ (Haiku 5.5 em TUDO, esforço max — régua do dono) · claude-code/xai-oauth (assinatura) · Fireworks (DeepSeek v4.1) · Z.ai (glm-5.3-flash) · OpenAI (gpt-6-luna) · Gemini (3.1-flash-lite) · MiniMax (M3.1-Flash) · custom | wizard · `brain memory providers set llm …` · TUI Configurações · painel |
+| **LLM** (só `full`) | — | Anthropic ✓ (Haiku 5.5 em TUDO, esforço high — régua do dono) · claude-code/xai-oauth (assinatura com login guiado) · Fireworks (DeepSeek v4.1) · Z.ai (glm-5.3-flash) · OpenAI (gpt-6-luna) · Gemini (3.1-flash-lite) · MiniMax (M3.1-Flash) · custom | wizard · `brain memory providers set llm …` · TUI Configurações · painel |
 | **Embeddings** | embed: local — LM Studio bge-m3 (zero egress) · **full: Fireworks `qwen3-embedding-8b` @1536 (só-nuvem)** | Fireworks `qwen3-embedding-8b` @1536 · OpenAI · Cohere · custom | idem |
 | **Reranker** | off — fusão RRF (veredito 2026-11-07: local reprovado no gate de 400 ms) | Fireworks `qwen3-reranker-8b` (top-50) · Cohere · ZeroEntropy · OpenRouter · custom | idem |
-| **Decisão** (só `full`) | **off — cada um paga só os tokens do próprio LLM (pular é normal)** | Hindsight `hs-decide-1-flash` — US$ 0,02/1M de entrada, chave `hsk_` por uso | idem |
+| **Decisão** (só `full`) | **off — cada um paga só os tokens do próprio LLM (pular é normal)** | Hindsight `hs-decide-1-flash` — US$ 0,02/1M de entrada, chave `hsk_` por uso (`--recall on --candidates N` opcional) · ou `local` (`/v1/systemone`, zero egress) | idem |
 
 Regras do desenho:
 
@@ -287,8 +287,8 @@ Regras do desenho:
 - **A escolha mora no `[memory]`** (`llm_provider`, `embeddings_provider`, `reranker_provider`…);
   **a chave mora no `config/.env`** (0600) e nunca volta em output, view ou painel.
 - **Egress é dito na tela**: qualquer provedor de nuvem manda texto do vault para fora
-  (LLM para extrair, embeddings para vetorizar, reranker para ranquear) — o wizard avisa
-  em cada escolha e o doctor narra (`cloud_embeddings`/`cloud_reranker`/`cloud_llm`).
+  (LLM para extrair, embeddings para vetorizar, reranker para ranquear, decisor em nuvem para julgar) — o wizard avisa
+  em cada escolha e o doctor narra (`cloud_embeddings`/`cloud_reranker`/`cloud_decision`/`cloud_llm`).
 - **Compose**: o `env_file: ../config/.env` injeta as chaves `HINDSIGHT_API_*` no container;
   os cinco campos do stack local são fallback de fábrica. Trocou provedor? Recrie com
   `--env-file config/.env`. **Trocou embeddings?** Vetores antigos ficam incompatíveis —
@@ -310,7 +310,8 @@ Memória), com o chip de estado: *autenticado* ✓ / *autenticar* ⚠.
 |---|---|---|
 | `claude-code` | `claude setup-token` na máquina → token de longo prazo no `config/.env` (`HINDSIGHT_API_LLM_API_KEY`, o caminho *server-held token* do Hindsight — sobrevive a recreate) | Sim, ponta a ponta (`brain memory auth claude-code`): exige o CLI `claude` logado na máquina |
 | `xai-oauth` | device-code DENTRO do container: URL + código que você aprova em qualquer navegador; store no volume `hindsight-auth` | Sim (`brain memory auth xai-oauth`): sobe o servidor com o volume e narra a URL no job |
-| `chatgpt` · `cursor` · `github-copilot` · `nous` | login no servidor de memória (navegador/CLI do próprio provedor) | Não nesta instalação Docker — o hint do provedor carrega o caminho exato |
+| `chatgpt` · `nous` · `github-copilot` | login manual no servidor de memória (`docker exec -it hindsight …`, exibido no wizard via `auth_command`). No Copilot o modelo padrão (`gpt-5.6-terra`) é fraco para memória | Não nesta instalação Docker — aparecem no fim do menu com o sufixo *"login manual no servidor"* e o doctor avisa *"login no servidor não verificado"* quando não há evidência de login |
+| `cursor` | `cursor-agent` logado no servidor de memória | Indisponível nesta instalação Docker — omitido do menu padrão do wizard/painel (ainda aceito pela CLI, com aviso no `brain doctor`) |
 
 **Renovação (o que é automático e o que não é):** o *access token* o Hindsight renova
 sozinho (proativo antes de expirar, reativo no 401 — cada provedor gira o próprio store).
@@ -333,9 +334,11 @@ recomendado — o placeholder diz exatamente qual. As recomendações são **cur
 na frente da tabela do servidor pinado (estudo 2026-11-19, leaderboard oficial da Hindsight
 + preço de catálogo):
 
-- **Anthropic e Claude Code**: `claude-haiku-5-5` em TODAS as operações, esforço `max`
+- **Anthropic e Claude Code**: `claude-haiku-5-5` em TODAS as operações, esforço `high`
   (régua do dono — superou o antigo cenário B com Sonnet: haiku-5.5+decide é a melhor
-  qualidade acessível, 88.5 all-ops, 14/14 idiomas no retain, e $0.10/$0.50 até 100k).
+  qualidade acessível, 88.5 all-ops, 14/14 idiomas no retain, e $0.10/$0.50 até 100k;
+  se o `config/.env` já tiver `HINDSIGHT_API_LLM_REASONING_EFFORT=max`, o Brain preserva o
+  arquivo e o `brain doctor` apenas avisa que está diferente do padrão `high`).
 - **OpenAI/ChatGPT**: `gpt-6-luna` (#2 geral, $11/1k; retain 95.8 @ $0.43/1k).
 - **Z.ai**: `glm-5.3-flash` (#1 VALOR — $9.33/1k all-ops; #1 consolid. e reflect).
 - **Gemini**: `gemini-3.1-flash-lite` ($0.25/$1.50) — **não** a 3.8-flash: 3-6× o preço e
@@ -362,12 +365,35 @@ das chamadas do LLM SUBINDO a qualidade** (haiku-5.5: US$ 35→21 por 1k casos, 
   `inference.hindsight.vectorize.io` e cola no wizard (ou `brain memory providers set
   decision --provider hindsight --key …`). Dono cobre a sua e as da equipe; quem não quer
   cola nada e fica no padrão.
-- **Egress**: trechos pequenos de memória vão à nuvem de inferência do Hindsight para
-  julgamento — mesmo gate narrado dos outros provedores de nuvem.
-- **Segurança de queda**: se o decisor falha, consolidação/reflect/páginas voltam ao
-  caminho só-LLM (perde-se a economia, nunca a operação). Recall segue com RRF.
-- **Servidor**: o pin 1.2.0 já suporta (off = `none`, o valor de fábrica); o doctor aponta
-  chave ausente com o comando exato quando o slot está ligado.
+- **Egress**: no provedor `hindsight`, trechos pequenos de memória vão à nuvem de inferência do
+  Hindsight para julgamento (`cloud_decision = true`) — mesmo gate narrado dos outros provedores
+  de nuvem. No provedor `local`, nada sai da máquina (`cloud_decision = false`).
+- **Segurança de queda e decisor no recall (`--recall on|off`, padrão `off`)**:
+  - Com `--recall off` (padrão, `HINDSIGHT_API_RECALL_DECISION_MODEL_PROVIDER=none`), o decisor
+    só atua em consolidação/reflect/páginas: se falhar ali, essas operações voltam ao caminho
+    só-LLM (perde-se a economia, nunca a operação) e o recall segue pelo caminho normal (RRF/reranker).
+  - Com `--recall on` (`HINDSIGHT_API_RECALL_DECISION_MODEL_PROVIDER=hindsight`, disponível apenas
+    no modo `full` com o provedor `hindsight`), o decisor também julga os candidatos do recall.
+    Ligar exige um teto explícito de candidatos (`--candidates N`, sem default silencioso), e o
+    slot Reranker fica oculto/inerte (o valor existente no `config/.env` é preservado, não apagado).
+    **Importante**: com o decisor ligado no recall **não há fallback para RRF** nesta versão do
+    servidor (1.2.0) — cada candidato gera uma requisição própria ao decisor e, se o decisor cair,
+    **o recall falha fechado**. O `brain doctor` emite aviso sempre que o recall com decisor está ativo.
+- **Decisor local (`--provider local`, primeira entrega)**:
+  - Exceção declarada no modo `full`: permite rodar o `hs-decide-1-flash` localmente sem egress
+    (`cloud_decision = false`, `HINDSIGHT_API_DECISION_MODEL_MAX_CONCURRENT=1`, `BASE_URL` e
+    `API_KEY` obrigatórias; ao trocar de `local` para outro provedor, `HINDSIGHT_API_DECISION_MODEL_BASE_URL`
+    é removida do `config/.env`). O slot LLM continua proibido para modelos locais e o modo `embed`
+    continua sem decisor.
+  - **`hs-decide` não é servido por LM Studio nem Ollama**: o protocolo do modelo é `/v1/systemone`.
+    O Brain **não inicia nem gerencia** o processo do servidor local. Os três servidores documentados
+    em alto nível são: **MLX** (Apple Silicon), **vLLM** (Linux com GPU) e **transformers** (referência
+    Python). O comando de subida está no model card do modelo (não fixamos versão de MLX não medida),
+    e esta primeira entrega **não habilita recall com decisor local** (`--recall on` é recusado com
+    `local`, aguardando medição de latência). O `brain doctor` apenas verifica a alcançabilidade
+    (reescrevendo `host.docker.internal` para `localhost` fora do container).
+- **Servidor**: o pin 1.2.0 já suporta (`off` = `none`, o valor de fábrica); o doctor aponta
+  chave/URL ausente quando o slot está ligado.
 
 ## Migração de instâncias antigas (0.10.x · dois bancos · sem harnesses)
 
