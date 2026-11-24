@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import getpass
+import hashlib
 import html
 import json
 import os
@@ -240,7 +241,8 @@ def docker_state(up: bool | None = None, which=shutil.which, exists=None) -> str
     return "installed" if docker_installed(which, exists) else "missing"
 
 
-def docker_ensure(ui, run=_run, which=shutil.which) -> bool:
+def docker_ensure(ui, run=_run, which=shutil.which, fetch=None,
+                  pins: dict[str, str] | None = None) -> bool:
     """Traz o runtime de contêiner ao estado que o Brain precisa — instala se faltar e sobe o
     daemon — narrando cada passo (mesma regra do LM Studio: o dono fica ciente, não executa).
     macOS: OrbStack (cask oficial do Homebrew; `orb start` sobe). Linux/WSL: Docker Engine
@@ -278,9 +280,10 @@ def docker_ensure(ui, run=_run, which=shutil.which) -> bool:
             import tempfile
             with tempfile.TemporaryDirectory() as td:
                 script = Path(td) / "get-docker.sh"
-                err = _fetch(DOCKER_INSTALL_URL, script, timeout=120)
+                err = _fetch_verified(DOCKER_INSTALL_URL, script, "docker",
+                                      timeout=120, fetch=fetch, pins=pins)
                 if err:
-                    ui.say(f"✗ não consegui baixar o instalador do Docker ({err}) — manual: "
+                    ui.say(f"✗ não consegui baixar/verificar o instalador do Docker ({err}) — manual: "
                            "curl -fsSL https://get.docker.com | sh")
                     return False
                 code, out = run(["sh", str(script)], timeout=1800)
@@ -404,6 +407,28 @@ def lmstudio_model_present(bin_: str, model: str, run=_run) -> bool:
     return code == 0 and model in out
 
 
+INSTALLER_PINS_PATH = FRAMEWORK / "scripts" / "installer-pins.json"
+
+
+def _load_installer_pins(path: Path | None = None) -> dict[str, str]:
+    """Carrega mapa {nome: sha256} de scripts/installer-pins.json."""
+    p = path or INSTALLER_PINS_PATH
+    try:
+        raw = json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    pins = raw.get("pins") if isinstance(raw, dict) else None
+    if not isinstance(pins, dict):
+        return {}
+    out: dict[str, str] = {}
+    for k, v in pins.items():
+        if isinstance(v, dict) and isinstance(v.get("sha256"), str) and v["sha256"].strip():
+            out[str(k)] = v["sha256"].strip().lower()
+        elif isinstance(v, str) and v.strip():
+            out[str(k)] = v.strip().lower()
+    return out
+
+
 def _fetch(url: str, dest: Path, timeout: int = 120) -> str | None:
     """Baixa a url para dest (arquivo temporário, nunca `curl | sh`). Devolve erro ou None."""
     try:
@@ -414,7 +439,30 @@ def _fetch(url: str, dest: Path, timeout: int = 120) -> str | None:
         return str(e)
 
 
-def lmstudio_ensure(ui, model: str = "", run=_run, which=shutil.which) -> bool:
+def _fetch_verified(url: str, dest: Path, pin_name: str, *, timeout: int = 120,
+                    fetch=None, pins: dict[str, str] | None = None) -> str | None:
+    """Baixa url para dest e confere sha256 contra scripts/installer-pins.json antes de executar."""
+    downloader = _fetch if fetch is None else fetch
+    err = downloader(url, dest, timeout=timeout)
+    if err:
+        return err
+    try:
+        got = hashlib.sha256(dest.read_bytes()).hexdigest().lower()
+    except OSError as e:
+        return f"não consegui ler o instalador baixado ({e})"
+    pin_table = _load_installer_pins() if pins is None else pins
+    entry = pin_table.get(pin_name)
+    expected = (entry.get("sha256") if isinstance(entry, dict) else entry) or ""
+    expected = str(expected).strip().lower()
+    if not expected:
+        return f"pin sha256 ausente para '{pin_name}' (esperado: <ausente>, obtido: {got})"
+    if got != expected:
+        return f"sha256 divergente para '{pin_name}' (esperado: {expected}, obtido: {got})"
+    return None
+
+
+def lmstudio_ensure(ui, model: str = "", run=_run, which=shutil.which,
+                    fetch=None, pins: dict[str, str] | None = None) -> bool:
     """Traz o LM Studio ao estado que o Brain especifica — instalação, servidor :1234 e modelo
     de embeddings — narrando cada passo (o dono fica ciente, não executa nada à mão). Devolve
     True quando o servidor responde com o modelo no disco (carregar é best-effort: o JIT cobre).
@@ -434,9 +482,9 @@ def lmstudio_ensure(ui, model: str = "", run=_run, which=shutil.which) -> bool:
         import tempfile
         with tempfile.TemporaryDirectory() as td:
             script = Path(td) / "install.sh"
-            err = _fetch(LMS_INSTALL_URL, script)
+            err = _fetch_verified(LMS_INSTALL_URL, script, "lmstudio", fetch=fetch, pins=pins)
             if err:
-                ui.say(f"✗ não consegui baixar o instalador do LM Studio ({err}) — baixe em "
+                ui.say(f"✗ não consegui baixar/verificar o instalador do LM Studio ({err}) — baixe em "
                        "https://lmstudio.ai e rode `brain setup --only memoria` de novo")
                 return False
             code, out = run(["bash", str(script)], timeout=900)
