@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Poll do repositório do framework: `brain update --check` no login e a cada 2h. Só faz `git fetch` e grava o
+     cache de FRESH/.update-check.json (o painel e a TUI leem dali); não altera código nem views.
+     O caminho da instância entra no lugar do placeholder __BRAIN_DIR__ ao instalar — este arquivo não é
+     válido como está:
+       sed "s#__BRAIN_DIR__#$PWD#g" services/com.segundo-cerebro.updatecheck.plist \
+         > ~/Library/LaunchAgents/com.segundo-cerebro.updatecheck.plist
+       launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.segundo-cerebro.updatecheck.plist -->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.segundo-cerebro.updatecheck</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__BRAIN_DIR__/brain</string>
+    <string>update</string>
+    <string>--check</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>__BRAIN_DIR__</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>BRAIN_HOME</key>
+    <string>__BRAIN_DIR__</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>StartInterval</key>
+  <integer>7200</integer>
+  <key>StandardOutPath</key>
+  <string>__BRAIN_DIR__/vault/logs/updatecheck.log</string>
+  <key>StandardErrorPath</key>
+  <string>__BRAIN_DIR__/vault/logs/updatecheck.log</string>
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>LowPriorityIO</key>
+  <true/>
+</dict>
+</plist>

@@ -1,3 +1,9 @@
+## 2.40.0 — o aviso de atualização checa o repositório a cada 2h e não afirma "em dia" sem ter conferido
+
+- **Poll do upstream a cada 2h.** Um LaunchAgent opcional (`services/com.segundo-cerebro.updatecheck.plist`) roda `brain update --check` no login e de 2 em 2 horas. `update --check` passa a perguntar ao remoto de verdade, em vez de reaproveitar um cache de 24h; a validade do cache cai para 2h.
+- **O noturno confere o upstream todo dia.** A checagem usava o cache de 24h: uma checagem feita de dia dispensava a da madrugada seguinte. Agora o noturno força a checagem e a faz antes do render final, para o painel da manhã nascer com o resultado de hoje, não o de ontem.
+- **"Em dia" só com verificação recente.** O selo do painel e o doctor mostram "sem verificar" quando a última verificação tem mais de 4h ou falhou por rede, em vez de afirmar "em dia" por causa de um `behind: 0` antigo.
+
 ## 2.39.0 — o scan não cai com nome estranho, e o recall gravado não se desliga sozinho
 
 - **Nome entre aspas com byte inválido não derruba o scan.** O git imprime esse nome entre aspas, com o byte cru lá dentro. A leitura quebrava a varredura inteira. O byte fica guardado e o arquivo entra na acusação.

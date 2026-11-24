@@ -195,7 +195,7 @@ def _version(root: Path) -> str:
 
 # ── novidades (CHANGELOG.md) e verificação de atualização com cache ─────────
 CHECK_CACHE = ".update-check.json"       # em FRESH/ (derivado): último resultado da verificação
-CHECK_MAX_AGE_H = 24
+CHECK_MAX_AGE_H = 2                      # poll do upstream: services/com.segundo-cerebro.updatecheck.plist roda a cada 2h
 
 
 def _vkey(v: str) -> tuple:
@@ -233,6 +233,17 @@ def news_between(text: str, from_v: str, to_v: str | None = None) -> list[str]:
     return out
 
 
+def check_is_stale(cache: dict, max_age_h: float = CHECK_MAX_AGE_H * 2) -> bool:
+    """O cache não prova "em dia": vazio, com erro de rede ou mais velho que o dobro do intervalo do poll."""
+    from . import util as _u
+    if not cache or cache.get("error"):
+        return bool(cache)
+    try:
+        return (_u.now() - _u.parse_dt(cache["checked_at"])).total_seconds() > max_age_h * 3600
+    except Exception:                                  # noqa: BLE001 — sem data legível = não dá para afirmar
+        return True
+
+
 def read_check_cache(inst) -> dict:
     """Última verificação (sem rede). {} = nunca verificificado."""
     from . import util as _u
@@ -246,7 +257,7 @@ def read_check_cache(inst) -> dict:
 
 
 def check_update(inst, force: bool = False, git=None) -> dict:
-    """Verifica o upstream (git fetch, ≤1×/dia a menos que force) e grava o cache em FRESH/.
+    """Verifica o upstream (git fetch, ≤1× a cada CHECK_MAX_AGE_H a menos que force) e grava o cache em FRESH/.
 
     Sem rede / sem git: devolve o cache antigo marcado `stale=True` — nunca falha,
     nunca bloqueia (superfícies só LÊEM o cache; a rede fica aqui e no noturno).
@@ -1073,14 +1084,15 @@ def _print_json(obj) -> None:
 # ── entrada do CLI ──────────────────────────────────────────────────────────
 def cli_update(args, _b) -> None:
     inst = config.load()
-    if args.check:                                     # verifica (com cache de 24h) ANTES de decidir
-        check_update(inst, force=False)
+    checked: dict = {}
+    if args.check:                                     # pergunta ao remoto de verdade (é o poll de 2h e o pedido do dono)
+        checked = check_update(inst, force=True)
     res = update(inst, check=args.check, rebase=args.rebase, remote=args.remote, branch=args.branch)
     if not args.check:
         from . import perms
         perms.try_sync(config.load(inst.root))   # settings.json novo desceu com o pull: o local acompanha
     if args.check and res.get("behind") and not res.get("news"):
-        res["news"] = check_update(inst, force=True).get("news", [])
+        res["news"] = checked.get("news", [])
     if args.json:
         _print_json(res)
     else:

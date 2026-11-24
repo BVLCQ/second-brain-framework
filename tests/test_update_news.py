@@ -179,5 +179,65 @@ class SurfacesTests(_RepoCase):
         self.assertTrue(any("atualização disponível" in c["detail"] for c in got))
 
 
+class StaleCacheTests(_RepoCase):
+    """O cache de verificação não pode afirmar "em dia" com um behind=0 velho (o selo mentia depois de ontem)."""
+
+    def _ago(self, **kw) -> str:
+        from datetime import timedelta
+        return (util.now() - timedelta(**kw)).isoformat(timespec="seconds")
+
+    def _write_cache(self, **kw):
+        self.inst.fresh.mkdir(parents=True, exist_ok=True)
+        (self.inst.fresh / upstream.CHECK_CACHE).write_text(json.dumps(
+            {"behind": 0, "ahead": 0, "version": "2.1.0", "remote_version": "2.1.0", "error": "", **kw}),
+            encoding="utf-8")
+
+    def test_ttl_is_the_two_hour_poll(self):
+        self.assertEqual(upstream.CHECK_MAX_AGE_H, 2)
+
+    def test_old_cache_is_stale_and_recent_is_not(self):
+        self.assertTrue(upstream.check_is_stale({"behind": 0, "checked_at": self._ago(days=1)}))
+        self.assertFalse(upstream.check_is_stale({"behind": 0, "checked_at": self._ago(minutes=30)}))
+        self.assertTrue(upstream.check_is_stale({"behind": 0, "checked_at": self._ago(minutes=30), "error": "offline"}))
+        self.assertFalse(upstream.check_is_stale({}))                 # nunca verificado: o selo já não diz "em dia"
+
+    def test_expired_cache_refetches_and_sees_new_commits(self):
+        self._write_cache(checked_at=self._ago(days=1))
+        c = upstream.check_update(self.inst, force=False)             # venceu o TTL: vai ao remoto sozinho
+        self.assertEqual(c["behind"], 1)
+        self.assertFalse(upstream.check_is_stale(c))
+
+    def test_cli_check_always_asks_the_remote(self):
+        self._write_cache(checked_at=self._ago(minutes=1))            # cache recém-gravado, behind=0
+        args = type("A", (), {"check": True, "rebase": False, "remote": None, "branch": None, "json": True})()
+        from contextlib import redirect_stdout
+        import io
+        old = os.environ.get("BRAIN_HOME")
+        os.environ["BRAIN_HOME"] = str(self.work)
+        try:
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                upstream.cli_update(args, None)
+        finally:
+            if old is None:
+                os.environ.pop("BRAIN_HOME", None)
+            else:
+                os.environ["BRAIN_HOME"] = old
+        self.assertEqual(upstream.read_check_cache(config.load(self.work))["behind"], 1)
+        self.assertEqual(json.loads(buf.getvalue())["news"], ["Modo full da memória", "Painel mais rápido"])
+
+    def test_view_model_and_doctor_flag_stale_cache(self):
+        from brainlib import doctor
+        self._write_cache(checked_at=self._ago(days=1))
+        b = Brain(self.inst)
+        b.record_one({"type": "person.added", "id": "eu", "by": "owner",
+                      "data": {"name": "Dona", "relation": "dono"}})
+        m = render.view_model(b)
+        self.assertTrue(m["update"]["stale"])
+        got = [c for c in doctor.checks(b) if c["title"] == "framework"]
+        self.assertFalse(any("em dia" in c["detail"] for c in got))
+        self.assertTrue(any("sem confirmação" in c["detail"] for c in got))
+
+
 if __name__ == "__main__":
     unittest.main()

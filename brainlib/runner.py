@@ -377,14 +377,14 @@ def nightly(brain, skip_agent: bool = False, run=None) -> dict:
             steps["colheita"] = f"{len(absorbed)} alteração(ões) absorvida(s) na janela do agente"
         return render.summary(rep).splitlines()[0]
 
-    step("render final", _final_render)
-    try:
+    try:                                                # antes do render final: o painel da manhã já nasce com o resultado de hoje
         from . import upstream as _up
-        c = _up.check_update(brain.inst, force=False)   # renova o cache de versão/atualização (painel/TUI/doctor)
+        c = _up.check_update(brain.inst, force=True)    # force: um check de ontem não pode dispensar o de hoje
         if (c.get("behind") or 0) > 0:
             steps["atualização"] = f"{c['behind']} commits disponíveis — brain update"
     except Exception:                                   # noqa: BLE001 — sem rede no noturno é normal
         pass
+    step("render final", _final_render)
     brain.record_one({"type": "run.completed", "id": "nightly", "by": "system", "data": {"ok": ok, "steps": steps}})
     print(("✓" if ok else "⚠") + " noturno: " + " · ".join(f"{k}: {v}" for k, v in steps.items()))
     return {"ok": ok, "steps": steps}

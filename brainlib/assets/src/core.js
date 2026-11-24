@@ -1553,10 +1553,10 @@ function syncVerBadge(){
   }
   b.textContent = behind
     ? transTxt + " · " + commitsTxt
-    : (u.checked ? verTxt + " · em dia" : verTxt);
+    : (u.checked ? verTxt + (u.stale ? " · sem verificar" : " · em dia") : verTxt);
   b.classList.toggle("behind", behind);
   b.title = behind ? "atualização disponível (" + commitsTxt + ") — comando `update`"
-                   : "Segundo Cérebro " + verTxt + (u.checked ? " — em dia" : "");
+                   : "Segundo Cérebro " + verTxt + (u.checked ? (u.stale ? " — verificação desatualizada" + (u.checked_at ? " (" + fmtDL(u.checked_at) + ")" : "") : " — em dia") : "");
 }
 (function(){
   const b = document.getElementById("verbadge");
@@ -1567,7 +1567,9 @@ function syncVerBadge(){
   const log = document.getElementById("newslog");
   const fb = document.getElementById("newsfb");
   const semNovidade = u => u.checked
-    ? ["Tudo em dia por aqui. A lista completa mora no CHANGELOG.md do repositório."]
+    ? (u.stale
+        ? ["Não conseguimos confirmar se há atualização: a última verificação está velha" + (u.error ? " ou falhou" : "") + ". Rode `update --check`."]
+        : ["Tudo em dia por aqui. A lista completa mora no CHANGELOG.md do repositório."])
     : ["Ainda não verificamos se há atualizações — o noturno ou o comando `update --check` fazem isso."];
   const openNews = () => {
     const u = M.update || {};
@@ -1582,11 +1584,11 @@ function syncVerBadge(){
     if (meta) {
       meta.textContent = behind
         ? transTxt + " · " + commitsTxt + (u.checked_at ? " · verificado " + fmtDL(u.checked_at) : "")
-        : verTxt + (u.checked ? " · em dia" : "") + (u.checked_at ? " · verificado " + fmtDL(u.checked_at) : "");
+        : verTxt + (u.checked ? (u.stale ? " · sem verificar" : " · em dia") : "") + (u.checked_at ? " · verificado " + fmtDL(u.checked_at) : "");
     }
     document.getElementById("newshow").textContent = behind
       ? "No terminal, use o comando `update`."
-      : "Instalação em dia." + (u.checked_at ? " · verificado " + fmtDL(u.checked_at) : "");
+      : (u.stale ? "Verificação desatualizada." : "Instalação em dia.") + (u.checked_at ? " · verificado " + fmtDL(u.checked_at) : "");
     if (act) act.hidden = !behind;
     if (log && !log.textContent) log.hidden = true;
     if (fb) fb.textContent = "";

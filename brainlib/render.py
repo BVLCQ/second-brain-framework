@@ -110,6 +110,7 @@ def view_model(brain) -> dict:
     m["update"] = {"version": _ver, "behind": c.get("behind"), "ahead": c.get("ahead"),
                    "remote_version": c.get("remote_version"), "checked_at": c.get("checked_at"),
                    "news": c.get("news", [])[:12], "checked": bool(c),
+                   "stale": _up.check_is_stale(c), "error": bool(c.get("error")),
                    "cli_cmd": "./brain update"}
     return m
 

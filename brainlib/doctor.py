@@ -594,6 +594,11 @@ def checks(brain, online: bool = False, probe_agent: bool = False, docker_probe=
     if c and (c.get("behind") or 0) > 0:
         out.append(_c("warn", "framework", f"atualização disponível (v{_ver} → v{c.get('remote_version', '?')}, "
                                          f"{c['behind']} commits) — `brain update` (novidades: {len(c.get('news', []))})"))
+    elif c and upstream.check_is_stale(c):
+        out.append(_c("warn", "framework", f"sem confirmação de atualização (v{_ver}, última verificação "
+                                         + str(c.get("checked_at", ""))[:16].replace("T", " ")
+                                         + (" falhou" if c.get("error") else " está velha")
+                                         + ") — `brain update --check`"))
     elif c:
         out.append(_c("ok", "framework", f"em dia (v{_ver}, verificado "
                                          + str(c.get("checked_at", ""))[:10] + ")"))

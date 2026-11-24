@@ -1189,6 +1189,7 @@ Específicos desta instalação (OrbStack + LM Studio + watchdog + hook).
 | UI do Hindsight | http://localhost:9999 |
 | Modelos carregados no LM Studio | `lms ps` |
 | Servidor do LM Studio | `lms server start` / `lms server stop` |
+| Poll do repositório (a cada 2h) | LaunchAgent `com.segundo-cerebro.updatecheck`: roda `brain update --check` no login e a cada 2h — só `git fetch` e o cache `FRESH/.update-check.json`; o painel, a TUI e o doctor leem dali (cache sem verificação há mais de 4h, ou com erro, deixa de dizer "em dia"). Instalar, da raiz da instância: `mkdir -p ~/Library/LaunchAgents && sed "s#__BRAIN_DIR__#$PWD#g" services/com.segundo-cerebro.updatecheck.plist > ~/Library/LaunchAgents/com.segundo-cerebro.updatecheck.plist && launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.segundo-cerebro.updatecheck.plist` · log: `vault/logs/updatecheck.log` |
 | Pausar o watchdog | `touch ~/.brain-watchdog-off` (retomar: `rm ~/.brain-watchdog-off`) |
 | Rodar o watchdog agora | `launchctl kickstart gui/$(id -u)/com.segundo-cerebro.watchdog` |
 | Log do watchdog | `cat ~/brain/vault/logs/watchdog.log` |
