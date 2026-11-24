@@ -52,18 +52,27 @@ SLACK_PLACEHOLDERS = {"seu-workspace", "workspace", "example", "acme", "empresa"
 GIT_TIMEOUT_S = 600
 
 
-def _git(root: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess:
+def _git(root: Path, *args: str, check: bool = True, raw: bool = False,
+         errors: str = "replace") -> subprocess.CompletedProcess:
     # sem terminal para pedir senha (noturno, hook): credencial ausente falha em vez de travar para sempre
     env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
+    # `raw=True`: stdout em bytes, para lista de NOME de arquivo (`_paths`): nome não é texto. `errors` diz o
+    # que fazer, na saída em texto, com byte que não é do encoding do terminal. `replace` serve para metadado
+    # (ref, remote, mensagem de erro). Diff e log carregam nome de arquivo no cabeçalho e conteúdo: ali o byte
+    # tem de voltar inteiro (`surrogateescape`), porque o nome vira rótulo do achado.
+    dec = {} if raw else {"text": True, "errors": errors}
     try:
-        r = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True, errors="replace",
-                           env=env, timeout=GIT_TIMEOUT_S)
+        r = subprocess.run(["git", "-C", str(root), *args], capture_output=True, env=env,
+                           timeout=GIT_TIMEOUT_S, **dec)
     except FileNotFoundError as e:
         raise util.BrainError("git não encontrado no PATH") from e
     except subprocess.TimeoutExpired as e:
         raise util.BrainError(f"git {' '.join(args[:2])} não respondeu em {GIT_TIMEOUT_S}s", 4) from e
     if check and r.returncode != 0:
-        raise util.BrainError(f"git {' '.join(args[:2])} falhou: {(r.stderr or r.stdout).strip()}", 4)
+        err = r.stderr or r.stdout
+        if isinstance(err, bytes):                    # leitura em bytes: a mensagem de erro continua sendo texto
+            err = err.decode("utf-8", "replace")
+        raise util.BrainError(f"git {' '.join(args[:2])} falhou: {err.strip()}", 4)
     return r
 
 
@@ -72,10 +81,22 @@ def _lines(r: subprocess.CompletedProcess) -> list[str]:
 
 
 def _paths(r: subprocess.CompletedProcess) -> list[str]:
-    """Caminhos de um `git … -z`: separados por NUL, nunca entre aspas. Sem o -z o git entrega entre aspas e com
-    escapes o nome com acento, aspas ou barra invertida (`"ol\\303\\241.py"`) — não é caminho de arquivo nenhum:
-    não casa como pathspec, não abre, não casa com prefixo. `core.quotePath=false` só tira o caso do acento."""
-    return [f for f in r.stdout.split("\0") if f]
+    """Caminhos de um `git … -z` lido em bytes (`_git(…, raw=True)`): separados por NUL, nunca entre aspas, e
+    decodificados como NOME de arquivo (`os.fsdecode`), não como texto. Nome de arquivo é a sequência de bytes que
+    o sistema de arquivos guarda, e no Linux ela pode não ser UTF-8 válida. Lido como texto, o byte inválido vira
+    U+FFFD — o nome de arquivo nenhum: como pathspec não casa com nada, e o arquivo era dado como `já público`,
+    saindo do scan sem erro. `os.fsdecode` é a decodificação que o próprio Python usa para nome de arquivo: guarda
+    o byte (surrogate), e o nome volta byte a byte quando entra de novo no git como pathspec. Sem o -z o git
+    entrega entre aspas e com escapes o nome com acento, aspas ou barra invertida (`"ol\\303\\241.py"`);
+    `core.quotePath=false` só tira o caso do acento."""
+    return [os.fsdecode(p) for p in r.stdout.split(b"\0") if p]
+
+
+def _show(name: str) -> str:
+    """Nome de arquivo para MOSTRAR: o byte que não é UTF-8 válido (guardado como surrogate) aparece como escape
+    (`caf\\udce9.py`) em vez de derrubar o print, porque stdout em UTF-8 recusa surrogate. Só a tela passa por aqui;
+    o nome que volta ao git segue intacto."""
+    return name.encode("utf-8", "backslashreplace").decode("utf-8")
 
 
 def _prepare(inst: config.Instance, remote: str | None, branch: str | None, fetch: bool = True,
@@ -91,10 +112,11 @@ def _prepare(inst: config.Instance, remote: str | None, branch: str | None, fetc
         branch = _git(root, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
         if branch == "HEAD":
             raise util.BrainError("HEAD solto (detached): entre num branch antes de sincronizar", 1)
-    private = [f for f in _paths(_git(root, "ls-files", "-z")) if f in PRIVATE_FILES or f.startswith(PRIVATE_PREFIXES)]
+    private = [f for f in _paths(_git(root, "ls-files", "-z", raw=True)) if f in PRIVATE_FILES or f.startswith(PRIVATE_PREFIXES)]
     if private:
         raise util.BrainError("arquivos do dono estão rastreados pelo git (nunca devem): "
-                              + ", ".join(private[:5]) + " — `git rm --cached` neles antes de continuar", 4)
+                              + ", ".join(_show(p) for p in private[:5])
+                              + " — `git rm --cached` neles antes de continuar", 4)
     if fetch:
         # refspec explícito: clones feitos com `git remote add` não têm remote.origin.fetch, e aí o
         # fetch simples só atualizaria FETCH_HEAD (origin/<branch> ficaria velho e ahead/behind mentiria)
@@ -116,8 +138,8 @@ def _ahead_behind(root: Path, ref: str) -> tuple[int, int]:
 
 def _pending_files(root: Path, ref: str) -> tuple[list[str], list[str]]:
     """(rastreados que diferem do remoto, novos não rastreados e não ignorados)."""
-    tracked = _paths(_git(root, "diff", "--name-only", "-z", ref))
-    untracked = _paths(_git(root, "ls-files", "-z", "--others", "--exclude-standard"))
+    tracked = _paths(_git(root, "diff", "--name-only", "-z", ref, raw=True))
+    untracked = _paths(_git(root, "ls-files", "-z", "--others", "--exclude-standard", raw=True))
     return tracked, untracked
 
 
@@ -609,9 +631,10 @@ def scan(inst: config.Instance, ref: str | None, committed: bool = False,
         for revs in revsets:
             if not revs:
                 continue
-            diff = _git(root, *q, "log", "-p", "-U0", "--no-color", "--cc", "--reverse", "--format=%x01%H", *revs)
+            diff = _git(root, *q, "log", "-p", "-U0", "--no-color", "--cc", "--reverse", "--format=%x01%H", *revs,
+                        errors="surrogateescape")          # nome de arquivo vem no cabeçalho: o byte volta inteiro
             _scan_diff(root, diff.stdout, check)
-            for f in _paths(_git(root, *q, "log", "--name-only", "-z", "--format=", *revs)):
+            for f in _paths(_git(root, *q, "log", "--name-only", "-z", "--format=", *revs, raw=True)):
                 if _private_path(f):
                     key = (f, 0, "arquivo do dono no histórico")
                     if key not in seen:
@@ -622,8 +645,9 @@ def scan(inst: config.Instance, ref: str | None, committed: bool = False,
         # `keep` deixa de fora o que já é público; lista vazia = nada a varrer na árvore de trabalho
         groups = [()] if keep is None else [("--", *keep[i:i + 400]) for i in range(0, len(keep), 400)]
         for scope in groups:
-            _scan_diff(root, _git(root, LITERAL, *q, "diff", "-U0", "--no-color", ref or EMPTY_TREE, *scope).stdout, check)
-    for f in ([] if committed else _paths(_git(root, *q, "ls-files", "-z", "--others", "--exclude-standard"))):
+            _scan_diff(root, _git(root, LITERAL, *q, "diff", "-U0", "--no-color", ref or EMPTY_TREE, *scope,
+                                  errors="surrogateescape").stdout, check)         # idem: nome no cabeçalho
+    for f in ([] if committed else _paths(_git(root, *q, "ls-files", "-z", "--others", "--exclude-standard", raw=True))):
         p = root / f
         check(f, 0, f)
         try:
@@ -683,7 +707,7 @@ def pre_push_scan(inst: config.Instance, remote: str, stdin_text: str) -> dict:
     """O que o hook pre-push roda: varre exatamente os commits que este push envia (qualquer branch,
     tag, HEAD solto ou ref nova), sem depender do branch atual."""
     revsets = push_revsets(inst, remote, stdin_text)
-    tracked = [f for f in _paths(_git(inst.root, "ls-files", "-z")) if _private_path(f)]
+    tracked = [f for f in _paths(_git(inst.root, "ls-files", "-z", raw=True)) if _private_path(f)]
     findings = [{"file": f, "line": 0, "rule": "arquivo do dono rastreado pelo git",
                  "hint": "git rm --cached antes de enviar"} for f in tracked]
     findings += scan(inst, None, committed=True, revsets=revsets) if revsets else []
@@ -732,7 +756,7 @@ def _public_paths(root: Path, remote: str, candidates: list[str]) -> list[str]:
             break
         differing: set[str] = set()
         for i in range(0, len(todo), 400):
-            differing.update(_paths(_git(root, *q, "diff", "--name-only", "-z", tip, "--", *todo[i:i + 400])))
+            differing.update(_paths(_git(root, *q, "diff", "--name-only", "-z", tip, "--", *todo[i:i + 400], raw=True)))
         public.update(p for p in todo if p not in differing)
         todo = [p for p in todo if p in differing]
     return sorted(public)
@@ -770,9 +794,9 @@ def upstream_scan(inst: config.Instance, remote: str | None = None, branch: str 
 def _print_findings(findings: list[dict]) -> None:
     for f in findings[:25]:
         if f.get("hint"):
-            print(f"  ✗ {f['file']}:{f['line']} — {f['rule']}: {f['hint']}")
+            print(_show(f"  ✗ {f['file']}:{f['line']} — {f['rule']}: {f['hint']}"))
         else:
-            print(f"  ✗ {f['file']}:{f['line']} — {f['rule']} (sha:{f.get('fingerprint', '')}, {f.get('length', 0)} chars)")
+            print(_show(f"  ✗ {f['file']}:{f['line']} — {f['rule']} (sha:{f.get('fingerprint', '')}, {f.get('length', 0)} chars)"))
     if len(findings) > 25:
         print(f"  … e mais {len(findings) - 25}")
 
@@ -789,13 +813,13 @@ def _print_scan(st: dict) -> None:
     if not st["committed_only"] and (st["changed"] or st["new"]):
         print(f"não enviados: {len(st['changed'])} alterado(s) · {len(st['new'])} novo(s)")
         for f in st["changed"][:30]:
-            print(f"  M {f}")
+            print(f"  M {_show(f)}")
         for f in st["new"][:30]:
-            print(f"  ? {f}")
+            print(f"  ? {_show(f)}")
     if st["local_scripts"]:
         print("inovação local (scripts/local/ — ignorada pelo git; gradue movendo para scripts/ ou brainlib/):")
         for f in st["local_scripts"][:10]:
-            print(f"  · {f}")
+            print(f"  · {_show(f)}")
     if st["findings"]:
         print(f"✗ {len(st['findings'])} achado(s) de dado pessoal/segredo — não envie ao repo público até limpar:")
         _print_findings(st["findings"])

@@ -7,6 +7,8 @@ outra ref do remoto, o que está byte-idêntico ao remoto já é público e fica
 """
 from __future__ import annotations
 
+import contextlib
+import io
 import os
 import shutil
 import subprocess
@@ -140,7 +142,11 @@ class GitQuotedPathNames(unittest.TestCase):
     (`"ol\\303\\241.py"`); `core.quotePath=false` só resolve o caso do acento. Usado como caminho, o nome entre
     aspas não corresponde a arquivo nenhum: ele saía das listas de caminho da varredura (e um vazamento dentro
     ficava fora do scan, sem erro nenhum), não abria como arquivo novo e não correspondia ao prefixo de arquivo do
-    dono. Toda lista de caminho pede `-z`, que separa por NUL e nunca põe aspas."""
+    dono. Toda lista de caminho pede `-z`, que separa por NUL e nunca põe aspas.
+
+    O `-z` não basta: o nome listado ainda era lido como TEXTO, com o encoding do terminal. No Linux o nome de
+    arquivo é qualquer byte fora NUL e `/` — pode não ser UTF-8 válido — e o byte inválido virava U+FFFD, outro
+    nome, que não casa com nada. A lista sai em bytes e vira nome com `os.fsdecode`."""
 
     def _leak(self) -> str:
         return f'P = "{Path.home()}/segredo"\n'
@@ -196,6 +202,89 @@ class GitQuotedPathNames(unittest.TestCase):
                              ["vault/reunião.md"])
             with self.assertRaisesRegex(util.BrainError, "vault/reunião.md"):
                 upstream._prepare(config.load(repo), None, "batch/x", fetch=False)
+
+    def _imprime(self, st: dict) -> str:
+        """O relato da varredura num stdout UTF-8 estrito, como um terminal de verdade."""
+        saida = io.TextIOWrapper(io.BytesIO(), encoding="utf-8", errors="strict")
+        with contextlib.redirect_stdout(saida):
+            upstream._print_scan(st)
+            saida.flush()
+        return saida.buffer.getvalue().decode("utf-8")
+
+    def test_name_with_a_byte_that_is_not_utf8_is_not_taken_for_already_public(self):
+        """Sem criar arquivo (o APFS recusa esse nome): um `git` de prova lista um nome com um byte que não é UTF-8
+        válido e só reconhece o mesmo nome como pathspec se ele chegar byte a byte igual. Antes: o byte virava
+        U+FFFD na leitura, o pathspec não casava com nada e o arquivo saía dos pendentes como `já público`."""
+        esperado = b"caf\xe9-ruim.py"                       # 0xE9 é "é" em latin-1: não é UTF-8 válido
+        roteiro = b"".join([
+            b"#!/bin/sh\n",
+            b"# git de prova: a listagem entrega um nome com um byte que nao e UTF-8; o mesmo nome so conta como\n",
+            b"# pathspec (depois de --) se chegar byte a byte igual.\n",
+            b"esp='" + esperado + b"'\n",
+            b'for a in "$@"; do case "$a" in diff) eh_diff=1;; for-each-ref) echo 1111111111111111111111111111111111111111; exit 0;; esac; done\n',
+            b'if [ "$eh_diff" = 1 ]; then\n',
+            b"  depois=0; achou=0\n",
+            b'  for a in "$@"; do\n',
+            b'    case "$a" in --) depois=1;; esac\n',
+            b'    if [ "$depois" = 1 ] && [ "$a" = "$esp" ]; then achou=1; fi\n',
+            b"  done\n",
+            b'  if [ "$achou" = 1 ] || [ "$depois" = 0 ]; then printf \'%s\\000\' "$esp"; fi\n',
+            b"fi\n",
+            b"exit 0\n",
+        ])
+        with tempfile.TemporaryDirectory() as td:
+            raiz, provas = Path(td) / "repo", Path(td) / "bin"
+            raiz.mkdir()
+            provas.mkdir()
+            (provas / "git").write_bytes(roteiro)
+            (provas / "git").chmod(0o755)
+            caminho = os.environ.get("PATH")
+            os.environ["PATH"] = f"{provas}{os.pathsep}{caminho or os.defpath}"    # o git achado é o de prova
+            try:
+                rastreados = upstream._pending_files(raiz, "HEAD~1")[0]
+                publicos = upstream._public_paths(raiz, "origin", rastreados)
+                estranho = upstream._public_paths(raiz, "origin", ["outro.py"])      # o de prova discrimina: nome
+            finally:                                                                 # que ele não lista é dado como público
+                if caminho is None:
+                    os.environ.pop("PATH", None)
+                else:
+                    os.environ["PATH"] = caminho
+            self.assertEqual(estranho, ["outro.py"])
+            self.assertEqual(publicos, [], "o arquivo foi dado como já público")
+            self.assertEqual([os.fsencode(f) for f in rastreados], [esperado])
+
+    def test_printing_a_name_with_an_invalid_byte_does_not_crash(self):
+        """O nome pode guardar um byte que não é UTF-8 (surrogate): stdout em UTF-8 recusa surrogate, e o print
+        derrubava a varredura no meio do relato. Na tela o byte aparece como escape; o nome em si segue intacto."""
+        nome = os.fsdecode(b"caf\xe9-ruim.py")
+        st = {"remote": "origin", "branch": "batch/x", "ref": None, "ahead": 1, "behind": 0, "unpushed_base": True,
+              "changed": [nome], "new": [], "local_scripts": [], "committed_only": False,
+              "findings": [{"file": nome, "line": 1, "rule": "caminho da máquina", "hint": "P = …"}]}
+        texto = self._imprime(st)                     # Antes: UnicodeEncodeError (surrogates not allowed)
+        self.assertEqual(texto.count("caf\\udce9-ruim.py"), 2)
+        self.assertNotIn("\ufffd", nome)
+
+    def test_files_whose_name_is_not_utf8_are_scanned(self):
+        """De ponta a ponta, com git de verdade. Depende de um sistema de arquivos que aceite o nome: o Linux aceita
+        qualquer byte fora NUL e `/`; o APFS recusa. Antes: `changed=[] findings=[]` — o nome com U+FFFD não casava
+        com nada, o rastreado era dado como já público e o novo não abria."""
+        with tempfile.TemporaryDirectory() as td:
+            repo = self._branch(Path(td))
+            try:
+                with open(os.fsencode(repo) + b"/caf\xe9-ruim.py", "wb") as fh:   # OSError no APFS: pula o teste
+                    fh.write(self._leak().encode("utf-8"))
+            except OSError as e:
+                self.skipTest(f"este sistema de arquivos recusa nome que não é UTF-8 (errno {e.errno})")
+            _git(repo, "add", "-A")
+            _git(repo, "commit", "-q", "-m", "vazamento só local")
+            with open(os.fsencode(repo) + b"/novo\xe9.py", "wb") as fh:            # não rastreado
+                fh.write(self._leak().encode("utf-8"))
+            rastreado, novo = os.fsdecode(b"caf\xe9-ruim.py"), os.fsdecode(b"novo\xe9.py")
+            st = upstream.upstream_scan(config.load(repo))
+            self.assertEqual((st["changed"], st["new"]), ([rastreado], [novo]))
+            self.assertCountEqual(_names(st["findings"]), [rastreado, novo])
+            self.assertIn("caf\\udce9-ruim.py", self._imprime(st))                  # na tela: escape, sem derrubar
+
 
 
 if __name__ == "__main__":
