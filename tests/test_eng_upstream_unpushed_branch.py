@@ -105,6 +105,44 @@ class ScanOnUnpushedBranch(unittest.TestCase):
             self.assertEqual(_names(st["findings"]), [":x.py"])
             self.assertEqual(_names(upstream.upstream_scan(config.load(repo), committed=True)["findings"]), [":x.py"])
 
+    def test_tracked_file_with_brackets_in_its_name_is_not_dropped(self):
+        """Nome com colchetes: `[1]` é classe de caractere num glob. Medido no git 2.54: passado como pathspec comum,
+        `segredo[1].py` casa consigo mesmo (o git compara o pathspec literalmente antes de tentar o glob) e casa
+        também `segredo1.py`; com `--literal-pathspecs` fica exato. O arquivo não sai do scan nos dois casos. Este
+        teste guarda o formato contra uma troca para pathspec `:(glob)` ou para filtro por `fnmatch`."""
+        with tempfile.TemporaryDirectory() as td:
+            repo = _repo(Path(td))
+            (repo / "segredo[1].py").write_text("X = 1\n", encoding="utf-8")
+            _git(repo, "add", "-A")
+            _git(repo, "commit", "-q", "-m", "colchetes")
+            _git(repo, "push", "-q", "origin", "HEAD:main")            # já é público, limpo
+            _git(repo, "checkout", "-q", "-b", "batch/x")              # sem origin/batch/x
+            (repo / "segredo[1].py").write_text(f'P = "{Path.home()}/segredo"\n', encoding="utf-8")
+            _git(repo, "add", "-A")
+            _git(repo, "commit", "-q", "-m", "vazamento só local")
+
+            st = upstream.upstream_scan(config.load(repo))
+            self.assertEqual(st["changed"], ["segredo[1].py"])         # alteração pendente: difere do remoto
+            self.assertEqual(_names(st["findings"]), ["segredo[1].py"])
+
+    @unittest.skipIf(os.name == "nt", "o NTFS recusa caractere de controle no nome")
+    def test_tracked_file_with_a_tab_in_its_name_is_scanned(self):
+        """O terceiro caso que `core.quotePath=false` não alcança: o git sempre põe aspas no nome com tabulação."""
+        with tempfile.TemporaryDirectory() as td:
+            repo = _repo(Path(td))
+            (repo / "com\ttab.py").write_text("X = 1\n", encoding="utf-8")
+            _git(repo, "add", "-A")
+            _git(repo, "commit", "-q", "-m", "tabulação")
+            _git(repo, "push", "-q", "origin", "HEAD:main")           # já é público, limpo
+            _git(repo, "checkout", "-q", "-b", "batch/x")              # sem origin/batch/x
+            (repo / "com\ttab.py").write_text(f'P = "{Path.home()}/segredo"\n', encoding="utf-8")
+            _git(repo, "add", "-A")
+            _git(repo, "commit", "-q", "-m", "vazamento só local")
+
+            st = upstream.upstream_scan(config.load(repo))
+            self.assertEqual(st["changed"], ["com\ttab.py"])
+            self.assertEqual(_names(st["findings"]), ["com\ttab.py"])
+
     def test_branch_that_merged_a_public_branch_rescans_nothing_public(self):
         """Antes: a base do diff era o pai do commit só-local mais antigo. Num branch que mergeou outra ref do
         remoto (ex.: um `origin/main` que andou), `base..HEAD` e `diff base` traziam de volta arquivo e mensagem
@@ -146,7 +184,7 @@ class GitQuotedPathNames(unittest.TestCase):
 
     O `-z` não basta: o nome listado ainda era lido como TEXTO, com o encoding do terminal. No Linux o nome de
     arquivo é qualquer byte fora NUL e `/` — pode não ser UTF-8 válido — e o byte inválido virava U+FFFD, outro
-    nome, que não casa com nada. A lista sai em bytes e vira nome com `os.fsdecode`."""
+    nome, que não casa com nada. A lista sai em bytes e vira nome com `_decode` (surrogateescape)."""
 
     def _leak(self) -> str:
         return f'P = "{Path.home()}/segredo"\n'
@@ -211,6 +249,7 @@ class GitQuotedPathNames(unittest.TestCase):
             saida.flush()
         return saida.buffer.getvalue().decode("utf-8")
 
+    @unittest.skipIf(os.name == "nt", "o git de prova é script de shell, e o argv do Windows não carrega byte cru")
     def test_name_with_a_byte_that_is_not_utf8_is_not_taken_for_already_public(self):
         """Sem criar arquivo (o APFS recusa esse nome): um `git` de prova lista um nome com um byte que não é UTF-8
         válido e só reconhece o mesmo nome como pathspec se ele chegar byte a byte igual. Antes: o byte virava
@@ -256,8 +295,8 @@ class GitQuotedPathNames(unittest.TestCase):
     def test_printing_a_name_with_an_invalid_byte_does_not_crash(self):
         """O nome pode guardar um byte que não é UTF-8 (surrogate): stdout em UTF-8 recusa surrogate, e o print
         derrubava a varredura no meio do relato. Na tela o byte aparece como escape; o nome em si segue intacto."""
-        nome = os.fsdecode(b"caf\xe9-ruim.py")
-        st = {"remote": "origin", "branch": "batch/x", "ref": None, "ahead": 1, "behind": 0, "unpushed_base": True,
+        nome = "caf\udce9-ruim.py"                          # o byte 0xE9 guardado como surrogate; com `os.fsdecode`
+        st = {"remote": "origin", "branch": "batch/x", "ref": None, "ahead": 1, "behind": 0, "unpushed_base": True,  # esse byte levanta no Windows
               "changed": [nome], "new": [], "local_scripts": [], "committed_only": False,
               "findings": [{"file": nome, "line": 1, "rule": "caminho da máquina", "hint": "P = …"}]}
         texto = self._imprime(st)                     # Antes: UnicodeEncodeError (surrogates not allowed)
@@ -273,13 +312,13 @@ class GitQuotedPathNames(unittest.TestCase):
             try:
                 with open(os.fsencode(repo) + b"/caf\xe9-ruim.py", "wb") as fh:   # OSError no APFS: pula o teste
                     fh.write(self._leak().encode("utf-8"))
-            except OSError as e:
-                self.skipTest(f"este sistema de arquivos recusa nome que não é UTF-8 (errno {e.errno})")
+            except (OSError, UnicodeDecodeError) as e:      # no Windows o próprio nome em bytes já não decodifica
+                self.skipTest(f"este sistema de arquivos recusa nome que não é UTF-8 ({getattr(e, 'errno', type(e).__name__)})")
             _git(repo, "add", "-A")
             _git(repo, "commit", "-q", "-m", "vazamento só local")
             with open(os.fsencode(repo) + b"/novo\xe9.py", "wb") as fh:            # não rastreado
                 fh.write(self._leak().encode("utf-8"))
-            rastreado, novo = os.fsdecode(b"caf\xe9-ruim.py"), os.fsdecode(b"novo\xe9.py")
+            rastreado, novo = "caf\udce9-ruim.py", "novo\udce9.py"      # o byte 0xE9 guardado como surrogate
             st = upstream.upstream_scan(config.load(repo))
             self.assertEqual((st["changed"], st["new"]), ([rastreado], [novo]))
             self.assertCountEqual(_names(st["findings"]), [rastreado, novo])

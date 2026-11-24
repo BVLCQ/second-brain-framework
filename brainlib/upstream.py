@@ -60,7 +60,9 @@ def _git(root: Path, *args: str, check: bool = True, raw: bool = False,
     # que fazer, na saída em texto, com byte que não é do encoding do terminal. `replace` serve para metadado
     # (ref, remote, mensagem de erro). Diff e log carregam nome de arquivo no cabeçalho e conteúdo: ali o byte
     # tem de voltar inteiro (`surrogateescape`), porque o nome vira rótulo do achado.
-    dec = {} if raw else {"text": True, "errors": errors}
+    # `encoding` fixado em UTF-8: sem ele o subprocess decodifica com o encoding do locale — `cp1252` num Windows em
+    # português — e o nome acentuado do cabeçalho do diff chegava trocado, sem casar com o nome da listagem.
+    dec = {} if raw else {"text": True, "encoding": "utf-8", "errors": errors}
     try:
         r = subprocess.run(["git", "-C", str(root), *args], capture_output=True, env=env,
                            timeout=GIT_TIMEOUT_S, **dec)
@@ -72,7 +74,7 @@ def _git(root: Path, *args: str, check: bool = True, raw: bool = False,
         err = r.stderr or r.stdout
         if isinstance(err, bytes):                    # leitura em bytes: a mensagem de erro continua sendo texto
             err = err.decode("utf-8", "replace")
-        raise util.BrainError(f"git {' '.join(args[:2])} falhou: {err.strip()}", 4)
+        raise util.BrainError(f"git {' '.join(args[:2])} falhou: {_show(err.strip())}", 4)   # texto pode trazer surrogate
     return r
 
 
@@ -80,16 +82,24 @@ def _lines(r: subprocess.CompletedProcess) -> list[str]:
     return [ln for ln in r.stdout.splitlines() if ln.strip()]
 
 
+def _decode(p: bytes) -> str:
+    """Byte de NOME de arquivo → str, como o `os.fsdecode` do Linux e do macOS: o byte que não é UTF-8 válido fica
+    guardado (surrogate) e volta byte a byte quando o nome entra de novo no git como pathspec. Sem o `os.fsdecode`
+    porque no Windows ele levanta UnicodeDecodeError com esse byte (lá o handler é `surrogatepass`, PEP 529): a
+    varredura caía num clone com histórico de nome assim, em vez de guardar o byte e seguir."""
+    return p.decode(sys.getfilesystemencoding(), "surrogateescape")
+
+
 def _paths(r: subprocess.CompletedProcess) -> list[str]:
     """Caminhos de um `git … -z` lido em bytes (`_git(…, raw=True)`): separados por NUL, nunca entre aspas, e
-    decodificados como NOME de arquivo (`os.fsdecode`), não como texto. Nome de arquivo é a sequência de bytes que
+    decodificados como NOME de arquivo (`_decode`), não como texto. Nome de arquivo é a sequência de bytes que
     o sistema de arquivos guarda, e no Linux ela pode não ser UTF-8 válida. Lido como texto, o byte inválido vira
     U+FFFD — o nome de arquivo nenhum: como pathspec não casa com nada, e o arquivo era dado como `já público`,
-    saindo do scan sem erro. `os.fsdecode` é a decodificação que o próprio Python usa para nome de arquivo: guarda
+    saindo do scan sem erro. `_decode` é a decodificação que o próprio Python usa para nome de arquivo: guarda
     o byte (surrogate), e o nome volta byte a byte quando entra de novo no git como pathspec. Sem o -z o git
     entrega entre aspas e com escapes o nome com acento, aspas ou barra invertida (`"ol\\303\\241.py"`);
     `core.quotePath=false` só tira o caso do acento."""
-    return [os.fsdecode(p) for p in r.stdout.split(b"\0") if p]
+    return [_decode(p) for p in r.stdout.split(b"\0") if p]
 
 
 def _show(name: str) -> str:
@@ -944,6 +954,13 @@ def doctor_checks(inst: config.Instance) -> list[dict]:
     return out
 
 
+def _print_json(obj) -> None:
+    """Saída `--json`: toda string passa por `_show`. Nome de arquivo pode guardar surrogate (byte que não é UTF-8
+    válido), a saída vai com `ensure_ascii=False`, e stdout em UTF-8 não imprime surrogate — o comando caía no
+    meio do relato em JSON. Na saída o byte aparece como escape, como no relato em texto."""
+    print(json.dumps(util.jsonable(obj, _show), ensure_ascii=False, indent=2))
+
+
 # ── entrada do CLI ──────────────────────────────────────────────────────────
 def cli_update(args, _b) -> None:
     inst = config.load()
@@ -956,7 +973,7 @@ def cli_update(args, _b) -> None:
     if args.check and res.get("behind") and not res.get("news"):
         res["news"] = check_update(inst, force=True).get("news", [])
     if args.json:
-        print(json.dumps(res, ensure_ascii=False, indent=2))
+        _print_json(res)
     else:
         _print_update(res)
 
@@ -976,7 +993,7 @@ def cli_upstream(args, _b) -> None:
     else:
         st = upstream_scan(inst, args.remote, args.branch, committed=args.committed, fetch=args.fetch)
     if args.json:
-        print(json.dumps(st, ensure_ascii=False, indent=2))
+        _print_json(st)
     else:
         _print_scan(st)
     if st["findings"]:

@@ -4,7 +4,7 @@ Sem `-z` o git entrega entre aspas e com escapes o nome com acento, aspas, barra
 (`"docs/relat\\303\\263rio.md"`). A leitura completa partia a lista de arquivos por linha e lia o nome assim:
 o sufixo dava `.md"`, o documento nem entrava na conta de documentos e o conteúdo nunca era lido — sem erro
 nenhum. A lista de arquivos de cada commit mostrava o nome nesse formato. Agora as duas listas saem do git
-entre NULs (`-z`) e são lidas como NOME (`os.fsdecode`). No snapshot o byte que não é UTF-8 válido e o
+entre NULs (`-z`) e são lidas como NOME (`_decode`: UTF-8 com surrogateescape, a regra do `os.fsdecode` do Linux e do macOS). No snapshot o byte que não é UTF-8 válido e o
 caractere de controle aparecem como escape: snapshot é arquivo UTF-8 e a linha é a estrutura do Markdown.
 """
 from __future__ import annotations
@@ -55,6 +55,7 @@ class QuotedNamesInRepoOverview(unittest.TestCase):
         self.assertIn("- docs/relatório.md", texto)
         self.assertNotIn("\\303", texto)
 
+    @unittest.skipIf(os.name == "nt", "o NTFS recusa aspas, barra invertida e tabulação no nome")
     def test_document_with_a_quote_or_a_backslash_in_its_name_is_read(self):
         """A aspas e a barra invertida o git entrega entre aspas em qualquer config — não é só o acento."""
         commit(self.repo, "README.md", "# Projeto de exemplo", date=OLD)
@@ -67,6 +68,7 @@ class QuotedNamesInRepoOverview(unittest.TestCase):
         self.assertIn("### caminho\\nome.md", texto)
         self.assertIn("nome com barra invertida", texto)
 
+    @unittest.skipIf(os.name == "nt", "o NTFS recusa aspas, barra invertida e tabulação no nome")
     def test_control_character_in_a_name_does_not_break_the_line_of_the_snapshot(self):
         """Nome com tabulação: no snapshot aparece como escape, senão a linha deixa de ser a estrutura."""
         commit(self.repo, "com\ttab.md", "conteúdo com tabulação", date=OLD)
@@ -77,17 +79,20 @@ class QuotedNamesInRepoOverview(unittest.TestCase):
         self.assertNotIn("com\ttab.md", texto)
         self.assertIn("conteúdo com tabulação", texto)
 
+    @unittest.skipIf(os.name == "nt", "o NTFS recusa aspas, barra invertida e tabulação no nome")
     def test_file_list_of_each_commit_shows_the_real_names(self):
         """A lista de arquivos do commit (adição e renomeação) traz o nome de verdade, sem aspas nem escape."""
         commit(self.repo, "relatório.md", "primeiro", date=OLD)
         sha1 = git(self.repo, "rev-parse", "HEAD").strip()
         commit(self.repo, 'n"d.md', "segundo", date=OLD)
+        sha_aspas = git(self.repo, "rev-parse", "HEAD").strip()       # o nome com aspas entra na conta, não só na cena
         git(self.repo, "mv", "relatório.md", "renomeado-á.md")
         git(self.repo, "commit", "-q", "-m", "terceiro")
         sha2 = git(self.repo, "rev-parse", "HEAD").strip()
-        achado = repos._files_batch(self.repo, [sha1, sha2])
-        self.assertEqual(sorted(achado), sorted([sha1, sha2]))
+        achado = repos._files_batch(self.repo, [sha1, sha_aspas, sha2])
+        self.assertEqual(sorted(achado), sorted([sha1, sha_aspas, sha2]))
         self.assertEqual(achado[sha1], ["A relatório.md"])
+        self.assertEqual(achado[sha_aspas], ['A n"d.md'])
         self.assertEqual(achado[sha2], ["R100 relatório.md renomeado-á.md"])
 
     def test_document_whose_name_is_not_utf8_is_read_and_the_snapshot_stays_utf8(self):
@@ -96,8 +101,8 @@ class QuotedNamesInRepoOverview(unittest.TestCase):
         try:
             with open(base + b"/caf\xe9-ruim.md", "wb") as fh:
                 fh.write("conteúdo de nome inválido\n".encode("utf-8"))
-        except OSError as e:
-            self.skipTest(f"este sistema de arquivos recusa nome que não é UTF-8 (errno {e.errno})")
+        except (OSError, UnicodeDecodeError) as e:        # no Windows o próprio nome em bytes já não decodifica
+            self.skipTest(f"este sistema de arquivos recusa nome que não é UTF-8 ({getattr(e, 'errno', type(e).__name__)})")
         git(self.repo, "add", "-A")
         git(self.repo, "commit", "-q", "-m", "nome inválido")
         texto = self._overview()

@@ -20,6 +20,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 from . import snapshot, util, watch
@@ -82,14 +83,22 @@ def _git_bytes(repo: Path, *args: str, stdin: str | None = None, timeout: int = 
     return out
 
 
+def _decode(p: bytes) -> str:
+    """Byte de NOME de arquivo → str, como o `os.fsdecode` do Linux e do macOS: o byte que não é UTF-8 válido fica
+    guardado (surrogate) e volta byte a byte quando o nome entra de novo no git (`show <rev>:<nome>`). Sem o
+    `os.fsdecode` porque no Windows ele levanta UnicodeDecodeError com esse byte (lá o handler é `surrogatepass`,
+    PEP 529): a leitura do repositório caía num clone com histórico de nome assim."""
+    return p.decode(sys.getfilesystemencoding(), "surrogateescape")
+
+
 def _names(out: bytes) -> list[str]:
     """Nomes de um `git … -z` lido em bytes (`_git_bytes`): separados por NUL, nunca entre aspas, e
-    decodificados como NOME de arquivo (`os.fsdecode`) — a decodificação que o próprio Python usa: o byte que não
+    decodificados como NOME de arquivo (`_decode`) — a decodificação que o próprio Python usa: o byte que não
     é UTF-8 válido fica guardado (surrogate) e volta byte a byte quando o nome entra de novo no git
     (`show <rev>:<nome>`). Sem o `-z` o git entrega entre aspas e com escapes o nome com acento, aspas, barra
     invertida ou tabulação (`"docs/relat\\303\\263rio.md"`): o sufixo passa a ser `.md"`, e o documento sai da
     leitura sem erro nenhum."""
-    return [os.fsdecode(p) for p in out.split(b"\0") if p]
+    return [_decode(p) for p in out.split(b"\0") if p]
 
 
 def _show(name: str) -> str:
@@ -202,7 +211,7 @@ def _files_batch(repo: Path, shas: list[str]) -> dict[str, list[str]]:
             i += 1
         else:
             n = 2 if t[:1] in (b"R", b"C") else 1        # renomeação e cópia trazem dois nomes
-            nomes = [_show(os.fsdecode(p)) for p in toks[i + 1:i + 1 + n]]
+            nomes = [_show(_decode(p)) for p in toks[i + 1:i + 1 + n]]
             if sha in res:
                 res[sha].append(" ".join([t.decode("ascii", "replace"), *nomes]))
             i += 1 + n
@@ -335,36 +344,44 @@ def pull(brain, key: str, fetch: bool | None = None, full: bool = False) -> dict
     return {"key": key, "failed": failed, "fetch": do_fetch, "repos": rows}
 
 
+def _print_json(obj, indent: int | None = 2) -> None:
+    """Saída `--json`: toda string passa por `_show`. Nome de repositório vem do sistema de arquivos e pode guardar
+    surrogate (byte que não é UTF-8 válido); a saída vai com `ensure_ascii=False`, e stdout em UTF-8 não imprime
+    surrogate — o comando caía no meio da lista."""
+    print(json.dumps(util.jsonable(obj, _show), ensure_ascii=False, indent=indent))
+
+
 def cli(args, brain) -> None:
     if args.rcmd == "list":
         src = source(brain.inst, args.key)
         root = Path(os.path.expanduser(str(src["path"]))).resolve()
         found = discover(root) if root.is_dir() else []
         if args.json:
-            print(json.dumps([str(p.relative_to(root)) if p != root else p.name for p in found], ensure_ascii=False))
+            _print_json([str(p.relative_to(root)) if p != root else p.name for p in found], indent=None)
             return
         if not found:
             print(f"nenhum repositório git em {src['path']}")
         for p in found:
-            print(f"{p.relative_to(root).as_posix() if p != root else p.name}\t{_remote(p) or '—'}")
+            print(f"{_show(p.relative_to(root).as_posix() if p != root else p.name)}\t{_remote(p) or '—'}")
         return
     r = pull(brain, args.key, fetch=args.fetch, full=args.full)
     if args.json:
-        print(json.dumps(r, ensure_ascii=False, indent=2))
+        _print_json(r)
         return
     if r.get("error"):
         print(f"⚠ {args.key}: {r['error']} — registrado como falha")
         return
     for x in r["repos"]:
+        repo, erro, aviso = _show(x["repo"]), _show(x["error"] or ""), _show(x["warning"] or "")
         if x["error"]:
-            print(f"⚠ {x['repo']}: {x['error']}")
+            print(f"⚠ {repo}: {erro}")
         elif x["snapshot"] and x["full"]:
-            print(f"✓ {x['repo']}: leitura completa ({x['new']} commits + árvore + documentos) → {x['snapshot']} (rode /dump)")
+            print(f"✓ {repo}: leitura completa ({x['new']} commits + árvore + documentos) → {x['snapshot']} (rode /dump)")
         elif x["snapshot"]:
-            print(f"✓ {x['repo']}: {x['new']} commit(s) novo(s) → {x['snapshot']} (rode /dump)")
+            print(f"✓ {repo}: {x['new']} commit(s) novo(s) → {x['snapshot']} (rode /dump)")
         else:
-            print(f"✓ {x['repo']}: sem novidades")
+            print(f"✓ {repo}: sem novidades")
         if x["warning"]:
-            print(f"  ⚠ {x['warning']}")
+            print(f"  ⚠ {aviso}")
     if r["failed"]:
         print(f"⚠ {args.key}: todos os repositórios falharam — registrado como falha")
