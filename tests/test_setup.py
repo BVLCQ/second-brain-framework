@@ -1,6 +1,7 @@
 """Setup assistido (`brain setup`) — stdlib unittest, sem rede, sem docker."""
 from __future__ import annotations
 
+import hashlib
 import os
 import stat
 import sys
@@ -486,7 +487,9 @@ class LmStudioTests(unittest.TestCase):
                     mock.patch.object(setup, "_LMS_APP_DIRS", ()), \
                     mock.patch.object(setup, "_fetch",
                                       side_effect=lambda url, dest, timeout=120:
-                                      (dest.write_text("#!/bin/sh\n", encoding="utf-8"), None)[1]):
+                                      (dest.write_text("#!/bin/sh\n", encoding="utf-8"), None)[1]), \
+                    mock.patch.object(setup, "_load_installer_pins",
+                                      return_value={"lmstudio": hashlib.sha256(b"#!/bin/sh\n").hexdigest()}):
                 # 1ª leitura (antes do server start) falsa, demais verdadeiras:
                 ups = iter([False, True, True, True])
                 with mock.patch.object(setup, "lmstudio_up", side_effect=lambda: next(ups, True)):
@@ -682,6 +685,8 @@ class DockerEnsureTests(unittest.TestCase):
                 mock.patch.object(setup, "_fetch",
                                   side_effect=lambda url, dest, timeout=120:
                                   (dest.write_text("#!/bin/sh\n", encoding="utf-8"), None)[1]), \
+                mock.patch.object(setup, "_load_installer_pins",
+                                  return_value={"docker": hashlib.sha256(b"#!/bin/sh\n").hexdigest()}), \
                 mock.patch.object(setup, "docker_available",
                                   side_effect=lambda: len(calls) >= 2):   # sobe após o systemctl
             ui = ScriptedUI([])

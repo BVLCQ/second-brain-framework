@@ -1131,7 +1131,7 @@ def d_prov(store, it) -> Doc:
     """Ficha de um slot de provedor (face Configurações): o que está escolhido, onde mora cada coisa."""
     d = it.data
     doc = Doc().h(Text(d.get("icon", d["slot"]), "bold"), Text(f" — {d.get('label') or '—'}"))
-    doc.kv([
+    kvs = [
         ("slot", Text(d["slot"])),
         ("provedor", Text(d["provider"] or "—")),
         ("modelo", Text(d.get("model") or "—")),
@@ -1140,7 +1140,17 @@ def d_prov(store, it) -> Doc:
         ("chave", Text(f"presente ({d['key_env']})", GRN) if d.get("key_present")
          else (Text(f"ausente — brain memory providers set {d['slot']} --provider {d['provider']} --key …", RED)
                if d.get("key_env") else Text("não usa", DIM))),
-    ])
+    ]
+    if d["slot"] == "decision":
+        kvs.append(("recall", Text(f"ligado (top-{d.get('candidates') or '?'} candidatos · sem fallback)", AMB)
+                    if d.get("recall") else Text("desligado (padrão)", DIM)))
+        if d.get("base_url"):
+            kvs.append(("base URL", Text(d["base_url"])))
+    if d["slot"] == "reranker" and d.get("inert"):
+        kvs.append(("estado", Text("inerte (decisor ligado no recall · .env preservado)", DIM)))
+    if d["slot"] == "llm" and d.get("auth_command") and d.get("docker_auth") == "manual":
+        kvs.append(("login manual", Text(d["auth_command"], AMB)))
+    doc.kv(kvs)
     doc.blank().p(Text("Tecla m muda modo e provedores · s troca um provedor · w abre o wizard da memória.", DIM))
     doc.p(Text("Trocou embeddings? brain memory rebuild re-deriva os vetores do vault.", DIM))
     return doc

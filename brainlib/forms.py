@@ -568,20 +568,25 @@ def _forms() -> list[Form]:
               value="embeddings"),
             F("provider", "provedor", choices="@providers", depends="slot", init="@provider"),
             F("model", "modelo", ph="vazio = recomendado do provedor", hint="provider_model", arg="--model"),
-            F("base_url", "base URL", ph="custom / openai-wire", show={"provider": ["custom"]}, arg="--base-url"),
+            F("base_url", "base URL", ph="custom / openai-wire / local /v1/systemone", show="need_base_url", arg="--base-url"),
             F("key", "API key", ph="vazio = mantém a do config/.env", secret=True,
-              show={"provider!": ["local", "off", "", *_LLM_SUBSCRIPTIONS]}, arg="--key"),
+              show="need_provider_key", arg="--key"),
             F("models", "modelos por operação", ph="retain=…,consolidation=… (vazio = recomendados)",
               show={"slot": ["llm"]}, arg="--models"),
-            F("candidates", "top-N candidatos", ph="vazio = default do provedor",
-              show={"slot": ["reranker"], "provider!": ["off"]}, arg="--candidates")),
+            F("recall", "usar no recall",
+              choices=(("off", "off — só consolidação/reflect (padrão)"),
+                       ("on", "on — julga cada candidato no recall (exige top-N; sem fallback)")),
+              value="off", init="@recall", show={"slot": ["decision"], "provider": ["hindsight"]},
+              check="recall_candidates", hint="recall_note", arg="--recall"),
+            F("candidates", "top-N candidatos", ph="exigido com recall on; vazio = default do reranker",
+              show="show_candidates", check="int:1:500", arg="--candidates")),
             sub="A escolha vai ao config/.env (chave nunca volta em output) e ao [memory]. Provedor de LLM por "
                 "assinatura (claude-code, xai-oauth…) não tem chave de API: autentique com `brain memory auth "
                 "<provedor>`. Trocou embeddings? vetores "
                 "antigos ficam incompatíveis — brain memory rebuild. Depois recrie o container (modo full inclui o "
                 "override): docker compose -f services/compose.yaml -f services/compose.full.yaml "
-                "--env-file config/.env up -d — no embed, sem o segundo -f. Full é só-nuvem: embeddings locais "
-                "ficam para o modo embed."),
+                "--env-file config/.env up -d — no embed, sem o segundo -f. Full é só-nuvem para LLM e embeddings "
+                "(decisor local /v1/systemone é a única exceção sem egress)."),
     ]
     del watch
     return out
@@ -639,14 +644,11 @@ def _src_opp_status(m, v, ctx):
 
 def memory_provider_options(slot: str, mode: str = "embed") -> list[tuple[str, str]]:
     """Cardápio de provedores de um slot derivado do registro providers.PROVIDERS — o mesmo que o
-    `brain memory setup` aceita (cli._flat_memory_providers; um teste cruza os dois). Sem `custom`: exige
-    model + base_url, que este formulário não pede; o valor atual em custom aparece como "(atual)"."""
-    tbl = _providers.PROVIDERS.get(slot, {})
-    out = [(pid, tbl[pid].get("label") or pid) for pid in tbl if pid != "custom"]
-    if slot == "embeddings" and mode == "full":
-        return [(pid, lab) for pid, lab in out
-                if pid != "local" and not tbl[pid].get("local") and tbl[pid].get("family") != "local"]
-    return out
+    `brain memory setup` aceita (cli._flat_memory_providers; um teste cruza os dois). Sem `custom`
+    (exige model + base_url) e sem `cursor` (indisponível no Docker); guiados e chave de API vêm
+    primeiro, manual por último."""
+    return [(pid, info.get("label") or pid)
+            for pid, info in _providers.menu_providers(slot, include_custom=False, include_unavailable=False, mode=mode)]
 
 
 def _with_current(opts: list[tuple[str, str]], cur: str) -> list[tuple[str, str]]:
@@ -884,6 +886,13 @@ PRED = {   # (valores, ctx, m) → bool — visibilidade de campo e comandos ext
     "prop_effort": lambda v, ctx, m: ctx.get("kind") == "reestimar" and bool(ctx.get("target")),
     "prop_merge": lambda v, ctx, m: ctx.get("kind") == "unificar-acao" and bool(ctx.get("target")) and bool(ctx.get("into")),
     "prop_drop": lambda v, ctx, m: ctx.get("kind") == "descartar-acao" and bool(ctx.get("target")) and bool(ctx.get("into")),
+    "need_base_url": lambda v, ctx, m: v.get("provider") == "custom"
+                                       or (v.get("slot") == "decision" and v.get("provider") == "local"),
+    "need_provider_key": lambda v, ctx, m: v.get("provider", "") not in ("off", "", *_LLM_SUBSCRIPTIONS)
+                                           and not (v.get("slot") == "embeddings" and v.get("provider") == "local"),
+    "show_candidates": lambda v, ctx, m: (v.get("slot") == "reranker" and v.get("provider", "") not in ("", "off"))
+                                         or (v.get("slot") == "decision" and v.get("provider") == "hindsight"
+                                             and v.get("recall") == "on"),
 }
 
 
@@ -1089,6 +1098,12 @@ def _ck_no_dot(x, v, ctx, m):
     return "O título não pode ter “·”." if "·" in x else ""
 
 
+def _ck_recall_candidates(x, v, ctx, m):
+    if x == "on" and not (v.get("candidates") or "").strip():
+        return 'Preencha "top-N candidatos" (exigido ao ligar o decisor no recall).'
+    return ""
+
+
 CHECKS = {   # (valor, valores, ctx, m) → mensagem ("" = ok)
     "date": _ck_date,
     "duration": _ck_duration,
@@ -1109,6 +1124,7 @@ CHECKS = {   # (valor, valores, ctx, m) → mensagem ("" = ok)
     "opp_status": _ck_opp_status,
     "note_link": _ck_note_link,
     "no_dot": _ck_no_dot,
+    "recall_candidates": _ck_recall_candidates,
     "people": None,                    # PY_ONLY — a TUI liga o resolvedor de aliases do ledger
     "recipient": None,                 # PY_ONLY — [outbound].allow é config, não view model
 }
@@ -1190,6 +1206,10 @@ HINTS = {   # (valor, valores, ctx, m) → texto de apoio
     "note_link": _h_note_link,
     "ice:impact": _h_ice("impact"), "ice:confidence": _h_ice("confidence"), "ice:ease": _h_ice("ease"),
     "ice_impact": _h_ice_impact,
+    "recall_note": lambda x, v, ctx, m: (
+        "Cada candidato é uma requisição própria ao decisor; sem fallback para RRF nesta versão (1.2.0) — "
+        "se o decisor cair, o recall falha fechado."
+    ) if x == "on" else "",
     "dup_action": None,                # PY_ONLY — similaridade (dupes.py) sobre o ledger inteiro
     "promote_diff": None,              # PY_ONLY — diff do goals.md que nasceria (planning.py)
     "provider_model": None,            # PY_ONLY — recomendados por operação (providers.py)
@@ -1441,8 +1461,9 @@ def static(brain=None) -> dict:
     from . import schema
     from . import providers as prov
     out = {"recurrence": sorted(schema.RECURRENCE), "opp_kinds": sorted(schema.OPP_KINDS),
-           "providers": {slot: [(p, info.get("label") or p) for p, info in tbl.items()]
-                         for slot, tbl in prov.PROVIDERS.items()},
+           "providers": {slot: [(p, info.get("label") or p)
+                                for p, info in prov.menu_providers(slot, include_custom=True, include_unavailable=False)]
+                         for slot in prov.PROVIDERS},
            "memory_embs": {
                "embed": [list(x) for x in memory_provider_options("embeddings", "embed")],
                "full": [list(x) for x in memory_provider_options("embeddings", "full")],

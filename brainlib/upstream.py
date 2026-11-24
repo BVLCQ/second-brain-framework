@@ -72,45 +72,48 @@ def _lines(r: subprocess.CompletedProcess) -> list[str]:
 
 
 def _prepare(inst: config.Instance, remote: str | None, branch: str | None, fetch: bool = True,
-             require_ref: bool = True) -> tuple[str, str, str | None]:
+             require_ref: bool = True, git=None) -> tuple[str, str, str | None]:
     """Valida o repo e devolve (remote, branch, ref). Faz fetch; sem rede, ref pode ser None se não for exigida."""
+    git_fn = git or _git
     root = inst.root
     if not (root / ".git").exists():
         raise util.BrainError("esta instância não é um clone git do framework — nada a sincronizar", 1)
     remote = remote or "origin"
-    if remote not in _git(root, "remote").stdout.split():
+    if remote not in git_fn(root, "remote").stdout.split():
         raise util.BrainError(f"remote '{remote}' não existe (git remote -v)", 3)
     if not branch:
-        branch = _git(root, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
+        branch = git_fn(root, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
         if branch == "HEAD":
             raise util.BrainError("HEAD solto (detached): entre num branch antes de sincronizar", 1)
-    private = [f for f in _lines(_git(root, "ls-files")) if f in PRIVATE_FILES or f.startswith(PRIVATE_PREFIXES)]
+    private = [f for f in _lines(git_fn(root, "ls-files")) if f in PRIVATE_FILES or f.startswith(PRIVATE_PREFIXES)]
     if private:
         raise util.BrainError("arquivos do dono estão rastreados pelo git (nunca devem): "
                               + ", ".join(private[:5]) + " — `git rm --cached` neles antes de continuar", 4)
     if fetch:
         # refspec explícito: clones feitos com `git remote add` não têm remote.origin.fetch, e aí o
         # fetch simples só atualizaria FETCH_HEAD (origin/<branch> ficaria velho e ahead/behind mentiria)
-        r = _git(root, "fetch", remote, f"+refs/heads/{branch}:refs/remotes/{remote}/{branch}", check=False)
+        r = git_fn(root, "fetch", remote, f"+refs/heads/{branch}:refs/remotes/{remote}/{branch}", check=False)
         if r.returncode != 0:
             raise util.BrainError(f"fetch de {remote}/{branch} falhou: {(r.stderr or r.stdout).strip()}", 4)
     ref = f"{remote}/{branch}"
-    if _git(root, "rev-parse", "--verify", "--quiet", ref, check=False).returncode != 0:
+    if git_fn(root, "rev-parse", "--verify", "--quiet", ref, check=False).returncode != 0:
         if require_ref:
             raise util.BrainError(f"{ref} não existe — o branch ainda não foi publicado?", 3)
         return remote, branch, None
     return remote, branch, ref
 
 
-def _ahead_behind(root: Path, ref: str) -> tuple[int, int]:
-    a, b = _git(root, "rev-list", "--left-right", "--count", f"HEAD...{ref}").stdout.split()
+def _ahead_behind(root: Path, ref: str, git=None) -> tuple[int, int]:
+    git_fn = git or _git
+    a, b = git_fn(root, "rev-list", "--left-right", "--count", f"HEAD...{ref}").stdout.split()
     return int(a), int(b)
 
 
-def _pending_files(root: Path, ref: str) -> tuple[list[str], list[str]]:
+def _pending_files(root: Path, ref: str, git=None) -> tuple[list[str], list[str]]:
     """(rastreados que diferem do remoto, novos não rastreados e não ignorados)."""
-    tracked = _lines(_git(root, "diff", "--name-only", ref))
-    untracked = _lines(_git(root, "ls-files", "--others", "--exclude-standard"))
+    git_fn = git or _git
+    tracked = _lines(git_fn(root, "diff", "--name-only", ref))
+    untracked = _lines(git_fn(root, "ls-files", "--others", "--exclude-standard"))
     return tracked, untracked
 
 
@@ -174,13 +177,14 @@ def read_check_cache(inst) -> dict:
         return {}
 
 
-def check_update(inst, force: bool = False) -> dict:
+def check_update(inst, force: bool = False, git=None) -> dict:
     """Verifica o upstream (git fetch, ≤1×/dia a menos que force) e grava o cache em FRESH/.
 
     Sem rede / sem git: devolve o cache antigo marcado `stale=True` — nunca falha,
     nunca bloqueia (superfícies só LÊEM o cache; a rede fica aqui e no noturno).
     """
     from . import util as _u
+    git_fn = git or _git
     local_version = _version(inst.root)                # do DISCO: pós-atualização o módulo importado está velho
     cache = read_check_cache(inst)
     ts = cache.get("checked_at")
@@ -195,13 +199,13 @@ def check_update(inst, force: bool = False) -> dict:
     root = inst.root
     out = {"version": local_version, "checked_at": _u.now().isoformat(timespec="seconds")}
     try:
-        remote, branch, ref = _prepare(inst, None, None)
-        _git(root, "fetch", "--quiet", remote, branch, check=True)
-        ahead, behind = _ahead_behind(root, ref)          # (só-HEAD, só-remote) = (ahead, behind)
+        remote, branch, ref = _prepare(inst, None, None, git=git_fn)
+        git_fn(root, "fetch", "--quiet", remote, branch, check=True)
+        ahead, behind = _ahead_behind(root, ref, git=git_fn)  # (só-HEAD, só-remote) = (ahead, behind)
         out.update(remote=remote, branch=branch, behind=behind, ahead=ahead,
-                   incoming=[ln for ln in _lines(_git(root, "log", "--format=%h %s", f"HEAD..{ref}"))][:20],
-                   remote_version=_version_at(root, ref), error="")
-        changelog_remote = _file_at(root, ref, "CHANGELOG.md")
+                   incoming=[ln for ln in _lines(git_fn(root, "log", "--format=%h %s", f"HEAD..{ref}"))][:20],
+                   remote_version=_version_at(root, ref, git=git_fn), error="")
+        changelog_remote = _file_at(root, ref, "CHANGELOG.md", git=git_fn)
         if changelog_remote and out["remote_version"] != "?":
             out["news"] = news_between(changelog_remote, local_version, out["remote_version"])
         else:
@@ -218,16 +222,17 @@ def check_update(inst, force: bool = False) -> dict:
     return out
 
 
-def _file_at(root: Path, ref: str, path: str) -> str | None:
+def _file_at(root: Path, ref: str, path: str, git=None) -> str | None:
+    git_fn = git or _git
     try:
-        r = _git(root, "show", f"{ref}:{path}")
+        r = git_fn(root, "show", f"{ref}:{path}")
         return r.stdout if r.returncode == 0 else None
     except Exception:                                   # noqa: BLE001
         return None
 
 
-def _version_at(root: Path, ref: str) -> str:
-    text = _file_at(root, ref, "brainlib/__init__.py")
+def _version_at(root: Path, ref: str, git=None) -> str:
+    text = _file_at(root, ref, "brainlib/__init__.py", git=git)
     if not text:
         return "?"
     m = re.search(r'__version__\s*=\s*"([^"]+)"', text)
@@ -267,17 +272,25 @@ def _area(path: str) -> str:
 
 
 def update(inst: config.Instance, check: bool = False, rebase: bool = False,
-           remote: str | None = None, branch: str | None = None) -> dict:
+           remote: str | None = None, branch: str | None = None,
+           git=None, run=None) -> dict:
+    if not check and (util.is_nightly() or util.is_agent()):
+        raise util.BrainError(
+            "o noturno/agente só pode checar atualizações (`brain update --check`) — não aplica `brain update`",
+            code=4,
+        )
+    git_fn = git or _git
+    run_fn = run or subprocess.run
     root = inst.root
-    remote, branch, ref = _prepare(inst, remote, branch)
-    ahead, behind = _ahead_behind(root, ref)
-    tracked, untracked = _pending_files(root, ref)
+    remote, branch, ref = _prepare(inst, remote, branch, git=git_fn)
+    ahead, behind = _ahead_behind(root, ref, git=git_fn)
+    tracked, untracked = _pending_files(root, ref, git=git_fn)
     res: dict = {"remote": remote, "branch": branch, "ahead": ahead, "behind": behind, "checked_only": check,
                  "version_before": _version(root), "incoming": [], "areas": {}, "seeded": [],
                  "template_diverged": [], "local_pending": len(tracked) + len(untracked)}
     if behind:
-        res["incoming"] = [ln for ln in _lines(_git(root, "log", "--format=%h %s", f"HEAD..{ref}"))]
-        files = _lines(_git(root, "diff", "--name-only", f"HEAD...{ref}"))
+        res["incoming"] = [ln for ln in _lines(git_fn(root, "log", "--format=%h %s", f"HEAD..{ref}"))]
+        files = _lines(git_fn(root, "diff", "--name-only", f"HEAD...{ref}"))
         for f in files:
             res["areas"][_area(f)] = res["areas"].get(_area(f), 0) + 1
         res["incoming_files"] = files
@@ -289,11 +302,29 @@ def update(inst: config.Instance, check: bool = False, rebase: bool = False,
             raise util.BrainError(
                 f"divergiu: {ahead} commit(s) locais ainda não publicados e {behind} novo(s) no upstream. "
                 "`brain update --rebase` re-aplica os seus por cima; para conflito, `git rebase --abort` desfaz.", 2)
+        expected_sha = git_fn(root, "rev-parse", ref).stdout.strip()
+        if not expected_sha:
+            raise util.BrainError(f"não foi possível resolver o commit esperado de {ref}", 4)
         mode = ["--rebase"] if ahead else ["--ff-only"]
-        r = _git(root, "pull", *mode, "--autostash", remote, branch, check=False)
+        r = git_fn(root, "pull", *mode, "--autostash", remote, branch, check=False)
         if r.returncode != 0:
             raise util.BrainError("pull falhou — nada do vault foi tocado; edições locais ficam no `git stash list` "
                                   f"se o autostash não reaplicou:\n{(r.stderr or r.stdout).strip()}", 4)
+        actual_head = git_fn(root, "rev-parse", "HEAD").stdout.strip()
+        if ahead:
+            anc = git_fn(root, "merge-base", "--is-ancestor", expected_sha, "HEAD", check=False)
+            if not actual_head or anc.returncode != 0:
+                raise util.BrainError(
+                    f"HEAD pós-rebase ({actual_head[:12] or '?'}) não contém o commit esperado de {ref} "
+                    f"({expected_sha[:12]}) — execução pós-pull (doctor/hook) recusada",
+                    4,
+                )
+        elif actual_head != expected_sha:
+            raise util.BrainError(
+                f"HEAD pós-pull ({actual_head[:12] or '?'}) difere do commit esperado de {ref} "
+                f"({expected_sha[:12]}) — execução pós-pull (doctor/hook) recusada",
+                4,
+            )
         res["updated"] = True
         res["version_after"] = _version(root)
         try:
@@ -301,19 +332,19 @@ def update(inst: config.Instance, check: bool = False, rebase: bool = False,
             res["news"] = news_between(chlog, res["version_before"], res["version_after"])
         except OSError:
             res["news"] = []
-        check_update(inst, force=True)                  # re-basa o cache pós-atualização
+        check_update(inst, force=True, git=git_fn)      # re-basa o cache pós-atualização
         incoming_tpl = [f for f in res.get("incoming_files", []) if f.startswith("template/")]
         res["seeded"] = seed_template(inst)
         res["template_diverged"] = [f"vault/{f[len('template/'):]}" for f in incoming_tpl
                                     if (inst.vault / f[len("template/"):]).exists()
                                     and (inst.vault / f[len("template/"):]).read_bytes() != (root / f).read_bytes()]
         try:
-            d = subprocess.run([sys.executable, str(root / "brain"), "doctor"], cwd=root, capture_output=True,
-                               text=True, timeout=GIT_TIMEOUT_S)
+            d = run_fn([sys.executable, str(root / "brain"), "doctor"], cwd=root, capture_output=True,
+                       text=True, timeout=GIT_TIMEOUT_S)
             doc_out, doc_ok = d.stdout + d.stderr, d.returncode == 0
         except subprocess.TimeoutExpired:
             doc_out, doc_ok = f"doctor não respondeu em {GIT_TIMEOUT_S}s", False
-        res["hook"] = hook(inst, "install")
+        res["hook"] = hook(inst, "install", git=git_fn)
         res["doctor"] = [ln for ln in doc_out.splitlines() if ln.strip()]
         res["doctor_ok"] = doc_ok
     return res
@@ -758,8 +789,9 @@ exit 1
 """
 
 
-def _hook_path(root: Path) -> Path:
-    rel = _git(root, "rev-parse", "--git-path", "hooks/pre-push").stdout.strip()
+def _hook_path(root: Path, git=None) -> Path:
+    git_fn = git or _git
+    rel = git_fn(root, "rev-parse", "--git-path", "hooks/pre-push").stdout.strip()
     return (root / rel) if not os.path.isabs(rel) else Path(rel)
 
 
@@ -788,21 +820,21 @@ def ensure_fetch_refspec(inst: config.Instance) -> str:
     return "corrigido"
 
 
-def hook_state(inst: config.Instance) -> str:
+def hook_state(inst: config.Instance, git=None) -> str:
     """'instalado' | 'ausente' | 'de-outro' (já existe um pre-push que não é nosso) | 'sem-git'."""
     if not (inst.root / ".git").exists():
         return "sem-git"
-    path = _hook_path(inst.root)
+    path = _hook_path(inst.root, git=git)
     if not path.exists():
         return "ausente"
     return "instalado" if HOOK_MARK in path.read_text(encoding="utf-8", errors="replace") else "de-outro"
 
 
-def hook(inst: config.Instance, action: str) -> str:
-    state = hook_state(inst)
+def hook(inst: config.Instance, action: str, git=None) -> str:
+    state = hook_state(inst, git=git)
     if state == "sem-git":
         return state
-    path = _hook_path(inst.root)
+    path = _hook_path(inst.root, git=git)
     if action == "install" and state in ("ausente", "instalado"):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(HOOK_BODY, encoding="utf-8")

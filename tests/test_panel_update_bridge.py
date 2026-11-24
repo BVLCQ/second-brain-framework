@@ -248,15 +248,23 @@ class PanelUpdateBridgeTests(unittest.TestCase):
         self.assertEqual(final["lines"], verbatim)
         self.assertFalse(restarted.wait(timeout=1.5), "não pode agendar restart em erro")
 
-    def test_api_update_permitido_com_brain_nightly(self):
-        self.state.update_cmd_fn = lambda _inst, on_line: (on_line("✓ já está na versão do upstream"), 0)[1]
+    def test_api_update_bloqueado_com_brain_nightly_403(self):
+        called = False
+
+        def fake_cmd(_inst, _on_line):
+            nonlocal called
+            called = True
+            return 0
+
+        self.state.update_cmd_fn = fake_cmd
         self.state.restart_fn = lambda: None
 
         with mock.patch.dict(os.environ, {"BRAIN_NIGHTLY": "1"}):
             code, res = self._req("/api/update", token=self.token, method="POST", body={})
-            self.assertEqual(code, 200)
-            final = self._poll_until_done(res["job"])
-            self.assertEqual(final["status"], "done")
+            self.assertEqual(code, 403)
+            self.assertFalse(res["ok"])
+            self.assertIn("noturno", res["error"])
+        self.assertFalse(called)
 
     def test_serve_preserva_token_via_env_no_reinicio(self):
         preset = "tok-reinicio-preservado-123456"

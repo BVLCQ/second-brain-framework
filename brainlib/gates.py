@@ -16,6 +16,24 @@ SURFACES = frozenset({"tui", "painel"})                 # atestação da superf�
 OUTBOX_RE = re.compile(r"^(ok|aprovo|enviar \d+|\d+a)$")   # a constituição também aceita "enviar 1" / "1a" no outbox
 
 
+def require_owner_present(what: str = "aprovação") -> None:
+    """Recusa aprovação ou ato privativo do dono sob `BRAIN_AGENT` ou `BRAIN_NIGHTLY` (code 4)."""
+    agent = util.is_agent()
+    nightly = util.is_nightly()
+    if not (agent or nightly):
+        return
+    if agent and nightly:
+        who, env_hint = "o agente no noturno", "BRAIN_AGENT/BRAIN_NIGHTLY"
+    elif agent:
+        who, env_hint = "o agente", "BRAIN_AGENT"
+    else:
+        who, env_hint = "o noturno", "BRAIN_NIGHTLY"
+    raise util.BrainError(
+        f"{what}: {who} não pode aprovar no lugar do dono ({env_hint})",
+        code=4,
+    )
+
+
 def verify_approval(
     value: str | None,
     *,
@@ -25,6 +43,7 @@ def verify_approval(
     allow_surface: bool = True,
 ) -> tuple[str, str]:
     """Devolve `(valor_normalizado, origem)` com `origem` em `{"literal", "surface"}`; recusa qualquer outra coisa (code 4)."""
+    require_owner_present(what=what)
     val = " ".join(str(value or "").strip().lower().split()) if isinstance(value, str) else ""
     if allow_surface and val in SURFACES:
         return val, "surface"

@@ -1085,7 +1085,7 @@ brain memory recall "prazos" --tags proj:PROJ-1,pessoa:marina-demo
 brain memory providers show                          # o stack atual (chave: presença, nunca valor)
 brain memory providers set embeddings --provider fireworks --key …   # escolha sem wizard
 brain memory providers set reranker --off            # volta à fusão RRF
-brain memory providers set llm --provider anthropic --key …         # Haiku 5.5 em tudo, esforço max (default)
+brain memory providers set llm --provider anthropic --key …         # Haiku 5.5 em tudo, esforço high (default)
 brain memory reflect "como está o projeto de churn?"
 brain memory rebuild
 brain memory setup --mode full      # troca de setup (full exige chave no .env + "ok" no wizard)

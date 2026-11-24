@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import re
+import secrets
 import tempfile
 import threading
 import sys
@@ -236,12 +237,21 @@ def pid_alive(pid: int) -> bool:
     return True
 
 
+def _env_flag(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def is_nightly() -> bool:
     """`BRAIN_NIGHTLY` ligado? Única leitura do modo noturno (o agente headless roda sem dono presente).
 
     Aceita qualquer valor truthy óbvio (``1``/``true``/``yes``/``on``, qualquer caixa): comparação exata com
     ``"1"`` fazia ``BRAIN_NIGHTLY=true`` desarmar as recusas de gate em silêncio (#134)."""
-    return os.environ.get("BRAIN_NIGHTLY", "").strip().lower() in {"1", "true", "yes", "on"}
+    return _env_flag("BRAIN_NIGHTLY")
+
+
+def is_agent() -> bool:
+    """`BRAIN_AGENT` ligado? Subprocesso do agente não aprova, não responde pelo dono e não aplica `brain update`."""
+    return _env_flag("BRAIN_AGENT")
 
 
 def split_csv(value: str | list | None) -> list[str]:
@@ -369,6 +379,19 @@ def _tab_prefix(url: str) -> str | None:
     return url.split("#", 1)[0] if url.startswith("file://") else None
 
 
+def _reused_tab_url(url: str) -> str:
+    """Garante mudança de query (`?n=<nonce>`) ao reaproveitar aba da ponte local,
+    forçando navegação completa para o boot consumir `#t=` uma única vez."""
+    if not re.match(r"https?://127\.0\.0\.1:\d+/", url):
+        return url
+    parts = urllib.parse.urlsplit(url)
+    q = [(k, v) for k, v in urllib.parse.parse_qsl(parts.query, keep_blank_values=True) if k != "n"]
+    q.append(("n", secrets.token_hex(4)))
+    return urllib.parse.urlunsplit(
+        (parts.scheme, parts.netloc, parts.path, urllib.parse.urlencode(q), parts.fragment)
+    )
+
+
 def on_macos() -> bool:
     """True no macOS nativo. Seam de plataforma (ver in_wsl)."""
     return sys.platform == "darwin"
@@ -401,13 +424,14 @@ def focus_open_tab(url: str) -> bool:
     prefix = _tab_prefix(url)
     if not prefix or sys.platform != "darwin":
         return False
+    target = _reused_tab_url(url)
     default = _default_browser()
     cands = ([default] if default else []) + [v for v in _SCRIPTABLE.values() if v != default]
     for app, family in cands:
         try:
             if subprocess.run(["/usr/bin/pgrep", "-x", app], capture_output=True, timeout=3).returncode != 0:
                 continue                                          # fechado: osascript o abriria à toa
-            r = subprocess.run(["/usr/bin/osascript", "-e", _FIND_TAB[family].format(app=app), prefix, url],
+            r = subprocess.run(["/usr/bin/osascript", "-e", _FIND_TAB[family].format(app=app), prefix, target],
                                capture_output=True, text=True, timeout=10)
         except (OSError, subprocess.SubprocessError):
             continue                                              # permissão negada, osascript ausente, travou…

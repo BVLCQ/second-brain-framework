@@ -161,7 +161,7 @@ somente-leitura para o mundo.
 
 O noturno roda com `BRAIN_NIGHTLY=1`: o ledger **recusa** qualquer evento do
 dono, aprovação, envio, publicação, issue de feedback ou `focus.apply` no Google. Não há dono
-presente. A porta 6 é a exceção: já aprovada, cria, mantém o Resumo e sugere.
+presente. O noturno também não aplica `brain update` (só a checagem). A porta 6 é a exceção: já aprovada, cria, mantém o Resumo e sugere.
 
 ## O livro-razão (a verdade das entidades)
 
@@ -389,7 +389,7 @@ Sem servidor, o motor é `none` e `/ask` usa índice → artefato → RAW. Guias
 - **Registro de egresso da memória:** a camada de memória pode enviar texto do vault a APIs
   externas configuradas pelo dono — LLM no modo full (`[memory].cloud_llm = true`) e, desde o
   plano memory-providers, embeddings e reranker de nuvem (`cloud_embeddings`/`cloud_reranker =
-  true`). O wizard avisa na tela em cada escolha de nuvem e o doctor narra; chave no
+  true`) e o decisor hospedado (`cloud_decision = true`; o decisor `local` não sai da máquina). O wizard avisa na tela em cada escolha de nuvem e o doctor narra; chave no
   `config/.env`, nada público — a invariante da porta 5 continua.
 - Segredos **nunca** aparecem no chat, em log, em artefato ou em view. Não
   leia `.env` além de checar existência/permissão; nunca imprima seu conteúdo.
@@ -435,9 +435,7 @@ Dúvida que bloqueia o agente ou que é do dono decidir **não fica só no log n
 só o dono responde** (`brain ask answer`, pela TUI) e nunca no noturno, que pode perguntar mas não responder. Estados:
 aberta → respondida → aplicada (ou descartada). **Passo 0 do `/dump` e do `/update`:** `./brain ask list --answered`, aplicar cada
 resposta (alias, ação, reclassificação) e gravar `./brain ask applied ASK-#### --how "…"` — é a fila de reserva quando a TUI não
-consegue retomar o agente na hora. **Ferramenta nativa não gera ASK:** o preset do agente headless (noturno e ações ⚡) já libera
-`Bash` inteiro — qualquer comando (`ls`, `cat`, `cd`, `grep`…) — mais Read/Edit/Write/Glob/Grep/NotebookEdit/WebFetch/
-WebSearch/Task, sem lista de exceções (`runner.CLAUDE_TOOLS`). Permissão negada de MCP também vira ASK (`kind=permissao`);
+consegue retomar o agente na hora. **Ferramenta nativa não gera ASK:** o preset headless do Claude (noturno e ações ⚡) só executa `./brain` além de leitura (`Read`/`Grep`/`Glob`, `runner.HEADLESS_TOOLS`) — sem `Bash` irrestrito e sem Edit/Write/Web. A sessão interativa do dono (`runner.CLAUDE_TOOLS`) não muda. Permissão negada de MCP também vira ASK (`kind=permissao`);
 liberar grava a regra em
 `[tui].agent_allow` (`brain agent allow`), **exceto** ferramenta MCP de escrita no mundo exterior (enviar, postar, criar, mover…),
 que nunca é liberada por aí: passa pelas portas (`/outbox`, `/publish`).

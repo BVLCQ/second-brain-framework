@@ -1,0 +1,21 @@
+{
+  "note": "Pins go stale when upstream changes; mismatch aborts instead of running unknown code.",
+  "pins": {
+    "homebrew": {
+      "url": "https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh",
+      "sha256": "8fd2f1a5287a7c2e3d7362924c677edcc04c5a0e16448c77132d056bc88cf1ed"
+    },
+    "mise": {
+      "url": "https://mise.jdx.dev/install.sh",
+      "sha256": "2e481a9b2432bee720c1cd727abc48d8d1bb37a015811598a05f76a981c3ca2d"
+    },
+    "docker": {
+      "url": "https://get.docker.com",
+      "sha256": "c9e2607b313b7a208027fa225b9d0454e72c9ff4cd0e2c5f7a9edd8eb6a890e4"
+    },
+    "lmstudio": {
+      "url": "https://lmstudio.ai/install.sh",
+      "sha256": "7db4d9fd6298fea065144ee1d21325da2dc135e9b626b637e28faa16ae6bc5c1"
+    }
+  }
+}

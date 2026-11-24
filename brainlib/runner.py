@@ -2,8 +2,8 @@
 
 Ordem: render (sempre, sem LLM) → agente headless roda /update (puxa fontes via MCP,
 /dump) → sync de foco → memória → backup semanal → brief → render final. Cada passo isolado:
-falha em um não derruba os outros. O agente roda com BRAIN_NIGHTLY=1: o ledger recusa
-qualquer evento "do dono", aprovação, envio ou publicação — não há dono presente.
+falha em um não derruba os outros. O agente roda com BRAIN_NIGHTLY=1 e BRAIN_AGENT=1: o ledger
+recusa qualquer evento "do dono", aprovação, envio ou publicação — não há dono presente.
 """
 from __future__ import annotations
 
@@ -22,17 +22,31 @@ from pathlib import Path
 
 from . import config, util
 
-BASH_ALLOW = "Bash"   # qualquer comando de shell, sempre liberado para o agente headless (noturno e ações ⚡ do TUI)
-# Toda ferramenta nativa do claude, sem restrição: o agente headless não consegue pedir permissão, então cada uma
-# fora da lista virava um ASK `permissao`. MCP não entra aqui: leitura vai em [runner].allow, escrita só pelas portas.
+BASH_ALLOW = "Bash"   # sessão interativa do dono (.claude/settings.json); não entra nos presets headless
+# Ferramentas nativas da sessão interativa do dono (`perms.static_settings`).
 CLAUDE_TOOLS = [BASH_ALLOW, "Read", "Edit", "Write", "Glob", "Grep", "NotebookEdit", "WebFetch", "WebSearch", "Task"]
+# Ferramentas nativas dos presets headless (noturno e ações ⚡): leitura + `./brain` apenas, sem Bash irrestrito
+# nem Edit/Write/NotebookEdit/WebFetch/WebSearch/Task. MCP não entra aqui: leitura vai em [runner].allow, escrita só pelas portas.
+HEADLESS_TOOLS = ["Read", "Grep", "Glob", "Bash(./brain *)", "Bash(./brain)"]
+# Negações extras de ambiente no headless para o filho não limpar BRAIN_AGENT nem inspecionar o env.
+HEADLESS_ENV_DENIES: tuple[str, ...] = (
+    "Bash(env *)",
+    "Bash(*env -u*)",
+    "Bash(printenv*)",
+)
+# Flags de bypass total dos presets não-claude: nunca sobem no noturno.
+BYPASS_FLAGS: frozenset[str] = frozenset({
+    "--force",
+    "--full-auto",
+    "--dangerously-skip-permissions",
+    "--yolo",
+})
+NIGHTLY_SAFE_PRESETS: frozenset[str] = frozenset({"claude"})
 
 PRESETS: dict[str, list[str]] = {
     "cursor": ["cursor-agent", "-p", "--force", "--output-format", "text", "{prompt}"],
-    # `Bash` sem restrição: o agente headless nunca consegue pedir permissão, e cada comando fora de `./brain`
-    # (ls, cat, cd, grep…) virava um ASK `permissao`. Escrita no mundo exterior continua só pelas portas (AGENTS.md).
     "claude": ["claude", "-p", "{prompt}", "--permission-mode", "acceptEdits",
-               "--allowedTools", *CLAUDE_TOOLS],
+               "--allowedTools", *HEADLESS_TOOLS],
     "codex": ["codex", "exec", "--full-auto", "{prompt}"],
     "agy": ["agy", "-p", "{prompt}", "--dangerously-skip-permissions"],
     "gemini": ["gemini", "-p", "{prompt}", "--yolo"],
@@ -88,20 +102,22 @@ def filtered_mcp_allow(cfg: dict, *, include_tui: bool = False, extra: list[str]
 
 
 def disallowed_tools(cfg: dict) -> list[str]:
-    """Regras de negação para `--disallowedTools`: limites da Constituição (`perms.DENY`) + ferramentas MCP de escrita
-    externa dos conectores padrão não liberadas explicitamente pela porta `oppdrive` (`door_allow`)."""
+    """Regras de negação para `--disallowedTools`: limites da Constituição (`perms.DENY`) + bloqueio de manipulação
+    de ambiente (`BRAIN_AGENT`) + ferramentas MCP de escrita externa dos conectores padrão não liberadas
+    explicitamente pela porta `oppdrive` (`door_allow`)."""
     from . import perms
     door = set(door_allow(cfg))
     mcp_deny = [pat for pat in MCP_WRITE_DENY_PATTERNS if not any(fnmatch.fnmatchcase(d, pat) for d in door)]
-    return [*perms.DENY, *mcp_deny]
+    return [*perms.DENY, *HEADLESS_ENV_DENIES, *mcp_deny]
 
 
-def preset_argv(name: str, cfg: dict, prompt: str) -> list[str] | None:
-    """argv do preset `name` com `prompt`, ou None sem binário no PATH. claude ganha --model, --disallowedTools e as regras MCP."""
+def preset_argv(name: str, cfg: dict, prompt: str, *, night: bool = True) -> list[str] | None:
+    """argv do preset `name` com `prompt`, ou None sem binário no PATH. claude ganha --model, --disallowedTools e as regras MCP.
+    Com `night=True`, remove flags de bypass total (`--force`, `--full-auto`, `--dangerously-skip-permissions`, `--yolo`)."""
     preset = PRESETS.get(name)
     if not preset or not shutil.which(preset[0]):
         return None
-    argv = [p.replace("{prompt}", prompt) for p in preset]
+    argv = [p.replace("{prompt}", prompt) for p in preset if not (night and p in BYPASS_FLAGS)]
     if name == "claude":
         r = cfg["runner"]
         if r.get("model"):   # antes do --allowedTools (variádico): flag depois dele seria engolida
@@ -169,7 +185,7 @@ def probe(name: str, cfg: dict, cwd: Path | None = None, timeout: int = 60, run=
                           + ("" if name == "command" else f" ({name})")}
 
     try:
-        p = run(argv, cwd=cwd, env={**os.environ, "BRAIN_NIGHTLY": "1"}, capture_output=True, text=True,
+        p = run(argv, cwd=cwd, env={**os.environ, "BRAIN_NIGHTLY": "1", "BRAIN_AGENT": "1"}, capture_output=True, text=True,
                 stdin=subprocess.DEVNULL, timeout=timeout, check=False)
     except subprocess.TimeoutExpired:
         return {"name": name, "ok": False, "auth": False, "reason": f"sem resposta em {timeout}s"}
@@ -226,30 +242,43 @@ def _footprint(brain) -> tuple:
             tuple(sorted(p.name for p in inbox.glob("*"))) if inbox.exists() else ())
 
 
-def _attempt(brain, cmd: list[str], env: dict, timeout: int) -> tuple[int, str]:
+def _attempt(brain, cmd: list[str], env: dict, timeout: int, run=None) -> tuple[int, str]:
+    brain.inst.logs.mkdir(parents=True, exist_ok=True)
     log = brain.inst.logs / "nightly-agent.log"
     start = log.stat().st_size if log.exists() else 0
     with open(log, "a", encoding="utf-8") as fh:
         fh.write(f"──── {util.iso_now()} · {cmd[0]} ────\n")
         fh.flush()
-        proc = subprocess.run(cmd, cwd=brain.inst.root, env=env, stdout=fh, stderr=subprocess.STDOUT,
-                              stdin=subprocess.DEVNULL, timeout=timeout, check=False)
+        proc = (run or subprocess.run)(cmd, cwd=brain.inst.root, env=env, stdout=fh, stderr=subprocess.STDOUT,
+                                       stdin=subprocess.DEVNULL, timeout=timeout, check=False)
     with open(log, "rb") as fh:
         fh.seek(start)
         tail = fh.read().decode("utf-8", "replace").split("\n", 1)[-1]
     return proc.returncode, failure_reason(tail[-4000:])
 
 
-def run_agent(brain, ran: dict | None = None) -> str:
+def _nightly_unsupported(name: str) -> str | None:
+    if name in PRESETS and name not in NIGHTLY_SAFE_PRESETS:
+        return f"preset {name} não tem modo restrito — noturno não sobe com bypass"
+    return None
+
+
+def run_agent(brain, ran: dict | None = None, run=None) -> str:
     cands = agent_candidates(brain.inst.cfg)
     if not cands:
         return "nenhum agente headless encontrado — inbox espera o primeiro chat do dia"
-    env = {**os.environ, "BRAIN_NIGHTLY": "1"}
+    env = {**os.environ, "BRAIN_NIGHTLY": "1", "BRAIN_AGENT": "1"}
     timeout = brain.inst.cfg["runner"]["timeout_min"] * 60
     failed: list[str] = []
+    attempted = 0
     for name, cmd in cands:
+        unsup = _nightly_unsupported(name)
+        if unsup:
+            failed.append(unsup)
+            continue
+        attempted += 1
         before = _footprint(brain)
-        rc, why = _attempt(brain, cmd, env, timeout)     # TimeoutExpired sobe: rodou de verdade, não há fallback
+        rc, why = _attempt(brain, cmd, env, timeout, run=run)     # TimeoutExpired sobe: rodou de verdade, não há fallback
         if rc == 0:
             if ran is not None:
                 ran["name"] = name
@@ -257,10 +286,12 @@ def run_agent(brain, ran: dict | None = None) -> str:
         if _footprint(brain) != before:
             raise RuntimeError(f"{name} saiu com código {rc} depois de começar — {why} (vault/logs/nightly-agent.log)")
         failed.append(f"{name} — {why or f'código {rc}'}")
+    if attempted == 0:
+        raise RuntimeError("; ".join(failed))
     raise RuntimeError("nenhum agente conseguiu rodar: " + "; ".join(failed) + " (vault/logs/nightly-agent.log)")
 
 
-def nightly(brain, skip_agent: bool = False) -> dict:
+def nightly(brain, skip_agent: bool = False, run=None) -> dict:
     from . import harvest, render
     steps: dict[str, str] = {}
     ok = True
@@ -285,7 +316,7 @@ def nightly(brain, skip_agent: bool = False) -> dict:
         ran: dict = {}
         snap = harvest.begin_agent_window(brain.inst, "nightly", strict=True)
         try:
-            step("agente", lambda: run_agent(brain, ran))
+            step("agente", lambda: run_agent(brain, ran) if run is None else run_agent(brain, ran, run=run))
         finally:
             window = harvest.end_agent_window(brain.inst, snap)
         gap = mcp_gap(brain)
