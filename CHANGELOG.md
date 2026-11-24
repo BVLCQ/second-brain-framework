@@ -1,3 +1,9 @@
+## 2.39.0 — o scan não cai com nome estranho, e o recall gravado não se desliga sozinho
+
+- **Nome entre aspas com byte inválido não derruba o scan.** O git imprime esse nome entre aspas, com o byte cru lá dentro. A leitura quebrava a varredura inteira. O byte fica guardado e o arquivo entra na acusação.
+- **Arquivo que a linha de comando não consegue nomear não sai como já público.** A pergunta do que já está no remoto não leva o nome na linha de comando. Se um nome não pode chegar ao git, a varredura abre mão do filtro em vez de pular o arquivo em silêncio.
+- **O recall gravado fica, quando o pedido não fala dele.** Regravar o slot de decisão sem mencionar o recall não desliga o decisor no recall nem regrava o reranker. Vale no formato aninhado e no plano.
+
 ## 2.38.0 — as 12 issues abertas: painel, memória e os buracos de segurança que ainda estavam abertos
 
 - **O fim do assistente abre a Home (#164).** O botão "Abrir meu Brain" troca o endereço para `#home` antes de redesenhar o painel. Antes a página continuava em `#onboarding` e o assistente reabria no último passo.
