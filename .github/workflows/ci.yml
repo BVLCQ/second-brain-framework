@@ -62,10 +62,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
+          # O workspace vem do job anterior, que pode ter executado código de um PR daqui. O `.git`
+          # dele não serve: uma config a mais (hook, fsmonitor) faria este job executar o que ele barra.
+          rm -rf -- "${GITHUB_WORKSPACE:-$PWD}/.git"
           git init -q
           git config http.extraheader "AUTHORIZATION: basic $(echo -n "x-access-token:$GITHUB_TOKEN" | base64 -w0)"
-          # o workspace vem do job anterior, com o remote dele já configurado: troca a URL ou cria
-          git remote set-url origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git" 2>/dev/null || git remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
+          git remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
           git fetch -q --no-tags origin "+refs/heads/main:refs/remotes/origin/main" "$TARGET_SHA"
           git checkout -q --force origin/main
           git clean -ffdxq # o que o job anterior deixou sem rastrear não entra nesta varredura
@@ -74,12 +76,12 @@ jobs:
           # A varredura procura o caminho do HOME no diff. O do container (/root) é caminho de servidor
           # que documentação legítima cita: passa a ser uma pasta dentro do workspace.
           export HOME="$PWD/.home-do-portao"
+          rm -rf -- "$HOME" # a pasta vem do job anterior: nenhuma config global é herdada
           case "$GATE_BASE" in
             0000000000000000000000000000000000000000) echo "push sem base conhecida: não dá para varrer só o que entrou"; exit 1 ;;
           esac
           # o PR entra por um worktree: os scripts que varrem são os da main, o PR só fornece os commits.
           # Exceção que só existe enquanto a main não tem o portão (este é o PR que o cria): aí usa-se o do PR.
-          git worktree prune
           git worktree add --detach /tmp/entrada "$TARGET_SHA"
           PORTAO=scripts/dev/public_gate.py
           if [ ! -f "$PORTAO" ]; then echo "main ainda sem o portão: varrendo com o do PR"; PORTAO=/tmp/entrada/$PORTAO; fi
@@ -105,10 +107,11 @@ jobs:
     steps:
       - name: Checkout (git puro, com o token do job)
         run: |
+          # mesma pasta de trabalho do runner: o `.git` que estiver nela é de outro job, e não serve
+          rm -rf -- "${GITHUB_WORKSPACE:-$PWD}/.git"
           git init -q
           git config http.extraheader "AUTHORIZATION: basic $(echo -n "x-access-token:$GITHUB_TOKEN" | base64 -w0)"
-          # o workspace vem do job anterior, com o remote dele já configurado: troca a URL ou cria
-          git remote set-url origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git" 2>/dev/null || git remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
+          git remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
           git fetch -q --depth=1 --no-tags origin "+$GITHUB_SHA:refs/remotes/origin/ci"
           git checkout -q --force refs/remotes/origin/ci
           git config --unset http.extraheader

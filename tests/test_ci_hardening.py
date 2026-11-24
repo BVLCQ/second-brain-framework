@@ -92,15 +92,22 @@ class WorkflowHardeningTest(unittest.TestCase):
     def test_data_gate_scans_with_the_scripts_from_main(self):
         gate = self.jobs["data-gate"]
         self.assertIn("+refs/heads/main:refs/remotes/origin/main", gate)
-        # o remote do job anterior continua no workspace: `git remote add` puro mata o segundo job
-        self.assertRegex(gate, r"git remote set-url origin .* \|\| git remote add origin ")
+        self.assertIn('git remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"', gate)
         self.assertIn("git checkout -q --force origin/main", gate)
         self.assertIn("--root /tmp/entrada", gate)
         self.assertIn("git worktree add --detach /tmp/entrada", gate)
         # a exceção (portão do PR) só se abre quando a MAIN não tem o script: o PR não escolhe as regras
         self.assertIn('if [ ! -f "$PORTAO" ]', gate)
-        # o workspace sobrevive de um job para o outro e o worktree do anterior não: sem o prune, o segundo job morre
-        self.assertIn("git worktree prune", gate)
+
+    def test_no_job_inherits_the_git_directory_of_the_previous_job(self):
+        # os jobs dividem a pasta de trabalho do runner, e um deles (a suíte) executa código de PR. Um
+        # `.git` deixado por ele — uma config a mais, um hook — faria o portão executar o que ele barra.
+        # Cada job apaga o `.git` antes de construir o seu; o portão não herda nem o HOME.
+        for name, job in self.jobs.items():
+            with self.subTest(job=name):
+                self.assertLess(job.index('rm -rf -- "${GITHUB_WORKSPACE:-$PWD}/.git"'), job.index("git init -q"))
+        gate = self.jobs["data-gate"]
+        self.assertRegex(gate, r'export HOME="\$PWD/\.home-do-portao"\n *rm -rf -- "\$HOME"')
 
     def test_checkout_header_is_what_git_and_github_accept(self):
         # `git config chave=valor` num argumento só: o git das imagens do CI recusa ("invalid key") e o
