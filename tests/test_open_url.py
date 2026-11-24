@@ -52,7 +52,8 @@ class FocusOpenTabTest(unittest.TestCase):
         with mock.patch("subprocess.run", _run(calls=calls)):
             self.assertTrue(util.focus_open_tab(LIVE))
         osa = next(c for c in calls if c[0].endswith("osascript"))
-        self.assertEqual(osa[-2:], ["http://127.0.0.1:8787/", LIVE])           # prefixo da origem + URL de destino
+        self.assertEqual(osa[-2], "http://127.0.0.1:8787/")
+        self.assertRegex(osa[-1], r"^http://127\.0\.0\.1:8787/\?n=[0-9a-f]+#t=novo-token$")
         self.assertIn('tell application "Safari"', osa[2])
 
     def test_no_tab_found_falls_back(self):
@@ -155,13 +156,12 @@ class AppleScriptSyntaxTest(unittest.TestCase):
 
 
 class PageTokenHandoffTest(unittest.TestCase):
-    def test_page_takes_the_new_token_from_a_reused_tab(self):
-        """O painel guarda o token do `#t=` que a aba reaproveitada recebe e devolve a rota (a falta disso = 401 na ponte nova)."""
+    def test_page_accepts_token_only_on_boot_not_hashchange(self):
+        """#t= é consumido só no boot (carregamento completo); hashchange com t= não guarda token nem recarrega."""
         js = (ROOT / "brainlib/assets/src/extra.js").read_text(encoding="utf-8")
-        self.assertIn('window.addEventListener("hashchange", e => {', js)
-        self.assertIn("if (tok !== TOK) location.reload();", js)
-        for name in ("dashboard.html", "portfolio.html"):
-            self.assertIn("if (tok !== TOK) location.reload();", (ROOT / "brainlib/assets" / name).read_text(encoding="utf-8"))
+        self.assertIn("consumeBootToken()", js)
+        self.assertIn('window.addEventListener("hashchange"', js)
+        self.assertNotIn("if (tok !== TOK) location.reload();", js)
 
 
 if __name__ == "__main__":

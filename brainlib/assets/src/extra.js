@@ -126,16 +126,20 @@ let TOK = null;
 if (SERVE) {
   TOK = consumeBootToken() || readStoredToken();
 }
-// aba reaproveitada (util.focus_open_tab): a nova URL traz `#t=<token>` e só muda o fragmento — a página não recarrega
-// sozinha, e o boot de cima já rodou. Guarda o token novo (com validade), devolve a rota ao que era e recarrega; token
-// igual, só devolve a URL. Sem isto a aba reaproveitada fica com o token antigo e a ponte nova responde 401.
-if (SERVE) window.addEventListener("hashchange", e => {
-  const m = location.hash.match(/[#&]t=([^&]+)/); if (!m) return;
-  let tok = m[1]; try { tok = decodeURIComponent(tok); } catch (x) {}
-  const back = (e.oldURL || "").split("#").slice(1).join("#");
-  storeToken(tok);
-  history.replaceState(null, "", location.pathname + location.search + (back ? "#" + back : ""));
-  if (tok !== TOK) location.reload();
+// #t= só entra no boot (consumeBootToken). Se ainda aparecer t= no fragmento em hashchange, remove sem guardar nem recarregar.
+if (SERVE) window.addEventListener("hashchange", () => {
+  const rawHash = location.hash || "";
+  if (!rawHash.startsWith("#")) return;
+  const parts = rawHash.slice(1).split("&");
+  let hasTok = false;
+  const kept = [];
+  for (const p of parts) {
+    if (p.startsWith("t=")) hasTok = true;
+    else if (p !== "") kept.push(p);
+  }
+  if (!hasTok) return;
+  const nextHash = kept.length ? "#" + kept.join("&") : "";
+  history.replaceState(null, "", location.pathname + location.search + nextHash);
 });
 let LIVE = SERVE && !!TOK;
 document.documentElement.dataset.live = LIVE ? "1" : "0";
@@ -3737,7 +3741,12 @@ async function exitOnboarding() {
   };
   try {
     const d = await api("/api/data");
-    if (d && d.model && window.BRAIN && window.BRAIN.refresh) { teardown(); window.BRAIN.refresh(d.model); return; }
+    if (d && d.model && window.BRAIN && window.BRAIN.refresh) {
+      teardown();
+      history.replaceState(null, "", location.pathname + location.search + "#home");
+      window.BRAIN.refresh(d.model);
+      return;
+    }
   } catch (e) { /* views regeneram no próximo brain render */ }
   teardown();
   location.hash = "home";
