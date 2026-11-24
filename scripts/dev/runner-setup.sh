@@ -16,8 +16,8 @@
 # (RUNNER_IMAGE) ou de mudar o número de workers. O token de registro (validade de 1h) só é
 # necessário na primeira vez de cada worker; o registro fica salvo no diretório do worker.
 #
-# O runner é registrado só neste repositório, e o workflow só roda nele código que veio de dentro
-# do repositório (PR de fork fica sem CI). Mantenha as duas coisas juntas: registrar este runner
+# O runner é registrado só neste repositório, e a suíte só roda nele código que veio de dentro
+# do repositório (PR de fork não a roda). Mantenha as duas coisas juntas: registrar este runner
 # em outro repositório expõe a máquina ao código que esse repositório receber.
 set -euo pipefail
 

@@ -102,7 +102,8 @@ somente-leitura para o mundo.
      aprovação. O **"ok" do dono é o merge** — sem ele o PR fica aberto. O
      hook `pre-push` roda a varredura em todo push, e o CI repete a varredura
      no PR (portão de dados, com uma lista privada de termos que nunca vai ao
-     repo) antes da suíte. Nunca `--force`, nunca `--no-verify`, nunca
+     repo) além de rodar a suíte; os dois precisam ficar verdes. Nunca
+     `--force`, nunca `--no-verify`, nunca
      `vault/` ou `config/.env`. O noturno nunca sobe. Fluxo completo:
      `guides/development.md`.
    - **Descer.** `./brain update` traz melhorias do framework (`--check`

@@ -10,8 +10,9 @@ mantenedor e portão de dados. É o mesmo fluxo dos outros projetos do mantenedo
 2. **Branch e pull request.** Um branch por mudança, a partir da `main`; o PR referencia a issue e
    segue o molde de `.github/pull_request_template.md`. Criar o branch, commitar e abrir o PR é do
    agente — não espera aprovação.
-3. **CI.** O PR roda no runner do mantenedor (abaixo): primeiro o portão de dados, depois a suíte em
-   Python 3.11–3.14.
+3. **CI.** O PR roda no runner do mantenedor (abaixo), em duas execuções: o portão de dados — com o
+   workflow da `main`, para o PR não enfraquecer o próprio portão — e a suíte em Python 3.11–3.14.
+   Os dois precisam ficar verdes.
 4. **"ok" do dono.** O PR fica aberto até o "ok" literal do dono; o "ok" é o merge. Nada entra na
    `main` sem PR com o CI verde (proteção de branch) e sem o "ok".
 
@@ -56,9 +57,10 @@ Pré-requisitos: Docker (OrbStack), `gh` como administrador do repositório e a 
 `~/.config/brain/public-denylist` (0600). Cada máquina do mantenedor tem a sua (`--tag m3`, `--tag m4`).
 A imagem do runner é fixada no script; para subir a versão, mude `RUNNER_IMAGE` e rode de novo.
 
-**Runner em repositório público.** O workflow só roda no runner código que veio de dentro do
-repositório: PR de fork fica sem CI (o `if` dos jobs), e quem é de fora propõe por issue — o
-mantenedor traz o código para um branch daqui. O token do job é só de leitura e nenhum job usa
+**Runner em repositório público.** A suíte só roda no runner código que veio de dentro do
+repositório: PR de fork não a roda (o `if` do job), e quem é de fora propõe por issue — o
+mantenedor traz o código para um branch daqui. O que roda para qualquer PR é o portão de dados,
+que só lê texto e usa o workflow da `main`. O token do job é só de leitura e nenhum job usa
 segredo. Não registre esse runner em outro repositório: a máquina fica exposta ao código que ele
 receber.
 

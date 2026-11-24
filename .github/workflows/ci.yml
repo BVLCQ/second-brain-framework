@@ -1,15 +1,20 @@
 # CI — GitHub Actions nos runners do mantenedor (workers em containers Docker, na máquina dele):
 # o repositório é público e é a origem; o CI roda aqui e não consome minutos do GitHub.
 #
-# pull_request: primeiro o portão de dados — o que o PR acrescenta à main passa pela varredura do
-# `brain upstream scan` mais uma lista privada de termos que nunca vai ao repo — e só com ele limpo
-# roda a suíte, em Python 3.11–3.14. push em main: o mesmo portão sobre os commits que entraram e a
-# suíte de novo.
+# Dois eventos de PR, um de cada lado da fronteira de confiança:
 #
-# Runner do mantenedor em repositório público só roda código de dentro do repositório: os jobs
-# abaixo só existem para push em main e para PR cujo branch mora neste repositório. Workflow vindo
-# de um fork (que aprovação dispensa) fica sem CI — não alcança a máquina do mantenedor. Quem é de
-# fora propõe por issue; o mantenedor traz o código para um branch daqui.
+# pull_request_target roda o PORTÃO DE DADOS, com o workflow da main — não o do PR: nenhum PR
+# consegue enfraquecer o próprio portão. O que o PR acrescenta à main passa pela varredura do
+# `brain upstream scan` mais uma lista privada de termos que nunca vai ao repo. Só texto entra (o
+# job não executa nada que venha do PR), por isso pode rodar para PR de fork também.
+#
+# pull_request roda a SUÍTE, que executa o código do PR, em Python 3.11–3.14. Só para PR cujo
+# branch mora neste repositório: `pull_request` usa o workflow do próprio PR, e o de um fork fica
+# sem CI — não alcança a máquina do mantenedor. Quem é de fora propõe por issue; o mantenedor
+# traz o código para um branch daqui.
+#
+# push em main: os dois, sobre o que acabou de entrar. Os dois jobs são independentes: ficam em
+# execuções diferentes, e o que segura o merge é a proteção da main exigir os dois.
 #
 # Sem actions em JavaScript (nenhum checkout@v4): o checkout é git puro com o token do job, e a
 # imagem `python:` oficial já traz git. O que ela não traz é o `node`, que os testes do painel
@@ -18,13 +23,16 @@ name: CI
 
 on:
   pull_request:
+  pull_request_target:
   push:
     branches: [main]
 
-# Em PR, um push novo cancela a execução anterior (os workers são poucos); em main, nunca.
+# Um push novo cancela a execução anterior do mesmo PR (os workers são poucos); em main, nunca.
+# O grupo leva o evento: em pull_request_target o `github.ref` é o da main, e sem isso todos os PRs
+# cairiam num grupo só, e a execução da suíte cancelaria a do portão.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
 
 # token só de leitura: nenhum job precisa escrever neste repositório
 permissions:
@@ -33,7 +41,8 @@ permissions:
 jobs:
   data-gate:
     name: data-gate
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    # push em main e pull_request_target (workflow da main). Nunca no `pull_request`, que é o do PR.
+    if: github.event_name != 'pull_request'
     runs-on: [self-hosted, linux, ARM64, brain]
     timeout-minutes: 15
     container:
@@ -78,8 +87,8 @@ jobs:
 
   tests:
     name: tests (py${{ matrix.python }})
-    needs: data-gate
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    # a suíte executa o código do PR: só push em main e PR cujo branch mora neste repositório
+    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: [self-hosted, linux, ARM64, brain]
     timeout-minutes: 60
     strategy:

@@ -1,8 +1,8 @@
 ## 2.41.0 — o CI roda nas máquinas do mantenedor, com portão de dados em todo PR
 
 - **CI nos runners do mantenedor.** A suíte (Python 3.11–3.14) deixou os runners do GitHub e passou para workers em containers na máquina do mantenedor: não consome minutos. O workflow não usa actions em JavaScript — o checkout é git puro, e o `node` que os testes do painel precisam entra por um tarball com checksum fixado.
-- **Portão de dados antes da suíte.** Todo PR e todo push na `main` passam pela varredura do `brain upstream scan` mais uma lista privada de termos que mora no host do runner e nunca vai ao repositório. O job varre com os scripts da `main`; sem a lista ele falha. A suíte só roda depois do portão limpo (`scripts/dev/public_gate.py`).
-- **PR de fork não roda no runner do mantenedor.** Em repositório público, os jobs só existem para push na `main` e para PR cujo branch mora no repositório.
+- **Portão de dados em todo PR.** Todo PR e todo push na `main` passam pela varredura do `brain upstream scan` mais uma lista privada de termos que mora no host do runner e nunca vai ao repositório. No PR o portão roda pelo evento `pull_request_target`, com o workflow e os scripts da `main`: o PR não consegue enfraquecer o próprio portão, e o job não executa nada que venha do PR. Sem a lista ele falha (`scripts/dev/public_gate.py`).
+- **PR de fork não roda no runner do mantenedor.** A suíte executa o código do PR e só existe para push na `main` e para PR cujo branch mora no repositório. O portão de dados, que só lê texto, roda para qualquer PR.
 - **Molde de mudança de tela e molde de PR.** Issue `[UI]` com o estado atual, as variantes e a recomendação; PR com evidência e gates. A evidência (prints e vídeo) vai por um release rascunho, que só quem mantém o repositório abre (`scripts/dev/pr_evidence.sh`).
 - **Setup do runner.** `scripts/dev/runner-setup.sh` registra e sobe os workers de uma máquina, e é idempotente. Guia: `guides/development.md`.
 

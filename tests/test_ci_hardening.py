@@ -21,7 +21,10 @@ from brainlib import upstream  # noqa: E402
 
 WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 FORK_GUARD = "github.event.pull_request.head.repo.full_name == github.repository"
-ONLY_INSIDE = f"github.event_name == 'push' || {FORK_GUARD}"
+# a suíte executa o código do PR: push em main, ou PR cujo branch mora neste repositório
+ONLY_INSIDE = f"github.event_name == 'push' || (github.event_name == 'pull_request' && {FORK_GUARD})"
+# o portão só lê texto do PR: roda em todo PR, pelo evento que usa o workflow da main
+GATE_EVENTS = "github.event_name != 'pull_request'"
 # um HOME que não existe: a varredura o procura no texto como "caminho da máquina"
 NO_HOME = "/lugar/que/nao/existe-em-arquivo-nenhum"
 
@@ -50,17 +53,29 @@ class WorkflowHardeningTest(unittest.TestCase):
             with self.subTest(uses=used):
                 self.assertRegex(used, r"^[^@\s]+@[0-9a-f]{40}$", "action fixada em tag móvel — fixe pelo SHA da versão")
 
-    def test_pull_request_trigger_is_not_a_target_fork_event(self):
+    def test_the_gate_runs_on_the_base_workflow_and_the_suite_never_does(self):
+        # `pull_request` usa o workflow do PR; `pull_request_target`, o da main. O portão roda no
+        # segundo — é o que impede um PR de enfraquecer o próprio portão. Em troca, o evento não pode
+        # alcançar nenhum job que execute código do PR.
         self.assertRegex(self.text, r"(?m)^  pull_request:\s*$")
-        self.assertNotIn("pull_request_target", self.text)
+        self.assertRegex(self.text, r"(?m)^  pull_request_target:\s*$")
+        self.assertNotIn("pull_request_target", self.jobs["tests"])
 
-    def test_no_job_reaches_the_maintainer_runner_from_a_fork(self):
+    def test_no_job_runs_pull_request_code_from_a_fork(self):
         self.assertEqual(sorted(self.jobs), ["data-gate", "tests"])
         for name, job in self.jobs.items():
             with self.subTest(job=name):
                 self.assertRegex(job, r"(?m)^    runs-on: \[self-hosted, [^\]]+\]$")
-                guards = re.findall(r"(?m)^    if: (.+)$", job)
-                self.assertEqual(guards, [ONLY_INSIDE], "todo job roda só para push em main ou PR deste repositório")
+
+        def guards(job: str) -> list[str]:
+            return re.findall(r"(?m)^    if: (.+)$", job)
+
+        self.assertEqual(guards(self.jobs["tests"]), [ONLY_INSIDE], "a suíte executa o código do PR: nunca para fork, nunca em pull_request_target")
+        self.assertEqual(guards(self.jobs["data-gate"]), [GATE_EVENTS], "o portão roda em todo PR")
+        # no evento do workflow da main, o único contato com o PR é texto: a ponta do PR entra num
+        # worktree destacado, e quem varre é o script da main
+        self.assertIn("git checkout -q --force origin/main", self.jobs["data-gate"])
+        self.assertIn("git worktree add --detach /tmp/entrada", self.jobs["data-gate"])
 
     def test_the_workflow_itself_passes_the_scan(self):
         # o portão de dados roda este workflow no PR: um caminho de máquina escrito aqui se acusaria
@@ -106,11 +121,22 @@ class WorkflowHardeningTest(unittest.TestCase):
         self.assertEqual(kind, "basic")
         self.assertEqual(base64.b64decode(b64, validate=True), b"x-access-" + b"token:" + env["GITHUB_TOKEN"].encode())
 
-    def test_tests_wait_for_the_gate_and_run_the_whole_matrix(self):
+    def test_the_suite_runs_the_whole_matrix_without_waiting_for_the_gate(self):
+        # os dois jobs ficam em execuções diferentes (eventos diferentes): um `needs` entre eles só
+        # faria a suíte nunca rodar em PR, onde a execução do `pull_request` pula o portão
         tests = self.jobs["tests"]
-        self.assertRegex(tests, r"(?m)^    needs: data-gate$")
+        self.assertNotRegex(tests, r"(?m)^    needs:")
         self.assertIn('python: ["3.11", "3.12", "3.13", "3.14"]', tests)
         self.assertIn('image: python:${{ matrix.python }}', tests)
+
+    def test_concurrency_group_keeps_the_two_pull_request_events_apart(self):
+        # em pull_request_target o `github.ref` é o da main: sem o evento no grupo, todos os PRs
+        # cairiam num grupo só, e a execução da suíte cancelaria a do portão
+        group = re.search(r"(?m)^  group: (.+)$", self.text)
+        assert group
+        self.assertIn("${{ github.event_name }}", group.group(1))
+        self.assertIn("${{ github.event.pull_request.number || github.ref }}", group.group(1))
+        self.assertIn("cancel-in-progress: ${{ github.event_name != 'push' }}", self.text)
 
 
 if __name__ == "__main__":
