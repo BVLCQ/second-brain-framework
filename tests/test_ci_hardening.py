@@ -5,8 +5,12 @@ O workflow é lido como texto — o repo não depende de parser de YAML.
 """
 from __future__ import annotations
 
+import base64
+import os
 import re
+import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -76,6 +80,25 @@ class WorkflowHardeningTest(unittest.TestCase):
         self.assertIn("git checkout -q --force origin/main", gate)
         self.assertIn("--root /tmp/entrada", gate)
         self.assertIn("git worktree add --detach /tmp/entrada", gate)
+
+    def test_checkout_header_is_what_git_and_github_accept(self):
+        # `git config chave=valor` num argumento só: o git das imagens do CI recusa ("invalid key") e o
+        # checkout morre antes de começar. Com um token falso, o cabeçalho tem que decodificar para o
+        # par que o GitHub espera do job: o login fixo e o token, sem sobra de quebra de linha.
+        self.assertNotIn("extraheader=AUTH", self.text)
+        values = re.findall(r"(?m)^ *git config http\.extraheader (.+)$", self.text)
+        self.assertEqual(len(values), 2, "cada job monta o cabeçalho uma vez")
+        env = {**os.environ, "GITHUB_TOKEN": "token-falso-do-job"}
+        with tempfile.TemporaryDirectory() as tmp:
+            subprocess.run(["git", "init", "-q", tmp], check=True)
+            for value in values:
+                subprocess.run(["bash", "-c", f"git config http.extraheader {value}"], cwd=tmp, env=env, check=True, capture_output=True)
+            header = subprocess.run(["git", "config", "--get", "http.extraheader"], cwd=tmp, capture_output=True, text=True, check=True).stdout.strip()
+        scheme, _, encoded = header.partition(" ")
+        self.assertEqual(scheme, "AUTHORIZATION:")
+        kind, _, b64 = encoded.partition(" ")
+        self.assertEqual(kind, "basic")
+        self.assertEqual(base64.b64decode(b64, validate=True), b"x-access-" + b"token:" + env["GITHUB_TOKEN"].encode())
 
     def test_tests_wait_for_the_gate_and_run_the_whole_matrix(self):
         tests = self.jobs["tests"]
