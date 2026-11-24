@@ -69,41 +69,45 @@ class _FakeGit:
         self.pulled = False
         self.calls: list[tuple[str, ...]] = []
 
-    def __call__(self, root: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess:
+    def __call__(self, root: Path, *args: str, check: bool = True, raw: bool = False) -> subprocess.CompletedProcess:
         self.calls.append(args)
         cmd = ("git", "-C", str(root), *args)
+
+        def ok(texto: str) -> subprocess.CompletedProcess:
+            # com raw=True o stdout e o stderr vêm em BYTES, como no `_git` de verdade (lista de nome de arquivo)
+            return subprocess.CompletedProcess(cmd, 0, texto.encode("utf-8") if raw else texto, b"" if raw else "")
+
         if args == ("remote",):
-            return subprocess.CompletedProcess(cmd, 0, "origin\n", "")
+            return ok("origin\n")
         if args == ("rev-parse", "--abbrev-ref", "HEAD"):
-            return subprocess.CompletedProcess(cmd, 0, "main\n", "")
-        if args == ("ls-files",):
-            return subprocess.CompletedProcess(cmd, 0, "", "")
-        if args[:2] == ("ls-files", "--others"):
-            return subprocess.CompletedProcess(cmd, 0, "", "")
+            return ok("main\n")
+        if args[:1] == ("ls-files",):            # com ou sem -z: sem arquivo algum no stub
+            return ok("")
         if args and args[0] == "fetch":
-            return subprocess.CompletedProcess(cmd, 0, "", "")
+            return ok("")
         if args[:3] == ("rev-parse", "--verify", "--quiet"):
-            return subprocess.CompletedProcess(cmd, 0, self.expected_sha + "\n", "")
+            return ok(self.expected_sha + "\n")
         if args[:3] == ("rev-list", "--left-right", "--count"):
-            return subprocess.CompletedProcess(cmd, 0, f"{self.ahead} {self.behind}\n", "")
+            return ok(f"{self.ahead} {self.behind}\n")
         if args[:2] == ("diff", "--name-only"):
-            return subprocess.CompletedProcess(cmd, 0, "brainlib/upstream.py\n", "")
+            return ok("brainlib/upstream.py\0" if "-z" in args else "brainlib/upstream.py\n")
+                                    # com -z o git separa por NUL, sem -z por quebra de linha
         if args[:2] == ("log", "--format=%h %s"):
-            return subprocess.CompletedProcess(cmd, 0, "abc1234 ajuste\n", "")
+            return ok("abc1234 ajuste\n")
         if args == ("rev-parse", "origin/main"):
-            return subprocess.CompletedProcess(cmd, 0, self.expected_sha + ("\n" if self.expected_sha else ""), "")
+            return ok(self.expected_sha + ("\n" if self.expected_sha else ""))
         if args and args[0] == "pull":
             self.pulled = True
-            return subprocess.CompletedProcess(cmd, 0, "Updating...\n", "")
+            return ok("Updating...\n")
         if args == ("rev-parse", "HEAD"):
             head = self.post_pull_head if self.pulled else self.initial_head
-            return subprocess.CompletedProcess(cmd, 0, head + ("\n" if head else ""), "")
+            return ok(head + ("\n" if head else ""))
         if args[:2] == ("merge-base", "--is-ancestor"):
             return subprocess.CompletedProcess(cmd, 0 if self.is_ancestor else 1, "", "")
         if args[:2] == ("rev-parse", "--git-path"):
-            return subprocess.CompletedProcess(cmd, 0, f".git/{args[2]}\n", "")
+            return ok(f".git/{args[2]}\n")
         if args and args[0] == "show":
-            return subprocess.CompletedProcess(cmd, 0, "", "")
+            return ok("")
         raise AssertionError(f"chamada git inesperada no stub: {args!r}")
 
 

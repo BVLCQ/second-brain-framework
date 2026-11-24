@@ -52,23 +52,90 @@ SLACK_PLACEHOLDERS = {"seu-workspace", "workspace", "example", "acme", "empresa"
 GIT_TIMEOUT_S = 600
 
 
-def _git(root: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess:
+def _git(root: Path, *args: str, check: bool = True, raw: bool = False,
+         errors: str = "replace") -> subprocess.CompletedProcess:
     # sem terminal para pedir senha (noturno, hook): credencial ausente falha em vez de travar para sempre
     env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
+    # `raw=True`: stdout em bytes, para lista de NOME de arquivo (`_paths`): nome não é texto. `errors` diz o
+    # que fazer, na saída em texto, com byte que não é UTF-8 válido. `replace` serve para metadado (ref, remote,
+    # mensagem de erro). Diff e log carregam nome de arquivo no cabeçalho e conteúdo: ali o byte tem de voltar
+    # inteiro (`surrogateescape`), porque o nome vira rótulo do achado.
+    # `encoding` fixado em UTF-8: sem ele o subprocess decodifica com o encoding do locale — `cp1252` num Windows em
+    # português — e o nome acentuado do cabeçalho do diff chegava trocado, sem casar com o nome da listagem.
+    # A linha de comando sai por `_cmd`: o nome foi LIDO em UTF-8 e tem de voltar em UTF-8, em bytes — como `str`,
+    # o Python o codificava no encoding do locale e ele chegava trocado ao git.
+    dec = {} if raw else {"text": True, "encoding": "utf-8", "errors": errors}
     try:
-        r = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True, errors="replace",
-                           env=env, timeout=GIT_TIMEOUT_S)
+        r = subprocess.run(_cmd(root, *args), capture_output=True, env=env,
+                           timeout=GIT_TIMEOUT_S, **dec)
     except FileNotFoundError as e:
         raise util.BrainError("git não encontrado no PATH") from e
     except subprocess.TimeoutExpired as e:
         raise util.BrainError(f"git {' '.join(args[:2])} não respondeu em {GIT_TIMEOUT_S}s", 4) from e
     if check and r.returncode != 0:
-        raise util.BrainError(f"git {' '.join(args[:2])} falhou: {(r.stderr or r.stdout).strip()}", 4)
+        err = r.stderr or r.stdout
+        if isinstance(err, bytes):                    # leitura em bytes: a mensagem de erro continua sendo texto
+            err = err.decode("utf-8", "replace")
+        raise util.BrainError(f"git {' '.join(args[:2])} falhou: {_show(err.strip())}", 4)   # texto pode trazer surrogate
     return r
 
 
 def _lines(r: subprocess.CompletedProcess) -> list[str]:
     return [ln for ln in r.stdout.splitlines() if ln.strip()]
+
+
+def _decode(p: bytes) -> str:
+    """Byte de NOME de arquivo → str, lido em UTF-8 com `surrogateescape`: o byte que não é UTF-8 válido fica
+    guardado (surrogate) e volta byte a byte quando o nome entra de novo no git (`_arg`) ou no disco (`_fs_path`).
+    O par é sempre este, nunca o do sistema: num locale de byte único (`pt_BR.ISO-8859-1`) o par do sistema é
+    latin-1 e o nome guardado em UTF-8 vinha trocado; no Windows é UTF-8 com `surrogatepass` (PEP 529), que levanta
+    UnicodeDecodeError com esse byte — a varredura caía num clone com histórico de nome assim, em vez de guardar
+    o byte e seguir."""
+    return p.decode("utf-8", "surrogateescape")
+
+
+def _paths(r: subprocess.CompletedProcess) -> list[str]:
+    """Caminhos de um `git … -z` lido em bytes (`_git(…, raw=True)`): separados por NUL, nunca entre aspas, e
+    decodificados como NOME de arquivo (`_decode`), não como texto. Nome de arquivo é a sequência de bytes que o
+    sistema de arquivos guarda, e no Linux ela pode não ser UTF-8 válida. Lido como texto, o byte inválido vira
+    U+FFFD — o nome de arquivo nenhum: como pathspec não casa com nada, e o arquivo era dado como `já público`,
+    saindo do scan sem erro. `_decode` guarda o byte (surrogate), e o nome volta byte a byte quando entra de novo
+    no git (`_arg`) ou no disco (`_fs_path`). Sem o -z o git entrega entre aspas e com escapes o nome com acento,
+    aspas ou barra invertida; `core.quotePath=false` só tira o caso do acento."""
+    return [_decode(p) for p in r.stdout.split(b"\0") if p]
+
+
+def _arg(a):
+    """Argumento da linha de comando do git, na forma em que chega byte a byte. Nome de arquivo é `str` com
+    surrogate onde havia byte inválido (`_decode`) e volta em bytes pelo MESMO par da leitura — UTF-8 +
+    surrogateescape. Como `str`, o Python o codificava no encoding do locale: num Linux em `pt_BR.ISO-8859-1`
+    o acento de `relatório` virava outro byte, e o git não achava o arquivo. O que já é bytes passa inteiro."""
+    return a.encode("utf-8", "surrogateescape") if isinstance(a, str) else a
+
+
+def _cmd(root: Path, *args: str) -> list:
+    """Linha de comando do git. Em POSIX vai em bytes: os argumentos por `_arg`; a raiz é caminho do sistema
+    operacional (veio do `argv`) e segue o par dele, `os.fsencode`. No Windows a linha de comando é UTF-16 e
+    segue em `str` — lá o byte que não é UTF-8 válido não chega ao git (daí `_untrustworthy`)."""
+    if os.name == "nt":
+        return ["git", "-C", str(root), *args]
+    return [b"git", b"-C", os.fsencode(root), *(_arg(a) for a in args)]
+
+
+def _fs_path(root: Path, name: str) -> bytes | Path:
+    """Caminho de DISCO de um nome que saiu do git (`_decode`): em POSIX, bytes pelo par da leitura — como `str`,
+    o Python o codificava no encoding do locale, e o arquivo de nome acentuado não era aberto. `Path(bytes)` só
+    existe no Python 3.13; bytes cru com `open`/`os.stat` serve de 3.11 a 3.14. No Windows, `Path`."""
+    if os.name == "nt":
+        return root / name
+    return os.path.join(os.fsencode(root), _arg(name))
+
+
+def _show(name: str) -> str:
+    """Nome de arquivo para MOSTRAR: o byte que não é UTF-8 válido (guardado como surrogate) aparece como escape
+    (`caf\\udce9.py`) em vez de derrubar o print, porque stdout em UTF-8 recusa surrogate. Só a tela passa por aqui;
+    o nome que volta ao git segue intacto."""
+    return name.encode("utf-8", "backslashreplace").decode("utf-8")
 
 
 def _prepare(inst: config.Instance, remote: str | None, branch: str | None, fetch: bool = True,
@@ -85,10 +152,11 @@ def _prepare(inst: config.Instance, remote: str | None, branch: str | None, fetc
         branch = git_fn(root, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
         if branch == "HEAD":
             raise util.BrainError("HEAD solto (detached): entre num branch antes de sincronizar", 1)
-    private = [f for f in _lines(git_fn(root, "ls-files")) if f in PRIVATE_FILES or f.startswith(PRIVATE_PREFIXES)]
+    private = [f for f in _paths(git_fn(root, "ls-files", "-z", raw=True)) if f in PRIVATE_FILES or f.startswith(PRIVATE_PREFIXES)]
     if private:
         raise util.BrainError("arquivos do dono estão rastreados pelo git (nunca devem): "
-                              + ", ".join(private[:5]) + " — `git rm --cached` neles antes de continuar", 4)
+                              + ", ".join(_show(p) for p in private[:5])
+                              + " — `git rm --cached` neles antes de continuar", 4)
     if fetch:
         # refspec explícito: clones feitos com `git remote add` não têm remote.origin.fetch, e aí o
         # fetch simples só atualizaria FETCH_HEAD (origin/<branch> ficaria velho e ahead/behind mentiria)
@@ -112,8 +180,8 @@ def _ahead_behind(root: Path, ref: str, git=None) -> tuple[int, int]:
 def _pending_files(root: Path, ref: str, git=None) -> tuple[list[str], list[str]]:
     """(rastreados que diferem do remoto, novos não rastreados e não ignorados)."""
     git_fn = git or _git
-    tracked = _lines(git_fn(root, "diff", "--name-only", ref))
-    untracked = _lines(git_fn(root, "ls-files", "--others", "--exclude-standard"))
+    tracked = _paths(git_fn(root, "diff", "--name-only", "-z", ref, raw=True))
+    untracked = _paths(git_fn(root, "ls-files", "-z", "--others", "--exclude-standard", raw=True))
     return tracked, untracked
 
 
@@ -402,8 +470,13 @@ def _leak_terms(inst: config.Instance) -> list[tuple[str, str]]:
             terms.setdefault(value.lower(), kind)
 
     cfg = inst.cfg
-    add("dono", cfg["owner"]["id"])
-    add("dono", cfg["owner"]["name"])
+    owner = cfg["owner"]
+    # Nome ainda igual ao placeholder público dos DEFAULTS não é dado de ninguém: sem config de instância
+    # (worktree, clone recém-feito) ele voltava como termo e a varredura acusava toda fixture que o escreve.
+    placeholder = config.DEFAULTS["owner"]["name"].strip().casefold()
+    if (owner.get("name") or "").strip().casefold() != placeholder:
+        add("dono", owner.get("name", ""))
+    add("dono", owner.get("id", ""))
     for x in cfg.get("outbound", {}).get("allow", []):
         add("destinatário", str(x).lstrip("#@"))
     for x in cfg.get("publish", {}).get("destinations", []):
@@ -466,6 +539,7 @@ def _scan_line(text: str, term_res: list[tuple[str, re.Pattern]], home: str) -> 
 
 
 EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+LITERAL = "--literal-pathspecs"     # caminho de arquivo como pathspec: sem isso, nome com `*` casa vizinhos e um que começa com `:` é mágica
 
 
 MAX_BLOB_BYTES = 50 * 2**20          # binário maior que isto não é varrido (o framework não carrega blobs assim)
@@ -474,7 +548,10 @@ _C_ESCAPES = {"a": 7, "b": 8, "t": 9, "n": 10, "v": 11, "f": 12, "r": 13, '"': 3
 
 
 def _unquote(path: str) -> str:
-    """Caminho como o git imprime: `"b/caf\\303\\251.md"` (aspas C, octal UTF-8) → `b/café.md`."""
+    """Caminho como o git imprime: `"b/caf\\303\\251.md"` (aspas C, octal UTF-8) → `b/café.md`.
+    O octal que não forma UTF-8 válido vira surrogate (`_decode`), não U+FFFD: o nome continua servindo de caminho.
+    Com `core.quotePath=false` o byte acima de 0x7F vem CRU entre as aspas — no texto, já é surrogate
+    (`_decode`) — e volta a ser byte na saída; em octal é a forma do padrão do git."""
     if not (len(path) >= 2 and path[0] == path[-1] == '"'):
         return path
     out, i, s = bytearray(), 0, path[1:-1]
@@ -489,9 +566,9 @@ def _unquote(path: str) -> str:
             out.append(_C_ESCAPES.get(nxt, ord(nxt)))
             i += 2
             continue
-        out += c.encode("utf-8")
+        out += c.encode("utf-8", "surrogateescape")
         i += 1
-    return out.decode("utf-8", errors="replace")
+    return out.decode("utf-8", "surrogateescape")
 
 
 def _strip_side(path: str, side: str) -> str:
@@ -503,17 +580,44 @@ def _binary_lines(data: bytes) -> list[str]:
     return [m.group(0).decode("utf-8", errors="replace") for m in _PRINTABLE_RUN.finditer(data)]
 
 
+def _blob_via_stdin(root: Path, sha: str, path: str) -> bytes | None:
+    """Blob de um nome que a linha de comando pode não carregar. O pedido vai no stdin, em bytes — no Windows
+    o argv é UTF-16 e o byte não chega, e o `cat-file` falhava em silêncio: o binário saía sem acusação."""
+    pedido = f"{sha}:{path}".encode("utf-8", "surrogateescape") + b"\n"
+    r = subprocess.run(_cmd(root, "cat-file", "--batch"), input=pedido, capture_output=True, timeout=120)
+    if r.returncode != 0 or not r.stdout:
+        return None
+    nl = r.stdout.find(b"\n")
+    if nl < 0 or r.stdout[:nl].endswith(b" missing"):
+        return None
+    try:
+        size = int(r.stdout[:nl].rsplit(b" ", 1)[-1])
+    except ValueError:
+        return None
+    if size > MAX_BLOB_BYTES:
+        return None
+    body = r.stdout[nl + 1:nl + 1 + size]
+    return body if len(body) == size else None
+
+
 def _blob(root: Path, sha: str, path: str) -> bytes | None:
-    """Conteúdo de `path` no commit `sha` (ou da working tree, sem sha) — para varrer binários."""
+    """Conteúdo de `path` no commit `sha` (ou da working tree, sem sha) — para varrer binários. O nome entra no
+    `cat-file` e no disco pelo par da leitura (`_cmd`, `_fs_path`): como `str`, num locale de byte único, o
+    binário de nome acentuado era pedido com o nome trocado — e a falha era em silêncio, sem acusação."""
     try:
         if not sha:
-            p = root / path
-            return p.read_bytes() if p.is_file() and p.stat().st_size <= MAX_BLOB_BYTES else None
-        size = subprocess.run(["git", "-C", str(root), "cat-file", "-s", f"{sha}:{path}"],
+            p = _fs_path(root, path)
+            if not os.path.isfile(p) or os.stat(p).st_size > MAX_BLOB_BYTES:
+                return None
+            with open(p, "rb") as fh:
+                return fh.read()
+        if _untrustworthy(path):
+            return _blob_via_stdin(root, sha, path)       # o nome não vai no argv: no Windows ele não chegaria
+        size = subprocess.run(_cmd(root, "cat-file", "-s", f"{sha}:{path}"),
                               capture_output=True, text=True, timeout=60)
         if size.returncode != 0 or int(size.stdout.strip() or 0) > MAX_BLOB_BYTES:
             return None
-        r = subprocess.run(["git", "-C", str(root), "cat-file", "blob", f"{sha}:{path}"], capture_output=True, timeout=120)
+        r = subprocess.run(_cmd(root, "cat-file", "blob", f"{sha}:{path}"), capture_output=True, timeout=120)
         return r.stdout if r.returncode == 0 else None
     except (OSError, ValueError, subprocess.TimeoutExpired):
         return None
@@ -587,13 +691,16 @@ def _private_path(path: str) -> bool:
 
 
 def scan(inst: config.Instance, ref: str | None, committed: bool = False,
-         revsets: list[list[str]] | None = None) -> list[dict]:
+         revsets: list[list[str]] | None = None, keep: list[str] | None = None) -> list[dict]:
     """Procura dado pessoal/segredo no que subiria: linhas adicionadas, nomes de arquivo, binários,
     arquivos novos e mensagens de commit.
 
     committed=True olha só commits (o que um push envia); False inclui working tree e arquivos novos.
-    `revsets` (só com committed): os conjuntos de commits que o push envia, um por ref atualizada
-    (ex.: [["<sha local>", "^<sha remoto>"]]) — é o que o hook pre-push recebe do git.
+    `revsets`: os conjuntos de commits cujas mensagens entram, um por ref atualizada (ex.:
+    [["<sha local>", "^<sha remoto>"]] — é o que o hook pre-push recebe do git); None = `ref..HEAD`.
+    `keep` (só sem committed): restringe o diff da árvore de trabalho a esses caminhos; None = todos,
+    lista vazia = nada a varrer. Os caminhos entram como pathspec LITERAL: cru, nome que começa com `:` é
+    mágica para o git e o diff vinha vazio, em silêncio.
     """
     root = inst.root
     term_res = [(kind, re.compile(r"(?<![\w])" + re.escape(t) + r"(?![\w])", re.I)) for t, kind in _leak_terms(inst)]
@@ -624,9 +731,10 @@ def scan(inst: config.Instance, ref: str | None, committed: bool = False,
         for revs in revsets:
             if not revs:
                 continue
-            diff = _git(root, *q, "log", "-p", "-U0", "--no-color", "--cc", "--reverse", "--format=%x01%H", *revs)
+            diff = _git(root, *q, "log", "-p", "-U0", "--no-color", "--cc", "--reverse", "--format=%x01%H", *revs,
+                        errors="surrogateescape")          # nome de arquivo vem no cabeçalho: o byte volta inteiro
             _scan_diff(root, diff.stdout, check)
-            for f in _lines(_git(root, *q, "log", "--name-only", "--format=", *revs)):
+            for f in _paths(_git(root, *q, "log", "--name-only", "-z", "--format=", *revs, raw=True)):
                 if _private_path(f):
                     key = (f, 0, "arquivo do dono no histórico")
                     if key not in seen:
@@ -634,15 +742,20 @@ def scan(inst: config.Instance, ref: str | None, committed: bool = False,
                         findings.append({"file": f, "line": 0, "rule": key[2],
                                          "hint": "vault/ e config pessoal nunca vão ao repo (git rm --cached + reescrever o commit)"})
     else:
-        _scan_diff(root, _git(root, *q, "diff", "-U0", "--no-color", ref or EMPTY_TREE).stdout, check)
-    for f in ([] if committed else _lines(_git(root, *q, "ls-files", "--others", "--exclude-standard"))):
-        p = root / f
+        # `keep` deixa de fora o que já é público; lista vazia = nada a varrer na árvore de trabalho
+        groups = [()] if keep is None else [("--", *keep[i:i + 400]) for i in range(0, len(keep), 400)]
+        for scope in groups:
+            _scan_diff(root, _git(root, LITERAL, *q, "diff", "-U0", "--no-color", ref or EMPTY_TREE, *scope,
+                                  errors="surrogateescape").stdout, check)         # idem: nome no cabeçalho
+    for f in ([] if committed else _paths(_git(root, *q, "ls-files", "-z", "--others", "--exclude-standard", raw=True))):
+        p = _fs_path(root, f)
         check(f, 0, f)
         try:
-            if not p.is_file() or p.stat().st_size > MAX_BLOB_BYTES:
+            if not os.path.isfile(p) or os.stat(p).st_size > MAX_BLOB_BYTES:
                 continue
-            raw = p.read_bytes()
-        except OSError:
+            with open(p, "rb") as fh:
+                raw = fh.read()
+        except (OSError, ValueError):
             continue
         try:
             body = raw.decode("utf-8") if len(raw) <= MAX_SCAN_BYTES and b"\0" not in raw else None
@@ -695,7 +808,7 @@ def pre_push_scan(inst: config.Instance, remote: str, stdin_text: str) -> dict:
     """O que o hook pre-push roda: varre exatamente os commits que este push envia (qualquer branch,
     tag, HEAD solto ou ref nova), sem depender do branch atual."""
     revsets = push_revsets(inst, remote, stdin_text)
-    tracked = [f for f in _lines(_git(inst.root, "ls-files")) if _private_path(f)]
+    tracked = [f for f in _paths(_git(inst.root, "ls-files", "-z", raw=True)) if _private_path(f)]
     findings = [{"file": f, "line": 0, "rule": "arquivo do dono rastreado pelo git",
                  "hint": "git rm --cached antes de enviar"} for f in tracked]
     findings += scan(inst, None, committed=True, revsets=revsets) if revsets else []
@@ -714,25 +827,94 @@ def _ref_offline(inst: config.Instance, remote: str | None, branch: str | None) 
     return remote, branch, ref
 
 
+def _unpushed_range(root: Path, remote: str) -> tuple[int, str, list[list[str]]] | None:
+    """Branch ainda sem referência no remoto: o que um push enviaria são os commits só locais — a mesma
+    conta do hook (`push_revsets`). Devolve (quantos, base para o diff da árvore de trabalho, conjuntos de
+    commits). None quando não dá para saber (push direto para URL). Sem isso a varredura caía no histórico
+    inteiro, que já é público, e transformava placeholder de commit antigo em achado.
+
+    A base é o pai do commit só-local mais antigo: cobre o branch linear. Num branch que mergeou outra ref
+    do remoto ela é só um candidato — o diff contra ela traz de volta o conteúdo da ref mergeada, que já é
+    público; `_public_paths` tira esse conteúdo do diff e da lista de pendentes."""
+    if remote not in _git(root, "remote").stdout.split():
+        return None
+    local = _lines(_git(root, "rev-list", "HEAD", "--not", f"--remotes={remote}"))
+    parent = (_git(root, "rev-parse", "--verify", "--quiet", f"{local[-1]}^", check=False).stdout.strip()
+              if local else "")
+    base = parent or (EMPTY_TREE if local else "HEAD")
+    return len(local), base, [["HEAD", "--not", f"--remotes={remote}"]]
+
+
+def _public_paths(root: Path, remote: str, candidates: list[str]) -> list[str]:
+    """Entre os caminhos alterados, os que estão byte-idênticos na ponta de alguma ref do remoto — já são
+    públicos. Compara pelo mesmo `git diff` da varredura (árvore de trabalho × ponta), então edição local de
+    um arquivo público continua indo ao scan: decide o conteúdo, não o caminho.
+
+    A pergunta vai SEM pathspec — "o que difere da ponta", para a árvore inteira — e o nome nunca entra na linha
+    de comando. Com pathspec, o nome era re-codificado no encoding do locale (num de byte único não casava com
+    nada) e, no Windows, o byte que não é UTF-8 válido não chega ao git: o diff vazio era lido como "já público"
+    e o arquivo saía da varredura, em silêncio."""
+    public: set[str] = set()
+    todo = list(candidates)
+    q = ("-c", "core.quotePath=false")
+    for tip in _lines(_git(root, "for-each-ref", "--format=%(objectname)", f"refs/remotes/{remote}")):
+        if not todo:
+            break
+        differing = set(_paths(_git(root, *q, "diff", "--name-only", "-z", tip, raw=True)))
+        public.update(p for p in todo if p not in differing)
+        todo = [p for p in todo if p in differing]
+    return sorted(public)
+
+
+def _untrustworthy(name: str) -> bool:
+    """Nome com byte que não é UTF-8 válido (guardado como surrogate por `_decode`): a linha de comando pode não
+    carregá-lo — no Windows ela é UTF-16. Pathspec assim não casa com nada, e o git devolve diff vazio, que
+    ninguém distingue de "nada alterado"."""
+    try:
+        name.encode("utf-8")
+    except UnicodeEncodeError:
+        return True
+    return False
+
+
 def upstream_scan(inst: config.Instance, remote: str | None = None, branch: str | None = None,
                   committed: bool = False, fetch: bool = False) -> dict:
     if fetch:
         remote, branch, ref = _prepare(inst, remote, branch)
     else:
         remote, branch, ref = _ref_offline(inst, remote, branch)
-    ahead, behind = _ahead_behind(inst.root, ref) if ref else (0, 0)
-    tracked, untracked = _pending_files(inst.root, ref) if ref else ([], [])
+    unpushed = None
+    keep = None
+    if ref:
+        ahead, behind = _ahead_behind(inst.root, ref)
+        tracked, untracked = _pending_files(inst.root, ref)
+    else:
+        unpushed = _unpushed_range(inst.root, remote)
+        if unpushed:
+            ahead, behind = unpushed[0], 0
+            tracked, untracked = _pending_files(inst.root, unpushed[1])
+            public = set(_public_paths(inst.root, remote, tracked))
+            tracked = [p for p in tracked if p not in public]      # byte-idêntico ao remoto: já é público
+            # Nome que a linha de comando pode não carregar: o pathspec do `keep` não casa com nada e o git
+            # devolve diff vazio. Abre mão da restrição — pode acusar arquivo que já é público, nunca deixar
+            # um de fora.
+            keep = None if any(_untrustworthy(p) for p in tracked) else tracked
+        else:
+            ahead, behind, tracked, untracked = 0, 0, [], []
+    revsets = unpushed[2] if unpushed else None                   # mensagens dos commits só locais, nos dois modos
+    base = unpushed[1] if unpushed else ref                  # árvore de trabalho × último commit já no remoto
     return {"remote": remote, "branch": branch, "ref": ref, "ahead": ahead, "behind": behind,
             "changed": tracked, "new": untracked, "local_scripts": _local_scripts(inst.root),
-            "committed_only": committed, "findings": scan(inst, ref, committed=committed)}
+            "committed_only": committed, "unpushed_base": bool(unpushed),
+            "findings": scan(inst, base, committed=committed, revsets=revsets, keep=keep)}
 
 
 def _print_findings(findings: list[dict]) -> None:
     for f in findings[:25]:
         if f.get("hint"):
-            print(f"  ✗ {f['file']}:{f['line']} — {f['rule']}: {f['hint']}")
+            print(_show(f"  ✗ {f['file']}:{f['line']} — {f['rule']}: {f['hint']}"))
         else:
-            print(f"  ✗ {f['file']}:{f['line']} — {f['rule']} (sha:{f.get('fingerprint', '')}, {f.get('length', 0)} chars)")
+            print(_show(f"  ✗ {f['file']}:{f['line']} — {f['rule']} (sha:{f.get('fingerprint', '')}, {f.get('length', 0)} chars)"))
     if len(findings) > 25:
         print(f"  … e mais {len(findings) - 25}")
 
@@ -740,19 +922,22 @@ def _print_findings(findings: list[dict]) -> None:
 def _print_scan(st: dict) -> None:
     if "revsets" in st:
         print(f"pre-push → {st['remote']}: {len(st['revsets'])} ref(s) com commits a varrer")
+    elif st.get("unpushed_base"):
+        print(f"{st['remote']}/{st['branch']} ainda sem referência no {st['remote']} — o que um push enviaria: "
+              f"{st['ahead']} commit(s)")
     else:
         ref = st["ref"] or f"{st['remote']}/{st['branch']} (ainda sem referência local)"
         print(f"{ref}: {st['ahead']} commit(s) à frente · {st['behind']} atrás (sem rede; `--fetch` atualiza)")
     if not st["committed_only"] and (st["changed"] or st["new"]):
         print(f"não enviados: {len(st['changed'])} alterado(s) · {len(st['new'])} novo(s)")
         for f in st["changed"][:30]:
-            print(f"  M {f}")
+            print(f"  M {_show(f)}")
         for f in st["new"][:30]:
-            print(f"  ? {f}")
+            print(f"  ? {_show(f)}")
     if st["local_scripts"]:
         print("inovação local (scripts/local/ — ignorada pelo git; gradue movendo para scripts/ ou brainlib/):")
         for f in st["local_scripts"][:10]:
-            print(f"  · {f}")
+            print(f"  · {_show(f)}")
     if st["findings"]:
         print(f"✗ {len(st['findings'])} achado(s) de dado pessoal/segredo — não envie ao repo público até limpar:")
         _print_findings(st["findings"])
@@ -878,6 +1063,13 @@ def doctor_checks(inst: config.Instance) -> list[dict]:
     return out
 
 
+def _print_json(obj) -> None:
+    """Saída `--json`: toda string passa por `_show`. Nome de arquivo pode guardar surrogate (byte que não é UTF-8
+    válido), a saída vai com `ensure_ascii=False`, e stdout em UTF-8 não imprime surrogate — o comando caía no
+    meio do relato em JSON. Na saída o byte aparece como escape, como no relato em texto."""
+    print(json.dumps(util.jsonable(obj, _show), ensure_ascii=False, indent=2))
+
+
 # ── entrada do CLI ──────────────────────────────────────────────────────────
 def cli_update(args, _b) -> None:
     inst = config.load()
@@ -890,7 +1082,7 @@ def cli_update(args, _b) -> None:
     if args.check and res.get("behind") and not res.get("news"):
         res["news"] = check_update(inst, force=True).get("news", [])
     if args.json:
-        print(json.dumps(res, ensure_ascii=False, indent=2))
+        _print_json(res)
     else:
         _print_update(res)
 
@@ -910,7 +1102,7 @@ def cli_upstream(args, _b) -> None:
     else:
         st = upstream_scan(inst, args.remote, args.branch, committed=args.committed, fetch=args.fetch)
     if args.json:
-        print(json.dumps(st, ensure_ascii=False, indent=2))
+        _print_json(st)
     else:
         _print_scan(st)
     if st["findings"]:

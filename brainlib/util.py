@@ -138,6 +138,20 @@ def write_json(path: Path, data) -> None:
     atomic_write(path, json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
 
 
+def jsonable(obj, esc):
+    """Cópia de `obj` para o `--json`: toda string passa por `esc`. Nome de arquivo vem do sistema de arquivos ou
+    do git e pode guardar surrogate (byte que não é UTF-8 válido); a saída vai com `ensure_ascii=False`, e stdout
+    em UTF-8 não imprime surrogate — o comando caía no meio do relato em JSON. `esc` é a função que a tela já usa
+    para o nome em cada módulo; na saída o byte aparece como escape, como no relato em texto."""
+    if isinstance(obj, str):
+        return esc(obj)
+    if isinstance(obj, dict):
+        return {k: jsonable(v, esc) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [jsonable(v, esc) for v in obj]
+    return obj
+
+
 _held_locks = threading.local()          # caminhos já travados nesta thread (re-entrância do flock)
 
 

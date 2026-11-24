@@ -80,6 +80,8 @@ class PortfolioKeys:
 
     def _people_check(self, v: str) -> str:
         for name in util.split_csv(v):
+            if util.fold(name) == "eu":                 # "eu" vale o dono do Brain, como em cli._resolve_people
+                continue
             if name in self.store.brain.state.people:
                 continue
             cands = people_mod.resolve(self.store.brain.state, name)

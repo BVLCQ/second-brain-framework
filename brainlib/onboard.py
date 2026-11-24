@@ -656,6 +656,30 @@ def save_keys(brain, data: dict) -> dict:
     return {"keys": {k: bool(env.get(k)) for k in KEY_NAMES}}
 
 
+# ── "fazer depois": UMA tarefa por passo ────────────────────────────────────────────────────────────────────
+_LATER_MEM_STEMS = ("Configurar memória semântica do Brain", "Decidir e configurar a memória semântica do Brain")
+_LATER_MEM_SUF = " (`brain setup --only memoria`)"
+_LATER_AGENT_PRE, _LATER_AGENT_SUF = "Conectar o ", " ao Brain (MCP somente-leitura + permissões)"
+
+
+def _later_task(brain, title: str, step: str, *, stems: tuple[str, ...] = ("",), suffix: str = "") -> str:
+    """"Fazer depois" vira TASK `mine` no ledger — uma por passo: a ainda aberta não é cunhada de novo (clique
+    duplo, retry de job, duas abas). `stems`/`suffix` dizem que títulos contam como a mesma tarefa (outro agente,
+    outro modo de memória) — e a escolha mais recente vira o título dela, porque é o que o dono decidiu por último.
+    Devolve o id da que existe ou da nova."""
+    for a in sorted(brain.state.actions.values(), key=lambda x: x.id):
+        same = any(a.title.startswith(s) for s in stems if s) and (not suffix or a.title.endswith(suffix))
+        if a.open and a.list == "mine" and (a.title == title or same):
+            if a.title != title:
+                brain.record_one({"type": "action.updated", "id": a.id, "by": "owner", "prov": "declarado",
+                                  "source": "onboarding", "data": {"title": title}})
+            return a.id
+    ev = brain.record_one({"type": "action.opened", "by": "owner", "prov": "declarado", "source": "onboarding",
+                           "data": {"title": title, "owner": brain.owner, "list": "mine"}})
+    _mark(brain.inst, step)
+    return ev["id"]
+
+
 def apply_memory(brain, data: dict) -> dict:
     from . import setup
     mode = {"lite": "embed"}.get(str(data.get("mode")), str(data.get("mode")))
@@ -671,13 +695,9 @@ def apply_memory(brain, data: dict) -> dict:
             if mode in ("embed", "full")
             else "Decidir e configurar a memória semântica do Brain (`brain setup --only memoria`)"
         )
-        ev = brain.record_one({
-            "type": "action.opened", "by": "owner", "prov": "declarado", "source": "onboarding",
-            "data": {"title": title, "owner": brain.owner, "list": "mine"},
-        })
-        _mark(brain.inst, "memoria")
+        task = _later_task(brain, title, "memoria", stems=_LATER_MEM_STEMS, suffix=_LATER_MEM_SUF)
         _save_progress(brain.inst, memory_later={"embed": "lite"}.get(mode, mode))
-        return {"later": True, "id": ev["id"], "mode": mode}
+        return {"later": True, "id": task, "mode": mode}
     setup.validate_memory_setup(data)                    # erros de escolha sobem ANTES do job (sem rodar nada)
     if mode == "none":
         from . import memory
@@ -776,15 +796,14 @@ def agent_later(brain, data: dict) -> dict:
     """"Fazer depois" com entidade: TASK nomeada no ledger, não frase de ajuda (plano F3).
     Só nomeia o agente que o dono ESCOLHEU na tela (clique no card); sem escolha, genérico —
     detecção no PATH nunca decide por ele (ruling: "allow the user to choose")."""
+    if util.is_nightly():
+        raise util.BrainError("\"fazer depois\" é escolha do dono presente — nunca no noturno", code=4)
     if brain.owner not in brain.state.people:
         raise util.BrainError("preencha o passo Você primeiro — a tarefa precisa do dono registrado", code=4)
     key = str(data.get("agent") or "")
     title = (f"Conectar o {_agent_label(key)} ao Brain (MCP somente-leitura + permissões)"
              if key in AGENT_KEYS else "Conectar o seu agente de IA ao Brain (MCP somente-leitura + permissões)")
-    ev = brain.record_one({"type": "action.opened", "by": "owner", "prov": "declarado", "source": "onboarding",
-                           "data": {"title": title, "owner": brain.owner, "list": "mine"}})
-    _mark(brain.inst, "agente")
-    return {"id": ev["id"]}
+    return {"id": _later_task(brain, title, "agente", stems=(_LATER_AGENT_PRE,), suffix=_LATER_AGENT_SUF)}
 
 
 def apply_foco_google(brain, data: dict) -> dict:
