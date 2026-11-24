@@ -58,18 +58,22 @@ jobs:
           git remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
           git fetch -q --no-tags origin "+refs/heads/main:refs/remotes/origin/main" "$TARGET_SHA"
           git checkout -q --force origin/main
+          git clean -ffdxq # o que o job anterior deixou sem rastrear não entra nesta varredura
       - name: Portão de dados (o que entra na main)
-        env:
-          # A varredura trata o caminho do HOME como "caminho da máquina" e o procura no diff. Este
-          # caminho não é de usuário nenhum: nenhum commit precisa evitá-lo, e nenhum se acusaria.
-          HOME: /var/lib/brain-gate
         run: |
+          # A varredura procura o caminho do HOME no diff. O do container (/root) é caminho de servidor
+          # que documentação legítima cita: passa a ser uma pasta dentro do workspace.
+          export HOME="$PWD/.home-do-portao"
           case "$GATE_BASE" in
             0000000000000000000000000000000000000000) echo "push sem base conhecida: não dá para varrer só o que entrou"; exit 1 ;;
           esac
-          # o PR entra por um worktree: os scripts que varrem são os da main, o PR só fornece os commits
+          # o PR entra por um worktree: os scripts que varrem são os da main, o PR só fornece os commits.
+          # Exceção que só existe enquanto a main não tem o portão (este é o PR que o cria): aí usa-se o do PR.
+          git worktree prune
           git worktree add --detach /tmp/entrada "$TARGET_SHA"
-          python3 scripts/dev/public_gate.py gate --root /tmp/entrada --base "$GATE_BASE" --denylist /denylist/denylist
+          PORTAO=scripts/dev/public_gate.py
+          if [ ! -f "$PORTAO" ]; then echo "main ainda sem o portão: varrendo com o do PR"; PORTAO=/tmp/entrada/$PORTAO; fi
+          python3 "$PORTAO" gate --root /tmp/entrada --base "$GATE_BASE" --denylist /denylist/denylist
 
   tests:
     name: tests (py${{ matrix.python }})
@@ -97,6 +101,7 @@ jobs:
           git fetch -q --depth=1 --no-tags origin "+$GITHUB_SHA:refs/remotes/origin/ci"
           git checkout -q --force refs/remotes/origin/ci
           git config --unset http.extraheader
+          git clean -ffdxq # o workspace é o mesmo de job para job: sobra do anterior não entra na suíte
           [ "$(git rev-parse HEAD)" = "$GITHUB_SHA" ] || { echo "HEAD não é GITHUB_SHA"; exit 1; }
       - name: Identidade do git (testes criam repos falsos e commitam)
         run: |

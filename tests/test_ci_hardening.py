@@ -80,6 +80,10 @@ class WorkflowHardeningTest(unittest.TestCase):
         self.assertIn("git checkout -q --force origin/main", gate)
         self.assertIn("--root /tmp/entrada", gate)
         self.assertIn("git worktree add --detach /tmp/entrada", gate)
+        # a exceção (portão do PR) só se abre quando a MAIN não tem o script: o PR não escolhe as regras
+        self.assertIn('if [ ! -f "$PORTAO" ]', gate)
+        # o workspace sobrevive de um job para o outro e o worktree do anterior não: sem o prune, o segundo job morre
+        self.assertIn("git worktree prune", gate)
 
     def test_checkout_header_is_what_git_and_github_accept(self):
         # `git config chave=valor` num argumento só: o git das imagens do CI recusa ("invalid key") e o
