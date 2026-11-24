@@ -250,13 +250,8 @@ def is_nightly() -> bool:
 
 
 def is_agent() -> bool:
-    """`BRAIN_AGENT` ligado? Subprocesso do agente não pode aprovar nem responder pelo dono."""
+    """`BRAIN_AGENT` ligado? Subprocesso do agente não aprova, não responde pelo dono e não aplica `brain update`."""
     return _env_flag("BRAIN_AGENT")
-
-
-def is_agent() -> bool:
-    """`BRAIN_AGENT` ligado? Sinaliza execução por agente (`BRAIN_AGENT=1`), que não aplica `brain update`."""
-    return os.environ.get("BRAIN_AGENT", "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def split_csv(value: str | list | None) -> list[str]:
