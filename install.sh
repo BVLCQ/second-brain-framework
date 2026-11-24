@@ -23,7 +23,13 @@ REPO_URL="https://github.com/BVLCQ/second-brain-framework"
 DEST="${1:-$HOME/Apps/second-brain-framework}"
 
 OS="$(uname -s)"
-SCRIPT_DIR="$(cd "$(dirname -- "$0")" 2>/dev/null && pwd -P || pwd -P)"
+SCRIPT_DIR=$(
+    if cd "$(dirname -- "$0")" 2>/dev/null; then
+        pwd -P
+    else
+        pwd -P
+    fi
+)
 say() { printf '→ %s\n' "$1"; }
 ok() { command -v "$1" >/dev/null 2>&1; }
 works() { "$1" --version >/dev/null 2>&1; }  # pega o stub git da Apple sem CLT
@@ -37,9 +43,8 @@ file_sha256() {
     else
         return 1
     fi
-    set -- $_fs_out
-    [ -n "${1:-}" ] || return 1
-    printf '%s\n' "$1" | tr '[:upper:]' '[:lower:]'
+    [ -n "${_fs_out:-}" ] || return 1
+    printf '%s\n' "${_fs_out%% *}" | tr '[:upper:]' '[:lower:]'
 }
 
 read_installer_pin() {
