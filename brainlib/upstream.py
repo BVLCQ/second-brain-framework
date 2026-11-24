@@ -57,14 +57,16 @@ def _git(root: Path, *args: str, check: bool = True, raw: bool = False,
     # sem terminal para pedir senha (noturno, hook): credencial ausente falha em vez de travar para sempre
     env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
     # `raw=True`: stdout em bytes, para lista de NOME de arquivo (`_paths`): nome não é texto. `errors` diz o
-    # que fazer, na saída em texto, com byte que não é do encoding do terminal. `replace` serve para metadado
-    # (ref, remote, mensagem de erro). Diff e log carregam nome de arquivo no cabeçalho e conteúdo: ali o byte
-    # tem de voltar inteiro (`surrogateescape`), porque o nome vira rótulo do achado.
+    # que fazer, na saída em texto, com byte que não é UTF-8 válido. `replace` serve para metadado (ref, remote,
+    # mensagem de erro). Diff e log carregam nome de arquivo no cabeçalho e conteúdo: ali o byte tem de voltar
+    # inteiro (`surrogateescape`), porque o nome vira rótulo do achado.
     # `encoding` fixado em UTF-8: sem ele o subprocess decodifica com o encoding do locale — `cp1252` num Windows em
     # português — e o nome acentuado do cabeçalho do diff chegava trocado, sem casar com o nome da listagem.
+    # A linha de comando sai por `_cmd`: o nome foi LIDO em UTF-8 e tem de voltar em UTF-8, em bytes — como `str`,
+    # o Python o codificava no encoding do locale e ele chegava trocado ao git.
     dec = {} if raw else {"text": True, "encoding": "utf-8", "errors": errors}
     try:
-        r = subprocess.run(["git", "-C", str(root), *args], capture_output=True, env=env,
+        r = subprocess.run(_cmd(root, *args), capture_output=True, env=env,
                            timeout=GIT_TIMEOUT_S, **dec)
     except FileNotFoundError as e:
         raise util.BrainError("git não encontrado no PATH") from e
@@ -83,23 +85,50 @@ def _lines(r: subprocess.CompletedProcess) -> list[str]:
 
 
 def _decode(p: bytes) -> str:
-    """Byte de NOME de arquivo → str, como o `os.fsdecode` do Linux e do macOS: o byte que não é UTF-8 válido fica
-    guardado (surrogate) e volta byte a byte quando o nome entra de novo no git como pathspec. Sem o `os.fsdecode`
-    porque no Windows ele levanta UnicodeDecodeError com esse byte (lá o handler é `surrogatepass`, PEP 529): a
-    varredura caía num clone com histórico de nome assim, em vez de guardar o byte e seguir."""
-    return p.decode(sys.getfilesystemencoding(), "surrogateescape")
+    """Byte de NOME de arquivo → str, lido em UTF-8 com `surrogateescape`: o byte que não é UTF-8 válido fica
+    guardado (surrogate) e volta byte a byte quando o nome entra de novo no git (`_arg`) ou no disco (`_fs_path`).
+    O par é sempre este, nunca o do sistema: num locale de byte único (`pt_BR.ISO-8859-1`) o par do sistema é
+    latin-1 e o nome guardado em UTF-8 vinha trocado; no Windows é UTF-8 com `surrogatepass` (PEP 529), que levanta
+    UnicodeDecodeError com esse byte — a varredura caía num clone com histórico de nome assim, em vez de guardar
+    o byte e seguir."""
+    return p.decode("utf-8", "surrogateescape")
 
 
 def _paths(r: subprocess.CompletedProcess) -> list[str]:
     """Caminhos de um `git … -z` lido em bytes (`_git(…, raw=True)`): separados por NUL, nunca entre aspas, e
-    decodificados como NOME de arquivo (`_decode`), não como texto. Nome de arquivo é a sequência de bytes que
-    o sistema de arquivos guarda, e no Linux ela pode não ser UTF-8 válida. Lido como texto, o byte inválido vira
+    decodificados como NOME de arquivo (`_decode`), não como texto. Nome de arquivo é a sequência de bytes que o
+    sistema de arquivos guarda, e no Linux ela pode não ser UTF-8 válida. Lido como texto, o byte inválido vira
     U+FFFD — o nome de arquivo nenhum: como pathspec não casa com nada, e o arquivo era dado como `já público`,
-    saindo do scan sem erro. `_decode` é a decodificação que o próprio Python usa para nome de arquivo: guarda
-    o byte (surrogate), e o nome volta byte a byte quando entra de novo no git como pathspec. Sem o -z o git
-    entrega entre aspas e com escapes o nome com acento, aspas ou barra invertida (`"ol\\303\\241.py"`);
-    `core.quotePath=false` só tira o caso do acento."""
+    saindo do scan sem erro. `_decode` guarda o byte (surrogate), e o nome volta byte a byte quando entra de novo
+    no git (`_arg`) ou no disco (`_fs_path`). Sem o -z o git entrega entre aspas e com escapes o nome com acento,
+    aspas ou barra invertida; `core.quotePath=false` só tira o caso do acento."""
     return [_decode(p) for p in r.stdout.split(b"\0") if p]
+
+
+def _arg(a):
+    """Argumento da linha de comando do git, na forma em que chega byte a byte. Nome de arquivo é `str` com
+    surrogate onde havia byte inválido (`_decode`) e volta em bytes pelo MESMO par da leitura — UTF-8 +
+    surrogateescape. Como `str`, o Python o codificava no encoding do locale: num Linux em `pt_BR.ISO-8859-1`
+    o acento de `relatório` virava outro byte, e o git não achava o arquivo. O que já é bytes passa inteiro."""
+    return a.encode("utf-8", "surrogateescape") if isinstance(a, str) else a
+
+
+def _cmd(root: Path, *args: str) -> list:
+    """Linha de comando do git. Em POSIX vai em bytes: os argumentos por `_arg`; a raiz é caminho do sistema
+    operacional (veio do `argv`) e segue o par dele, `os.fsencode`. No Windows a linha de comando é UTF-16 e
+    segue em `str` — lá o byte que não é UTF-8 válido não chega ao git (daí `_untrustworthy`)."""
+    if os.name == "nt":
+        return ["git", "-C", str(root), *args]
+    return [b"git", b"-C", os.fsencode(root), *(_arg(a) for a in args)]
+
+
+def _fs_path(root: Path, name: str) -> bytes | Path:
+    """Caminho de DISCO de um nome que saiu do git (`_decode`): em POSIX, bytes pelo par da leitura — como `str`,
+    o Python o codificava no encoding do locale, e o arquivo de nome acentuado não era aberto. `Path(bytes)` só
+    existe no Python 3.13; bytes cru com `open`/`os.stat` serve de 3.11 a 3.14. No Windows, `Path`."""
+    if os.name == "nt":
+        return root / name
+    return os.path.join(os.fsencode(root), _arg(name))
 
 
 def _show(name: str) -> str:
@@ -519,7 +548,10 @@ _C_ESCAPES = {"a": 7, "b": 8, "t": 9, "n": 10, "v": 11, "f": 12, "r": 13, '"': 3
 
 
 def _unquote(path: str) -> str:
-    """Caminho como o git imprime: `"b/caf\\303\\251.md"` (aspas C, octal UTF-8) → `b/café.md`."""
+    """Caminho como o git imprime: `"b/caf\\303\\251.md"` (aspas C, octal UTF-8) → `b/café.md`.
+    O octal que não forma UTF-8 válido vira surrogate (`_decode`), não U+FFFD: o nome continua servindo de caminho.
+    Com `core.quotePath=false` o byte acima de 0x7F vem CRU entre as aspas — no texto, já é surrogate
+    (`_decode`) — e volta a ser byte na saída; em octal é a forma do padrão do git."""
     if not (len(path) >= 2 and path[0] == path[-1] == '"'):
         return path
     out, i, s = bytearray(), 0, path[1:-1]
@@ -534,9 +566,9 @@ def _unquote(path: str) -> str:
             out.append(_C_ESCAPES.get(nxt, ord(nxt)))
             i += 2
             continue
-        out += c.encode("utf-8")
+        out += c.encode("utf-8", "surrogateescape")
         i += 1
-    return out.decode("utf-8", errors="replace")
+    return out.decode("utf-8", "surrogateescape")
 
 
 def _strip_side(path: str, side: str) -> str:
@@ -549,16 +581,21 @@ def _binary_lines(data: bytes) -> list[str]:
 
 
 def _blob(root: Path, sha: str, path: str) -> bytes | None:
-    """Conteúdo de `path` no commit `sha` (ou da working tree, sem sha) — para varrer binários."""
+    """Conteúdo de `path` no commit `sha` (ou da working tree, sem sha) — para varrer binários. O nome entra no
+    `cat-file` e no disco pelo par da leitura (`_cmd`, `_fs_path`): como `str`, num locale de byte único, o
+    binário de nome acentuado era pedido com o nome trocado — e a falha era em silêncio, sem acusação."""
     try:
         if not sha:
-            p = root / path
-            return p.read_bytes() if p.is_file() and p.stat().st_size <= MAX_BLOB_BYTES else None
-        size = subprocess.run(["git", "-C", str(root), "cat-file", "-s", f"{sha}:{path}"],
+            p = _fs_path(root, path)
+            if not os.path.isfile(p) or os.stat(p).st_size > MAX_BLOB_BYTES:
+                return None
+            with open(p, "rb") as fh:
+                return fh.read()
+        size = subprocess.run(_cmd(root, "cat-file", "-s", f"{sha}:{path}"),
                               capture_output=True, text=True, timeout=60)
         if size.returncode != 0 or int(size.stdout.strip() or 0) > MAX_BLOB_BYTES:
             return None
-        r = subprocess.run(["git", "-C", str(root), "cat-file", "blob", f"{sha}:{path}"], capture_output=True, timeout=120)
+        r = subprocess.run(_cmd(root, "cat-file", "blob", f"{sha}:{path}"), capture_output=True, timeout=120)
         return r.stdout if r.returncode == 0 else None
     except (OSError, ValueError, subprocess.TimeoutExpired):
         return None
@@ -689,13 +726,14 @@ def scan(inst: config.Instance, ref: str | None, committed: bool = False,
             _scan_diff(root, _git(root, LITERAL, *q, "diff", "-U0", "--no-color", ref or EMPTY_TREE, *scope,
                                   errors="surrogateescape").stdout, check)         # idem: nome no cabeçalho
     for f in ([] if committed else _paths(_git(root, *q, "ls-files", "-z", "--others", "--exclude-standard", raw=True))):
-        p = root / f
+        p = _fs_path(root, f)
         check(f, 0, f)
         try:
-            if not p.is_file() or p.stat().st_size > MAX_BLOB_BYTES:
+            if not os.path.isfile(p) or os.stat(p).st_size > MAX_BLOB_BYTES:
                 continue
-            raw = p.read_bytes()
-        except OSError:
+            with open(p, "rb") as fh:
+                raw = fh.read()
+        except (OSError, ValueError):
             continue
         try:
             body = raw.decode("utf-8") if len(raw) <= MAX_SCAN_BYTES and b"\0" not in raw else None
@@ -788,19 +826,33 @@ def _unpushed_range(root: Path, remote: str) -> tuple[int, str, list[list[str]]]
 def _public_paths(root: Path, remote: str, candidates: list[str]) -> list[str]:
     """Entre os caminhos alterados, os que estão byte-idênticos na ponta de alguma ref do remoto — já são
     públicos. Compara pelo mesmo `git diff` da varredura (árvore de trabalho × ponta), então edição local de
-    um arquivo público continua indo ao scan: decide o conteúdo, não o caminho."""
+    um arquivo público continua indo ao scan: decide o conteúdo, não o caminho.
+
+    A pergunta vai SEM pathspec — "o que difere da ponta", para a árvore inteira — e o nome nunca entra na linha
+    de comando. Com pathspec, o nome era re-codificado no encoding do locale (num de byte único não casava com
+    nada) e, no Windows, o byte que não é UTF-8 válido não chega ao git: o diff vazio era lido como "já público"
+    e o arquivo saía da varredura, em silêncio."""
     public: set[str] = set()
     todo = list(candidates)
-    q = (LITERAL, "-c", "core.quotePath=false")
+    q = ("-c", "core.quotePath=false")
     for tip in _lines(_git(root, "for-each-ref", "--format=%(objectname)", f"refs/remotes/{remote}")):
         if not todo:
             break
-        differing: set[str] = set()
-        for i in range(0, len(todo), 400):
-            differing.update(_paths(_git(root, *q, "diff", "--name-only", "-z", tip, "--", *todo[i:i + 400], raw=True)))
+        differing = set(_paths(_git(root, *q, "diff", "--name-only", "-z", tip, raw=True)))
         public.update(p for p in todo if p not in differing)
         todo = [p for p in todo if p in differing]
     return sorted(public)
+
+
+def _untrustworthy(name: str) -> bool:
+    """Nome com byte que não é UTF-8 válido (guardado como surrogate por `_decode`): a linha de comando pode não
+    carregá-lo — no Windows ela é UTF-16. Pathspec assim não casa com nada, e o git devolve diff vazio, que
+    ninguém distingue de "nada alterado"."""
+    try:
+        name.encode("utf-8")
+    except UnicodeEncodeError:
+        return True
+    return False
 
 
 def upstream_scan(inst: config.Instance, remote: str | None = None, branch: str | None = None,
@@ -821,7 +873,10 @@ def upstream_scan(inst: config.Instance, remote: str | None = None, branch: str 
             tracked, untracked = _pending_files(inst.root, unpushed[1])
             public = set(_public_paths(inst.root, remote, tracked))
             tracked = [p for p in tracked if p not in public]      # byte-idêntico ao remoto: já é público
-            keep = tracked
+            # Nome que a linha de comando pode não carregar: o pathspec do `keep` não casa com nada e o git
+            # devolve diff vazio. Abre mão da restrição — pode acusar arquivo que já é público, nunca deixar
+            # um de fora.
+            keep = None if any(_untrustworthy(p) for p in tracked) else tracked
         else:
             ahead, behind, tracked, untracked = 0, 0, [], []
     revsets = unpushed[2] if unpushed else None                   # mensagens dos commits só locais, nos dois modos

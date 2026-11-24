@@ -1324,12 +1324,15 @@ def validate_memory_setup(data: dict) -> dict:
     dec_model = str(dec_in.get("model") or dec_reg.get("model", "")).strip()
     dec_base_url = str(dec_in.get("base_url") or dec_reg.get("base_url", "")).strip()
     dec_rec_raw = dec_in.get("recall") if "recall" in dec_in else data.get("decision_recall")
-    dec_recall = bool(prov._parse_recall(dec_rec_raw))
+    dec_rec = prov._parse_recall(dec_rec_raw)
+    dec_recall = bool(dec_rec)                 # o que o payload disse — False TAMBÉM quando ele não falou do recall
+    recall_named = dec_rec is not None         # aninhado (`decision.recall`) ou plano legado (`decision_recall`)
     dec_cands_raw = dec_in.get("candidates") if "candidates" in dec_in else data.get("decision_candidates")
     try:
         dec_cands = int(dec_cands_raw) if dec_cands_raw not in (None, "") else 0
     except (TypeError, ValueError) as e:
         raise util.BrainError("teto de candidatos inválido (use um inteiro positivo)", code=4) from e
+    cands_named = dec_cands_raw not in (None, "", 0, "0")     # 0 não é pedido: com o recall ligado é recusado abaixo
     if dec_recall:
         if mode != "full" or dec != "hindsight":
             raise util.BrainError(
@@ -1373,9 +1376,10 @@ def validate_memory_setup(data: dict) -> dict:
                    "reranker": bool(rer_in.get("model") or rer_in.get("base_url")),
                    # decisão: além de modelo/endpoint, o payload pode trazer o decisor no recall (ligar ou
                    # desligar, teto de candidatos) SEM mudar o provedor — aí o slot não fica como está,
-                   # senão o pedido era engolido (kept)
+                   # senão o pedido era engolido (kept). Nos DOIS formatos: as chaves planas legadas
+                   # (`decision_recall`/`decision_candidates`) ficavam de fora e o pedido não chegava ao roteiro
                    "decision": bool(dec_in.get("model") or dec_in.get("base_url")
-                                    or "recall" in dec_in or "candidates" in dec_in)}
+                                    or recall_named or cands_named)}
     given = {"llm": named["llm"] or model_given["llm"] or bool(llm_key),
              "embeddings": named["embeddings"] or model_given["embeddings"] or bool(emb_key),
              "reranker": named["reranker"] or model_given["reranker"] or bool(k_rer),
@@ -1392,6 +1396,7 @@ def validate_memory_setup(data: dict) -> dict:
 
     return {"mode": mode, "provider": provider, "emb": emb, "rer": rer, "dec": dec,
             "dec_recall": dec_recall, "dec_candidates": dec_cands, "dec_base_url": dec_base_url,
+            "recall_named": recall_named, "cands_named": cands_named,
             "model": model, "consent": consent,
             "key": key, "emb_key": emb_key, "rer_key": k_rer, "dec_key": k_dec, "slots": slots,
             "given": given, "named": named, "model_given": model_given}
@@ -1442,6 +1447,18 @@ def configure_memory(brain, data: dict, say=print) -> str:
         s["provider"] = cur         # sem provedor nomeado (ou o mesmo): vale o atual
         if not v["model_given"][slot] and (not reg.get("key_env") or env_now.get(reg["key_env"]) or s.get("key")):
             kept.add(slot)          # mesma escolha: nem passa pelo passo de provedores — só a chave (se veio) muda
+    # Recall EFETIVO do decisor: o que o payload nomeou (aninhado ou plano legado); do que ele não nomeou, vale o
+    # gravado — como qualquer campo de um slot mantido. As guardas liam só o payload (`v["dec_recall"]`), que vale
+    # False quando ele não fala de recall: um save do painel que regravava o slot de decisão DESLIGAVA o recall e
+    # zerava o teto, e o reranker — inerte com o recall ligado — era regravado ou tinha a chave trocada.
+    salvo = st["decision"]
+    dec_final = v["slots"].get("decision", {}).get("provider", "off")
+    recall_efet = bool(v["dec_recall"]) if v["recall_named"] else bool(
+        salvo["recall"] and salvo["provider"] == dec_final)
+    cands_efet = int(v["dec_candidates"]) if v["cands_named"] else (int(salvo["candidates"]) if recall_efet else 0)
+    if v["cands_named"] and not recall_efet:
+        raise util.BrainError("o teto de candidatos só vale com o recall do decisor ligado — ligue `recall` no mesmo "
+                              "payload (antes o valor era aceito e descartado em silêncio)", code=4)
     provider = v["slots"].get("llm", {}).get("provider", provider)
     emb, rer = v["slots"]["embeddings"]["provider"], v["slots"]["reranker"]["provider"]
     key, emb_key, rer_key = v["key"], v["emb_key"], v["rer_key"]
@@ -1455,7 +1472,7 @@ def configure_memory(brain, data: dict, say=print) -> str:
     for slot, s in v["slots"].items():
         if slot not in todo:
             continue                                    # fica como está: só a chave, se veio no payload
-        if slot == "reranker" and v.get("dec_recall"):
+        if slot == "reranker" and recall_efet:
             continue                    # recall do decisor ligado: reranker fica inerte e o .env atual é preservado
         p = s["provider"]
         reg = prov.PROVIDERS[slot][p]
@@ -1476,7 +1493,7 @@ def configure_memory(brain, data: dict, say=print) -> str:
     # passo de provedores) — e o container é recriado, como em qualquer troca de chave
     rotate: dict[str, str] = {}
     for slot in kept:
-        if slot == "reranker" and v.get("dec_recall"):
+        if slot == "reranker" and recall_efet:
             continue                        # recall do decisor ligado: o .env do reranker fica como está
         key_env = prov.PROVIDERS[slot][v["slots"][slot]["provider"]].get("key_env", "")
         k = v["slots"][slot].get("key", "")
@@ -1495,8 +1512,8 @@ def configure_memory(brain, data: dict, say=print) -> str:
     ui = ScriptedMemoriaUI(_SayOnly(say), {"LLM": provider, "embeddings": emb, "reranker": rer, "decision": dec},
                            keys, v["model"], v["consent"], base_url=llm_base,
                            models_override=bool(v["model"]),
-                           decision_recall=bool(v.get("dec_recall")),
-                           decision_candidates=int(v.get("dec_candidates") or 0),
+                           decision_recall=recall_efet,
+                           decision_candidates=cands_efet,
                            decision_base_url=str(v.get("dec_base_url") or ""),
                            slot_models=slot_models)
     _run_memoria(brain, ui, mode_hint=mode, only=todo, env_dirty=bool(rotate))

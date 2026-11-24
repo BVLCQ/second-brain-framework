@@ -408,5 +408,109 @@ class MemorySetupAppliesCustomSlotValues(unittest.TestCase):
         self.assertIn('const r = await obAct("memory", body);', js)
 
 
+
+
+class MemorySetupRecallFollowsTheSavedState(unittest.TestCase):
+    """Revisão independente (rodada 6): achados 3, 4 e 5 do FOLLOWUPS-6, mais a cobertura que o achado 6 cobrou.
+
+    Regra do ramo: um slot mantém tudo que o payload não nomeou. O recall do decisor é um campo do slot de decisão —
+    e as guardas consultavam só o payload (`v["dec_recall"]`), que vale False quando ele não fala de recall. Passou a
+    valer o recall EFETIVO: o que o payload nomeia; senão o que está gravado."""
+    BASE = {"mode": "full", "consent": True, "provider": "openai", "model": "gpt-prova", "key": "sk-" + "1",
+            "embeddings": "fireworks", "emb_key": "fw-" + "1"}
+    _configure = MemorySetupKeepsUnaddressedSlots._configure
+    _slot_env = staticmethod(MemorySetupKeepsUnaddressedSlots._slot_env)
+    @staticmethod
+    def _recall_salvo(b: Brain, *, ligado: bool) -> None:
+        """Estado de partida: reranker de nuvem configurado e decisor hindsight com o recall gravado (ligado ou não)."""
+        providers.set_slot(b, "reranker", "cohere", key="ck-" + "1")
+        providers.set_slot(b, "decision", "hindsight", key="hs-" + "1",
+                           recall="on" if ligado else None, candidates=30 if ligado else 0)
+    @staticmethod
+    def _recall(b: Brain) -> tuple:
+        mem = config.load(b.inst.root).cfg["memory"]
+        return mem["decision_provider"], bool(mem.get("decision_recall")), mem.get("decision_max_candidates")
+    def test_candidates_alone_keep_the_saved_recall_on(self):
+        """Achado 3: `{"decision": {"candidates": 50}}` mudava o teto de um recall ligado — e o desligava."""
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            self._recall_salvo(b, ligado=True)
+            self._configure(b, {**self.BASE, "decision": {"candidates": 50}})
+            self.assertEqual(self._recall(b), ("hindsight", True, 50))
+    def test_model_alone_keeps_the_saved_recall_on(self):
+        """Achado 3: o slot é endereçado por outro campo; o recall, que o payload não nomeou, é sobrescrito."""
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            self._recall_salvo(b, ligado=True)
+            self._configure(b, {**self.BASE, "decision": {"model": "hindsight-prova"}})
+            self.assertEqual(self._recall(b), ("hindsight", True, 30))
+    def test_new_decision_key_alone_keeps_the_saved_recall_on(self):
+        """Cobertura: a chave nova entra pela rotação do slot que fica como está — o recall gravado não se mexe."""
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            self._recall_salvo(b, ligado=True)
+            self._configure(b, {**self.BASE, "decision": {"key": "hs-" + "NOVA"}})
+            self.assertEqual(self._recall(b), ("hindsight", True, 30))
+            self.assertIn("hs-" + "NOVA", config.load_env(b.inst).values())
+    def test_candidates_alone_are_refused_while_the_recall_is_off(self):
+        """Teto sem recall ligado não tem efeito: antes era aceito e zerado em silêncio."""
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            self._recall_salvo(b, ligado=False)
+            with self.assertRaises(util.BrainError):
+                self._configure(b, {**self.BASE, "decision": {"candidates": 50}})
+            self.assertEqual(self._recall(b), ("hindsight", False, 0))
+    def test_reranker_named_without_recall_in_the_payload_stays_untouched(self):
+        """Achado 4: recall ligado E gravado; o payload nomeia o reranker e não fala de recall."""
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            self._recall_salvo(b, ligado=True)
+            antes = config.load_env(b.inst)
+            self._configure(b, {**self.BASE, "reranker": {"provider": "fireworks", "key": "fw-" + "NOVA"}})
+            self.assertEqual(config.load(b.inst.root).cfg["memory"]["reranker_provider"], "cohere")
+            depois = config.load_env(b.inst)
+            self.assertEqual(self._slot_env(depois, "RERANK"), self._slot_env(antes, "RERANK"))
+            self.assertTrue(providers.stack(b)["reranker"]["inert"])
+    def test_reranker_key_alone_is_not_rotated_while_the_saved_recall_is_on(self):
+        """Achado 4: mesmo provedor, chave nova — a rotação gravava a chave de um slot inerte."""
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            self._recall_salvo(b, ligado=True)
+            self._configure(b, {**self.BASE, "reranker_key": "ck-" + "NOVA"})
+            self.assertEqual(config.load_env(b.inst).get("HINDSIGHT_API_RERANKER_COHERE_API_KEY"), "ck-" + "1")
+            self.assertEqual(config.load(b.inst.root).cfg["memory"]["reranker_provider"], "cohere")
+    def test_reranker_named_without_key_is_not_demanded_when_the_payload_turns_recall_on(self):
+        """Achado 6 (cobertura): com o recall ligado no payload, o reranker chega ao roteiro (provedor outro, sem
+        chave) e nenhuma chave dele é exigida — antes nenhuma prova passava por essas duas guardas."""
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            providers.set_slot(b, "reranker", "cohere", key="ck-" + "1")
+            self._configure(b, {**self.BASE, "decision": {"provider": "hindsight", "key": "hs-" + "1",
+                                                          "recall": "on", "candidates": 30},
+                                "reranker": {"provider": "fireworks"}})
+            mem = config.load(b.inst.root).cfg["memory"]
+            self.assertEqual((mem["reranker_provider"], mem.get("decision_recall")), ("cohere", True))
+            self.assertEqual(config.load_env(b.inst).get("HINDSIGHT_API_RERANKER_COHERE_API_KEY"), "ck-" + "1")
+    def test_naming_another_decision_provider_turns_the_recall_off_with_it(self):
+        """O recall gravado pertence ao provedor gravado: trocado o provedor no payload, ele não é herdado — e o
+        reranker, que volta a trabalhar, é aplicado normalmente (a guarda dele só vale com o recall efetivo ligado)."""
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            self._recall_salvo(b, ligado=True)
+            self._configure(b, {**self.BASE, "decision": {"provider": "off"},
+                                "reranker": {"provider": "fireworks", "key": "fw-" + "NOVA"}})
+            self.assertEqual(self._recall(b), ("off", False, 0))
+            self.assertEqual(config.load(b.inst.root).cfg["memory"]["reranker_provider"], "fireworks")
+            self.assertFalse(providers.stack(b)["reranker"]["inert"])
+    def test_flat_legacy_recall_keys_are_applied_with_the_same_provider(self):
+        """Achado 5: `dec` + `decision_recall` + `decision_candidates` no topo do payload (formato plano legado)."""
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            self._recall_salvo(b, ligado=False)
+            self._configure(b, {**self.BASE, "dec": "hindsight", "decision_recall": "on", "decision_candidates": 30})
+            self.assertEqual(self._recall(b), ("hindsight", True, 30))
+            self._configure(b, {**self.BASE, "decision_recall": "off"})
+            self.assertEqual(self._recall(b), ("hindsight", False, 0))
+
 if __name__ == "__main__":
     unittest.main()

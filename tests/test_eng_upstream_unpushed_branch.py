@@ -251,8 +251,9 @@ class GitQuotedPathNames(unittest.TestCase):
 
     @unittest.skipIf(os.name == "nt", "o git de prova é script de shell, e o argv do Windows não carrega byte cru")
     def test_name_with_a_byte_that_is_not_utf8_is_not_taken_for_already_public(self):
-        """Sem criar arquivo (o APFS recusa esse nome): um `git` de prova lista um nome com um byte que não é UTF-8
-        válido e só reconhece o mesmo nome como pathspec se ele chegar byte a byte igual. Antes: o byte virava
+        """Sem criar arquivo (o APFS recusa esse nome): um `git` de prova lista, no `diff --name-only`, um nome com um
+        byte que não é UTF-8 válido. A pergunta do `_public_paths` vai sem pathspec — o nome nunca entra na linha de
+        comando —, então o arquivo conta como diferente da ponta do remoto, seja qual for o byte. Antes: o byte virava
         U+FFFD na leitura, o pathspec não casava com nada e o arquivo saía dos pendentes como `já público`."""
         esperado = b"caf\xe9-ruim.py"                       # 0xE9 é "é" em latin-1: não é UTF-8 válido
         roteiro = b"".join([
