@@ -93,6 +93,11 @@ up_workers() {
   fi
   for n in $(seq 1 "$WORKERS"); do
     d="$(worker_dir "$n")"
+    # worker já no ar fica como está: religar derruba o job que estiver rodando nele
+    if [ "$(docker inspect -f '{{.State.Running}}' "$(container_name "$n")" 2>/dev/null)" = true ]; then
+      echo "já no ar: $(worker_name "$n") ($(container_name "$n"))"
+      continue
+    fi
     mkdir -p "$d/_work" "$d/runner"
     chmod 700 "$d" "$d/runner" # runner/ guarda o registro do worker (credencial dele): só o dono
     docker rm -f "$(container_name "$n")" >/dev/null 2>&1 || true

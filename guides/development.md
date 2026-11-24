@@ -12,7 +12,8 @@ mantenedor e portão de dados. É o mesmo fluxo dos outros projetos do mantenedo
    agente — não espera aprovação.
 3. **CI.** O PR roda no runner do mantenedor (abaixo), em duas execuções: o portão de dados — com o
    workflow da `main`, para o PR não enfraquecer o próprio portão — e a suíte em Python 3.11–3.14.
-   Os dois precisam ficar verdes.
+   Os dois precisam ficar verdes. Mudança no portão só vale para os PR abertos depois do merge: o
+   evento dele só lê o workflow da `main`.
 4. **"ok" do dono.** O PR fica aberto até o "ok" literal do dono; o "ok" é o merge. Nada entra na
    `main` sem PR com o CI verde (proteção de branch) e sem o "ok".
 
