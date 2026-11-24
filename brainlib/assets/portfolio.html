@@ -4500,8 +4500,8 @@ OBV.memoria = () => {
     ? m.providers
     : {
         llm: [
-          {key: "claude-code", label: "Claude Code (assinatura Claude Pro/Max)", recommended: false, cloud: true, model: "claude-haiku-5-5", subscription: true, docker_auth: "guided", auth_command: "brain memory auth claude-code", flow: "claude-token", key_set: false},
-          {key: "xai-oauth", label: "xAI / SuperGrok (sign-in)", recommended: false, cloud: true, model: "grok-4.7", subscription: true, docker_auth: "guided", auth_command: "brain memory auth xai-oauth", flow: "xai-device", key_set: false},
+          {key: "claude-code", label: "Claude Code (assinatura Claude Pro/Max)", recommended: false, cloud: true, model: "claude-haiku-5-5", subscription: true, docker_auth: "guided", auth_command: "brain " + "memory auth claude-code", flow: "claude-token", key_set: false},
+          {key: "xai-oauth", label: "xAI / SuperGrok (sign-in)", recommended: false, cloud: true, model: "grok-4.7", subscription: true, docker_auth: "guided", auth_command: "brain " + "memory auth xai-oauth", flow: "xai-device", key_set: false},
           {key: "anthropic", label: "Anthropic", recommended: true, cloud: true, model: "claude-haiku-5-5", key_set: !!m.llm_key},
           {key: "fireworks", label: "Fireworks — DeepSeek v4.1-Flash", recommended: false, cloud: true, model: "accounts/fireworks/models/deepseek-v4p1-flash", key_set: !!m.llm_key},
           {key: "openai", label: "OpenAI", recommended: false, cloud: true, model: "gpt-6-luna", key_set: !!m.llm_key},
