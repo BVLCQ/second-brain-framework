@@ -35,7 +35,7 @@ _EMB = "HINDSIGHT_API_EMBEDDINGS_"
 _RER = "HINDSIGHT_API_RERANKER_"
 _SUB_NOTE = "Custo incluído no plano, sujeito ao limite de taxa da assinatura."
 
-LOCAL_LLM_BLOCKED = frozenset({"lmstudio", "ollama", "llama.cpp"})
+LOCAL_LLM_BLOCKED = frozenset({"lmstudio", "ollama", "llama.cpp", "local"})
 
 # Fluxos de autenticação que o Brain consegue DIRIGIR (provedores de assinatura do slot LLM):
 #   claude-token → CLI `claude` na máquina: `claude setup-token` gera o token de longo prazo
@@ -44,8 +44,29 @@ LOCAL_LLM_BLOCKED = frozenset({"lmstudio", "ollama", "llama.cpp"})
 #   xai-device   → device-code DENTRO do container (sem callback de navegador): o login
 #                  escreve ~/.hindsight/xai_oauth.json no volume hindsight-auth e o servidor
 #                  renova o token sozinho a cada uso.
-# Vazio = fluxo manual nesta instalação: o setup_hint carrega o caminho exato.
+# Vazio = fluxo manual nesta instalação: o setup_hint e o auth_command carregam o caminho exato.
 AUTH_FLOWS = {"claude-code": "claude-token", "xai-oauth": "xai-device"}
+
+DOCKER_AUTH_SUFFIX = {
+    "guided": "",
+    "manual": "login manual no servidor",
+    "unavailable": "indisponível no Docker",
+}
+
+
+def derive_label(entry: dict) -> str:
+    """Deriva o rótulo exibido no menu a partir de `docker_auth` e `weak_default` (sem cópia manual)."""
+    base = entry.get("base_label") or entry.get("label", "")
+    parts: list[str] = []
+    da = entry.get("docker_auth", "")
+    if da and DOCKER_AUTH_SUFFIX.get(da):
+        parts.append(DOCKER_AUTH_SUFFIX[da])
+    if entry.get("weak_default"):
+        parts.append("modelo padrão fraco para memória")
+    if not parts:
+        return base
+    suffix = " · ".join(parts)
+    return f"{base} — {suffix}" if suffix not in base else base
 
 # Modelo default de cada provedor no SERVIDOR PINADO (digest do services/compose.yaml) —
 # sondado ao vivo da imagem (a tabela mora em hindsight_api.config.PROVIDER_DEFAULT_MODELS).
@@ -84,56 +105,30 @@ def default_model(provider: str) -> str:
 # key_env: onde a chave mora no .env (para o doctor conferir presença, nunca valor).
 PROVIDERS: dict[str, dict[str, dict]] = {
     "llm": {
-        # ── Assinatura (sem chave de API) ────────────────────────────────────
+        # ── Assinatura com login guiado (sem chave de API) ───────────────────
         "claude-code": {
             "label": "Claude Code (assinatura Claude Pro/Max)",
             "family": "subscription",
+            "docker_auth": "guided",
+            "auth_command": "brain memory auth claude-code",
             "key_env": "",
             "cost_mode": "subscription",
             "rate_limit_note": _SUB_NOTE,
-            # Régua do dono (2026-11-19): Haiku 5.5 em TODAS as operações, esforço max —
+            # Régua do dono (2026-11-19): Haiku 5.5 em TODAS as operações, esforço high —
             # leaderboard da Hindsight: haiku-5.5+decide é a melhor qualidade acessível
             # (88.5 all-ops; 14/14 idiomas no retain) e a 5.5 derrubou o preço em ~90%.
             "models": {"retain": "claude-haiku-5-5", "consolidation": "claude-haiku-5-5",
                        "mental_models": "claude-haiku-5-5", "reflect": "claude-haiku-5-5",
                        "default": "claude-haiku-5-5"},
-            "effort": "max",
+            "effort": "high",
             "setup_hint": "Autentique pelo botão Autenticar (painel) ou `brain memory auth claude-code`: "
                           "o token de longo prazo do `claude setup-token` vai para o config/.env.",
-        },
-        "chatgpt": {
-            "label": "ChatGPT (sign-in / assinatura Plus/Pro)",
-            "family": "subscription",
-            "key_env": "",
-            "cost_mode": "subscription",
-            "rate_limit_note": _SUB_NOTE,
-            "models": {"default": "gpt-6-luna"},   # #2 geral na leaderboard ($11/1k c/ decide; retain 95.8)
-            "setup_hint": "Login por navegador no servidor de memória (hindsight-admin chatgpt login) — "
-                          "nesta instalação Docker é manual; prefira claude-code ou uma chave de API.",
-        },
-        "cursor": {
-            "label": "Cursor (assinatura)",
-            "family": "subscription",
-            "key_env": "",
-            "cost_mode": "subscription",
-            "rate_limit_note": _SUB_NOTE,
-            "models": {"default": "auto"},
-            "setup_hint": "Exige o cursor-agent logado no servidor de memória — não disponível na instalação "
-                          "Docker do Brain; prefira claude-code ou uma chave de API.",
-        },
-        "github-copilot": {
-            "label": "GitHub Copilot (assinatura)",
-            "family": "subscription",
-            "key_env": "",
-            "cost_mode": "subscription",
-            "rate_limit_note": _SUB_NOTE,
-            "setup_hint": "Exige login do Copilot no servidor de memória, ou COPILOT_GITHUB_TOKEN/GH_TOKEN "
-                          "no config/.env (o container lê o arquivo inteiro). Valor fraco pra memória: o "
-                          "default do servidor (gpt-5.6-terra) é o pior da leaderboard (73 pontos, $332/1k).",
         },
         "xai-oauth": {
             "label": "xAI / SuperGrok (sign-in)",
             "family": "subscription",
+            "docker_auth": "guided",
+            "auth_command": "brain memory auth xai-oauth",
             "key_env": "",
             "cost_mode": "subscription",
             "rate_limit_note": _SUB_NOTE,
@@ -141,24 +136,15 @@ PROVIDERS: dict[str, dict[str, dict]] = {
             "setup_hint": "Autentique pelo botão Autenticar (painel) ou `brain memory auth xai-oauth`: "
                           "código de dispositivo que você aprova no navegador; o token renova sozinho.",
         },
-        "nous": {
-            "label": "Nous Portal (assinatura)",
-            "family": "subscription",
-            "key_env": "",
-            "cost_mode": "subscription",
-            "rate_limit_note": _SUB_NOTE,
-            "setup_hint": "Exige o login do Hermes (hermes portal) no servidor de memória — nesta instalação "
-                          "Docker é manual; prefira claude-code ou uma chave de API.",
-        },
         # ── Chave de API ─────────────────────────────────────────────────────
         "anthropic": {"label": "Anthropic", "family": "key", "cost_mode": "api_key", "recommended": True,
                       # Régua do dono (2026-11-19): Haiku 5.5 em TODAS as operações (o antigo cenário B
                       # com Sonnet nos mental models foi superado — haiku-5.5 tem a melhor qualidade
-                      # acessível na leaderboard e $0.10/$0.50 até 100k de prompt), esforço max.
+                      # acessível na leaderboard e $0.10/$0.50 até 100k de prompt), esforço high.
                       "models": {"retain": "claude-haiku-5-5", "consolidation": "claude-haiku-5-5",
                                  "mental_models": "claude-haiku-5-5", "reflect": "claude-haiku-5-5",
                                  "default": "claude-haiku-5-5"},
-                      "effort": "max",
+                      "effort": "high",
                       "key_env": "HINDSIGHT_API_LLM_API_KEY"},
         "openai": {"label": "OpenAI", "family": "key", "cost_mode": "api_key",
                    "model": "gpt-6-luna",        # #2 geral ($11/1k c/ decide; retain 95.8 @ $0.43)
@@ -180,6 +166,56 @@ PROVIDERS: dict[str, dict[str, dict]] = {
                     "key_env": "HINDSIGHT_API_LLM_API_KEY"},
         "custom": {"label": "Outro (OpenAI-compatível)", "family": "key", "cost_mode": "api_key",
                    "wire": "openai", "key_env": "HINDSIGHT_API_LLM_API_KEY"},
+        # ── Assinatura com login manual ou indisponível no Docker ────────────
+        "chatgpt": {
+            "label": "ChatGPT (sign-in / assinatura Plus/Pro)",
+            "family": "subscription",
+            "docker_auth": "manual",
+            "auth_command": "docker exec -it hindsight hindsight-admin chatgpt login",
+            "key_env": "",
+            "cost_mode": "subscription",
+            "rate_limit_note": _SUB_NOTE,
+            "models": {"default": "gpt-6-luna"},   # #2 geral na leaderboard ($11/1k c/ decide; retain 95.8)
+            "setup_hint": "Login por navegador no servidor de memória (hindsight-admin chatgpt login) — "
+                          "nesta instalação Docker é manual; prefira claude-code ou uma chave de API.",
+        },
+        "nous": {
+            "label": "Nous Portal (assinatura)",
+            "family": "subscription",
+            "docker_auth": "manual",
+            "auth_command": "docker exec -it hindsight hermes portal",
+            "key_env": "",
+            "cost_mode": "subscription",
+            "rate_limit_note": _SUB_NOTE,
+            "setup_hint": "Exige o login do Hermes (hermes portal) no servidor de memória — nesta instalação "
+                          "Docker é manual; prefira claude-code ou uma chave de API.",
+        },
+        "github-copilot": {
+            "label": "GitHub Copilot (assinatura)",
+            "family": "subscription",
+            "docker_auth": "manual",
+            "weak_default": True,
+            "auth_command": "docker exec -it hindsight hindsight-admin copilot login",
+            "key_env": "",
+            "cost_mode": "subscription",
+            "rate_limit_note": _SUB_NOTE,
+            "setup_hint": "Exige login manual do Copilot no servidor de memória — prefira um provedor com login "
+                          "guiado (claude-code, xai-oauth) ou uma chave de API. (A variável COPILOT_GITHUB_TOKEN/"
+                          "GH_TOKEN existe, mas não é o caminho recomendado; além disso, o modelo padrão "
+                          "gpt-5.6-terra é o mais fraco da leaderboard: 73 pontos, $332/1k.)",
+        },
+        "cursor": {
+            "label": "Cursor (assinatura)",
+            "family": "subscription",
+            "docker_auth": "unavailable",
+            "auth_command": "",
+            "key_env": "",
+            "cost_mode": "subscription",
+            "rate_limit_note": _SUB_NOTE,
+            "models": {"default": "auto"},
+            "setup_hint": "Exige o cursor-agent logado no servidor de memória — não disponível na instalação "
+                          "Docker do Brain; prefira claude-code ou uma chave de API.",
+        },
     },
     "embeddings": {
         "local": {"label": "Local — LM Studio bge-m3 (zero egress)", "recommended": True, "local": True,
@@ -217,14 +253,62 @@ PROVIDERS: dict[str, dict[str, dict]] = {
     "decision": {
         "off": {"label": "Desligado — só os tokens do próprio LLM (padrão)", "recommended": True},
         "hindsight": {"label": "Hindsight — hs-decide-1-flash · US$ 0,02/1M de entrada (corta ~40% das chamadas do LLM)",
-                      "model": "hs-decide-1-flash", "recommended_cloud": True,
+                      "model": "hs-decide-1-flash", "recommended_cloud": True, "wire": "hindsight",
                       "note": "Trechos pequenos de memória vão à nuvem de inferência do Hindsight para julgamento "
                               "(hsk_ key em inference.hindsight.vectorize.io — por uso, sem assinatura).",
                       "key_env": "HINDSIGHT_API_DECISION_MODEL_API_KEY"},
+        "local": {"label": "Local — hs-decide-1-flash (/v1/systemone, zero egress)",
+                  "local": True, "wire": "hindsight", "model": "hs-decide-1-flash",
+                  "base_url": "http://host.docker.internal:8000", "max_concurrent": 1,
+                  "note": "Servidor local /v1/systemone (MLX, vLLM ou transformers — LM Studio e Ollama não servem "
+                          "este protocolo). Nada sai da máquina.",
+                  "key_env": "HINDSIGHT_API_DECISION_MODEL_API_KEY"},
     },
 }
 
-CLOUD_FLAGS = {"embeddings": "cloud_embeddings", "reranker": "cloud_reranker"}
+for _pid, _entry in PROVIDERS["llm"].items():
+    _entry.setdefault("base_label", _entry["label"])
+    _entry["label"] = derive_label(_entry)
+
+
+def menu_providers(slot: str, *, include_custom: bool = True, include_unavailable: bool = False,
+                   mode: str = "embed") -> list[tuple[str, dict]]:
+    """Lista ordenada de provedores de um slot para wizard e painel: guiados e chave de API
+    primeiro; manual e indisponível por último. `cursor` (unavailable) fica fora do cardápio
+    padrão (continua aceito pela CLI)."""
+    tbl = PROVIDERS.get(slot, {})
+    items: list[tuple[str, dict]] = []
+    for pid, info in tbl.items():
+        if not include_custom and pid == "custom":
+            continue
+        if not include_unavailable and info.get("docker_auth") == "unavailable":
+            continue
+        if slot == "embeddings" and mode == "full" and (
+            pid == "local" or info.get("local") or info.get("family") == "local"
+        ):
+            continue
+        items.append((pid, info))
+    items.sort(key=lambda kv: (
+        1 if kv[1].get("docker_auth") in ("manual", "unavailable") else 0,
+        1 if kv[1].get("docker_auth") == "unavailable" else 0,
+    ))
+    return items
+
+
+CLOUD_FLAGS = {"embeddings": "cloud_embeddings", "reranker": "cloud_reranker", "decision": "cloud_decision"}
+
+
+def _parse_recall(val) -> bool | None:
+    if val is None or val == "":
+        return None
+    if isinstance(val, bool):
+        return val
+    s = str(val).strip().lower()
+    if s in ("on", "true", "1", "sim", "yes"):
+        return True
+    if s in ("off", "false", "0", "nao", "não", "no", "none"):
+        return False
+    raise util.BrainError(f"--recall aceita on|off — veio {val!r}", code=4)
 
 
 def _validate_key(provider: str, p: dict, key: str | None) -> None:
@@ -308,10 +392,14 @@ def _rer_env(p: dict, model: str, base_url: str, candidates: int, key: str | Non
 
 
 def slot_env(slot: str, provider: str, *, model: str = "", models: dict | None = None,
-             base_url: str = "", dimensions: int = 0, candidates: int = 0, key: str | None = None) -> dict:
+             base_url: str = "", dimensions: int = 0, candidates: int = 0, key: str | None = None,
+             recall: bool | str | None = None) -> dict:
     """Env do .env para a escolha (sem tocar disco). Valores vazios caem fora — segredo nunca ecoa."""
     p = PROVIDERS[slot][provider]
     _validate_key(provider, p, key)
+    rec = _parse_recall(recall)
+    if rec is not None and slot != "decision":
+        raise util.BrainError("--recall só vale no slot decision", code=4)
     if isinstance(key, str):
         key = key.strip() or None            # vazia ou só espaços = não informada, em todo slot (nada vazio chega ao .env)
     model, base_url, models = _clean(model), _clean(base_url), _clean_models(models)   # mesma regra nos demais textos
@@ -343,12 +431,34 @@ def slot_env(slot: str, provider: str, *, model: str = "", models: dict | None =
     if slot == "embeddings":
         return _emb_env(p, model or p.get("model", ""), base_url, dimensions, key)
     if slot == "decision":
+        rec_on = bool(rec)
+        if rec_on and provider != "hindsight":
+            raise util.BrainError(
+                "decisor no recall (--recall on) só é suportado com o provedor hindsight "
+                "(não disponível no decisor local ou desligado)",
+                code=4,
+            )
+        if rec_on and (not candidates or int(candidates) <= 0):
+            raise util.BrainError(
+                "ligar o decisor no recall (--recall on) exige um teto explícito de candidatos (--candidates N)",
+                code=4,
+            )
         # off explícito = "none" (valor de fábrica do servidor pinado) — trocar de lane limpa o estado
-        env = {"HINDSIGHT_API_DECISION_MODEL_PROVIDER": "none" if provider == "off" else "hindsight"}
+        env = {
+            "HINDSIGHT_API_DECISION_MODEL_PROVIDER": "none" if provider == "off" else p.get("wire", "hindsight"),
+            "HINDSIGHT_API_RECALL_DECISION_MODEL_PROVIDER": "hindsight" if rec_on else "none",
+        }
         if provider == "off":
             return env
         if model or p.get("model"):
             env["HINDSIGHT_API_DECISION_MODEL_MODEL"] = model or p["model"]
+        if provider == "local":
+            url = base_url or p.get("base_url", "")
+            if url:
+                env["HINDSIGHT_API_DECISION_MODEL_BASE_URL"] = url
+            env["HINDSIGHT_API_DECISION_MODEL_MAX_CONCURRENT"] = str(p.get("max_concurrent", 1))
+        if rec_on and candidates:
+            env["HINDSIGHT_API_RECALL_DECISION_MODEL_MAX_CANDIDATES"] = str(int(candidates))
         if key and p.get("key_env"):
             env[p["key_env"]] = key
         return env
@@ -356,7 +466,8 @@ def slot_env(slot: str, provider: str, *, model: str = "", models: dict | None =
 
 
 def set_slot(brain, slot: str, provider: str, *, model: str = "", models: dict | None = None,
-             base_url: str = "", dimensions: int = 0, candidates: int = 0, key: str | None = None) -> dict:
+             base_url: str = "", dimensions: int = 0, candidates: int = 0, key: str | None = None,
+             recall: bool | str | None = None) -> dict:
     """Grava a escolha: .env (wire + chave) + [memory] (provedor/modelo/flags). Devolve o resumo."""
     if slot not in SLOTS:
         raise util.BrainError(f"slot inválido: {slot!r} — use {', '.join(SLOTS)}", code=4)
@@ -391,10 +502,25 @@ def set_slot(brain, slot: str, provider: str, *, model: str = "", models: dict |
     if slot == "llm" and not (models or model) and p.get("models"):
         models = dict(p["models"])              # recomendados por operação (cenário B) como default
     env_updates = slot_env(slot, provider, model=model, models=models, base_url=base_url,
-                           dimensions=dimensions, candidates=candidates, key=key)
+                           dimensions=dimensions, candidates=candidates, key=key, recall=recall)
+    cur_env = config.load_env(brain.inst)
+    # #159: não sobrescreve um .env existente que já tem HINDSIGHT_API_LLM_REASONING_EFFORT=max
+    if slot == "llm" and cur_env.get("HINDSIGHT_API_LLM_REASONING_EFFORT", "").strip().lower() == "max":
+        env_updates.pop("HINDSIGHT_API_LLM_REASONING_EFFORT", None)
     _guard_env_updates(env_updates)
+    unset_env: list[str] = []
+    rec_on = False
+    if slot == "decision":
+        rec_on = bool(_parse_recall(recall)) and provider == "hindsight"
+        if provider != "local":
+            unset_env.extend([
+                "HINDSIGHT_API_DECISION_MODEL_BASE_URL",
+                "HINDSIGHT_API_DECISION_MODEL_MAX_CONCURRENT",
+            ])
+        if not rec_on:
+            unset_env.append("HINDSIGHT_API_RECALL_DECISION_MODEL_MAX_CANDIDATES")
     from .setup import set_env                     # lazy: setup importa memory em tempo de execução
-    changed_env = set_env(brain.inst, env_updates)
+    changed_env = set_env(brain.inst, env_updates, unset=unset_env)
 
     cfg_updates: dict = {f"{slot}_provider": provider}
     if slot == "llm":
@@ -404,6 +530,11 @@ def set_slot(brain, slot: str, provider: str, *, model: str = "", models: dict |
             cfg_updates["llm_models"] = model
         elif not is_sub:
             cfg_updates["llm_models"] = ""
+    elif slot == "decision":
+        cfg_updates["decision_model"] = (model or p.get("model", "")) if provider != "off" else ""
+        cfg_updates["decision_base_url"] = (base_url or p.get("base_url", "")) if provider == "local" else ""
+        cfg_updates["decision_recall"] = rec_on
+        cfg_updates["decision_max_candidates"] = int(candidates) if (rec_on and candidates) else 0
     else:
         if model or p.get("model"):
             cfg_updates[f"{slot}_model"] = model or p.get("model", "")
@@ -430,9 +561,12 @@ def set_slot(brain, slot: str, provider: str, *, model: str = "", models: dict |
         "provider": provider,
         "label": p["label"],
         "family": p.get("family", ""),
+        "docker_auth": p.get("docker_auth", ""),
+        "auth_command": p.get("auth_command", ""),
         "setup_hint": p.get("setup_hint", ""),
         "rate_limit_note": p.get("rate_limit_note", ""),
         "cloud": bool(flag and cfg_updates.get(flag)) or (slot == "llm"),
+        "recall": rec_on,
         "env": sorted(changed_env),
         "cfg": sorted(changed_cfg),
         "rebuild_needed": rebuild,
@@ -467,12 +601,30 @@ def stack(brain) -> dict:
         if slot == "llm":
             entry.update({
                 "family": p.get("family", ""),
+                "docker_auth": p.get("docker_auth", ""),
+                "auth_command": p.get("auth_command", ""),
                 "cost_mode": p.get("cost_mode", ""),
                 "legacy_local": provider in LOCAL_LLM_BLOCKED,
                 "key_required": bool(p and p.get("key_env")),
                 "setup_hint": p.get("setup_hint", ""),
                 "rate_limit_note": p.get("rate_limit_note", ""),
             })
+        elif slot == "decision":
+            rec_on = (bool(mem.get("decision_recall"))
+                      or env.get("HINDSIGHT_API_RECALL_DECISION_MODEL_PROVIDER") == "hindsight")
+            rec_cands = int(mem.get("decision_max_candidates")
+                            or env.get("HINDSIGHT_API_RECALL_DECISION_MODEL_MAX_CANDIDATES") or 0)
+            base_u = (env.get("HINDSIGHT_API_DECISION_MODEL_BASE_URL")
+                      or mem.get("decision_base_url", "")
+                      or (p.get("base_url", "") if provider == "local" else ""))
+            entry.update({
+                "recall": rec_on if provider == "hindsight" else False,
+                "candidates": rec_cands if (provider == "hindsight" and rec_on) else 0,
+                "base_url": base_u if provider == "local" else "",
+            })
+        elif slot == "reranker":
+            entry["inert"] = bool(mem.get("decision_recall")
+                                  or env.get("HINDSIGHT_API_RECALL_DECISION_MODEL_PROVIDER") == "hindsight")
         out[slot] = entry
     return out
 
@@ -509,10 +661,11 @@ def auth_state(brain, run=None) -> dict[str, str]:
     renova sozinho; o que morre e pede dono é o login/token raiz — é isso que se vigia).
     `state`: ok (pronta) · pending (falta autenticar — `fix` carrega o comando) ·
              unknown (não deu para verificar agora) · manual (sem verificação automática) ·
-             na (o slot não é assinatura)."""
+             unavailable (indisponível no Docker) · na (o slot não é assinatura)."""
     provider = brain.inst.cfg["memory"].get("llm_provider", "")
     p = PROVIDERS["llm"].get(provider) or {}
     out: dict = {"provider": provider, "family": p.get("family", ""), "flow": AUTH_FLOWS.get(provider, ""),
+                 "docker_auth": p.get("docker_auth", ""), "auth_command": p.get("auth_command", ""),
                  "state": "na", "note": "", "fix": ""}
     if p.get("family") != "subscription":
         return out
@@ -534,7 +687,7 @@ def auth_state(brain, run=None) -> dict[str, str]:
             out.update(state="pending", fix="brain memory auth xai-oauth",
                        note="sem login no servidor de memória")
         return out
-    out.update(state="manual", note=p.get("setup_hint", ""))
+    out.update(state="manual", note=p.get("setup_hint", ""), fix=p.get("auth_command", ""))
     return out
 
 
@@ -547,7 +700,8 @@ def cli(args, brain) -> None:
         res = set_slot(brain, args.slot, args.provider, model=args.model or "",
                        models=_parse_models(args.models) if args.models else None,
                        base_url=args.base_url or "", dimensions=args.dimensions or 0,
-                       candidates=args.candidates or 0, key=args.key)
+                       candidates=args.candidates or 0, key=args.key,
+                       recall=getattr(args, "recall", None))
         print(f"✓ {res['slot']} → {res['label']}")
         if res["env"]:
             print(f"  .env: {', '.join(res['env'])} (valor não impresso)")
@@ -556,6 +710,8 @@ def cli(args, brain) -> None:
         if res.get("family") == "subscription":
             if res.get("setup_hint"):
                 print(f"  setup: {res['setup_hint']}")
+            if res.get("auth_command") and res.get("docker_auth") == "manual":
+                print(f"  comando: {res['auth_command']}")
             if res.get("rate_limit_note"):
                 print(f"  limite: {res['rate_limit_note']}")
         if res["cloud"]:
@@ -583,6 +739,12 @@ def cli(args, brain) -> None:
         print(f"{icons[slot]}: {name}{cloud}{key}")
         if s["model"] and s["model"] != "—":
             print(f"  modelo: {_fmt_models(s['model'])}")
+        if slot == "decision" and s.get("recall"):
+            print(f"  recall: ligado (top-{s.get('candidates') or '?'} candidatos · sem fallback para RRF)")
+        if slot == "decision" and s.get("base_url"):
+            print(f"  base_url: {s['base_url']}")
+        if slot == "reranker" and s.get("inert"):
+            print("  nota: inerte enquanto o decisor estiver ligado no recall (.env preservado)")
         if slot == "llm" and s.get("rate_limit_note"):
             print(f"  nota: {s['rate_limit_note']}")
     print("\nProvedores LLM disponíveis (modo full):")

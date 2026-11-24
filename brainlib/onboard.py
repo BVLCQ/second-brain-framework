@@ -413,14 +413,25 @@ def state(brain) -> dict:
                                    or env.get("HINDSIGHT_API_RERANKER_COHERE_API_KEY")),
                    "dec_provider": cfg["memory"].get("decision_provider", "") or "off",
                    "dec_key": bool(env.get("HINDSIGHT_API_DECISION_MODEL_API_KEY")),
+                   "dec_base_url": (env.get("HINDSIGHT_API_DECISION_MODEL_BASE_URL")
+                                    or cfg["memory"].get("decision_base_url", "")),
+                   "dec_recall": bool(cfg["memory"].get("decision_recall")
+                                      or env.get("HINDSIGHT_API_RECALL_DECISION_MODEL_PROVIDER") == "hindsight"),
+                   "dec_candidates": int(cfg["memory"].get("decision_max_candidates")
+                                         or env.get("HINDSIGHT_API_RECALL_DECISION_MODEL_MAX_CANDIDATES") or 0),
                    "providers": {slot: [{"key": k, "label": v["label"], "recommended": bool(v.get("recommended")),
                                          "cloud": not (v.get("local") or k == "off"),
+                                         "local": bool(v.get("local")),
                                          "subscription": slot == "llm" and v.get("family") == "subscription",
+                                         "docker_auth": v.get("docker_auth", "") if slot == "llm" else "",
+                                         "auth_command": v.get("auth_command", "") if slot == "llm" else "",
                                          "flow": _providers.AUTH_FLOWS.get(k, "") if slot == "llm" else "",
-                                         "hint": v.get("setup_hint", ""),
-                                         "model": _providers.default_model(k) if slot == "llm" else "",
+                                         "hint": v.get("setup_hint", "") or v.get("note", ""),
+                                         "model": _providers.default_model(k) if slot == "llm" else v.get("model", ""),
+                                         "base_url": v.get("base_url", "") if (slot == "decision" and k == "local") else "",
+                                         "key_required": bool(v.get("key_env")),
                                          "key_set": bool(v.get("key_env") and env.get(v["key_env"]))}
-                                        for k, v in providers_registry[slot].items()]
+                                        for k, v in _providers.menu_providers(slot, include_custom=True, include_unavailable=False)]
                                  for slot in ("llm", "embeddings", "reranker", "decision")},
                    "llm_auth": _llm_auth_state(brain, _providers),
                    "stack": {"llm": cfg["memory"].get("llm_provider", ""),

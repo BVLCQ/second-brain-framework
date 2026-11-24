@@ -102,6 +102,12 @@ exclude_types = ["connectors", "github"]   # tipos do RAW que nunca vão ao banc
 # reranker_base_url = ""
 # reranker_max_candidates = 0
 # cloud_reranker = false          # true = pergunta+candidatos vão a uma API externa
+# decision_provider = "off"       # off (padrão) | hindsight (hs-decide-1-flash, chave hsk_) | local (/v1/systemone, zero egress)
+# decision_model = ""
+# decision_base_url = ""
+# decision_recall = false         # true = decisor também julga candidatos no recall (só full + hindsight; exige decision_max_candidates)
+# decision_max_candidates = 0
+# cloud_decision = false          # true = trechos vão à nuvem de inferência do Hindsight para julgamento
 
 [runner]
 agent = "auto"                  # auto | cursor | claude | codex | agy | gemini | none

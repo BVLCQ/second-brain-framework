@@ -49,10 +49,13 @@ class ConfigKeys:
         self.open_form("memory.mode", {"item": item}, render=False, show="Provedores")
 
     def f_providers_set(self) -> None:
-        """Muda um slot (llm · embeddings · reranker) — mesmo caminho do wizard, sem refazer setup."""
+        """Muda um slot (llm · embeddings · reranker · decision) — mesmo caminho do wizard, sem refazer setup."""
         cur = prov.stack(self.store.brain) if self.store else {}
-        self.open_form("memory.provider", {"provider": cur.get("embeddings", {}).get("provider", "local")},
-                       render=False, show="Provedores")
+        dec = cur.get("decision", {})
+        self.open_form("memory.provider", {
+            "provider": cur.get("embeddings", {}).get("provider", "local"),
+            "recall": "on" if dec.get("recall") else "off",
+        }, render=False, show="Provedores")
 
     def f_wizard_memoria(self) -> None:
         """Abre o passo Memória do wizard num terminal suspenso (interativo)."""

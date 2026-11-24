@@ -966,13 +966,15 @@ V["cfg/agente"] = setupView("agente", "Seu agente", "O agente de IA que lê suas
 V["cfg/conectores"] = setupView("conectores", "Conectores", "O que o Brain pode ler, sempre só leitura. Nada é enviado sem você aprovar o texto exato.");
 V["cfg/integracoes"] = setupView("integracoes", "Integrações", "Opcionais. As chaves ficam só no seu computador e nunca aparecem de novo na tela.");
 V["cfg/memoria"] = () => {
-  const rows = [["llm", "LLM"], ["embeddings", "Embeddings"], ["reranker", "Reranker"]].map(([k, icon]) => {
+  const rows = [["llm", "LLM"], ["embeddings", "Embeddings"], ["reranker", "Reranker"], ["decision", "Decisão"]].map(([k, icon]) => {
     const p = M.providers[k] || {};
     const egress = p.cloud ? '<span class="late">☁ egress</span>' : (p.local ? '<span class="dim">local</span>' : "");
     const key = p.key_env ? (p.key_present ? '<span class="ok">chave ok</span>' : '<span class="late">sem chave</span>') : "";
-    return "<tr><td><b>" + icon + "</b></td><td>" + esc(p.label || "—") + "</td><td>" + esc(p.model || "—") + "</td><td>" + egress + " " + key + "</td></tr>";
+    const rec = k === "decision" && p.recall ? ' <span class="late">· recall (top-' + esc(String(p.candidates || "?")) + ")</span>" : "";
+    const inert = k === "reranker" && p.inert ? ' <span class="dim">· inerte (decisor no recall)</span>' : "";
+    return "<tr><td><b>" + icon + "</b></td><td>" + esc(p.label || "—") + rec + inert + "</td><td>" + esc(p.model || "—") + "</td><td>" + egress + " " + key + "</td></tr>";
   }).join("");
-  return '<div class="pagehead"><div><h1>Memória</h1><p class="sub">O modo e os provedores (LLM · embeddings · reranker) — configuração viva: mude quando quiser.</p></div></div>' +
+  return '<div class="pagehead"><div><h1>Memória</h1><p class="sub">O modo e os provedores (LLM · embeddings · reranker · decisão) — configuração viva: mude quando quiser.</p></div></div>' +
     '<div id="setup" data-step="memoria"></div>' +
     panel("Provedores", '<div class="twrap"><table><tr><th>Slot</th><th>Provedor</th><th>Modelo</th><th></th></tr>' + rows + "</table></div>" +
       '<p class="note-s" style="margin:10px 2px">A chave mora no config/.env e nunca aparece aqui. Trocou embeddings? O comando rebuild da memória re-deriva os vetores do vault. Depois de trocar, recrie o container (compose com o env-file da config).</p>' +

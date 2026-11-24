@@ -3151,12 +3151,8 @@ OBV.memoria = () => {
     ? m.providers
     : {
         llm: [
-          {key: "claude-code", label: "Claude Code (assinatura Claude Pro/Max)", recommended: false, cloud: true, model: "claude-haiku-5-5", subscription: true, flow: "claude-token", key_set: false},
-          {key: "chatgpt", label: "ChatGPT (sign-in / assinatura Plus/Pro)", recommended: false, cloud: true, model: "gpt-6-luna", subscription: true, key_set: false},
-          {key: "cursor", label: "Cursor (assinatura)", recommended: false, cloud: true, model: "auto", subscription: true, key_set: false},
-          {key: "github-copilot", label: "GitHub Copilot (assinatura)", recommended: false, cloud: true, model: "gpt-5.6-terra", subscription: true, key_set: false},
-          {key: "xai-oauth", label: "xAI / SuperGrok (sign-in)", recommended: false, cloud: true, model: "grok-4.7", subscription: true, flow: "xai-device", key_set: false},
-          {key: "nous", label: "Nous Portal (assinatura)", recommended: false, cloud: true, model: "deepseek/deepseek-v4-flash", subscription: true, key_set: false},
+          {key: "claude-code", label: "Claude Code (assinatura Claude Pro/Max)", recommended: false, cloud: true, model: "claude-haiku-5-5", subscription: true, docker_auth: "guided", auth_command: "brain memory auth claude-code", flow: "claude-token", key_set: false},
+          {key: "xai-oauth", label: "xAI / SuperGrok (sign-in)", recommended: false, cloud: true, model: "grok-4.7", subscription: true, docker_auth: "guided", auth_command: "brain memory auth xai-oauth", flow: "xai-device", key_set: false},
           {key: "anthropic", label: "Anthropic", recommended: true, cloud: true, model: "claude-haiku-5-5", key_set: !!m.llm_key},
           {key: "fireworks", label: "Fireworks — DeepSeek v4.1-Flash", recommended: false, cloud: true, model: "accounts/fireworks/models/deepseek-v4p1-flash", key_set: !!m.llm_key},
           {key: "openai", label: "OpenAI", recommended: false, cloud: true, model: "gpt-6-luna", key_set: !!m.llm_key},
@@ -3164,6 +3160,9 @@ OBV.memoria = () => {
           {key: "gemini", label: "Google Gemini (chave do AI Studio)", recommended: false, cloud: true, model: "gemini-3.1-flash-lite", key_set: !!m.llm_key},
           {key: "minimax", label: "MiniMax — M3.1-Flash (campeão de extração)", recommended: false, cloud: true, model: "MiniMax-M3.1-Flash", key_set: !!m.llm_key},
           {key: "custom", label: "Outro (OpenAI-compatível)", recommended: false, cloud: true, key_set: !!m.llm_key},
+          {key: "chatgpt", label: "ChatGPT (sign-in / assinatura Plus/Pro) — login manual no servidor", recommended: false, cloud: true, model: "gpt-6-luna", subscription: true, docker_auth: "manual", auth_command: "docker exec -it hindsight hindsight-admin chatgpt login", hint: "Login por navegador no servidor de memória (hindsight-admin chatgpt login) — nesta instalação Docker é manual; prefira claude-code ou uma chave de API.", key_set: false},
+          {key: "nous", label: "Nous Portal (assinatura) — login manual no servidor", recommended: false, cloud: true, model: "deepseek/deepseek-v4-flash", subscription: true, docker_auth: "manual", auth_command: "docker exec -it hindsight hermes portal", hint: "Exige o login do Hermes (hermes portal) no servidor de memória — nesta instalação Docker é manual; prefira claude-code ou uma chave de API.", key_set: false},
+          {key: "github-copilot", label: "GitHub Copilot (assinatura) — login manual no servidor · modelo padrão fraco para memória", recommended: false, cloud: true, model: "gpt-5.6-terra", subscription: true, docker_auth: "manual", auth_command: "docker exec -it hindsight hindsight-admin copilot login", hint: "Exige login manual do Copilot no servidor de memória — prefira um provedor com login guiado (claude-code, xai-oauth) ou uma chave de API.", key_set: false},
         ],
         embeddings: [
           {key: "local", label: "Local — LM Studio bge-m3 (zero egress)", recommended: true, cloud: false, key_set: false},
@@ -3182,7 +3181,8 @@ OBV.memoria = () => {
         ],
         decision: [
           {key: "off", label: "Desligado — só os tokens do próprio LLM (padrão)", recommended: true, cloud: false, key_set: false},
-          {key: "hindsight", label: "Hindsight — hs-decide-1-flash · US$ 0,02/1M de entrada (corta ~40% das chamadas do LLM)", recommended: false, cloud: true, key_set: !!m.dec_key},
+          {key: "hindsight", label: "Hindsight — hs-decide-1-flash · US$ 0,02/1M de entrada (corta ~40% das chamadas do LLM)", recommended: false, cloud: true, key_required: true, model: "hs-decide-1-flash", key_set: !!m.dec_key},
+          {key: "local", label: "Local — hs-decide-1-flash (/v1/systemone, zero egress)", recommended: false, cloud: false, local: true, key_required: true, model: "hs-decide-1-flash", base_url: "http://host.docker.internal:8000", key_set: !!m.dec_key},
         ],
       };
 
@@ -3199,6 +3199,8 @@ OBV.memoria = () => {
   };
   const listFor = slot => providers[slot] || [];
   const chosen = {llm: "", embeddings: "", reranker: "", decision: ""};
+  let decRecall = m.dec_recall ? "on" : "off";
+  let decCands = m.dec_candidates ? String(m.dec_candidates) : "";
   ["llm", "embeddings", "reranker", "decision"].forEach(slot => {
     const list = listFor(slot);
     const curVal = stackDefault(slot);
@@ -3206,6 +3208,7 @@ OBV.memoria = () => {
     chosen[slot] = found ? found.key : "";
   });
   const getProv = (slot, key) => listFor(slot).find(p => p.key === key) || null;
+  const isRecallActive = () => sel === "full" && chosen.decision === "hindsight" && decRecall === "on";
 
   const pre = (on, t, link, midNote) => {
     const mid = on === "installed";
@@ -3239,9 +3242,13 @@ OBV.memoria = () => {
     const list = listFor(slot);
     const curKey = chosen[slot];
     const p = getProv(slot, curKey) || {};
-    const needModel = slot === "llm" || curKey === "custom";
-    const needModelUrl = needModel;
-    const modelPh = slot === "llm" && p.model ? "vazio = " + p.model : "ex.: gpt-4o-mini";
+    const needUrl = curKey === "custom" || (slot === "decision" && curKey === "local");
+    const needModel = slot === "llm" || needUrl;
+    const needKey = !p.subscription && (p.cloud || p.key_required);
+    const modelPh = p.model ? "vazio = " + p.model : "ex.: gpt-4o-mini";
+    const urlPh = p.base_url || "https://…/v1";
+    const urlVal = (slot === "decision" && curKey === "local") ? (m.dec_base_url || p.base_url || "") : "";
+    const showRecall = slot === "decision" && sel === "full" && curKey === "hindsight";
     return '<div class="slot" data-slot="' + slot + '">' +
       '<div class="sh"><span>' + esc(title) + "</span>" + (p.recommended ? '<span class="pill rec">✓ recomendado</span>' : "") + "</div>" +
       '<select id="prov-' + slot + '">' +
@@ -3252,9 +3259,10 @@ OBV.memoria = () => {
         '<small>' + esc(p.hint || "Autentique pelo botão abaixo; a credencial nunca passa pela tela.") + "</small>" +
         (p.flow ? '<div style="margin-top:8px"><button class="btn sm" type="button" id="auth-llm">' +
           (m.llm_auth && m.llm_auth.state === "ok" && m.llm_auth.provider === curKey ? "Reautenticar" : "Autenticar") +
-          "</button></div>" : "") +
-      "</label>" : p.cloud ? '<div style="margin-top:10px">' +
-        '<label class="f" style="margin-bottom:' + (needModelUrl ? "10px" : "0") + '">' +
+          "</button></div>"
+        : (p.auth_command ? '<div style="margin-top:6px"><small>Comando no servidor: <code class="kbd">' + esc(p.auth_command) + "</code></small></div>" : "")) +
+      "</label>" : needKey ? '<div style="margin-top:10px">' +
+        '<label class="f" style="margin-bottom:' + (needModel ? "10px" : "0") + '">' +
           "<span>API key " + (p.key_set ? '<span class="pill ok" style="margin-left:6px">chave já salva</span>' : "") + "</span>" +
           '<input type="password" id="key-' + slot + '" placeholder="' + (p.key_set ? "deixe vazio para manter a atual" : "cole a chave aqui") + '" autocomplete="off">' +
           '<small>Vai direto para <span class="kbd">config/.env</span> (0600) e nunca volta para a tela.</small>' +
@@ -3262,7 +3270,21 @@ OBV.memoria = () => {
       "</div>" : "") +
       (needModel ? '<div class="grid2" style="margin-top:8px">' +
         '<label class="f" style="margin-bottom:0"><span>Modelo</span><input type="text" id="model-' + slot + '" placeholder="' + esc(modelPh) + '"></label>' +
-        (curKey === "custom" ? '<label class="f" style="margin-bottom:0"><span>Base URL</span><input type="text" id="url-' + slot + '" placeholder="https://…/v1"></label>' : "<div></div>") +
+        (needUrl ? '<label class="f" style="margin-bottom:0"><span>Base URL</span><input type="text" id="url-' + slot + '" value="' + esc(urlVal) + '" placeholder="' + esc(urlPh) + '"></label>' : "<div></div>") +
+      "</div>" : "") +
+      (showRecall ? '<div style="margin-top:10px">' +
+        '<label class="f" style="margin-bottom:' + (decRecall === "on" ? "8px" : "0") + '">' +
+          "<span>Usar o decisor também no recall</span>" +
+          '<select id="recall-decision">' +
+            '<option value="off"' + (decRecall !== "on" ? " selected" : "") + ">Desligado — só consolidação e reflect (padrão)</option>" +
+            '<option value="on"' + (decRecall === "on" ? " selected" : "") + ">Ligado — julga cada candidato no recall (exige teto; sem fallback)</option>" +
+          "</select>" +
+        "</label>" +
+        (decRecall === "on" ? '<label class="f" style="margin-bottom:0">' +
+          "<span>Teto de candidatos no recall (--candidates) *</span>" +
+          '<input type="number" min="1" max="500" id="candidates-decision" value="' + esc(decCands) + '" placeholder="obrigatório (ex.: 25)">' +
+          "<small>Cada candidato é uma requisição própria ao decisor; não há fallback para RRF nesta versão (1.2.0) e o recall falha fechado se o decisor cair. O slot Reranker fica inerte (.env preservado).</small>" +
+        "</label>" : "") +
       "</div>" : "") +
     "</div>";
   };
@@ -3273,9 +3295,12 @@ OBV.memoria = () => {
       $("#det").innerHTML = '<h2>Apenas livro-razão</h2><p class="sub" style="margin:0">O Brain usa o índice local de palavras. Você pode ativar o Embed ou o Full depois (a tarefa fica registrada se escolher "Fazer depois").</p>';
       return;
     }
-    const visibleSlots = sel === "full" ? ["llm", "embeddings", "reranker", "decision"] : ["embeddings", "reranker"];
+    const recallActive = isRecallActive();
+    const visibleSlots = sel === "full"
+      ? (recallActive ? ["llm", "embeddings", "decision"] : ["llm", "embeddings", "reranker", "decision"])
+      : ["embeddings", "reranker"];
     const anyCloud = visibleSlots.some(sl => (getProv(sl, chosen[sl]) || {}).cloud);
-    const usesLocal = visibleSlots.some(sl => ["local", "lmstudio"].includes((getProv(sl, chosen[sl]) || {}).key));
+    const usesLocal = sel === "embed" && ["local", "lmstudio"].includes((getProv("embeddings", chosen.embeddings) || {}).key);
     const prereqs = '<div class="rowline" style="margin-top:12px;padding-bottom:0;border-top:1px solid var(--line2)">' +
       '<div class="info"><b>Servidor e modelos locais</b>' +
         pre(m.docker_state || m.docker, "<b>OrbStack</b> — roda o servidor de memória (o Brain instala e sobe ao ativar)",
@@ -3288,7 +3313,7 @@ OBV.memoria = () => {
       '<p class="sub">Escolha os provedores por slot — os itens recomendados já vêm selecionados.</p>' +
       (sel === "full" ? renderSlot("llm", "LLM — extração de fatos") : "") +
       renderSlot("embeddings", "Embeddings") +
-      renderSlot("reranker", "Reranker") +
+      (recallActive ? "" : renderSlot("reranker", "Reranker")) +
       (sel === "full" ? renderSlot("decision", "Decisão — juiz rápido (opcional)") : "") +
       (anyCloud ? '<div class="egress">⚠ Provedor em nuvem: texto do vault sai da máquina — o doctor narra enquanto estiver ativo.</div>' : "") +
       prereqs +
@@ -3298,6 +3323,15 @@ OBV.memoria = () => {
       const sEl = $("#prov-" + slot);
       if (sEl) sEl.onchange = () => { chosen[slot] = sEl.value; drawDetails(); };
     });
+    const recEl = $("#recall-decision");
+    if (recEl) recEl.onchange = () => {
+      const cEl = $("#candidates-decision");
+      if (cEl) decCands = cEl.value.trim();
+      decRecall = recEl.value;
+      drawDetails();
+    };
+    const candEl = $("#candidates-decision");
+    if (candEl) candEl.oninput = () => { decCands = candEl.value.trim(); };
     const aBtn = $("#auth-llm");
     if (aBtn) aBtn.onclick = async () => {
       const gen = obStepGen;
@@ -3332,26 +3366,38 @@ OBV.memoria = () => {
     if (kEl && kEl.value.trim()) obj.key = kEl.value.trim();
     if (mEl && mEl.value.trim()) obj.model = mEl.value.trim();
     if (uEl && uEl.value.trim()) obj.base_url = uEl.value.trim();
+    if (slot === "decision" && sEl.value === "hindsight") {
+      const rEl = $("#recall-decision"), cEl = $("#candidates-decision");
+      obj.recall = rEl ? rEl.value : "off";
+      if (cEl && cEl.value.trim()) obj.candidates = parseInt(cEl.value.trim(), 10) || 0;
+    }
     return obj;
   };
 
   obBindNav(async btn => {
     const body = {mode: sel};
+    const recallActive = isRecallActive();
     if (sel === "embed" || sel === "full") {
       body.embeddings = readSlot("embeddings");
-      body.reranker = readSlot("reranker");
+      if (!recallActive) body.reranker = readSlot("reranker");
     }
     if (sel === "full") {
       body.llm = readSlot("llm");
       body.decision = readSlot("decision");
+      if (body.decision && body.decision.recall === "on" && !(body.decision.candidates > 0)) {
+        return obMsg($("#m"), "err", "Informe o teto de candidatos (--candidates N) para usar o decisor no recall.");
+      }
       body.consent = !!($("#consent") && $("#consent").checked);
       if (!body.consent) return obMsg($("#m"), "err", "Para o modo Full, marque o aceite de envio à API.");
     }
-    const checkSlots = sel === "full" ? [["llm", "LLM"], ["embeddings", "Embeddings"], ["reranker", "Reranker"], ["decision", "Decisão"]]
+    const checkSlots = sel === "full"
+      ? (recallActive ? [["llm", "LLM"], ["embeddings", "Embeddings"], ["decision", "Decisão"]]
+                      : [["llm", "LLM"], ["embeddings", "Embeddings"], ["reranker", "Reranker"], ["decision", "Decisão"]])
       : (sel === "embed" ? [["embeddings", "Embeddings"], ["reranker", "Reranker"]] : []);
     for (const pair of checkSlots) {
+      if (!body[pair[0]]) continue;
       const p = getProv(pair[0], body[pair[0]].provider);
-      if (p && p.cloud && !p.subscription && !p.key_set && !body[pair[0]].key) {
+      if (p && (p.cloud || p.key_required) && !p.subscription && !p.key_set && !body[pair[0]].key) {
         return obMsg($("#m"), "err", 'Cole a API key de ' + pair[1] + " (" + p.label + ') — ou escolha "Fazer depois".');
       }
     }

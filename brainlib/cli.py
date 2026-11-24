@@ -1605,16 +1605,18 @@ def build_parser() -> argparse.ArgumentParser:
     pv = ps.add_parser("set", help="grava a escolha (config/.env + [memory]); recrie o container para aplicar")
     pv.add_argument("slot", choices=["llm", "embeddings", "reranker", "decision"])
     pv.add_argument("--provider", required=True,
-                    help="llm (assinatura): claude-code|chatgpt|cursor|github-copilot|xai-oauth|nous · "
+                    help="llm (assinatura): claude-code|xai-oauth|chatgpt|nous|github-copilot|cursor · "
                          "llm (chave): anthropic|openai|fireworks|zai|gemini|minimax|custom · "
                          "embeddings: local|fireworks|openai|cohere|custom · "
                          "reranker: off|fireworks|cohere|zeroentropy|openrouter|custom · "
-                         "decision: off|hindsight (hs-decide-1-flash, US$ 0,02/1M — opcional)")
+                         "decision: off|hindsight|local (hs-decide-1-flash, opcional)")
     pv.add_argument("--model", help="modelo (opcional em assinatura/anthropic; exigido em llm custom/openai/zai/gemini)")
     pv.add_argument("--models", help="llm por operação: retain=…,consolidation=…,mental_models=…,reflect=…,default=…")
-    pv.add_argument("--base-url", help="endpoint (custom / openai-wire)")
+    pv.add_argument("--base-url", help="endpoint (custom / openai-wire / decision local)")
     pv.add_argument("--dimensions", type=int, default=0, help="embeddings: dimensão de saída (ex.: 1536 MRL)")
-    pv.add_argument("--candidates", type=int, default=0, help="reranker: top-N candidatos (default do provedor)")
+    pv.add_argument("--candidates", type=int, default=0, help="reranker ou decision --recall on: top-N candidatos")
+    pv.add_argument("--recall", choices=["on", "off"],
+                    help="decision (só full + hindsight): usar o decisor também no recall (on exige --candidates N)")
     pv.add_argument("--key", help="chave da API — vai ao config/.env (0600), nunca volta em output")
     xa = ms.add_parser("auth", help="autentica o provedor de assinatura do LLM (claude-code: token de longo "
                                     "prazo via `claude setup-token` · xai-oauth: código de dispositivo no servidor)")

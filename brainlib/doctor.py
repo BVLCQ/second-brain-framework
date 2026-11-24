@@ -107,6 +107,32 @@ def _lms_reachable(http_get=None) -> bool:
         return False
 
 
+def _host_url(url: str) -> str:
+    """Reescreve `host.docker.internal` para `localhost`: o container usa o nome do host Docker,
+    mas o doctor roda fora do container."""
+    if not url:
+        return ""
+    return re.sub(r"(?i)(https?://)host\.docker\.internal(?=[:/]|$)", r"\1localhost", url.strip())
+
+
+def _decision_local_reachable(url: str, http_get=None) -> tuple[bool, str]:
+    probe_url = _host_url(url)
+    if not probe_url:
+        return False, ""
+    try:
+        if http_get is not None:
+            r = http_get(probe_url)
+            if r is False or r is None:
+                return False, probe_url
+            if r is True:
+                return True, probe_url
+            return int(getattr(r, "status", getattr(r, "code", 200))) < 500, probe_url
+        with urllib.request.urlopen(probe_url, timeout=1) as r:
+            return int(getattr(r, "status", 200)) < 500, probe_url
+    except Exception:  # noqa: BLE001
+        return False, probe_url
+
+
 def _hindsight_transient(cfg: dict | None = None, which=shutil.which, run=subprocess.run,
                          http_get=None, online: bool = True, exists=None) -> str | None:
     if which is _STD_WHICH:
@@ -150,7 +176,8 @@ def _hindsight_transient(cfg: dict | None = None, which=shutil.which, run=subpro
     return "Hindsight inicializando no boot — estado transitório; rode ./brain doctor em ~1 min"
 
 
-def checks(brain, online: bool = False, probe_agent: bool = False, docker_probe=None) -> list[dict]:
+def checks(brain, online: bool = False, probe_agent: bool = False, docker_probe=None,
+           *, http_get=None, auth_probe=None) -> list[dict]:
     inst, out = brain.inst, []
     cfg = inst.cfg
     if not (inst.config_dir / "brain.toml").exists():
@@ -324,12 +351,27 @@ def checks(brain, online: bool = False, probe_agent: bool = False, docker_probe=
 
         # Slot LLM
         llm_ok = True
-        if mem_mode == "embed":
-            out.append(_c("ok", "memória · LLM", "não exigido no modo embed (LLM não é chamado)"))
+        llm_s = st_prov["llm"]
+        llm_prov = llm_s["provider"]
+        llm_p = _prov.PROVIDERS["llm"].get(llm_prov)
+        effort_val = env.get("HINDSIGHT_API_LLM_REASONING_EFFORT", "").strip().lower()
+        effort_max = effort_val == "max"
+        effort_note = " · HINDSIGHT_API_LLM_REASONING_EFFORT=max é diferente do padrão (high)" if effort_max else ""
+        if llm_prov == "cursor" or (llm_p and llm_p.get("docker_auth") == "unavailable"):
+            out.append(_c("warn", "memória · LLM",
+                          f"{llm_p['label'] if llm_p else llm_prov} — indisponível no Docker "
+                          f"({(llm_p or {}).get('setup_hint', '')}; login no servidor não verificado)"))
+        elif mem_mode == "embed" and llm_p and llm_p.get("docker_auth") == "manual":
+            out.append(_c("warn", "memória · LLM",
+                          f"{llm_p['label']} — login no servidor não verificado "
+                          f"({llm_p.get('auth_command') or llm_p.get('setup_hint', '')})"))
+        elif mem_mode == "embed":
+            if effort_max:
+                out.append(_c("warn", "memória · LLM",
+                              "HINDSIGHT_API_LLM_REASONING_EFFORT=max no config/.env é diferente do padrão (high)"))
+            else:
+                out.append(_c("ok", "memória · LLM", "não exigido no modo embed (LLM não é chamado)"))
         elif mem_mode == "full":
-            llm_s = st_prov["llm"]
-            llm_prov = llm_s["provider"]
-            llm_p = _prov.PROVIDERS["llm"].get(llm_prov)
             if llm_prov in _prov.LOCAL_LLM_BLOCKED:
                 llm_ok = False
                 out.append(_c("error", "memória · LLM",
@@ -337,7 +379,8 @@ def checks(brain, online: bool = False, probe_agent: bool = False, docker_probe=
                               "escolha assinatura ou chave via `brain memory providers`"))
             elif not llm_prov:
                 if env.get("HINDSIGHT_API_LLM_API_KEY"):
-                    out.append(_c("ok", "memória · LLM", "configurado via config/.env (HINDSIGHT_API_LLM_API_KEY presente)"))
+                    out.append(_c("warn" if effort_max else "ok", "memória · LLM",
+                                  "configurado via config/.env (HINDSIGHT_API_LLM_API_KEY presente)" + effort_note))
                 else:
                     llm_ok = False
                     out.append(_c("error", "memória",
@@ -348,17 +391,32 @@ def checks(brain, online: bool = False, probe_agent: bool = False, docker_probe=
                 out.append(_c("error", "memória · LLM",
                               f"provedor desconhecido ({llm_prov}) — escolha via `brain memory providers`"))
             elif llm_p.get("family") == "subscription":
-                auth = _prov.auth_state(brain)
-                if auth.get("state") == "pending":
-                    llm_ok = False
-                    out.append(_c("error", "memória · LLM",
-                                  f"{llm_p['label']} sem credencial — {auth.get('note', '')} · {auth.get('fix', '')}"))
-                elif auth.get("state") == "unknown":
-                    out.append(_c("warn", "memória · LLM",
-                                  f"{llm_p['label']} (assinatura — {auth.get('note') or 'autenticação não verificada'})"))
+                if llm_p.get("docker_auth") == "manual":
+                    probed_ok = False
+                    if auth_probe is not None:
+                        res_p = auth_probe(llm_prov) if callable(auth_probe) else auth_probe
+                        probed_ok = (res_p.returncode == 0) if hasattr(res_p, "returncode") else bool(res_p)
+                    if not probed_ok:
+                        cmd_hint = f" · `{llm_p['auth_command']}`" if llm_p.get("auth_command") else ""
+                        out.append(_c("warn", "memória · LLM",
+                                      f"{llm_p['label']} — login no servidor não verificado "
+                                      f"({llm_p.get('setup_hint', '')}{cmd_hint})"))
+                    else:
+                        out.append(_c("warn" if effort_max else "ok", "memória · LLM",
+                                      f"{llm_p['label']} (assinatura — login verificado no servidor{effort_note})"))
                 else:
-                    note = auth.get("note") if auth.get("state") == "ok" else f"verificação manual: {auth.get('note', '')}"
-                    out.append(_c("ok", "memória · LLM", f"{llm_p['label']} (assinatura — {note})"))
+                    auth = _prov.auth_state(brain, run=auth_probe)
+                    if auth.get("state") == "pending":
+                        llm_ok = False
+                        out.append(_c("error", "memória · LLM",
+                                      f"{llm_p['label']} sem credencial — {auth.get('note', '')} · {auth.get('fix', '')}"))
+                    elif auth.get("state") == "unknown":
+                        out.append(_c("warn", "memória · LLM",
+                                      f"{llm_p['label']} (assinatura — {auth.get('note') or 'autenticação não verificada'})"))
+                    else:
+                        note = auth.get("note") if auth.get("state") == "ok" else f"verificação manual: {auth.get('note', '')}"
+                        out.append(_c("warn" if effort_max else "ok", "memória · LLM",
+                                      f"{llm_p['label']} (assinatura — {note}{effort_note})"))
             else:
                 kenv = llm_p.get("key_env", "")
                 if kenv and not env.get(kenv):
@@ -367,8 +425,8 @@ def checks(brain, online: bool = False, probe_agent: bool = False, docker_probe=
                                   f"LLM ({llm_prov}) sem a chave no config/.env ({kenv}) — "
                                   f"`brain memory providers set llm --provider {llm_prov} --key …`"))
                 else:
-                    out.append(_c("ok", "memória · LLM",
-                                  f"{llm_p['label']} (chave presente no config/.env)"))
+                    out.append(_c("warn" if effort_max else "ok", "memória · LLM",
+                                  f"{llm_p['label']} (chave presente no config/.env{effort_note})"))
 
         # Slot Embeddings
         emb_s = st_prov["embeddings"]
@@ -415,22 +473,81 @@ def checks(brain, online: bool = False, probe_agent: bool = False, docker_probe=
         dec_s = st_prov["decision"]
         dec_prov = dec_s["provider"]
         dec_p = _prov.PROVIDERS["decision"].get(dec_prov)
+        recall_on = (bool(cfg["memory"].get("decision_recall"))
+                     or env.get("HINDSIGHT_API_RECALL_DECISION_MODEL_PROVIDER") == "hindsight")
+        recall_warn_msg = ("recall com decisor: cada candidato é uma requisição própria, não há fallback "
+                           "nesta versão do servidor (1.2.0) e o recall falha fechado se o decisor cair")
         if dec_prov in ("", "off"):
-            out.append(_c("ok", "memória · decisão",
-                          "desligado (padrão) — as operações usam só o LLM; ligar corta ~40% das chamadas"))
+            if recall_on:
+                out.append(_c("warn", "memória · decisão",
+                              f"recall do decisor ligado sem provedor ativo (chave/URL ausente) — {recall_warn_msg}"))
+            else:
+                out.append(_c("ok", "memória · decisão",
+                              "desligado (padrão) — as operações usam só o LLM; ligar corta ~40% das chamadas"))
         elif dec_p is None:
             out.append(_c("error", "memória · decisão",
                           f"provedor desconhecido ({dec_prov}) — `brain memory providers`"))
+        elif dec_prov == "local":
+            kenv = dec_p.get("key_env", "")
+            has_key = bool(kenv and env.get(kenv))
+            raw_url = env.get("HINDSIGHT_API_DECISION_MODEL_BASE_URL") or cfg["memory"].get("decision_base_url", "")
+            missing = []
+            if not has_key:
+                missing.append(f"chave ({kenv})")
+            if not raw_url:
+                missing.append("base URL (HINDSIGHT_API_DECISION_MODEL_BASE_URL)")
+            if missing:
+                out.append(_c("warn", "memória · decisão",
+                              f"decisão local sem {' e '.join(missing)} no config/.env — "
+                              "`brain memory providers set decision --provider local --base-url … --key …`"
+                              + (f" · {recall_warn_msg}" if recall_on else "")))
+            elif http_get is not None or online:
+                reach_ok, probed_url = _decision_local_reachable(raw_url, http_get=http_get)
+                if not reach_ok:
+                    out.append(_c("warn", "memória · decisão",
+                                  f"{dec_s['label']} — servidor local inacessível em {probed_url} "
+                                  "(o Brain não sobe o processo local; guides/memory.md)"))
+                elif recall_on:
+                    out.append(_c("warn", "memória · decisão",
+                                  f"{dec_s['label']} (respondendo em {probed_url}) — recall local não é suportado "
+                                  f"nesta entrega · {recall_warn_msg}"))
+                else:
+                    out.append(_c("ok", "memória · decisão",
+                                  f"{dec_s['label']} (respondendo em {probed_url} · zero egress, cloud_decision = false)"))
+            else:
+                probed_url = _host_url(raw_url)
+                if recall_on:
+                    out.append(_c("warn", "memória · decisão",
+                                  f"{dec_s['label']} (URL {probed_url}) — recall local não é suportado "
+                                  f"nesta entrega · {recall_warn_msg}"))
+                else:
+                    out.append(_c("ok", "memória · decisão",
+                                  f"{dec_s['label']} (chave e URL presentes · sonda em {probed_url} · "
+                                  "zero egress, cloud_decision = false)"))
         else:
             kenv = dec_p.get("key_env", "")
-            if kenv and not env.get(kenv):
-                out.append(_c("error", "memória · decisão",
-                              f"decisão ({dec_prov}) sem a chave hsk_ no config/.env ({kenv}) — "
-                              f"`brain memory providers set decision --provider hindsight --key …` "
-                              "(ou volte a off)"))
+            has_key = bool(kenv and env.get(kenv))
+            if recall_on:
+                if not has_key:
+                    out.append(_c("warn", "memória · decisão",
+                                  f"decisão ({dec_prov}) com recall ligado e sem a chave hsk_ no config/.env ({kenv}) — "
+                                  f"{recall_warn_msg} · `brain memory providers set decision --provider hindsight "
+                                  "--key … --recall on --candidates N`"))
+                else:
+                    cands = (cfg["memory"].get("decision_max_candidates")
+                             or env.get("HINDSIGHT_API_RECALL_DECISION_MODEL_MAX_CANDIDATES") or "?")
+                    out.append(_c("warn", "memória · decisão",
+                                  f"{dec_s['label']} (chave presente · cloud_decision = true · top-{cands} candidatos) — "
+                                  f"{recall_warn_msg}"))
             else:
-                out.append(_c("ok", "memória · decisão",
-                              f"{dec_s['label']} (chave presente) — julga antes de chamar o LLM"))
+                if not has_key:
+                    out.append(_c("error", "memória · decisão",
+                                  f"decisão ({dec_prov}) sem a chave hsk_ no config/.env ({kenv}) — "
+                                  "`brain memory providers set decision --provider hindsight --key …` "
+                                  "(ou volte a off)"))
+                else:
+                    out.append(_c("ok", "memória · decisão",
+                                  f"{dec_s['label']} (chave presente) — julga antes de chamar o LLM"))
 
         if mem_mode == "full" and llm_ok and online:
             try:

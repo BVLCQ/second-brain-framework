@@ -28,9 +28,8 @@ from brainlib.tui.config_keys import ConfigKeys  # noqa: E402
 class MemoryModeFormTest(unittest.TestCase):
     @staticmethod
     def _flat(slot):
-        """Registro inteiro menos `custom`: provedor custom exige model + base_url, que nem o formulário
-        nem as flags planas do `memory setup` têm como levar."""
-        return [k for k in providers.PROVIDERS[slot] if k != "custom"]
+        """Registro inteiro menos `custom` (exige model + base_url) e `unavailable` no Docker (`cursor`)."""
+        return [k for k, _ in providers.menu_providers(slot, include_custom=False, include_unavailable=False)]
 
     def test_memory_mode_lists_match_providers_registry(self):
         m = {"form_static": forms.static()}
