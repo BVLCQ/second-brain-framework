@@ -1,3 +1,7 @@
+## 2.47.0 — os cartões do TODO filtram o quadro
+
+- **A visão geral do TODO filtra.** Clicar em Atrasadas, Vencem em 7 dias ou qualquer outro cartão deixa no quadro só esse recorte, nas colunas de sempre. Outro clique soma. Clicar de novo tira. "Limpar filtros" volta ao quadro inteiro. O filtro se junta ao de projeto, vista e ordem. Cartão selecionado fica marcado; os outros esmaecem enquanto houver filtro. Enter e Espaço alternam, e o estado é anunciado.
+
 ## 2.45.0 — o decisor local se instala sozinho, e o Brain religa o que estiver fora
 
 - **Escolher Local instala o servidor.** Decisão → Local (wizard, painel ou CLI) instala o `hs-decide-1-flash` num venv próprio, sobe o `/v1/systemone` (MLX no Apple Silicon, vLLM no Linux com GPU) e só grava o slot depois de um julgamento de verdade. Sem Apple Silicon e sem GPU NVIDIA, a escolha é recusada e nada é instalado. Chave, modelo e URL não são pedidos: a chave local fica numa variável separada da `hsk_` da nuvem. Se o teste falha, o slot volta a desligado.

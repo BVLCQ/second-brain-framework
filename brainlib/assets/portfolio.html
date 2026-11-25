@@ -184,7 +184,13 @@ tbody tr.src-problem:hover td{background:color-mix(in srgb,var(--riskbg) 55%,tra
 .todo-ov #todo-ov-cards{display:none;margin:10px 0 0}
 .todo-ov.is-open #todo-ov-cards{display:grid}
 .todo-ov .kpis{grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:10px}
-.todo-ov .kpi{padding:10px 12px}.todo-ov .kpi b{font-size:20px}
+.todo-ov .kpi{padding:10px 12px;appearance:none;cursor:pointer;text-align:left;font:inherit;color:inherit;width:100%}
+.todo-ov .kpi b{font-size:20px}
+.todo-ov .kpi.is-on{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.todo-ov.is-filtering .kpi.is-off{opacity:.45}
+.todo-ov .kpi:focus-visible,.todo-ov-line .ovp:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.todo-ov-line .ovp{border:0;background:none;padding:0;margin:0;cursor:pointer;font:inherit;color:inherit}
+.todo-ov-line .ovp.is-on{color:var(--accent)}
 .kpi.later b{color:var(--muted)}
 .col{background:var(--chip);border-radius:var(--r);padding:10px;min-height:120px}
 .col h2, .col h3{margin:2px 4px 10px;font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;font-weight:700;
@@ -6055,36 +6061,73 @@ V.home = () => {
   return h;
 };
 // ── visão geral do quadro (TODO): recolhível; aberta = cartões, recolhida = uma linha ──
+// Os cartões também filtram o quadro (união). A contagem usa o mesmo predicado do filtro.
 const TODO_KPI_KEY = "brain.todo.overview";
+const TODO_KPI_ORDER = ["abertas", "atrasadas", "vencem", "fazendo", "bloqueadas", "depois", "outros", "feitas"];
 function todoKpisOpen(){ try { return localStorage.getItem(TODO_KPI_KEY) !== "0"; } catch (e) { return true; } }
 function setTodoKpisOpen(v){ try { localStorage.setItem(TODO_KPI_KEY, v ? "1" : "0"); } catch (e) {} }
-function todoOverview(list, waitingN){
-  const open = list.filter(a => a.open), act = open.filter(a => !a.parked);
-  const recent = new Date(M.today + "T12:00:00"); recent.setDate(recent.getDate() - 14);
-  const late = act.filter(a => a.overdue_days).length;
-  const blk = act.filter(a => (a.blocked_by && a.blocked_by.length) || a.status === "bloqueada" || a.status === "aguardando").length;
-  const k = [["Abertas", act.length, ""], ["Atrasadas", late, late ? "risk" : "ok"],
-    ["Vencem em 7 dias", act.filter(a => !a.overdue_days && a.due_in != null && a.due_in >= 0 && a.due_in <= 7).length, ""],
-    ["Fazendo", act.filter(a => a.status === "fazendo").length, ""], ["Bloqueadas / aguardando", blk, blk ? "risk" : ""],
-    ["Depois", open.length - act.length, "later"], ["Aguardando outros", waitingN, ""],
-    ["Feitas 14d", list.filter(a => a.status === "fechada" && a.closed && new Date(a.closed + "T12:00:00") >= recent).length, "ok"]];
+function todoRecent(today){
+  const recent = new Date((today || M.today) + "T12:00:00");
+  recent.setDate(recent.getDate() - 14);
+  return recent;
+}
+function todoIsBlk(a){
+  return !!((a.blocked_by && a.blocked_by.length) || a.status === "bloqueada" || a.status === "aguardando");
+}
+function todoKpiHit(a, key, recent){
+  const mine = a.list === "mine", open = !!a.open, parked = !!a.parked, act = open && !parked;
+  if (key === "abertas") return mine && act;
+  if (key === "atrasadas") return mine && act && !!a.overdue_days;
+  if (key === "vencem") return mine && act && !a.overdue_days && a.due_in != null && a.due_in >= 0 && a.due_in <= 7;
+  if (key === "fazendo") return mine && act && a.status === "fazendo";
+  if (key === "bloqueadas") return mine && act && todoIsBlk(a);
+  if (key === "depois") return mine && open && parked;
+  if (key === "outros") return a.list === "waiting" && open;
+  if (key === "feitas") return mine && a.status === "fechada" && !!a.closed && new Date(a.closed + "T12:00:00") >= recent;
+  return false;
+}
+function todoKpiSelected(q){
+  const raw = String((q && q.get("k")) || "").split(",").filter(Boolean);
+  return TODO_KPI_ORDER.filter(k => raw.indexOf(k) >= 0);
+}
+function todoOverview(list, waitingN, selected){
+  const recent = todoRecent(M.today);
+  selected = selected || [];
+  const labels = {abertas: "Abertas", atrasadas: "Atrasadas", vencem: "Vencem em 7 dias", fazendo: "Fazendo",
+    bloqueadas: "Bloqueadas / aguardando", depois: "Depois", outros: "Aguardando outros", feitas: "Feitas 14d"};
+  const n = {};
+  TODO_KPI_ORDER.forEach(k => { n[k] = k === "outros" ? waitingN : list.filter(a => todoKpiHit(a, k, recent)).length; });
+  const tone = {abertas: "", atrasadas: n.atrasadas ? "risk" : "ok", vencem: "", fazendo: "",
+    bloqueadas: n.bloqueadas ? "risk" : "", depois: "later", outros: "", feitas: "ok"};
+  const filtering = selected.length > 0;
+  const pressed = key => selected.indexOf(key) >= 0;
+  const chip = key => '<button type="button" class="ovp ' + (tone[key] || "") + (pressed(key) ? " is-on" : "") +
+    '" data-kpi="' + key + '" aria-pressed="' + (pressed(key) ? "true" : "false") + '">' +
+    esc(labels[key].toLowerCase()) + " <b>" + esc(n[key]) + "</b></button>";
+  const card = key => '<button type="button" class="kpi ' + (tone[key] || "") +
+    (pressed(key) ? " is-on" : (filtering ? " is-off" : "")) + '" data-kpi="' + key +
+    '" aria-pressed="' + (pressed(key) ? "true" : "false") + '"><span>' + esc(labels[key]) +
+    "</span><b>" + esc(n[key]) + "</b></button>";
   const on = todoKpisOpen();
-  return '<div id="todo-ov" class="todo-ov' + (on ? " is-open" : "") + '">' +
-    '<div class="todo-ov-bar"><button class="btn ovtoggle" id="kpitoggle" aria-expanded="' + (on ? "true" : "false") + '" aria-controls="todo-ov-cards">' + (on ? "▾" : "▸") + " visão geral</button>" +
-    '<span class="todo-ov-line">' + k.map(x => '<span class="ovp ' + x[2] + '">' + esc(x[0].toLowerCase()) + " <b>" + esc(x[1]) + "</b></span>").join("") + "</span></div>" +
-    '<div class="kpis" id="todo-ov-cards">' + k.map(x => '<div class="kpi ' + x[2] + '"><span>' + esc(x[0]) + "</span><b>" + esc(x[1]) + "</b></div>").join("") + "</div></div>";
+  const clear = filtering ? '<button type="button" class="btn" id="kpiclear">limpar filtros</button>' : "";
+  return '<div id="todo-ov" class="todo-ov' + (on ? " is-open" : "") + (filtering ? " is-filtering" : "") + '">' +
+    '<div class="todo-ov-bar"><button class="btn ovtoggle" id="kpitoggle" aria-expanded="' + (on ? "true" : "false") +
+    '" aria-controls="todo-ov-cards">' + (on ? "▾" : "▸") + " visão geral</button>" + clear +
+    '<span class="todo-ov-line">' + TODO_KPI_ORDER.map(chip).join("") + "</span></div>" +
+    '<div class="kpis" id="todo-ov-cards">' + TODO_KPI_ORDER.map(card).join("") + "</div></div>";
 }
 V.todo = (q) => {
   const proj = q.get("p") || "", showWatch = q.get("w") === "1";
   const view = q.get("v") || "todas", sortK = q.get("o") || "prazo", showAll = q.get("a") === "1";
+  const selected = todoKpiSelected(q);
   const end = new Date(M.today + "T12:00:00"); { const d = end.getDay(); end.setDate(end.getDate() + (d === 0 ? 0 : 7 - d)); }
   const endS = end.toISOString().slice(0, 10);
   let mine = M.actions.filter(a => a.list === "mine" && (!proj || a.project === proj));      // a lista mine é a sua; o dono não filtra
   const all = mine;                                                                           // a visão geral segue o projeto, não a vista
   if (view === "semana") mine = mine.filter(a => a.open && !a.parked && ((a.due && a.due <= endS) || a.status === "fazendo"));
   else if (view === "adiante") mine = mine.filter(a => a.open && !a.parked && !((a.due && a.due <= endS) || a.status === "fazendo"));
-  const recent = new Date(M.today + "T12:00:00");
-  recent.setDate(recent.getDate() - 14);
+  const recent = todoRecent(M.today);
+  if (selected.length) mine = mine.filter(a => selected.some(k => k !== "outros" && todoKpiHit(a, k, recent)));
   // "Depois": adiada de propósito (parked, só o dono) — à esquerda, fora do atraso; arrastar para lá/de lá = --park/--unpark
   const isBlk = a => (a.blocked_by && a.blocked_by.length) || a.status === "bloqueada" || a.status === "aguardando";
   const cols = [["Depois", a => a.open && a.parked, "depois"],
@@ -6096,14 +6139,15 @@ V.todo = (q) => {
     : ((x.due || "9999").localeCompare(y.due || "9999") || (x.priority === "alta" ? -1 : 0)));
   const VIEWS = [["todas", "todas"], ["semana", "esta semana"], ["adiante", "mais adiante"]];
   let h = '<div class="pagehead"><div><h1>TODO</h1><p class="sub">Suas ações em quadro. Feche pelo chat (/done), marcando em FRESH/todo.md — ou pelo painel, se a ponte CLI estiver ligada. Arraste para Depois o que você adiou de propósito: lá não conta como atrasada.</p></div></div>' +
-    todoOverview(all, (M.actions || []).filter(a => a.open && a.list === "waiting" && (!proj || a.project === proj)).length) +
+    todoOverview(all, (M.actions || []).filter(a => a.open && a.list === "waiting" && (!proj || a.project === proj)).length, selected) +
     '<div class="filters">' + dd("fp", M.projects.map(p => [p.id, p.id + " " + p.title]), proj, "todos os projetos") +
     dd("fv", VIEWS, view, "todas as vistas") + dd("fo", [["prazo", "por prazo"], ["id", "por id"]], sortK, "por prazo") +
     '<label class="chk"><input type="checkbox" id="fa"' + (showAll ? " checked" : "") + "> todas (fechadas além de 14d)</label>" +
     '<label class="chk"><input type="checkbox" id="fw"' + (showWatch ? " checked" : "") + "> mostrar observando</label></div>";
   h += '<div class="kanban">' + cols.map(([t, f, key]) => { const l = sortA(mine.filter(f)); return '<div class="col' + (key === "depois" ? " col-later" : "") + '" data-col="' + key + '"><h2>' + t + ' <span class="count">' + l.length + "</span></h2>" + (l.map(card).join("") || empty("—")) + "</div>"; }).join("") + "</div>";
   const waiting = M.actions.filter(a => a.open && a.list === "waiting" && (!proj || a.project === proj));
-  h += panel("Aguardando de outros · " + waiting.length, actionTable(sortA(waiting).map(a => a.id), ["owner", "age", "project"]), ' style="margin-top:16px"');
+  if (!selected.length || selected.indexOf("outros") >= 0)
+    h += panel("Aguardando de outros · " + waiting.length, actionTable(sortA(waiting).map(a => a.id), ["owner", "age", "project"]), ' style="margin-top:16px"');
   if (showWatch) {
     const w = M.actions.filter(a => a.open && a.list === "watching" && (!proj || a.project === proj));
     h += panel("Observando — contexto, não cobra · " + w.length, actionTable(w.map(a => a.id), ["owner", "project"]), ' style="margin-top:14px"');
@@ -6113,16 +6157,24 @@ V.todo = (q) => {
     if (kt) kt.onclick = () => { const open = !todoKpisOpen(); setTodoKpisOpen(open);
       const ov = document.querySelector("#todo-ov"); if (ov) ov.classList.toggle("is-open", open);
       kt.setAttribute("aria-expanded", open ? "true" : "false"); kt.textContent = open ? "▾ visão geral" : "▸ visão geral"; };
+    const todoQ = extra => ({p: proj, w: showWatch ? "1" : "", v: view !== "todas" ? view : "",
+      o: sortK !== "prazo" ? sortK : "", a: showAll ? "1" : "", k: selected.join(","), ...extra});
+    document.querySelectorAll("#todo-ov [data-kpi]").forEach(el => {
+      el.addEventListener("click", () => {
+        const key = el.getAttribute("data-kpi");
+        const next = selected.indexOf(key) >= 0 ? selected.filter(k => k !== key) : selected.concat(key);
+        go("todo", todoQ({k: next.join(",")}));
+      });
+    });
+    const clear = document.querySelector("#kpiclear");
+    if (clear) clear.onclick = () => go("todo", todoQ({k: ""}));
     [["fp", "p"], ["fv", "v"], ["fo", "o"]].forEach(([id0, key]) => {
       const b = document.querySelector('[data-dd="' + id0 + '"] .dd-btn');
-      if (b) b.addEventListener("ddchange", e => go("todo", {p: proj, w: showWatch ? "1" : "",
-        v: view !== "todas" ? view : "", o: sortK !== "prazo" ? sortK : "", a: showAll ? "1" : "", [key]: e.detail.value}));});
+      if (b) b.addEventListener("ddchange", e => go("todo", todoQ({[key]: e.detail.value})));});
     const fa = document.querySelector("#fa");
-    if (fa) fa.onchange = e => go("todo", {p: proj, w: showWatch ? "1" : "",
-      v: view !== "todas" ? view : "", o: sortK !== "prazo" ? sortK : "", a: e.target.checked ? "1" : ""});
+    if (fa) fa.onchange = e => go("todo", todoQ({a: e.target.checked ? "1" : ""}));
     const c = document.querySelector("#fw");
-    if (c) c.onchange = e => go("todo", {p: proj, w: e.target.checked ? "1" : "",
-      v: view !== "todas" ? view : "", o: sortK !== "prazo" ? sortK : "", a: showAll ? "1" : ""});
+    if (c) c.onchange = e => go("todo", todoQ({w: e.target.checked ? "1" : ""}));
   });
   return h;
 };

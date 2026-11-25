@@ -752,7 +752,9 @@ por uma versão.
   lista de aguardando-de-outros. Teclas: `n` nova, `e` editar, `c` fechar,
   `s` status, `t` prazo, `d` descartar, `z` depois (adiar), `o` reabrir,
   `m` rascunhar cobrança, `M` mescla duplicada (`action merge`), `v`/`O`/`T`
-  vista · ordem · todas. A ficha da ação tem os mesmos botões.
+  vista · ordem · todas. Os cartões da visão geral filtram o quadro (clique
+  soma o recorte; de novo tira; "limpar filtros" volta ao normal) e se
+  combinam com projeto, vista e ordem. A ficha da ação tem os mesmos botões.
 - **Projetos** — ficha por projeto: entregáveis com peso, próximos marcos,
   saúde com motivo, decisões e ações ligadas. O círculo do entregável
   marca feito (`space`) ou muda estado (`s`) — é a colheita do checkbox.
