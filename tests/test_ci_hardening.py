@@ -30,6 +30,7 @@ PRIVATE_LIST = "${{ secrets.PUBLIC_DENYLIST_B64 }}"
 # o cabeçalho de autenticação do checkout, montado por partes: escrito inteiro, o próprio arquivo de
 # teste viraria achado da varredura
 CHECKOUT_HEADER = "AUTHORIZATION: basic $(echo -n \"x-access-" + "token:$GITHUB_TOKEN\" | base64 -w0)"
+GATE_IMAGE_DIGEST = "sha256:9dd21fafb95870b99f9faa703a947d08feeb673048ad556e92ce503d0c086a95"   # python:3.12
 STATUS_CONTEXT = "data-gate (status)"
 
 
@@ -160,11 +161,11 @@ class BothWorkflowsTest(unittest.TestCase):
                 # o token sai da configuração logo depois do fetch: nada que toque em objeto do PR o usa
                 self.assertLess(_run(step).index("git fetch"), _run(step).index("git config --unset http.extraheader"))
         self.assertEqual(headers, {CHECKOUT_HEADER})
-        # o token do job entra por `env:` de passo (checkout; e, no portão, também o passo do status) —
+        # o token do job entra por `env:` de passo (checkout; no portão, também os dois passos do status) —
         # nunca no `env:` do job, que valeria para todo passo
         counts = {name: len(re.findall(r"(?m)^          GITHUB_TOKEN: \$\{\{ github\.token \}\}$", text))
                   for name, text in self.texts.items()}
-        self.assertEqual(counts, {"ci.yml": 1, "data-gate.yml": 2})
+        self.assertEqual(counts, {"ci.yml": 1, "data-gate.yml": 3})
         self.assertNotRegex("".join(self.texts.values()), r"(?m)^ {3,8}GITHUB_TOKEN:")
         self.assertNotIn("ghp_", "".join(self.texts.values()))
 
@@ -173,7 +174,9 @@ class BothWorkflowsTest(unittest.TestCase):
         for jobs in self.jobs.values():
             for text in jobs.values():
                 images += re.findall(r"(?m)^      image: (.+?)\s*$", text)
-        self.assertEqual(images, ["python:${{ matrix.python }}", "python:3.12"])
+        # a suíte não recebe segredo e roda a matriz por tag; o portão, que carrega a lista privada, roda a
+        # imagem fixada por digest: tag móvel muda de baixo do repositório, sem PR nenhum
+        self.assertEqual(images, ["python:${{ matrix.python }}", f"python:3.12@{GATE_IMAGE_DIGEST}"])
 
 
 class SuiteWorkflowTest(unittest.TestCase):
@@ -247,6 +250,10 @@ class GateWorkflowTest(unittest.TestCase):
         for step in (self.checkout, self.gate):
             self.assertNotRegex(step, r"(?m)^        if:")
         self.assertNotIn("continue-on-error", self.job)
+        # os únicos passos com `if:` são o primeiro e o último (os dois do status); nenhum decide pelo
+        # conteúdo do PR
+        guarded = [i for i, step in enumerate(_steps(self.job)) if re.search(r"(?m)^        if:", step)]
+        self.assertEqual(guarded, [0, len(_steps(self.job)) - 1])
 
     def test_only_the_gate_job_can_write_and_only_statuses(self):
         self.assertEqual(_permissions(self.job, "    "), {"contents": "read", "statuses": "write"})
@@ -292,6 +299,36 @@ class GateWorkflowTest(unittest.TestCase):
         self.assertIn('echo "rc=$rc" >> "$GITHUB_OUTPUT"', _run(self.gate))
         self.assertRegex(_run(self.gate), r"(?m)^python3 scripts/dev/public_gate\.py gate .* \|\| rc=\$\?$")
         self.assertIn('exit "$rc"', _run(self.gate))
+
+    def _curl_posts(self, text: str) -> list[tuple[str, str]]:
+        """(estado, contexto) de cada status que um `curl … -d '{…}'` do texto publica."""
+        return re.findall(r'\{"state":"([a-z]+)","context":"([^"]+)"', text)
+
+    def test_the_status_is_pending_before_any_checkout(self):
+        # o GitHub exige status e check de mesmo nome OS DOIS só quando os dois existem: até o último
+        # passo publicar, só existia o check do fork — e bastava. O primeiro passo publica `pending`, sem
+        # ler nada do repositório: só o curl da imagem e o token do job
+        steps = _steps(self.job)
+        first = steps[0]
+        self.assertEqual(first.split("\n", 1)[0],
+                         "      - name: Status pendente na ponta do PR (antes de qualquer checkout)")
+        self.assertLess(steps.index(first), steps.index(self.checkout))
+        self.assertRegex(first, r"(?m)^        if: github\.event_name == 'pull_request_target'$")  # em push não há status
+        run = _run(first)
+        self.assertEqual(self._curl_posts(run), [("pending", STATUS_CONTEXT)])
+        self.assertIn('curl -fsS -m 60 -X POST "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/statuses/$TARGET_SHA"', run)
+        self.assertIn("          GITHUB_TOKEN: ${{ github.token }}\n", first)       # token de passo, não de job
+        self.assertNotIn("git ", run)
+        self.assertNotIn("secrets.", first)                                          # a lista privada não entra aqui
+
+    def test_the_final_status_does_not_depend_on_the_checkout(self):
+        # job que morreu no checkout (fetch que falhou) não tem o script no disco: o mesmo pedido sai
+        # com curl, e publica `error` — o status nunca fica pendente nem some
+        status = _steps(self.job)[-1]
+        run = _run(status)
+        self.assertIn("if [ -f scripts/dev/public_gate.py ]; then\n", run)
+        self.assertIn('python3 scripts/dev/public_gate.py status --sha "$TARGET_SHA" --rc "$RC" --run "$RUN"', run)
+        self.assertEqual(self._curl_posts(run.split("else", 1)[1]), [("error", STATUS_CONTEXT)])
 
     def test_the_pr_tip_and_the_base_come_from_the_event_not_from_the_pr_itself(self):
         env = _job_env(self.job)
