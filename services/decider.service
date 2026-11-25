@@ -1,0 +1,10 @@
+[Unit]
+Description=Decisor local do Segundo Cerebro (hs-decide-1-flash)
+[Service]
+Type=simple
+Environment=BRAIN_DIR=__BRAIN_DIR__
+ExecStart=/bin/sh __BRAIN_DIR__/services/decider-serve.sh
+Restart=on-failure
+RestartSec=5
+[Install]
+WantedBy=default.target

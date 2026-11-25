@@ -690,6 +690,9 @@ class _Handler(BaseHTTPRequestHandler):
                 self._json(200 if snap else 404, snap or {"ok": False, "error": "atualização não encontrada"})
             elif path == "/api/ping":
                 self._json(200, {"ok": True, "pid": os.getpid(), "version": __version__})
+            elif path == "/api/services":
+                from . import services as _services
+                self._json(200, {"ok": True, **_services.read_status(self.state.inst)})
             elif path == "/api/data":
                 from . import render
                 with self.state.lock:
@@ -1237,6 +1240,8 @@ def serve(inst, port: int = 8787, open_browser: bool = False) -> int:
     _Handler.state = state
     url = f"http://127.0.0.1:{actual_port}/#t={token}"
     registered = register(inst, url, actual_port)
+    from . import services as _services
+    _services.kick(inst, reason="open")
     print(f"✓ ponte CLI no ar (Ctrl+C encerra)\n  {url}\n  file:// continua retrato: comandos só copiam")
     if not registered:
         print("  ⚠ outra ponte desta instância já está no ar: esta não vira a ponte do app (só esta URL)")

@@ -1326,6 +1326,9 @@ def _print_json(obj) -> None:
 # ── entrada do CLI ──────────────────────────────────────────────────────────
 def cli_update(args, _b) -> None:
     inst = config.load()
+    if not args.check and not util.is_nightly():
+        from . import services as _services
+        _services.kick(inst, reason="update")
     checked: dict = {}
     if args.check:                                     # pergunta ao remoto de verdade (é o poll de 2h e o pedido do dono)
         checked = check_update(inst, force=True)

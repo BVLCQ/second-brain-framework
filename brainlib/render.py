@@ -93,6 +93,8 @@ def view_model(brain) -> dict:
     from . import onboard
     m["onboarding"] = {"needed": onboard.needed(brain)}          # F8: primeira vez abre o wizard na própria página
     m["health"] = [{**c, "fix": doctor.fix_for(c)} for c in doctor.checks(brain)]
+    from . import services as _services
+    m["services"] = _services.read_status(brain.inst)
     m["freshness"] = doctor.freshness(brain)
     m["sources"] = _sources(brain)
     m["source_kinds"] = [list(k) for k in watch.KINDS]
@@ -226,6 +228,8 @@ def open_onboarding(brain) -> bool:
 
 
 def open_dashboard(brain, panel: str = "execucao", spawn: bool = True) -> None:
+    from . import services as _services
+    _services.kick(brain.inst, reason="open")
     # painel VIVO sempre que possível: executa comandos e o reload é sempre fresco
     try:
         from .serve import live_panel_url, stop_stale

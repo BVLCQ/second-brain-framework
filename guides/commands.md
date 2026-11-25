@@ -1176,9 +1176,11 @@ lê, julga e mostra; o `brain` valida e grava.
 
 ---
 
-## 21. Serviços desta máquina (fora do CLI)
+## 21. Serviços desta máquina
 
-Específicos desta instalação (OrbStack + LM Studio + watchdog + hook).
+Específicos desta instalação (OrbStack + LM Studio + decisor local + watchdog). O `brain setup`
+(passo memória) instala o watchdog; ele chama `brain services ensure`, a mesma função que abre o
+painel, a TUI e o noturno. `~/.brain-watchdog-off` pausa tudo. O noturno só religa — não instala.
 
 | O quê | Comando |
 |---|---|
@@ -1190,6 +1192,7 @@ Específicos desta instalação (OrbStack + LM Studio + watchdog + hook).
 | Modelos carregados no LM Studio | `lms ps` |
 | Servidor do LM Studio | `lms server start` / `lms server stop` |
 | Poll do repositório (a cada 2h) | LaunchAgent `com.segundo-cerebro.updatecheck`: roda `brain update --check` no login e a cada 2h — só `git fetch` e o cache `FRESH/.update-check.json`; o painel, a TUI e o doctor leem dali (cache sem verificação há mais de 4h, ou com erro, deixa de dizer "em dia"). Instalar, da raiz da instância: `mkdir -p ~/Library/LaunchAgents && sed "s#__BRAIN_DIR__#$PWD#g" services/com.segundo-cerebro.updatecheck.plist > ~/Library/LaunchAgents/com.segundo-cerebro.updatecheck.plist && launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.segundo-cerebro.updatecheck.plist` · log: `vault/logs/updatecheck.log` |
+| Conferir e religar os serviços | `brain services ensure` (também no login, via watchdog; estado em `vault/logs/services-status.json`) |
 | Pausar o watchdog | `touch ~/.brain-watchdog-off` (retomar: `rm ~/.brain-watchdog-off`) |
 | Rodar o watchdog agora | `launchctl kickstart gui/$(id -u)/com.segundo-cerebro.watchdog` |
 | Log do watchdog | `cat ~/brain/vault/logs/watchdog.log` |

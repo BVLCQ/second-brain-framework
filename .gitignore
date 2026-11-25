@@ -30,5 +30,8 @@ __pycache__/
 # TUI opcional (venv criada por `./brain tui --setup`)
 .venv-tui/
 
+# Decisor local (venv + pesos; o Brain instala aqui, nunca no repo)
+.decider/
+
 # Permissões da sessão do Claude Code geradas por `brain agent permissions` (MCP e pastas da instância)
 .claude/settings.local.json

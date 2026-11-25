@@ -137,6 +137,60 @@ def _sanitize_state(raw_state):
     return clean
 
 
+def maybe_stop_decider(hindsight_busy, now, *, dry=False, up=None, stop=None, flag=None):
+    """Para o decisor local quando o Hindsight está ocioso, para não segurar memória à toa.
+
+    O watchdog não religa enquanto o arquivo de ociosidade existir. Abrir o Brain apaga o arquivo.
+    """
+    idle_s = float(os.environ.get("BRAIN_IDLE_DECIDER_MIN", "15")) * 60
+    flag = flag or (Path(os.environ.get("BRAIN_DIR", "")) / ".decider" / "idle-stopped" if os.environ.get("BRAIN_DIR") else None)
+    if up is None:
+        up = _decider_up
+    if stop is None:
+        stop = _stop_decider
+    if hindsight_busy:
+        if flag is not None and flag.exists():
+            try:
+                flag.unlink()
+            except OSError:
+                pass
+        return "ocupado"
+    if not up():
+        return "fora"
+    if dry:
+        log("(dry-run) pararia o decisor local — ocioso")
+        return "pararia"
+    stop()
+    if flag is not None:
+        try:
+            flag.parent.mkdir(parents=True, exist_ok=True)
+            flag.write_text(str(now), encoding="utf-8")
+        except OSError:
+            pass
+    log(f"decisor local parado — ocioso (limite {idle_s / 60:.0f} min)")
+    return "parado"
+
+
+def _decider_up():
+    url = os.environ.get("BRAIN_DECIDER_URL", "http://127.0.0.1:8000/health")
+    try:
+        with urllib.request.urlopen(url, timeout=2):
+            return True
+    except Exception:
+        return False
+
+
+def _stop_decider():
+    import shutil
+    if shutil.which("launchctl"):
+        uid = os.getuid()
+        subprocess.run(["launchctl", "bootout", f"gui/{uid}/com.segundo-cerebro.decider"],
+                       capture_output=True, text=True, timeout=20)
+        return
+    subprocess.run(["systemctl", "--user", "stop", "segundo-cerebro-decider.service"],
+                   capture_output=True, text=True, timeout=20)
+
+
 def main(argv):
     if os.environ.get("BRAIN_IDLE_UNLOAD_OFF") == "1" or (Path.home() / ".brain-watchdog-off").exists():
         return 0
@@ -229,6 +283,7 @@ def main(argv):
                 ua = _num(v.get("unloaded_at"), -1.0, min_v=0.0)
                 if ua <= 0 or now - ua > 24 * 3600:
                     del state[k]
+        decider_note = maybe_stop_decider(bool(hs), now, dry=dry)
     finally:
         if not dry and state_loaded:
             state_path.parent.mkdir(parents=True, exist_ok=True)

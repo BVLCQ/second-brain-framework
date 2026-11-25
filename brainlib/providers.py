@@ -258,11 +258,11 @@ PROVIDERS: dict[str, dict[str, dict]] = {
                               "(hsk_ key em inference.hindsight.vectorize.io — por uso, sem assinatura).",
                       "key_env": "HINDSIGHT_API_DECISION_MODEL_API_KEY"},
         "local": {"label": "Local — hs-decide-1-flash (/v1/systemone, zero egress)",
-                  "local": True, "wire": "hindsight", "model": "hs-decide-1-flash",
+                  "local": True, "managed": True, "wire": "hindsight", "model": "hs-decide-1-flash",
                   "base_url": "http://host.docker.internal:8000", "max_concurrent": 1,
-                  "note": "Servidor local /v1/systemone (MLX, vLLM ou transformers — LM Studio e Ollama não servem "
-                          "este protocolo). Nada sai da máquina.",
-                  "key_env": "HINDSIGHT_API_DECISION_MODEL_API_KEY"},
+                  "note": "O Brain instala e liga o servidor (MLX no Apple Silicon, vLLM no Linux com GPU). "
+                          "LM Studio e Ollama não servem este protocolo. Nada sai da máquina.",
+                  "key_env": "BRAIN_DECISION_LOCAL_API_KEY"},
     },
 }
 
@@ -457,10 +457,13 @@ def slot_env(slot: str, provider: str, *, model: str = "", models: dict | None =
             if url:
                 env["HINDSIGHT_API_DECISION_MODEL_BASE_URL"] = url
             env["HINDSIGHT_API_DECISION_MODEL_MAX_CONCURRENT"] = str(p.get("max_concurrent", 1))
+            if key:
+                env["BRAIN_DECISION_LOCAL_API_KEY"] = key
+                env["HINDSIGHT_API_DECISION_MODEL_API_KEY"] = key
+        elif key and p.get("key_env"):
+            env[p["key_env"]] = key
         if rec_on and candidates:
             env["HINDSIGHT_API_RERANKER_MAX_CANDIDATES"] = str(int(candidates))
-        if key and p.get("key_env"):
-            env[p["key_env"]] = key
         return env
     return _rer_env(p, model or p.get("model", ""), base_url, candidates, key)
 
@@ -523,11 +526,44 @@ def set_slot(brain, slot: str, provider: str, *, model: str = "", models: dict |
     env_updates = slot_env(slot, provider, model=model, models=models, base_url=base_url,
                            dimensions=dimensions, candidates=candidates, key=key, recall=recall)
     cur_env = config.load_env(brain.inst)
+    unset_env: list[str] = []
+    if slot == "decision" and provider == "local" and not base_url:
+        from . import decider
+        try:
+            prepared = decider.prepare(brain, key=key or None)
+        except util.BrainError:
+            if mem.get("decision_provider") == "local":
+                set_slot(brain, "decision", "off")
+            raise
+        base_url = prepared["container_url"]
+        key = prepared["local_key"]
+        env_updates["HINDSIGHT_API_DECISION_MODEL_BASE_URL"] = base_url
+        env_updates["HINDSIGHT_API_DECISION_MODEL_MODEL"] = p.get("model") or "hs-decide-1-flash"
+        env_updates["BRAIN_DECISION_LOCAL_API_KEY"] = key
+        env_updates["HINDSIGHT_API_DECISION_MODEL_API_KEY"] = key
+    if slot == "decision" and provider == "local":
+        from . import decider
+        prev = cur_env.get("HINDSIGHT_API_DECISION_MODEL_API_KEY", "")
+        local_key = env_updates.get("BRAIN_DECISION_LOCAL_API_KEY") or key or ""
+        if prev and prev != local_key:
+            env_updates[decider.CLOUD_STASH_ENV] = prev
+    if slot == "decision" and provider != "local" and mem.get("decision_provider") == "local":
+        from . import decider
+        decider.stop_service(brain.inst, remove=True)
+        stash = cur_env.get(decider.CLOUD_STASH_ENV, "")
+        local_key = cur_env.get(decider.LOCAL_KEY_ENV, "")
+        wire = cur_env.get("HINDSIGHT_API_DECISION_MODEL_API_KEY", "")
+        if provider == "off" and wire and wire == local_key:
+            if stash:
+                env_updates["HINDSIGHT_API_DECISION_MODEL_API_KEY"] = stash
+            else:
+                unset_env.append("HINDSIGHT_API_DECISION_MODEL_API_KEY")
+        elif provider == "hindsight" and not key and stash and "HINDSIGHT_API_DECISION_MODEL_API_KEY" not in env_updates:
+            env_updates["HINDSIGHT_API_DECISION_MODEL_API_KEY"] = stash
     # #159: não sobrescreve um .env existente que já tem HINDSIGHT_API_LLM_REASONING_EFFORT=max
     if slot == "llm" and cur_env.get("HINDSIGHT_API_LLM_REASONING_EFFORT", "").strip().lower() == "max":
         env_updates.pop("HINDSIGHT_API_LLM_REASONING_EFFORT", None)
     _guard_env_updates(env_updates)
-    unset_env: list[str] = []
     rec_on = False
     if slot == "decision":
         rec_on = bool(_parse_recall(recall)) and provider == "hindsight"

@@ -272,7 +272,8 @@ class DecisionRecallAndLocalTests(unittest.TestCase):
             self.assertNotIn("HINDSIGHT_API_DECISION_MODEL_MAX_CONCURRENT", env_cloud)
             self.assertTrue(mem_cloud.get("cloud_decision"))
 
-            providers.set_slot(b, "decision", "local", key="local-secret-1")
+            providers.set_slot(b, "decision", "local", key="local-secret-1",
+                               base_url="http://host.docker.internal:8000")
             self.assertIn("HINDSIGHT_API_DECISION_MODEL_BASE_URL", config.load_env(b.inst))
             providers.set_slot(b, "decision", "off")
             self.assertNotIn("HINDSIGHT_API_DECISION_MODEL_BASE_URL", config.load_env(b.inst))

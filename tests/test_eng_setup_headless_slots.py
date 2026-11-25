@@ -396,9 +396,11 @@ class MemorySetupAppliesCustomSlotValues(unittest.TestCase):
         js = (ROOT / "brainlib" / "assets" / "src" / "extra.js").read_text(encoding="utf-8")
         self.assertRegex(js, r"""\{key: "custom",[^\n]*m\.emb_key\}""")              # menu de embeddings
         self.assertRegex(js, r"""\{key: "custom",[^\n]*m\.rer_key\}""")              # menu de reranker
-        # modelo só para o LLM e para `custom`; a Base URL, para `custom` e para o decisor local (#163) — `needUrl`
-        self.assertIn('const needUrl = curKey === "custom" || (slot === "decision" && curKey === "local");', js)
-        self.assertIn('const needModel = slot === "llm" || needUrl;', js)
+        # modelo e Base URL só para `custom` (e modelo para o LLM). Decisor local esconde os dois:
+        # o Brain instala e preenche; a URL fica atrás de "avançado".
+        self.assertIn('const localDecider = slot === "decision" && curKey === "local";', js)
+        self.assertIn('const needUrl = curKey === "custom";', js)
+        self.assertIn('const needModel = slot === "llm" || curKey === "custom";', js)
         self.assertIn("id=\"model-' + slot + '\"", js)
         self.assertRegex(js, r"""needUrl \? '<label[^>]*><span>Base URL</span><input[^>]*id="url-' \+ slot""")
         self.assertIn("if (mEl && mEl.value.trim()) obj.model = mEl.value.trim();", js)

@@ -397,19 +397,22 @@ das chamadas do LLM SUBINDO a qualidade** (haiku-5.5: US$ 35→21 por 1k casos, 
     **Importante**: com o decisor ligado no recall **não há fallback para RRF** nesta versão do
     servidor (1.2.0) — cada candidato gera uma requisição própria ao decisor e, se o decisor cair,
     **o recall falha fechado**. O `brain doctor` emite aviso sempre que o recall com decisor está ativo.
-- **Decisor local (`--provider local`, primeira entrega)**:
-  - Exceção declarada no modo `full`: permite rodar o `hs-decide-1-flash` localmente sem egress
-    (`cloud_decision = false`, `HINDSIGHT_API_DECISION_MODEL_MAX_CONCURRENT=1`, `BASE_URL` e
-    `API_KEY` obrigatórias; ao trocar de `local` para outro provedor, `HINDSIGHT_API_DECISION_MODEL_BASE_URL`
-    é removida do `config/.env`). O slot LLM continua proibido para modelos locais e o modo `embed`
-    continua sem decisor.
-  - **`hs-decide` não é servido por LM Studio nem Ollama**: o protocolo do modelo é `/v1/systemone`.
-    O Brain **não inicia nem gerencia** o processo do servidor local. Os três servidores documentados
-    em alto nível são: **MLX** (Apple Silicon), **vLLM** (Linux com GPU) e **transformers** (referência
-    Python). O comando de subida está no model card do modelo (não fixamos versão de MLX não medida),
-    e esta primeira entrega **não habilita recall com decisor local** (`--recall on` é recusado com
-    `local`, aguardando medição de latência). O `brain doctor` apenas verifica a alcançabilidade
-    (reescrevendo `host.docker.internal` para `localhost` fora do container).
+- **Decisor local (`--provider local`)**:
+  - Exceção declarada no modo `full`: roda o `hs-decide-1-flash` sem egress
+    (`cloud_decision = false`, `HINDSIGHT_API_DECISION_MODEL_MAX_CONCURRENT=1`). O Brain preenche
+    a URL e a chave local; ao trocar de `local`, `HINDSIGHT_API_DECISION_MODEL_BASE_URL` sai do
+    `config/.env` e a chave `hsk_` da nuvem não é apagada. O slot LLM continua proibido para
+    modelos locais e o modo `embed` continua sem decisor. `--recall on` com `local` segue recusado
+    (sem medição de latência).
+  - **`hs-decide` não é servido por LM Studio nem Ollama**: o protocolo é `/v1/systemone`.
+    Escolher `local` (wizard, painel ou `brain memory providers set decision --provider local`)
+    instala o servidor num venv próprio (`.decider/`, fora do git): MLX no Apple Silicon, vLLM no
+    Linux com GPU NVIDIA. Sem um dos dois, a escolha é recusada e nada é instalado. O Brain preenche
+    modelo, URL (`http://host.docker.internal:8000`) e uma chave local em `BRAIN_DECISION_LOCAL_API_KEY`,
+    separada da chave `hsk_`. Um teste de fumaça em `/v1/systemone` precisa passar antes de o slot
+    ficar ligado; se falhar, o slot volta a `off`. Trocar para outro provedor para e remove o serviço
+    (os pesos ficam) e não apaga a chave da nuvem. O noturno não instala — só confere e religa
+    (`brain services ensure`).
 - **Servidor**: o pin 1.2.0 já suporta (`off` = `none`, o valor de fábrica); o doctor aponta
   chave/URL ausente quando o slot está ligado.
 
