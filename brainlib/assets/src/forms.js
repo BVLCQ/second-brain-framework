@@ -153,7 +153,7 @@ const BRAIN_FORMS = (function(){
     memory_llm: (M, v, ctx) => withCurrent((((st(M).providers || {}).llm) || []).filter(x => x[0] !== "custom").map(x => [x[0], x[1]]), ((ctx && ctx.item) || {}).provider || ""),
     memory_embs: (M, v, ctx) => { const t = st(M).memory_embs || {}, mode = (v && v.mode) || "embed";
       const opts = (t[mode] || t.embed || []).map(x => [x[0], x[1]]), cur = ((ctx && ctx.item) || {}).embeddings || "";
-      return (mode === "full" && cur === "local") ? opts : withCurrent(opts, cur); },
+      return withCurrent(opts, cur); },
     memory_reranker: (M, v, ctx) => withCurrent((((st(M).providers || {}).reranker) || []).filter(x => x[0] !== "custom").map(x => [x[0], x[1]]), ((ctx && ctx.item) || {}).reranker || ""),
     "ice:impact": ice("impact"), "ice:confidence": ice("confidence"), "ice:ease": ice("ease"),
   };

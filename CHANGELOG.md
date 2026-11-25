@@ -1,3 +1,10 @@
+## 2.44.0 — no modo full, embeddings podem ficar na máquina
+
+- **Embeddings locais no full.** O modo full deixa de exigir embeddings de nuvem. O LLM continua só na nuvem (assinatura ou chave); o bge-m3 do LM Studio volta ao cardápio, como escolha — o recomendado do full segue o de nuvem. Quem já usa o local no embed sobe para o full com ele pré-selecionado; um pedido que não nomeia embeddings cai no de nuvem.
+- **O contêiner não sobe no escuro.** Com embeddings locais, o wizard, o `brain setup --only memoria`, o job do painel e o login de assinatura conferem o LM Studio antes de recriar o servidor. Fora do ar, o fluxo para e diz o comando que resolve. O watchdog não fica recriando um contêiner que morreria no boot.
+- **A troca avisa o custo.** Trocar embeddings entre local e nuvem, nos dois sentidos, pede o `brain memory rebuild` antes de gravar. No full, esse rebuild reenvia o vault inteiro e paga a extração de novo.
+- **O que sai da máquina fica dito.** Full com embeddings locais grava `cloud_llm` ligado e `cloud_embeddings` desligado. Wizard, painel, TUI e doctor dizem que os vetores ficam na máquina e o texto segue indo ao LLM. "Nada sai da máquina" continua sendo só do embed.
+
 ## 2.43.0 — o push passa pelo portão inteiro na máquina de quem mantém, e a `main` protegida
 
 - **O hook `pre-push` roda o portão de dados quando a lista privada está na máquina.** Com a cópia da lista em `~/.config/brain/public-denylist` (ou no caminho de `BRAIN_PUBLIC_DENYLIST`), o push varre os commits que leva com os termos da lista somados aos da instância e barra o anexo fechado (zip, PDF, banco, binário) — o que antes só o CI barrava, depois de o branch já estar público. São os mesmos commits que o hook já varria: só o que o push leva, nunca o que o remoto já tem. A saída do push diz `com a lista privada desta máquina e o anexo fechado`, e cada achado sai com arquivo e linha, nunca com o valor. Lista ilegível, vazia ou com termo curto barra o push; `BRAIN_PUBLIC_DENYLIST=` (vazio) desliga para um push. Sem a lista, nada muda: toda outra instância segue só com as regras públicas.

@@ -58,6 +58,7 @@ fi
 
 # Deriva o modo de memória de [memory] em config/brain.toml (espelha brainlib/memory.py:mode)
 mem_mode="embed"
+mem_emb="local"                   # padrão de fábrica de [memory].embeddings_provider (brainlib/config.py)
 if [[ -f "$CONFIG_TOML" ]]; then
   in_memory=0
   has_memory_section=0
@@ -92,6 +93,8 @@ if [[ -f "$CONFIG_TOML" ]]; then
         mem_engine="$val"
       elif [[ "$key" == "extract" ]]; then
         mem_extract="$val"
+      elif [[ "$key" == "embeddings_provider" ]]; then
+        mem_emb="$val"
       fi
     fi
   done < "$CONFIG_TOML"
@@ -115,6 +118,13 @@ for (( i=1; i<=WATCHDOG_HEALTH_TRIES; i++ )); do
   $CURL -s -m 5 http://127.0.0.1:8888/health | grep -q connected && exit 0
   sleep "$WATCHDOG_SLEEP"
 done
+# full com embeddings locais: o Hindsight checa o LM Studio no boot — com :1234 fora do ar o contêiner morre de
+# novo, então recriá-lo a cada 5 min só enche o log. O passo 1 já tentou subir o servidor; o que falta é do dono.
+if [[ "$mem_mode" == "full" && "$mem_emb" == "local" ]] \
+    && ! $CURL -sf -m 5 http://127.0.0.1:1234/v1/models >/dev/null; then
+  log "hindsight: sem health e o LM Studio (embeddings local no full) não responde em :1234 — não recrio o contêiner (morreria no boot); rode: brain setup --only memoria"
+  exit 0
+fi
 state_raw="$($DOCKER inspect -f '{{.State.Status}}|{{.State.Restarting}}' hindsight 2>/dev/null || true)"
 c_status="${state_raw%%|*}"
 c_restarting="${state_raw#*|}"

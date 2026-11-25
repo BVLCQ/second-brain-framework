@@ -275,7 +275,9 @@ def menu_providers(slot: str, *, include_custom: bool = True, include_unavailabl
                    mode: str = "embed") -> list[tuple[str, dict]]:
     """Lista ordenada de provedores de um slot para wizard e painel: guiados e chave de API
     primeiro; manual e indisponível por último. `cursor` (unavailable) fica fora do cardápio
-    padrão (continua aceito pela CLI)."""
+    padrão (continua aceito pela CLI). Embeddings `local` entra nos dois modos (a exigência de nuvem
+    do `full` vale só para o LLM); no `full` ele vai para o fim da lista — o recomendado de lá
+    continua sendo o de nuvem, `local` é escolha, não padrão."""
     tbl = PROVIDERS.get(slot, {})
     items: list[tuple[str, dict]] = []
     for pid, info in tbl.items():
@@ -283,14 +285,12 @@ def menu_providers(slot: str, *, include_custom: bool = True, include_unavailabl
             continue
         if not include_unavailable and info.get("docker_auth") == "unavailable":
             continue
-        if slot == "embeddings" and mode == "full" and (
-            pid == "local" or info.get("local") or info.get("family") == "local"
-        ):
-            continue
         items.append((pid, info))
+    emb_full = slot == "embeddings" and mode == "full"
     items.sort(key=lambda kv: (
         1 if kv[1].get("docker_auth") in ("manual", "unavailable") else 0,
         1 if kv[1].get("docker_auth") == "unavailable" else 0,
+        1 if emb_full and kv[1].get("local") else 0,
     ))
     return items
 
@@ -465,6 +465,30 @@ def slot_env(slot: str, provider: str, *, model: str = "", models: dict | None =
     return _rer_env(p, model or p.get("model", ""), base_url, candidates, key)
 
 
+REBUILD_COST_NOTE = ("no modo full o rebuild reenvia o vault inteiro ao LLM e paga a extração de novo "
+                     "(`brain memory cost` mede)")
+
+
+def embeddings_change_pending(brain, provider: str, model: str = "") -> bool:
+    """Escolher `provider`/`model` nos embeddings muda os vetores de um banco já sincronizado? Quem
+    chama avisa ANTES de gravar (o `rebuild` é o que re-deriva tudo do vault)."""
+    mem = brain.inst.cfg["memory"]
+    prev_provider, prev_model = mem.get("embeddings_provider", ""), mem.get("embeddings_model", "")
+    return (mem.get("engine") == "hindsight"
+            and (prev_provider != provider or bool(prev_model and model and prev_model != model))
+            and (brain.inst.root / ".memory-state.json").exists())
+
+
+def rebuild_warning(brain, full: bool | None = None) -> str:
+    """Texto do aviso de troca de embeddings: vetores incompatíveis → `rebuild`; no full, o custo.
+    `full` = o modo de destino quando o chamador está trocando de modo junto (wizard); None = o modo atual."""
+    from .memory import mode as _mem_mode                      # lazy: evita ciclo em tempo de import
+    msg = "embeddings mudam: vetores antigos ficam incompatíveis — `brain memory rebuild` re-deriva tudo do vault"
+    if _mem_mode(brain.inst.cfg["memory"]) == "full" if full is None else full:
+        msg += f"; {REBUILD_COST_NOTE}"
+    return msg
+
+
 def set_slot(brain, slot: str, provider: str, *, model: str = "", models: dict | None = None,
              base_url: str = "", dimensions: int = 0, candidates: int = 0, key: str | None = None,
              recall: bool | str | None = None) -> dict:
@@ -474,7 +498,7 @@ def set_slot(brain, slot: str, provider: str, *, model: str = "", models: dict |
     if slot == "llm" and provider in LOCAL_LLM_BLOCKED:
         raise util.BrainError(
             f"LLM local ({provider!r}) não é suportado no slot LLM — use um provedor por assinatura ou chave de API "
-            "(embeddings locais continuam no modo embed)",
+            "(embeddings locais valem nos modos embed e full — o LLM é que não pode ser local)",
             code=4,
         )
     if provider not in PROVIDERS[slot]:
@@ -483,11 +507,6 @@ def set_slot(brain, slot: str, provider: str, *, model: str = "", models: dict |
     p = PROVIDERS[slot][provider]
     model, base_url, models = _clean(model), _clean(base_url), _clean_models(models)   # mesma regra da chave
     is_sub = slot == "llm" and p.get("family") == "subscription"
-    if slot == "embeddings" and provider == "local":
-        from .memory import mode as _mem_mode                   # lazy: evita ciclo em tempo de import
-        if _mem_mode(brain.inst.cfg["memory"]) == "full":
-            raise util.BrainError("no modo full os embeddings são de nuvem — fireworks (qwen3-embedding-8b) "
-                                  "ou openai; o bge-m3 local é do modo embed (guides/memory.md)", code=4)
     if slot == "llm" and not is_sub and not (models or model) and not p.get("models"):
         # vazio = recomendado do provedor (tabela do servidor pinado em SERVER_DEFAULT_MODELS) —
         # gravado EXPLÍCITO no .env: o que aplicou é o que o stack mostra
@@ -498,7 +517,7 @@ def set_slot(brain, slot: str, provider: str, *, model: str = "", models: dict |
         raise util.BrainError("embeddings custom exige --model e --base-url", code=4)
 
     mem = brain.inst.cfg["memory"]
-    prev = {"provider": mem.get(f"{slot}_provider", ""), "model": mem.get(f"{slot}_model", "")}
+    rebuild = slot == "embeddings" and embeddings_change_pending(brain, provider, model or p.get("model", ""))
     if slot == "llm" and not (models or model) and p.get("models"):
         models = dict(p["models"])              # recomendados por operação (cenário B) como default
     env_updates = slot_env(slot, provider, model=model, models=models, base_url=base_url,
@@ -563,11 +582,13 @@ def set_slot(brain, slot: str, provider: str, *, model: str = "", models: dict |
     from .core import Brain                       # recarga completa (lição do _apply_mode)
     brain.inst = config.load(brain.inst.root)
     brain.reload()
+    # CLI (`memory providers set`) não passa pelo wizard: sem este sinal, o `setup --only memoria`
+    # que a saída indica vê o contêiner saudável e não recria — o config já diz local, o processo não.
+    if (slot == "embeddings" and mem.get("engine") == "hindsight"
+            and (mem.get("embeddings_provider") != provider or changed_env)):
+        from .setup import _recreate_mark
+        _recreate_mark(brain).write_text("embeddings\n", encoding="utf-8")
 
-    rebuild = (slot == "embeddings"
-               and mem.get("engine") == "hindsight"
-               and (prev["provider"] != provider or (prev["model"] and prev["model"] != (model or p.get("model", ""))))
-               and (brain.inst.root / ".memory-state.json").exists())
     return {
         "slot": slot,
         "provider": provider,
@@ -707,8 +728,17 @@ def _fmt_models(s: str) -> str:
     return s.replace(",", " · ") if s else ""
 
 
+def _lms_state() -> str:
+    """`up` · `installed` · `missing` — estado do LM Studio na máquina (probe de :1234)."""
+    from . import setup                                        # lazy: setup importa providers
+    return setup.lmstudio_state()
+
+
 def cli(args, brain) -> None:
     if getattr(args, "pcmd", "") == "set":
+        if args.slot == "embeddings" and args.provider in PROVIDERS["embeddings"] and embeddings_change_pending(
+                brain, args.provider, args.model or PROVIDERS["embeddings"][args.provider].get("model", "")):
+            print(f"  ⚠ {rebuild_warning(brain)}")                 # antes de gravar: quem desiste ainda pode
         res = set_slot(brain, args.slot, args.provider, model=args.model or "",
                        models=_parse_models(args.models) if args.models else None,
                        base_url=args.base_url or "", dimensions=args.dimensions or 0,
@@ -726,14 +756,28 @@ def cli(args, brain) -> None:
                 print(f"  comando: {res['auth_command']}")
             if res.get("rate_limit_note"):
                 print(f"  limite: {res['rate_limit_note']}")
+        from .memory import mode as _mem_mode
+        _is_full = _mem_mode(brain.inst.cfg["memory"]) == "full"
+        _full = " -f services/compose.full.yaml" if _is_full else ""
+        _recreate = f"docker compose -f services/compose.yaml{_full} --env-file config/.env up -d"
         if res["cloud"]:
-            from .memory import mode as _mem_mode
-            _full = " -f services/compose.full.yaml" if _mem_mode(brain.inst.cfg["memory"]) == "full" else ""
             print("  ⚠ egress: texto do vault vai para a API do provedor — recreate do container aplica "
-                  f"(docker compose -f services/compose.yaml{_full} --env-file config/.env up -d)")
+                  f"({_recreate})")
+        elif res["slot"] == "embeddings" and res["provider"] == "local":
+            _egress = ("embeddings local — os vetores não saem da máquina; o LLM continua na nuvem (o texto do "
+                       "vault vai a ele no full)" if _is_full else "embeddings local — nada sai da máquina")
+            print(f"  {_egress}")
+            _state = _lms_state()
+            if _state == "up":
+                print("  ✓ LM Studio respondendo em :1234")
+            else:
+                print(f"  ⚠ LM Studio {'instalado com o servidor desligado' if _state == 'installed' else 'ausente'} — "
+                      "`brain setup --only memoria` sobe e configura o bge-m3 antes de recriar o contêiner "
+                      "(sem ele o contêiner morre no boot)")
+            print(f"  próximo passo: {_recreate}")
         if res["rebuild_needed"]:
-            print("  ⚠ embeddings mudaram: vetores antigos são incompatíveis — `brain memory rebuild` "
-                  "re-deriva tudo do vault")
+            print("  → depois de recriar o contêiner: `brain memory rebuild`"
+                  + (f" — {REBUILD_COST_NOTE}" if _is_full else ""))
         return
     st = stack(brain)
     if getattr(args, "json", False):

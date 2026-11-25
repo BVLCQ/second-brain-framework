@@ -5,6 +5,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 os.environ.setdefault("BRAIN_NOW", "2026-10-09T10:00:00-03:00")
 
@@ -89,17 +90,76 @@ class ProvidersTests(unittest.TestCase):
             # troca de provider com banco já sincronizado → hint
             self.assertTrue(providers.set_slot(b, "embeddings", "fireworks", key="k")["rebuild_needed"])
 
-    def test_full_mode_is_cloud_only_for_embeddings(self):
+    def test_full_mode_accepts_local_embeddings_and_keeps_the_cloud_default(self):
+        """A exigência de nuvem do full vale só para o LLM: embeddings `local` é aceito (e grava o egresso certo),
+        mas o cardápio do full continua abrindo no de nuvem — `local` é escolha, não padrão."""
         with tempfile.TemporaryDirectory() as td:
             tmp = Path(td)
             b = _brain(tmp)
             config.set_keys(b.inst, "memory", {"extract": True, "cloud_llm": True})
             b.inst = config.load(b.inst.root)
-            with self.assertRaises(util.BrainError):
-                providers.set_slot(b, "embeddings", "local")     # full é só-nuvem (regra do dono)
+            providers.set_slot(b, "embeddings", "fireworks", key="fw-key-1")
+            res = providers.set_slot(b, "embeddings", "local")
+            self.assertFalse(res["cloud"])
+            mem = config.load(b.inst.root).cfg["memory"]
+            self.assertEqual(mem["embeddings_provider"], "local")
+            self.assertFalse(mem["cloud_embeddings"])            # os vetores ficam na máquina…
+            self.assertTrue(mem["cloud_llm"])                    # …o texto do vault continua indo ao LLM
+            full = [k for k, _ in providers.menu_providers("embeddings", mode="full")]
+            self.assertIn("local", full)
+            self.assertEqual(full[0], "fireworks")               # o default do full segue o de nuvem
+            self.assertEqual(full[-1], "local")
+            embed = [k for k, _ in providers.menu_providers("embeddings", mode="embed")]
+            self.assertEqual(embed[0], "local")                  # no embed o local segue recomendado
             config.set_keys(b.inst, "memory", {"extract": False, "cloud_llm": False})
             b.inst = config.load(b.inst.root)
-            providers.set_slot(b, "embeddings", "local")         # no embed o local segue válido
+            providers.set_slot(b, "embeddings", "local")         # e no embed segue válido
+
+    def test_switching_embeddings_in_full_warns_before_writing_that_rebuild_repays_extraction(self):
+        """Local ↔ nuvem no full muda os vetores: o aviso (com o custo) sai ANTES da gravação e nos dois sentidos."""
+        import argparse, contextlib, io
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            b = _brain(tmp)
+            (tmp / ".memory-state.json").write_text("{}", encoding="utf-8")
+            config.set_keys(b.inst, "memory", {"extract": True, "cloud_llm": True})
+            b.inst = config.load(b.inst.root)
+
+            def run(provider, key=None):
+                args = argparse.Namespace(pcmd="set", slot="embeddings", provider=provider, model="", models=None,
+                                          base_url="", dimensions=0, candidates=0, key=key, recall=None)
+                buf = io.StringIO()
+                with contextlib.redirect_stdout(buf), mock.patch.object(providers, "_lms_state", return_value="up"):
+                    providers.cli(args, b)
+                return buf.getvalue()
+
+            out = run("fireworks", key="fw-key-1")                # local → nuvem
+            self.assertIn("paga a extração de novo", out)
+            self.assertLess(out.index("paga a extração de novo"), out.index("✓ embeddings"))   # antes de gravar
+            out = run("local")                                    # nuvem → local
+            self.assertIn("paga a extração de novo", out)
+            self.assertLess(out.index("paga a extração de novo"), out.index("✓ embeddings"))
+            self.assertIn("docker compose -f services/compose.yaml -f services/compose.full.yaml", out)
+            self.assertIn("brain memory rebuild", out)
+            self.assertIn("o LLM continua na nuvem", out)
+            self.assertNotIn("nada sai da máquina", out)          # a promessa é só do embed
+            self.assertIn("LM Studio respondendo", out)
+            out = run("local")                                    # sem troca, sem aviso
+            self.assertNotIn("paga a extração de novo", out)
+            with mock.patch.object(providers, "_lms_state", return_value="installed"), \
+                    contextlib.redirect_stdout(io.StringIO()) as buf:
+                providers.cli(argparse.Namespace(pcmd="set", slot="embeddings", provider="local", model="",
+                                                 models=None, base_url="", dimensions=0, candidates=0, key=None,
+                                                 recall=None), b)
+            self.assertIn("brain setup --only memoria", buf.getvalue())      # LM Studio fora: o comando que resolve
+
+    def test_embed_switch_does_not_mention_extraction_cost(self):
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            b = _brain(tmp)
+            (tmp / ".memory-state.json").write_text("{}", encoding="utf-8")
+            self.assertNotIn("extração", providers.rebuild_warning(b))
+            self.assertIn("extração", providers.rebuild_warning(b, full=True))   # modo de destino (wizard)
 
     def test_invalid_inputs(self):
         with tempfile.TemporaryDirectory() as td:

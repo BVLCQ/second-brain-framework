@@ -394,7 +394,8 @@ Sem servidor, o motor é `none` e `/ask` usa índice → artefato → RAW. Guias
 - **Registro de egresso da memória:** a camada de memória pode enviar texto do vault a APIs
   externas configuradas pelo dono — LLM no modo full (`[memory].cloud_llm = true`) e, desde o
   plano memory-providers, embeddings e reranker de nuvem (`cloud_embeddings`/`cloud_reranker =
-  true`) e o decisor hospedado (`cloud_decision = true`; o decisor `local` não sai da máquina). O wizard avisa na tela em cada escolha de nuvem e o doctor narra; chave no
+  true`) e o decisor hospedado (`cloud_decision = true`; o decisor `local` não sai da máquina).
+  No `full`, embeddings podem ser locais (`cloud_embeddings = false`): o texto segue indo ao LLM, os vetores não saem. O wizard avisa na tela em cada escolha de nuvem e o doctor narra; chave no
   `config/.env`, nada público — a invariante da porta 5 continua.
 - Segredos **nunca** aparecem no chat, em log, em artefato ou em view. Não
   leia `.env` além de checar existência/permissão; nunca imprima seu conteúdo.

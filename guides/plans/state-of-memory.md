@@ -3,7 +3,8 @@
 > **Estado: SUPERSEDED (2026-11-07) por `guides/plans/memory-setups.md`.** O núcleo das
 > Fases 0–2 foi entregue, mas este plano descreve um mundo que mudou: banco único
 > `brain` (não `brain-mem`), mental models na Fase 8 (`mental_models = false` por
-> padrão), `full` só-nuvem para embeddings (2.19.0) — e as chaves `[memory.prices]`,
+> padrão), `full` só-nuvem para embeddings (2.19.0; **superado:** `local` voltou ao
+> cardápio do `full` como escolha, com pré-voo do LM Studio — `guides/memory.md`) — e as chaves `[memory.prices]`,
 > `entity_types` e `monthly_budget_usd` nunca existiram no config. Consulte o plano
 > vigente antes de executar qualquer fase daqui; o texto permanece como registro.
 

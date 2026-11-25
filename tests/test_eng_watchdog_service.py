@@ -162,6 +162,41 @@ class TestWatchdogComposeMode(unittest.TestCase):
         )
         self.assertNotIn(str(ROOT / "services" / "compose.full.yaml"), args)
 
+    def _lmstudio_down(self) -> None:
+        self.curl_stub = _write_stub(self.stubs / "curl-lms-down", 'exit 1')     # :1234 e :8888 fora do ar
+
+    def test_full_with_local_embeddings_does_not_recreate_while_lmstudio_is_down(self) -> None:
+        """O contêiner morreria no boot sem o LM Studio: recriar a cada 5 min só enche o log."""
+        (self.brain_dir / "config" / "brain.toml").write_text(
+            '[memory]\nengine = "hindsight"\nextract = true\ncloud_llm = true\n'
+            'embeddings_provider = "local"\n', encoding="utf-8")
+        (self.brain_dir / "config" / ".env").write_text("HINDSIGHT_API_LLM_PROVIDER=openai\n", encoding="utf-8")
+        self._lmstudio_down()
+        res = self._run_watchdog()
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertFalse(self.docker_args_file.exists())
+        log = self.log_file.read_text(encoding="utf-8")
+        self.assertIn("não recrio o contêiner", log)
+        self.assertIn("brain setup --only memoria", log)
+
+    def test_full_without_embeddings_key_defaults_to_local_and_waits_for_lmstudio(self) -> None:
+        (self.brain_dir / "config" / "brain.toml").write_text(
+            '[memory]\nengine = "hindsight"\nextract = true\ncloud_llm = true\n', encoding="utf-8")
+        self._lmstudio_down()
+        res = self._run_watchdog()
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertFalse(self.docker_args_file.exists())
+
+    def test_full_with_cloud_embeddings_still_recreates_without_lmstudio(self) -> None:
+        (self.brain_dir / "config" / "brain.toml").write_text(
+            '[memory]\nengine = "hindsight"\nextract = true\ncloud_llm = true\n'
+            'embeddings_provider = "fireworks"\n', encoding="utf-8")
+        (self.brain_dir / "config" / ".env").write_text("HINDSIGHT_API_LLM_PROVIDER=openai\n", encoding="utf-8")
+        self._lmstudio_down()
+        res = self._run_watchdog()
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertEqual(self.docker_args_file.read_text(encoding="utf-8").splitlines()[-2:], ["up", "-d"])
+
     def test_none_mode_skips_recreate(self) -> None:
         (self.brain_dir / "config" / "brain.toml").write_text(
             '[memory]\n'

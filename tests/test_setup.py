@@ -345,13 +345,21 @@ class ProviderRegistryTests(unittest.TestCase):
                 "embeddings": {"provider": "custom", "model": "meu-emb", "key": "ck-1"},
             })
 
-    def test_full_with_local_embeddings_refuses(self):
-        with self.assertRaises(util.BrainError):
-            setup.validate_memory_setup({
-                "mode": "full", "consent": True,
-                "llm": {"provider": "anthropic", "key": "sk-1"},
-                "embeddings": {"provider": "local"},
-            })
+    def test_full_with_local_embeddings_is_accepted_and_unnamed_stays_cloud(self):
+        v = setup.validate_memory_setup({
+            "mode": "full", "consent": True,
+            "llm": {"provider": "anthropic", "key": "sk-1"},
+            "embeddings": {"provider": "local"},
+        })
+        self.assertEqual(v["emb"], "local")
+        self.assertEqual(v["slots"]["embeddings"]["provider"], "local")
+        v = setup.validate_memory_setup({"mode": "full", "consent": True,
+                                         "llm": {"provider": "anthropic", "key": "sk-1"}})
+        self.assertEqual(v["emb"], "fireworks")                  # o default do full segue o de nuvem
+        with self.assertRaises(util.BrainError):                 # fora do registro continua recusado
+            setup.validate_memory_setup({"mode": "full", "consent": True,
+                                         "llm": {"provider": "anthropic", "key": "sk-1"},
+                                         "embeddings": {"provider": "turbo"}})
 
     def test_legacy_return_coherent_for_flat_payload(self):
         v_emb = setup.validate_memory_setup({"mode": "lite", "embeddings": "fireworks", "key": "fw-1"})
@@ -611,6 +619,209 @@ class LmStudioTests(unittest.TestCase):
                 setup._run_memoria(b, ui, mode_hint="embed")
             self.assertEqual(order[:2], ["ensure", "compose"])        # boot do Hindsight exige embeddings antes
             self.assertTrue(any("LM Studio pronto para o Brain" in s for s in ui.said))
+
+
+class FullLocalEmbeddingsTests(unittest.TestCase):
+    """`full` + embeddings `local`: o pré-voo do LM Studio vale antes de qualquer `up -d` (wizard, `brain setup
+    --only memoria` e job do painel passam por `_run_memoria`), e o default do full segue o de nuvem."""
+
+    @staticmethod
+    def _full_local(b: Brain) -> None:
+        config.set_keys(b.inst, "memory", {"engine": "hindsight", "llm_provider": "claude-code",
+                                           "embeddings_provider": "local", "cloud_embeddings": False})
+        b.inst = config.load(b.inst.root)
+        b.reload()
+
+    def _run(self, b: Brain, *, lms_up, ensure, health=None, calls=None):
+        from unittest import mock
+        calls = [] if calls is None else calls
+        ui = ScriptedUI(["ok"])                                # o aceite digitado do full
+        with mock.patch.object(setup, "docker_available", return_value=True), \
+                mock.patch.object(setup, "hindsight_health", return_value=health), \
+                mock.patch.object(setup, "compose_up",
+                                  side_effect=lambda *a, **k: calls.append("compose") or True), \
+                mock.patch.object(setup, "wait_hindsight", return_value=True), \
+                mock.patch.object(setup, "lmstudio_up", return_value=lms_up), \
+                mock.patch.object(setup, "lmstudio_ensure",
+                                  side_effect=lambda ui_, model="": calls.append("ensure") or ensure), \
+                mock.patch.object(memory, "setup", side_effect=lambda bb: ["brain"]), \
+                mock.patch.object(memory, "client"):
+            try:
+                setup._run_memoria(b, ui, mode_hint="full", only=[])
+            except util.BrainError as exc:
+                return ui, calls, exc
+        return ui, calls, None
+
+    def test_lmstudio_fora_do_ar_para_antes_do_up(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            self._full_local(b)
+            ui, calls, err = self._run(b, lms_up=False, ensure=False)
+            self.assertIsNotNone(err)                            # o job não termina em sucesso
+            self.assertEqual(calls, ["ensure"])                  # tentou subir o LM Studio; o compose nunca rodou
+            said = "\n".join(ui.said)
+            self.assertIn("brain setup --only memoria", said)    # o comando que resolve
+            self.assertIn("Nada foi recriado", said)
+            self.assertNotEqual(memory.mode(config.load(b.inst.root).cfg["memory"]), "full")   # modo não gravado
+
+    def test_container_ja_no_ar_e_sem_mudanca_de_env_nao_exige_o_pre_voo(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            self._full_local(b)
+            _, calls, err = self._run(b, lms_up=False, ensure=False, health={"status": "ok"})
+            self.assertIsNone(err)
+            self.assertEqual(calls, [])                          # nada a recriar → nada a checar
+
+    def test_lmstudio_pronto_ensure_antes_do_compose_e_full_gravado(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            self._full_local(b)
+            ui, calls, err = self._run(b, lms_up=False, ensure=True)
+            self.assertIsNone(err)
+            self.assertEqual(calls[:2], ["ensure", "compose"])
+            self.assertEqual(memory.mode(config.load(b.inst.root).cfg["memory"]), "full")
+            mem = config.load(b.inst.root).cfg["memory"]
+            self.assertEqual((mem["cloud_llm"], mem["cloud_embeddings"]), (True, False))   # egresso dito do jeito certo
+            self.assertTrue(any("LM Studio pronto para o Brain" in x for x in ui.said))
+
+    def test_configure_memory_headless_falha_o_job_quando_o_full_nao_subiu(self):
+        """O job do painel não pode terminar em sucesso com o full parado no pré-voo."""
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            self._full_local(b)
+            with mock.patch.object(setup, "docker_available", return_value=True), \
+                    mock.patch.object(setup, "hindsight_health", return_value=None), \
+                    mock.patch.object(setup, "compose_up", side_effect=AssertionError("não pode subir")), \
+                    mock.patch.object(setup, "lmstudio_up", return_value=False), \
+                    mock.patch.object(setup, "lmstudio_ensure", return_value=False):
+                with self.assertRaises(util.BrainError):
+                    setup.configure_memory(b, {"mode": "full", "consent": True, "provider": "claude-code",
+                                               "embeddings": "local"}, say=lambda *_: None)
+
+    def test_xai_login_nao_sobe_conteiner_que_morreria_sem_lmstudio(self):
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            self._full_local(b)
+            config.set_keys(b.inst, "memory", {"extract": True, "cloud_llm": True})
+            b.inst = config.load(b.inst.root)
+            with mock.patch.object(setup, "docker_available", return_value=True), \
+                    mock.patch.object(setup, "compose_up", side_effect=AssertionError("não pode subir")), \
+                    mock.patch.object(setup, "lmstudio_up", return_value=False), \
+                    mock.patch.object(setup, "lmstudio_ensure", return_value=False):
+                self.assertFalse(setup._auth_xai_device(b, ScriptedUI([])))
+
+    def test_default_do_full_e_nuvem_e_local_so_vem_pre_selecionado_quem_ja_usa_memoria(self):
+        from unittest import mock
+        class PickUI(ScriptedUI):
+            def choice(self, prompt, options, default):
+                self.seen = (list(options), default)
+                return default
+
+            def secret(self, prompt):
+                return "fw-demo"
+        for engine, expect in (("none", "fireworks"), ("hindsight", "local")):
+            with tempfile.TemporaryDirectory() as td:
+                b = _brain(Path(td))
+                config.set_keys(b.inst, "memory", {"engine": engine, "embeddings_provider": "local"})
+                b.inst = config.load(b.inst.root)
+                b.reload()
+                ui = PickUI([])
+                with mock.patch.object(setup, "lmstudio_up", return_value=True):
+                    setup._providers_step(b, ui, ["embeddings"], going_full=True)
+                options, default = ui.seen
+                self.assertIn("local", options)                  # `local` entra no cardápio do full…
+                self.assertEqual(default, expect, engine)        # …mas só pré-seleciona quem já usava memória
+
+    def test_wizard_narra_egresso_do_full_com_embeddings_local(self):
+        from unittest import mock
+        class LocalUI(ScriptedUI):
+            def choice(self, prompt, options, default):
+                return "local"
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            ui = LocalUI([])
+            with mock.patch.object(setup, "lmstudio_up", return_value=True):
+                setup._providers_step(b, ui, ["embeddings"], going_full=True)
+            said = "\n".join(ui.said)
+            self.assertIn("o LLM continua na nuvem", said)
+            self.assertNotIn("só-nuvem", said)
+            self.assertEqual(config.load(b.inst.root).cfg["memory"]["cloud_embeddings"], False)
+
+    def test_troca_para_local_com_container_no_ar_nao_grava_se_lmstudio_caiu(self):
+        """Full já no ar, embeddings de nuvem, LM Studio fora: não grava local e o job falha.
+        A nova tentativa, com o LM Studio no ar, grava e recria — não acha que não há o que fazer."""
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            config.set_keys(b.inst, "memory", {
+                "engine": "hindsight", "extract": True, "cloud_llm": True,
+                "llm_provider": "claude-code", "embeddings_provider": "fireworks",
+                "cloud_embeddings": True,
+            })
+            b.inst = config.load(b.inst.root)
+            b.reload()
+            calls: list[str] = []
+
+            def compose(*_a, **_k):
+                calls.append("compose")
+                return True
+
+            with mock.patch.object(setup, "docker_available", return_value=True), \
+                    mock.patch.object(setup, "hindsight_health", return_value={"status": "ok"}), \
+                    mock.patch.object(setup, "compose_up", side_effect=compose), \
+                    mock.patch.object(setup, "wait_hindsight", return_value=True), \
+                    mock.patch.object(setup, "lmstudio_up", return_value=False), \
+                    mock.patch.object(setup, "lmstudio_ensure", return_value=False), \
+                    mock.patch.object(memory, "setup", side_effect=lambda bb: ["brain"]), \
+                    mock.patch.object(memory, "client"):
+                with self.assertRaises(util.BrainError) as ctx:
+                    setup.configure_memory(b, {"mode": "full", "consent": True, "provider": "claude-code",
+                                               "embeddings": "local"}, say=lambda *_: None)
+            self.assertIn("nada foi gravado", str(ctx.exception))
+            self.assertEqual(calls, [])
+            mem = config.load(b.inst.root).cfg["memory"]
+            self.assertEqual(mem["embeddings_provider"], "fireworks")
+            self.assertTrue(mem["cloud_embeddings"])
+            self.assertFalse(setup._recreate_mark(b).exists())
+
+            with mock.patch.object(setup, "docker_available", return_value=True), \
+                    mock.patch.object(setup, "hindsight_health", return_value={"status": "ok"}), \
+                    mock.patch.object(setup, "compose_up", side_effect=compose), \
+                    mock.patch.object(setup, "wait_hindsight", return_value=True), \
+                    mock.patch.object(setup, "lmstudio_up", return_value=True), \
+                    mock.patch.object(memory, "setup", side_effect=lambda bb: ["brain"]), \
+                    mock.patch.object(memory, "client"):
+                final = setup.configure_memory(b, {"mode": "full", "consent": True, "provider": "claude-code",
+                                                   "embeddings": "local"}, say=lambda *_: None)
+            self.assertEqual(final, "full")
+            self.assertEqual(calls, ["compose"])
+            mem = config.load(b.inst.root).cfg["memory"]
+            self.assertEqual(mem["embeddings_provider"], "local")
+            self.assertFalse(mem["cloud_embeddings"])
+            self.assertTrue(mem["cloud_llm"])
+            self.assertFalse(setup._recreate_mark(b).exists())
+
+    def test_cli_set_deixa_recriacao_pendente_e_o_setup_sobe(self):
+        """`providers set` grava e aponta o setup; o setup tem de recriar, mesmo com o contêiner saudável."""
+        from brainlib import providers
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            config.set_keys(b.inst, "memory", {
+                "engine": "hindsight", "extract": True, "cloud_llm": True,
+                "embeddings_provider": "fireworks", "cloud_embeddings": True,
+            })
+            b.inst = config.load(b.inst.root)
+            b.reload()
+            providers.set_slot(b, "embeddings", "local")
+            self.assertTrue(setup._recreate_mark(b).exists())
+            (b.inst.config_dir / ".env").write_text("HINDSIGHT_API_LLM_API_KEY=sk-demo\n", encoding="utf-8")
+            self.assertEqual(config.load(b.inst.root).cfg["memory"]["embeddings_provider"], "local")
+            _, calls, err = self._run(b, lms_up=True, ensure=True, health={"status": "ok"})
+            self.assertIsNone(err)
+            self.assertEqual(calls, ["compose"])
+            self.assertFalse(setup._recreate_mark(b).exists())
 
 
 class DockerEnsureTests(unittest.TestCase):
