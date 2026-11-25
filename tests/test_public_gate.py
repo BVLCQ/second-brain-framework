@@ -311,6 +311,17 @@ class GateTests(unittest.TestCase):
             with self.subTest(arquivo=nome):
                 self._commitado_e_solto(nome, data, "quasaré labs\n")
 
+    def test_trecho_de_binario_com_byte_invalido_e_achado_uma_vez(self):
+        # o trecho que não é UTF-8 é lido uma vez só — a leitura em CP1252 é da busca. Lido em duas
+        # leituras, ele virava duas linhas, e o mesmo trecho saía achado duas vezes
+        _commit_bytes(self.repo, "dados.dat", b"hdr\0\xffconta da acme-corp\0fim\0")
+        code, out = self._gate(detalhes=True)
+        self.assertEqual(code, self.mod.FOUND)
+        linhas = [ln for ln in out.splitlines() if "dados.dat" in ln]
+        self.assertEqual(len(linhas), 1, linhas)
+        self.assertRegex(linhas[0], r"^  ✗ dados\.dat \(commit [0-9a-f]{9}\) \[binário\]:1 — "
+                         + re.escape(self.mod.PRIVATE_RULE))
+
     def test_nome_decomposto_ou_com_espaco_a_mais_e_o_mesmo_nome(self):
         # nome de arquivo vindo do macOS e texto de vários editores estão decompostos (NFD: `e` +
         # acento em vez de `é`). E `acme  corp` com dois espaços, ou com tabulação, é o mesmo nome

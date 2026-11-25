@@ -670,13 +670,12 @@ def _wide_text(data: bytes) -> str | None:
     return data.decode(best[1], errors="replace").lstrip("\ufeff")
 
 
-def _decode_piece(piece: bytes) -> list[str]:
-    """Leituras de um trecho em bytes: em UTF-8 e, se ele não é UTF-8 válido, também em CP1252 — mesmo
-    motivo de `_forms`: a planilha em pt-BR guarda o acento num byte que o UTF-8 não entende."""
-    try:
-        return [piece.decode("utf-8")]
-    except UnicodeDecodeError:
-        return [piece.decode("utf-8", errors="replace"), piece.decode("cp1252", errors="replace")]
+def _decode_piece(piece: bytes) -> str:
+    """Um trecho em bytes como texto, em UTF-8 — o byte que não é UTF-8 fica guardado como surrogate
+    (`surrogateescape`), como na linha de diff. A leitura em CP1252 (planilha em pt-BR exportada pelo
+    Excel) é a de `_forms`, na busca. Duas leituras aqui viravam duas linhas: o mesmo trecho, achado
+    duas vezes."""
+    return piece.decode("utf-8", "surrogateescape")
 
 
 def _binary_lines(data: bytes) -> list[str]:
@@ -686,8 +685,8 @@ def _binary_lines(data: bytes) -> list[str]:
     sem perder termo de 4 ou 5 caracteres entre dois bytes nulos) e, se é texto em UTF-16/UTF-32, o
     texto decodificado."""
     if b"\0" not in data:
-        return [ln for text in _decode_piece(data) for ln in text.splitlines()]
-    out = [ln for m in _PRINTABLE_RUN.finditer(data) for ln in _decode_piece(m.group(0))]
+        return _decode_piece(data).splitlines()
+    out = [_decode_piece(m.group(0)) for m in _PRINTABLE_RUN.finditer(data)]
     wide = _wide_text(data)
     if wide is not None:
         out += wide.splitlines()
