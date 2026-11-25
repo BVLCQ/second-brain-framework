@@ -236,7 +236,7 @@ def _scratch(root: Path) -> bool:
 
 def prepare(brain, *, key: str | None = None, run=None, http_post=None,
             system: str | None = None, machine: str | None = None, nvidia: bool | None = None,
-            python: str | None = None) -> dict:
+            python: str | None = None, sleep=None) -> dict:
     """Instala (se faltar), sobe e passa no teste de fumaça. Não grava o slot.
 
     Recusa no noturno e em plataforma sem MLX/vLLM — nesse caso nada é instalado.
@@ -278,7 +278,7 @@ def prepare(brain, *, key: str | None = None, run=None, http_post=None,
                 code=4)
     _install_unit(inst, run=run)
     _start_unit(inst, run=run)
-    if not smoke(HOST_URL, local_key, http_post=http_post):
+    if not _wait_smoke(HOST_URL, local_key, http_post=http_post, sleep=sleep):
         stop_service(inst, remove=False, run=run)
         raise util.BrainError(
             "teste de fumaça do decisor falhou — o slot não foi ligado. "
@@ -286,6 +286,18 @@ def prepare(brain, *, key: str | None = None, run=None, http_post=None,
             code=4)
     return {"kind": kind, "local_key": local_key, "container_url": CONTAINER_URL,
             "host_url": HOST_URL, "installed": True, "smoked": True}
+
+
+def _wait_smoke(url: str, key: str, *, http_post, sleep, attempts: int = 30, pause: float = 3) -> bool:
+    """O kickstart volta antes do servidor escutar. A fumaça espera, não dispara uma vez."""
+    import time
+    sleep = time.sleep if sleep is None else sleep
+    for i in range(attempts):
+        if smoke(url, key, http_post=http_post):
+            return True
+        if i + 1 < attempts:
+            sleep(pause)
+    return False
 
 
 def _default_run(cmd: list[str]) -> tuple[int, str]:
@@ -321,10 +333,17 @@ def _install_unit(inst, *, run) -> None:
 
 
 def _start_unit(inst, *, run) -> None:
+    """Sobe o serviço. `kickstart` exige o job carregado; depois de um bootout (ocioso) o bootstrap recarrega."""
     if _scratch(Path(inst.root)):
         return
     if sys.platform == "darwin":
-        run(["launchctl", "kickstart", "-k", f"gui/{os.getuid()}/{LABEL}"])
+        uid = str(os.getuid())
+        label = f"gui/{uid}/{LABEL}"
+        code, _out = run(["launchctl", "kickstart", "-k", label])
+        if code != 0:
+            plist = Path.home() / "Library" / "LaunchAgents" / f"{LABEL}.plist"
+            run(["launchctl", "bootstrap", f"gui/{uid}", str(plist)])
+            run(["launchctl", "kickstart", "-k", label])
     elif sys.platform == "linux":
         run(["systemctl", "--user", "start", "segundo-cerebro-decider.service"])
 

@@ -133,7 +133,7 @@ def _log(inst, msg: str) -> None:
 
 
 def ensure(inst, *, reason: str = "cli", install: bool = False, probes=None, run=None,
-           sleep=time.sleep, waits: int = 3) -> dict:
+           sleep=time.sleep, waits: int = 12, pause: float = 5) -> dict:
     """Confere cada dependência exigida e religa a que estiver fora.
 
     `install=True` só vale fora do noturno e só para o decisor (o resto é o setup).
@@ -160,7 +160,7 @@ def ensure(inst, *, reason: str = "cli", install: bool = False, probes=None, run
     deps: dict[str, dict] = {}
     for name in req:
         deps[name] = _one(inst, name, mem, probes=probes, run=run, install=install,
-                          nightly=nightly, reason=reason, sleep=sleep, waits=waits)
+                          nightly=nightly, reason=reason, sleep=sleep, waits=waits, pause=pause)
     if any(d["state"] == "failed" for d in deps.values()):
         state = "failed"
     elif any(d["state"] == "starting" for d in deps.values()):
@@ -174,7 +174,7 @@ def ensure(inst, *, reason: str = "cli", install: bool = False, probes=None, run
 
 
 def _one(inst, name: str, mem: dict, *, probes, run, install: bool, nightly: bool,
-         reason: str, sleep, waits: int) -> dict:
+         reason: str, sleep, waits: int, pause: float) -> dict:
     up = probes.get(name, lambda: False)
     try:
         healthy = bool(up())
@@ -192,9 +192,9 @@ def _one(inst, name: str, mem: dict, *, probes, run, install: bool, nightly: boo
     if name == "decider" and reason == "watchdog" and decider.idle_flag(inst).exists():
         return {"state": "ready", "detail": "parado de propósito (ocioso) — abre o Brain para religar"}
     if name == "lmstudio":
-        return _restart_lmstudio(inst, run=run, probes=probes, sleep=sleep, waits=waits)
+        return _restart_lmstudio(inst, run=run, probes=probes, sleep=sleep, waits=waits, pause=pause)
     if name == "docker":
-        return _restart_docker(inst, run=run, probes=probes, sleep=sleep, waits=waits)
+        return _restart_docker(inst, run=run, probes=probes, sleep=sleep, waits=waits, pause=pause)
     if name == "hindsight":
         lms_up = True
         if mem.get("embeddings_provider", "local") == "local":
@@ -206,7 +206,7 @@ def _one(inst, name: str, mem: dict, *, probes, run, install: bool, nightly: boo
         if blocked:
             _log(inst, blocked)
             return {"state": "failed", "detail": blocked}
-        return _restart_hindsight(inst, mem, run=run, probes=probes, sleep=sleep, waits=waits)
+        return _restart_hindsight(inst, mem, run=run, probes=probes, sleep=sleep, waits=waits, pause=pause)
     if name == "decider":
         if not decider.installed(inst):
             if nightly or not install:
@@ -215,40 +215,41 @@ def _one(inst, name: str, mem: dict, *, probes, run, install: bool, nightly: boo
                         "decisor local não instalado — escolha Decisão → Local de novo para instalar"}
             return {"state": "failed",
                     "detail": "instalação do decisor é do slot, não do ensure — nada instalado aqui"}
-        return _restart_decider(inst, run=run, probes=probes, sleep=sleep, waits=waits)
+        return _restart_decider(inst, run=run, probes=probes, sleep=sleep, waits=max(waits, 18), pause=pause)
     return {"state": "failed", "detail": f"dependência desconhecida: {name}"}
 
 
-def _wait(probe, sleep, waits: int) -> bool:
-    for _ in range(waits):
+def _wait(probe, sleep, waits: int, pause: float = 5) -> bool:
+    for i in range(waits):
         try:
             if probe():
                 return True
         except Exception:
             pass
-        sleep(0)
+        if i + 1 < waits:
+            sleep(pause)
     return False
 
 
-def _restart_lmstudio(inst, *, run, probes, sleep, waits: int) -> dict:
+def _restart_lmstudio(inst, *, run, probes, sleep, waits: int, pause: float = 5) -> dict:
     from . import setup
     if not setup.lmstudio_installed():
         return {"state": "failed",
                 "detail": "LM Studio ausente — brain setup --only memoria baixa e configura"}
     run([setup.lms_bin() or "lms", "server", "start"])
-    if _wait(probes["lmstudio"], sleep, waits):
+    if _wait(probes["lmstudio"], sleep, waits, pause):
         return {"state": "ready", "detail": "religado em :1234"}
     return {"state": "failed", "detail": "LM Studio não respondeu em :1234"}
 
 
-def _restart_docker(inst, *, run, probes, sleep, waits: int) -> dict:
+def _restart_docker(inst, *, run, probes, sleep, waits: int, pause: float = 5) -> dict:
     from . import setup
     if not setup.docker_installed():
         return {"state": "failed",
                 "detail": "runtime de contêiner ausente — brain setup --only memoria instala"}
     if sys.platform == "darwin" and shutil_which_orb():
         run(["orbctl", "start"])
-    if _wait(probes["docker"], sleep, waits):
+    if _wait(probes["docker"], sleep, waits, pause):
         return {"state": "ready", "detail": "runtime no ar"}
     return {"state": "failed", "detail": "runtime de contêiner não subiu"}
 
@@ -258,14 +259,14 @@ def shutil_which_orb() -> bool:
     return shutil.which("orbctl") is not None or Path("/opt/homebrew/bin/orbctl").exists()
 
 
-def _restart_hindsight(inst, mem: dict, *, run, probes, sleep, waits: int) -> dict:
+def _restart_hindsight(inst, mem: dict, *, run, probes, sleep, waits: int, pause: float = 5) -> dict:
     from .memory import mode
     m = mode(mem)
     docker = _docker_bin()
     argv = [docker, *compose_argv(Path(inst.root), m)]
     code, out = run(argv)
     _log(inst, f"compose ({m}) code={code} {out[:200]}")
-    if _wait(probes["hindsight"], sleep, waits):
+    if _wait(probes["hindsight"], sleep, waits, pause):
         return {"state": "ready", "detail": f"contêiner no ar (modo {m})"}
     return {"state": "failed", "detail": f"Hindsight sem health depois do compose (modo {m})"}
 
@@ -278,7 +279,7 @@ def _docker_bin() -> str:
     return shutil.which("docker") or "docker"
 
 
-def _restart_decider(inst, *, run, probes, sleep, waits: int) -> dict:
+def _restart_decider(inst, *, run, probes, sleep, waits: int, pause: float = 5) -> dict:
     flag = decider.idle_flag(inst)
     if flag.exists():
         try:
@@ -286,7 +287,7 @@ def _restart_decider(inst, *, run, probes, sleep, waits: int) -> dict:
         except OSError:
             pass
     decider._start_unit(inst, run=run)
-    if _wait(probes["decider"], sleep, waits):
+    if _wait(probes["decider"], sleep, waits, pause):
         return {"state": "ready", "detail": f"respondendo em {decider.HOST_URL}"}
     return {"state": "failed", "detail": f"decisor não respondeu em {decider.HOST_URL} — ver vault/logs/decider.log"}
 

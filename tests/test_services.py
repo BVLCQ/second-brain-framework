@@ -38,7 +38,16 @@ class PlatformTests(unittest.TestCase):
     def test_linux_without_gpu_refuses(self):
         self.assertIsNone(decider.platform_kind(system="linux", machine="x86_64", nvidia=False))
 
-    def test_prepare_refuses_without_installing(self):
+    def test_smoke_waits_for_the_server_to_bind(self):
+        calls = []
+
+        def post(url, body, key):
+            calls.append(url)
+            return len(calls) >= 3
+
+        self.assertTrue(decider._wait_smoke("http://127.0.0.1:8000", "bdk_x", http_post=post,
+                                            sleep=lambda _s: None, attempts=5, pause=3))
+        self.assertEqual(len(calls), 3)
         with tempfile.TemporaryDirectory() as td:
             b = _brain(Path(td))
             ran = []
@@ -167,10 +176,16 @@ class IdleTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             flag = Path(td) / "idle-stopped"
             stopped = []
-            self.assertEqual(mod.maybe_stop_decider(True, 1.0, up=lambda: True, stop=lambda: stopped.append(1),
-                                                    flag=flag), "ocupado")
+            note, seen = mod.maybe_stop_decider(True, 100.0, up=lambda: True, stop=lambda: stopped.append(1),
+                                                flag=flag, idle_s=15)
+            self.assertEqual(note, "ocupado")
             self.assertEqual(stopped, [])
-            self.assertEqual(mod.maybe_stop_decider(False, 2.0, up=lambda: True, stop=lambda: stopped.append(1),
-                                                    flag=flag), "parado")
+            note, seen = mod.maybe_stop_decider(False, 100.0, up=lambda: True, stop=lambda: stopped.append(1),
+                                                flag=flag, last_busy=0.0, idle_s=15)
+            self.assertEqual(note, "aguardando")
+            self.assertEqual(stopped, [])
+            note, seen = mod.maybe_stop_decider(False, 120.0, up=lambda: True, stop=lambda: stopped.append(1),
+                                                flag=flag, last_busy=seen, idle_s=15)
+            self.assertEqual(note, "parado")
             self.assertEqual(stopped, [1])
             self.assertTrue(flag.is_file())
