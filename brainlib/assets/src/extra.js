@@ -3987,8 +3987,10 @@ window.exitOnboarding = exitOnboarding;
       } catch (e) {}
     };
     pollSvc();
-    const svcTimer = setInterval(pollSvc, 8000);
-    if (svcTimer && typeof svcTimer.unref === "function") svcTimer.unref();
+    if (typeof setInterval === "function") {
+      const svcTimer = setInterval(pollSvc, 8000);
+      if (svcTimer && typeof svcTimer.unref === "function") svcTimer.unref();
+    }
   }
 })();
 

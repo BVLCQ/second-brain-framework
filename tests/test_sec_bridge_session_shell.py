@@ -611,8 +611,12 @@ class BridgeSessionShellSecurityTests(unittest.TestCase):
                 return json.loads(proc.stdout.strip())
 
             # 1. Rota #todo&t=<token>: hidrata via /api/data e renderiza a vista #todo (não #home)
+            # A pílula de serviços pode pedir /api/services à parte; não entra na hidratação.
+            def hydrate(calls):
+                return [c for c in calls if c != "/api/services"]
+
             res_todo = run_mode(dash_shell, f"#todo&t={self.token}")
-            self.assertEqual(res_todo["fetchCalls"], ["/api/data"])
+            self.assertEqual(hydrate(res_todo["fetchCalls"]), ["/api/data"])
             self.assertEqual(res_todo["hash"], "#todo")
             self.assertTrue(res_todo["live"])
             self.assertEqual(res_todo["ownername"], "Você (demo)")
@@ -621,14 +625,14 @@ class BridgeSessionShellSecurityTests(unittest.TestCase):
 
             # 2. portfolio.html com #pf/opps&t=<token>: hidrata via /api/portfolio e renderiza Oportunidades
             res_pf = run_mode(pf_shell, f"#pf/opps&t={self.token}")
-            self.assertEqual(res_pf["fetchCalls"], ["/api/portfolio"])
+            self.assertEqual(hydrate(res_pf["fetchCalls"]), ["/api/portfolio"])
             self.assertEqual(res_pf["hash"], "#pf/opps")
             self.assertEqual(res_pf["ownername"], "Você (demo)")
             self.assertIn("Oportunidades", res_pf["viewHtml"])
 
             # 3. Token inválido -> ponte responde 401 -> limpa sessionStorage e mostra prompt de reautenticação
             res_bad = run_mode(dash_shell, "#t=token-invalido")
-            self.assertEqual(res_bad["fetchCalls"], ["/api/data"])
+            self.assertEqual(hydrate(res_bad["fetchCalls"]), ["/api/data"])
             self.assertFalse(res_bad["live"])
             self.assertIsNone(res_bad["sessionTok"])
             self.assertIn("data-auth-required", res_bad["viewHtml"])
