@@ -6,7 +6,6 @@
 
 - **Falha do git na varredura não é dado pessoal.** Se o git falha ou estoura o tempo no meio do `upstream scan`, o comando sai com código 1. O hook diz para corrigir o erro acima e tentar de novo. Código 4 continua só para achado de verdade. Quem usa o git direto no `update` não muda.
 - **O diálogo de atualização cabe na janela.** Título e botões ficam visíveis. Só a lista de mudanças rola, dentro do diálogo. Rolar em cima dele não move a página atrás.
->>>>>>> origin/main
 
 ## 2.45.0 — o decisor local se instala sozinho, e o Brain religa o que estiver fora
 
