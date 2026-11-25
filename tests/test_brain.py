@@ -1040,6 +1040,7 @@ class DashboardAssetTests(unittest.TestCase):
         # (memory harness saiu: o canal MCP é CLI do agente — brain harness connect/disconnect/status)
         "harness connect", "harness disconnect", "harness status",
         "note edit", "setup",                          # wizard do dono: terminal primeiro (TUI/painel = Fases 2–3 do plano)
+        "feedback approve",   # o clique do painel é `feedback push --approval`; approve é o ok do chat, amarrado ao texto
         "query actions", "query decisions", "query person", "query entity", "query sql",   # ferramenta do agente/MCP (brain_query)
         "index rebuild", "index update", "index status",          # ciclo de vida: terminal (doctor avisa)
         "route",                                               # ferramenta do agente/hook (Fase 4.5)

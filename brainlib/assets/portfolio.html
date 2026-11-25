@@ -6334,7 +6334,7 @@ V.feedback = (q) => {
       (f.status === "criado"
         ? ' · <button class="btn tiny" data-fbretract="' + esc(f.id) + '" title="retratar issue publicada (fechar ou corrigir texto)">r retratar</button>'
         : "") +
-      "</header>" + (f.body ? '<div class="msg">' + esc(f.body) + "</div>" : "") +
+      "</header>" + ((f.issue_body || f.body) ? '<div class="msg">' + esc(f.issue_title || "") + "\n\n" + esc(f.issue_body || f.body) + "</div>" : "") +
       ((f.status === "retirado" || f.status === "retratado") && f.reason
         ? '<div class="msg muted"><b>Motivo' + (f.retract_mode ? " (" + esc(f.retract_mode) + ")" : "") + ":</b> " + esc(f.reason) +
           (commentUrl ? ' · <a href="' + esc(commentUrl) + '" target="_blank" rel="noopener">comentário</a>' : "") + "</div>"

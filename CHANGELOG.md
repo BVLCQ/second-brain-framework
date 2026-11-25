@@ -1,3 +1,7 @@
+## 2.48.0 — o ok de uma sugestão fica amarrado ao texto que subiria
+
+- **Aprovar uma sugestão grava o texto exato.** `feedback approve` guarda o hash do título com a tag e do corpo com molde e rodapé. Se o texto mudar depois, o push recusa até um novo ok. Sem aprovação, o push mostra esse texto e para. O clique no painel continua publicando o texto que está na tela. A aba Sugestões mostra o título e o corpo finais, não só o rascunho cru.
+
 ## 2.45.0 — o decisor local se instala sozinho, e o Brain religa o que estiver fora
 
 - **Escolher Local instala o servidor.** Decisão → Local (wizard, painel ou CLI) instala o `hs-decide-1-flash` num venv próprio, sobe o `/v1/systemone` (MLX no Apple Silicon, vLLM no Linux com GPU) e só grava o slot depois de um julgamento de verdade. Sem Apple Silicon e sem GPU NVIDIA, a escolha é recusada e nada é instalado. Chave, modelo e URL não são pedidos: a chave local fica numa variável separada da `hsk_` da nuvem. Se o teste falha, o slot volta a desligado.

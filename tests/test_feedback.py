@@ -323,6 +323,28 @@ class FeedbackFlowTests(unittest.TestCase):
         self.assertEqual(m["feedback"][0]["id"], "FB-0001")
         self.assertEqual((m["feedback"][0]["kind"], m["feedback"][0]["status"]), ("sugestao", "pendente"))
         self.assertEqual(m["counts"]["feedback_pending"], 1)
+        self.assertEqual(m["feedback"][0]["issue_title"], feedback.issue_title(self.brain.state.feedbacks["FB-0001"]))
+        self.assertEqual(m["feedback"][0]["issue_body"], feedback.issue_body(self.brain.state.feedbacks["FB-0001"]))
+        self.assertEqual(m["feedback"][0]["text_sha"], feedback.public_sha(self.brain.state.feedbacks["FB-0001"]))
+
+    def test_push_sem_aprovacao_mostra_o_texto_exato(self):
+        feedback.add(self.brain, "sugestao", "Lembrete de fornada", "A marina-demo esquece o timer")
+        with self.assertRaises(util.BrainError) as cm:
+            feedback.push(self.brain, "FB-0001", approval="")
+        self.assertIn("[Sugestão] Lembrete de fornada", str(cm.exception))
+        self.assertIn("sem aprovação", str(cm.exception))
+        self.assertEqual(self.brain.state.feedbacks["FB-0001"].status, "pendente")
+
+    def test_revise_depois_do_ok_recusa_o_push(self):
+        feedback.add(self.brain, "sugestao", "Lembrete de fornada", "A marina-demo esquece o timer")
+        feedback.approve(self.brain, "FB-0001", "ok")
+        feedback.revise(self.brain, "FB-0001", title="Lembrete da fornada da tarde")
+        with self.assertRaises(util.BrainError) as cm:
+            feedback.push(self.brain, "FB-0001", approval="ok")
+        self.assertIn("texto mudou", str(cm.exception))
+        feedback.approve(self.brain, "FB-0001", "ok")
+        self.assertEqual(feedback._bound_sha(self.brain.state.feedbacks["FB-0001"]),
+                         feedback.public_sha(self.brain.state.feedbacks["FB-0001"]))
 
     def test_cli_add_no_push(self):
         from brainlib import cli as cli_mod

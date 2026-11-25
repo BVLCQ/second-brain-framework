@@ -182,6 +182,7 @@ class ModelBuilder:
                 "reason": f"último movimento {util.fmt_date(last)}" if last else "sem prazos próximos"}
 
     def build(self) -> dict:
+        from . import feedback as _fb
         st, plan, today = self.st, self.plan, self.today
         actions = [self.action(a) for a in st.actions.values()]
         by_id = {a["id"]: a for a in actions}
@@ -303,6 +304,8 @@ class ModelBuilder:
             "plan_changes": [{**c, "date": _iso(c["date"])} for c in st.plan_changes],
             "plan_warnings": plan.warnings,
             "feedback": [{"id": f.id, "kind": f.kind, "title": f.title, "body": f.body,
+                          "issue_title": _fb.issue_title(f), "issue_body": _fb.issue_body(f),
+                          "text_sha": _fb.public_sha(f),
                           "status": f.status, "reason": f.reason, "comment_url": f.comment_url,
                           "retract_mode": f.retract_mode, "added_by": f.added_by,
                           "number": f.number, "url": f.url, "issue_state": f.issue_state,
