@@ -18,9 +18,11 @@ o `--root` é um worktree do PR: os scripts e a configuração da varredura vêm
 o PR nunca diz quais são os termos.
 
 O log do CI é público e qualquer pessoa abre PR de fork: o portão não pode virar oráculo da lista
-privada. No CI, achado da lista privada sai sem arquivo, sem linha e sem contagem — um bit por
-execução ("ao menos um termo aparece no alcance"). Com `--detalhes` (fora do CI, na máquina de
-quem mantém) sai onde. O valor achado nunca é ecoado, em nenhum modo.
+privada. No CI, nenhum achado sai com caminho — nem o da lista privada, nem o das regras públicas
+(quem abre o PR escolhe os nomes de arquivo, e caminho impresso de um candidato e omitido de outro
+diz qual deles está na lista). Da lista privada sai um bit por execução ("ao menos um termo aparece no
+alcance"); das demais regras, só os nomes, sem repetição e em ordem alfabética. Com `--detalhes` (fora
+do CI, na máquina de quem mantém) sai onde. O valor achado nunca é ecoado, em nenhum modo.
 
 Arquivo que a varredura não abre por dentro — compactado, documento, banco de dados, e-mail,
 imagem de disco, binário (zip, gzip, 7z, RAR, PDF, Office, SQLite, Parquet, PST, ISO, JAR…) — que o
@@ -30,10 +32,13 @@ repositório os usa, e são revisão de quem mantém.
 `status` publica o resultado do portão como status de commit de contexto `data-gate (status)` na
 ponta do PR, que é o que o branch protection exige. O check run do job não serve para isso: um fork
 consegue emitir um check com o mesmo nome na ponta do próprio PR (a chave é só o texto); status de
-commit exige token de escrita, que PR de fork não tem.
+commit exige token de escrita, que PR de fork não tem. O GitHub só exige os dois quando os dois
+existem: por isso o workflow publica o status `pending` no primeiro passo, antes de qualquer checkout
+— nunca há só o check do fork.
 
 Códigos de saída do `gate`: 0 limpo · 4 achado · 1 erro — inclusive lista privada ausente, vazia,
-toda em comentário ou com termo curto demais: sem os termos pedidos o portão não atesta nada.
+toda em comentário ou com termo curto demais: sem os termos pedidos o portão não atesta nada. Erro
+imprime só a classe da exceção; a mensagem sai apenas com `--detalhes`, com termo da lista mascarado.
 """
 from __future__ import annotations
 
@@ -43,6 +48,7 @@ import os
 import re
 import subprocess
 import sys
+import unicodedata
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -50,13 +56,17 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT))
 
-from brainlib import config, upstream, util  # noqa: E402
+from brainlib import config, upstream  # noqa: E402
 
 KIND = "lista privada"                 # nome da regra nos achados
 PRIVATE_RULE = upstream.term_rule(KIND)   # como a regra aparece nos achados (`f["rule"]`)
 MIN_TERM = upstream.MIN_TERM           # mesmo piso do `brain upstream scan`: evita termo curto que casa tudo
 CLEAN, FOUND, ERROR = 0, 4, 1
-LISTED = 25                            # achados de regra pública listados por execução (os demais só são contados)
+
+
+class GateError(RuntimeError):
+    """Erro cuja mensagem é escrita aqui, no script — texto fixo, que não depende de nada que o PR
+    tenha posto no alcance. É o único erro cuja mensagem pode ir ao log do CI."""
 
 
 def parse_denylist(text: str) -> list[str]:
@@ -76,7 +86,7 @@ def parse_denylist(text: str) -> list[str]:
             if not term:
                 continue
             if len(term) < MIN_TERM:
-                raise RuntimeError(f"lista privada com termo curto demais (menos de {MIN_TERM} caracteres)")
+                raise GateError(f"lista privada com termo curto demais (menos de {MIN_TERM} caracteres)")
             if term.casefold() not in {t.casefold() for t in out}:
                 out.append(term)
     return out
@@ -87,10 +97,10 @@ def load_denylist(path: Path) -> list[str]:
     try:
         text = path.read_text(encoding="utf-8")
     except (OSError, UnicodeError) as e:
-        raise RuntimeError(f"lista privada ilegível: {type(e).__name__}") from e
+        raise GateError(f"lista privada ilegível: {type(e).__name__}") from e
     terms = parse_denylist(text)
     if not terms:
-        raise RuntimeError("lista privada vazia: sem termos o portão não atesta nada")
+        raise GateError("lista privada vazia: sem termos o portão não atesta nada")
     return terms
 
 
@@ -142,13 +152,15 @@ OPAQUE_SUFFIXES = (
     ".iso", ".dmg", ".img", ".vhd", ".vhdx", ".vmdk", ".vdi", ".qcow", ".qcow2",               # imagem de disco
     ".jar", ".war", ".ear", ".whl", ".egg", ".apk", ".ipa", ".deb", ".rpm", ".msi", ".exe", ".dll",
     ".so", ".dylib", ".class", ".pyc", ".pyz", ".node", ".wasm", ".a", ".o", ".lib", ".bin",   # binário
+    ".dump", ".backup", ".bak",                                                       # cópia de banco e de arquivo
+    ".p12", ".pfx", ".kdbx", ".gpg", ".age",                                          # chave e texto cifrado
 )
 OPAQUE_MAGIC = (
     b"\x1f\x8b", b"\x1f\x9d", b"PK\x03\x04", b"PK\x05\x06", b"7z\xbc\xaf\x27\x1c", b"Rar!\x1a\x07",
     b"\xfd7zXZ\x00", b"\x28\xb5\x2f\xfd", b"\x04\x22\x4d\x18", b"BZh", b"MSCF", b"070701", b"!<arch>\n",
     b"%PDF-", b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1", b"{\\rtf",
     b"SQLite format 3\x00", b"PAR1", b"ORC", b"Obj\x01", b"ARROW1", b"\x89HDF\r\n\x1a\n",
-    b"\x7fELF", b"\x00asm", b"\xca\xfe\xba\xbe",
+    b"\x7fELF", b"\x00asm", b"\xca\xfe\xba\xbe", b"PGDMP",                          # `PGDMP`: dump do PostgreSQL
 )
 
 
@@ -244,43 +256,45 @@ def opaque_attachments(root: Path, base: str | None) -> list[dict]:
             or _zlib_stream(wide.get(sha, b""))]
 
 
+def _tail(data: bytes | str) -> str:
+    """Fim da saída de erro de um comando, como texto (sem derrubar o print em byte inválido)."""
+    return (data.decode("utf-8", "replace") if isinstance(data, bytes) else str(data)).strip()[-200:]
+
+
 def _lists_private_term(terms: list[str], text: str) -> bool:
-    return any(upstream._term_regex(t, KIND).search(text) for t in terms)
+    return any(upstream._term_regex(t, KIND).search(unicodedata.normalize("NFC", text)) for t in terms)
 
 
 def _mask(text: str, terms: list[str]) -> str:
     """Tira da mensagem qualquer termo da lista privada que tenha entrado nela (nome de arquivo que o git
     repete no erro, por exemplo)."""
+    text = unicodedata.normalize("NFC", text)
     for t in terms:
         text = upstream._term_regex(t, KIND).sub("•••", text)
     return text
 
 
+NO_WHERE = "onde, só com --detalhes na máquina de quem mantém"
+
+
 def report(findings: list[dict], base: str, terms: list[str], details: bool) -> None:
-    """Diz o que achou. Fora do CI (`details`), tudo. No CI, achado da lista privada sai sem arquivo, sem
-    linha e sem contagem: o log é público, e quem abre PR de fork testaria candidato a termo contra ele.
-    Caminho de arquivo é dado igual — nome de pasta da empresa, por exemplo."""
+    """Diz o que achou. Fora do CI (`details`), tudo — arquivo, linha e regra de cada achado.
+
+    No CI, nenhum achado sai com caminho: nem o da lista privada, nem o das regras públicas. O log é
+    público e quem abre PR de fork escolhe os nomes de arquivo do alcance: um caminho impresso aqui e
+    outro substituído dizia qual candidato a termo estava na lista — uma linha por arquivo em vez de um
+    bit por execução. Saem a linha da lista privada e, das demais regras, só os nomes: sem repetição e em
+    ordem alfabética, que não dependem de qual arquivo bateu nem de quantos."""
     print(f"✗ portão de dados: achado em {base}..HEAD")
     if details:
         for f in findings:
             print(upstream._show(upstream._format_finding(f)))
         return
-    private = [f for f in findings if f["rule"] == PRIVATE_RULE]
-    others = [f for f in findings if f["rule"] != PRIVATE_RULE]
-    if private:
+    if any(f["rule"] == PRIVATE_RULE for f in findings):
         print("  ✗ lista privada: ao menos um termo aparece no alcance — sem arquivo nem linha (o log do CI é")
         print("    público; quem mantém vê onde com --detalhes, na própria máquina)")
-    shown = 0
-    for f in others:
-        text = upstream._format_finding(f)
-        if _lists_private_term(terms, text):
-            text = "  ✗ — (caminho omitido: traz termo da lista privada) — " + _mask(f["rule"], terms)
-        print(upstream._show(text))
-        shown += 1
-        if shown == LISTED:
-            break
-    if len(others) > shown:
-        print("  … outros achados omitidos")
+    for rule in sorted({f["rule"] for f in findings if f["rule"] != PRIVATE_RULE}):
+        print(f"  ✗ {_mask(rule, terms) if _lists_private_term(terms, rule) else rule} — {NO_WHERE}")
 
 
 STATUS_CONTEXT = "data-gate (status)"
@@ -365,13 +379,16 @@ def main(argv: list[str] | None = None, trusted: Path | None = None) -> int:
             return FOUND
         print(f"✓ portão de dados limpo em {a.base}..HEAD")
         return CLEAN
-    except (RuntimeError, subprocess.CalledProcessError, util.BrainError) as e:
-        # a mensagem destas exceções não carrega valor achado: só a classe do erro de git. Ainda assim,
-        # qualquer termo da lista que tenha entrado nela sai antes de imprimir.
-        detail = e.stderr.strip()[-200:] if isinstance(e, subprocess.CalledProcessError) else str(e)
-        if isinstance(detail, bytes):
-            detail = detail.decode("utf-8", "replace")
-        print(f"✗ portão de dados: {_mask(str(detail), deny)}")
+    except Exception as e:   # noqa: BLE001 — qualquer exceção vira erro do portão. Traceback no log público é
+        # texto sem máscara: nome de arquivo do PR, termo da lista, o que a mensagem carregar.
+        if isinstance(e, GateError):                               # mensagem fixa deste script: pode ir ao log
+            print(f"✗ portão de dados: {e}")
+        elif isinstance(e, subprocess.CalledProcessError):         # o código de saída do git não diz nada do alcance
+            print(f"✗ portão de dados: git falhou (código {e.returncode})"
+                  + (f": {_mask(_tail(e.stderr), deny)}" if a.detalhes else f" — {NO_WHERE}"))
+        else:                                                     # qualquer outra: no CI, só a classe
+            print(f"✗ portão de dados: {type(e).__name__}"
+                  + (f": {_mask(str(e), deny)}" if a.detalhes else f" — {NO_WHERE}"))
         return ERROR
 
 

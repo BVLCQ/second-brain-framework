@@ -135,11 +135,12 @@ class GateTests(unittest.TestCase):
             upstream._leak_terms = restore
             upstream.PLAIN_KINDS.discard(self.mod.KIND)
 
-    def _scan(self, base: str = "HEAD") -> list[dict]:
+    def _scan(self, base: str = "HEAD",
+              terms: tuple[str, ...] = ("acme-corp", "rede-interna", "acme")) -> list[dict]:
         """Varredura da árvore de trabalho (`brain upstream scan`): arquivos sem commit contra `base`."""
         src = config.load(self.tmp / "confiavel")
         inst = config.Instance(root=self.repo, vault=src.vault, config_dir=src.config_dir, cfg=src.cfg)
-        restore = self.mod.install_denylist(["acme-corp", "rede-interna", "acme"])
+        restore = self.mod.install_denylist(list(terms))
         try:
             return upstream.scan(inst, base, committed=False)
         finally:
@@ -200,23 +201,59 @@ class GateTests(unittest.TestCase):
         self.assertTrue(all("pasta-da-acme-corp/notas.md (commit " in ln for ln in com_termo), com_termo)
         self.assertNotIn("rede-interna", out)
 
-    def test_achado_de_outra_regra_em_caminho_com_termo_da_lista_sai_sem_o_caminho(self):
-        # a regra do anexo fechado é pública; o caminho do arquivo é que traz o termo privado
-        _commit_bytes(self.repo, "acme-corp/export.parquet", b"PAR1dados")
-        code, out = self._gate()
-        self.assertEqual(code, self.mod.FOUND)
-        self.assertIn("anexo fechado", out)
-        self.assertIn("caminho omitido", out)
-        self.assertNotIn("acme-corp", out)
-
-    def test_erro_do_git_nao_repete_termo_da_lista(self):
-        # o git repete nome de arquivo no erro; se ele traz termo da lista, o termo não vai ao log
-        with mock.patch.object(self.mod, "scan_range",
-                               side_effect=util.BrainError("git log falhou: acme-corp/x: fatal")):
+    def test_no_ci_o_log_nao_distingue_arquivo_com_termo_da_lista_de_arquivo_sem(self):
+        # quem abre PR de fork escolhe os nomes de arquivo. Achado de regra pública (anexo fechado,
+        # caminho da máquina) saía com o caminho, salvo quando o caminho trazia termo da lista — no
+        # lugar saía "caminho omitido": um candidato por linha, em vez de um bit por execução. Com o
+        # mesmo bit da lista privada, o log tem de ser o mesmo byte a byte.
+        outs = []
+        for nome in ("dado/nao-listado-export.parquet", "dado/acme-corp-export.parquet",
+                     "dado/ACME-corp-export.parquet"):
+            _git(self.repo, "reset", "-q", "--hard", self.base)
+            _git(self.repo, "clean", "-fdqx")
+            _commit_bytes(self.repo, "notas.md", "conta da acme-corp no relatorio\n")       # o bit: igual nos três
+            _commit_bytes(self.repo, "instalacao.md", f"roda em {MACHINE_PATH}/brain\n")
+            _commit_bytes(self.repo, nome, b"PAR1dados")
             code, out = self._gate()
-        self.assertEqual(code, self.mod.ERROR)
-        self.assertIn("•••", out)
-        self.assertNotIn("acme-corp", out)
+            self.assertEqual(code, self.mod.FOUND)
+            outs.append(out)
+        self.assertEqual(outs[0], outs[1])
+        self.assertEqual(outs[0], outs[2])
+        for valor in ("acme-corp", "ACME-corp", "nao-listado", "export.parquet", "notas.md", "instalacao.md",
+                       "omitido"):
+            with self.subTest(valor=valor):
+                self.assertNotIn(valor, outs[0])
+        self.assertEqual(outs[0].count("caminho da máquina"), 1)
+        self.assertIn(OCULTO, outs[0])
+        # fora do CI sai onde — inclusive o caminho que traz o termo
+        code, det = self._gate(detalhes=True)
+        self.assertEqual(code, self.mod.FOUND)
+        self.assertRegex(det, _onde("dado/ACME-corp-export.parquet", 1, self.mod.OPAQUE_RULE))
+
+    def test_excecao_imprevista_e_erro_do_portao_sem_traceback(self):
+        # antes, só três classes eram pegas: qualquer outra derrubava o script com traceback — e
+        # traceback no log público é a mensagem sem máscara, com o que ela carregar (nome de
+        # arquivo do PR, por exemplo). No CI sai só a classe; a mensagem, só com --detalhes.
+        _commit_bytes(self.repo, "notas.md", "diff limpo\n")
+        erros = (util.BrainError("git log falhou: acme-corp/x: fatal"), KeyError("acme-corp/x"),
+                 OSError("acme-corp/x"), subprocess.CalledProcessError(
+                     128, ["git", "log", "acme-corp/x"], stderr=b"fatal: acme-corp/x"))
+        for erro in erros:
+            with self.subTest(erro=type(erro).__name__):
+                with mock.patch.object(self.mod, "scan_range", side_effect=erro):
+                    code, out = self._gate()
+                    self.assertEqual(code, self.mod.ERROR)
+                    code, det = self._gate(detalhes=True)
+                    self.assertEqual(code, self.mod.ERROR)
+                self.assertNotIn("Traceback", out)
+                self.assertNotIn("acme-corp", out)
+                self.assertNotIn("fatal", out)                          # a mensagem não vai ao log do CI
+                self.assertNotIn("acme-corp", det)
+                self.assertIn("•••", det)                               # com --detalhes, mascarada
+                if isinstance(erro, subprocess.CalledProcessError):
+                    self.assertIn("git falhou (código 128)", out)
+                else:
+                    self.assertIn(f"✗ portão de dados: {type(erro).__name__} — {self.mod.NO_WHERE}", out)
 
     def test_termo_da_lista_cola_em_outra_palavra_e_bloqueia_do_mesmo_jeito(self):
         # `<termo>_prod`, `<termo>VPN`: nome de empresa colado noutro nome é dado igual. Com fronteira
@@ -233,6 +270,80 @@ class GateTests(unittest.TestCase):
     def test_termo_na_mensagem_do_commit_tambem_bloqueia(self):
         _commit_bytes(self.repo, "notas.md", "sem dado nenhum aqui\n", msg="conta da rede-interna migrada")
         self.assertEqual(self._gate()[0], self.mod.FOUND)
+
+    def _commitado_e_solto(self, nome: str, data, termos: str) -> None:
+        """Achado da lista privada com o arquivo commitado (diff/blob) e sem commit (árvore de trabalho).
+
+        Os termos saem do mesmo parser da lista privada: `quasaré labs` é UM termo — partido no espaço,
+        `labs` sozinho casava e o teste passava sem a leitura que diz cobrir. E a chamada deixa a árvore
+        como achou: o arquivo solto de uma entrava no `git add .` da seguinte e respondia por ela."""
+        head = _git(self.repo, "rev-parse", "HEAD")
+        try:
+            _commit_bytes(self.repo, nome, data)
+            self.assertEqual(self._gate(base=head, terms=termos)[0], self.mod.FOUND, f"commitado: {nome}")
+            _git(self.repo, "reset", "-q", "--hard", head)
+            _git(self.repo, "clean", "-fdqx")
+            _write(self.repo, nome, data)
+            achados = self._scan(base=head, terms=tuple(self.mod.parse_denylist(termos)))
+            self.assertIn(self.mod.PRIVATE_RULE, {f["rule"] for f in achados}, f"árvore de trabalho: {nome}")
+        finally:
+            _git(self.repo, "reset", "-q", "--hard", head)
+            _git(self.repo, "clean", "-fdqx")
+
+    def test_sufixo_demo_nao_isenta_termo_da_lista_privada(self):
+        # `-demo` é a marca de dado fictício do LEDGER (`marina-demo`). Na lista privada não há
+        # "fictício": `<empresa>-demo` é host de demonstração de empresa de verdade, e a isenção
+        # apagava o termo antes da busca
+        for nome, data in (("notas.md", "host acme-corp-demo.internal\n"),
+                            ("notas.md", "senha do Rede-Interna-DEMO\n"),
+                            ("acme-corp-demo.md", "diff limpo\n")):
+            with self.subTest(arquivo=nome, conteudo=data):
+                self._commitado_e_solto(nome, data, "acme-corp\nrede-interna\n")
+        # a isenção do ledger continua valendo para o termo do ledger
+        res = [("pessoa", re.compile(r"(?<!\w)marina(?!\w)", re.I))]
+        self.assertFalse(upstream._scan_line("falei com a Marina-demo ontem, id marina-demo", res, ""))
+
+    def test_planilha_em_cp1252_e_varrida_como_tal(self):
+        # planilha em pt-BR exportada pelo Excel é CP1252: o `é` do nome era um byte que o UTF-8 não
+        # entende, e o termo com acento nunca casava — no diff, na árvore de trabalho e no binário
+        for nome, data in (("clientes.csv", b"cliente;Quasar\xe9 Labs;10\n"),
+                            ("clientes.dat", b"hdr\0cliente;Quasar\xe9 Labs;10\0fim\0")):
+            with self.subTest(arquivo=nome):
+                self._commitado_e_solto(nome, data, "quasaré labs\n")
+
+    def test_nome_decomposto_ou_com_espaco_a_mais_e_o_mesmo_nome(self):
+        # nome de arquivo vindo do macOS e texto de vários editores estão decompostos (NFD: `e` +
+        # acento em vez de `é`). E `acme  corp` com dois espaços, ou com tabulação, é o mesmo nome
+        for nome, data, termos in (("clientes.md", "cliente;Quasare\u0301 Labs\n".encode(), "quasaré labs\n"),
+                                   ("Quasare\u0301 Labs.md", "diff limpo\n", "quasaré labs\n"),
+                                   ("clientes.md", "cliente;Quasaré Labs\n".encode(), "quasare\u0301 labs\n"),
+                                   ("clientes.md", "cliente;Quasare\u0301 Labs\n".encode(), "quasare\u0301 labs\n"),
+                                   ("notas.md", b"cliente: acme  corp\n", "acme corp\n"),
+                                   ("notas.md", b"cliente: acme\tcorp\n", "acme corp\n")):
+            with self.subTest(arquivo=nome, conteudo=data, termos=termos):
+                self._commitado_e_solto(nome, data, termos)
+        # texto sem acento e com um espaço só continua limpo
+        _git(self.repo, "reset", "-q", "--hard", "HEAD")
+        _git(self.repo, "clean", "-fdqx")
+        head = _git(self.repo, "rev-parse", "HEAD")
+        _commit_bytes(self.repo, "limpo.md", b"cliente: outra empresa\n")
+        self.assertEqual(self._gate(base=head, terms="quasaré labs\nacme corp\n")[0], self.mod.CLEAN)
+
+    def test_nome_de_regra_publica_com_termo_da_lista_sai_mascarado(self):
+        # o nome da regra é texto fixo do script, mas a lista é de quem mantém: se um termo dela aparece
+        # no nome, o nome sai mascarado — o log do CI nunca carrega termo da lista
+        _commit_bytes(self.repo, "export.parquet", b"PAR1dados")
+        code, out = self._gate(terms="fechado\nacme-corp\n")
+        self.assertEqual(code, self.mod.FOUND)
+        self.assertIn(f"  ✗ anexo ••• (a varredura não lê o que há dentro) — {self.mod.NO_WHERE}", out)
+        self.assertNotIn("fechado", out)
+
+    def test_termo_de_4_ou_5_caracteres_em_binario_com_byte_nulo_e_achado(self):
+        # de um binário só os trechos legíveis são buscados; o piso era de 6 bytes e um termo de 4
+        # ou 5 caracteres sozinho entre dois bytes nulos não aparecia
+        for data, termos in ((b"hdr\0acme\0end\0", "acme\n"), (b"hdr\0zeta0\0end\0", "zeta0\n")):
+            with self.subTest(termos=termos):
+                self._commitado_e_solto("dados.dat", data, termos)
 
     def test_endereco_noreply_sai_da_linha_mas_o_resto_da_linha_entra(self):
         # antes, a linha da mensagem com `noreply@` era pulada inteira: bastava escrever o dado na mesma
@@ -271,18 +382,23 @@ class GateTests(unittest.TestCase):
         rules = {f["rule"] for f in self.mod.scan_range(self.repo, self.base, trusted=self.tmp)}
         self.assertIn("caminho da máquina", rules)
 
-    def test_no_ci_achado_das_regras_do_brain_sai_todos_e_com_onde(self):
-        # a regra do brain é pública: o onde não é segredo e é o que conserta o PR. Nenhum fica de fora
+    def test_no_ci_regra_do_brain_sai_pelo_nome_uma_vez_e_sem_onde(self):
+        # a regra é pública; o caminho, não — quem mantém vê onde com --detalhes, na própria máquina.
+        # Duas ocorrências da mesma regra viram uma linha; regras diferentes saem em ordem alfabética
         _commit_bytes(self.repo, "instalacao.md", f"roda em {MACHINE_PATH}/brain\n")
         _commit_bytes(self.repo, "copia.md", f"copia em {MACHINE_PATH}/vault\n")
         _commit_bytes(self.repo, "cliente.md", "conta da acme-corp no relatorio\n")
+        _commit_bytes(self.repo, "export.parquet", b"PAR1dados")
         code, out = self._gate()
         self.assertEqual(code, self.mod.FOUND)
         self.assertIn(OCULTO, out)
-        for arquivo in ("instalacao.md", "copia.md"):
-            self.assertRegex(out, _onde(arquivo, 1, "caminho da máquina"))
-        self.assertNotRegex(out, r"(?m)^  ✗ cliente\.md")               # o da lista privada continua sem onde
-        self.assertNotIn("omitidos", out)
+        self.assertEqual(out.splitlines()[3:], [
+            f"  ✗ {self.mod.OPAQUE_RULE} — {self.mod.NO_WHERE}", f"  ✗ caminho da máquina — {self.mod.NO_WHERE}"])
+        for arquivo in ("instalacao.md", "copia.md", "cliente.md", "export.parquet"):
+            self.assertNotIn(arquivo, out)
+        code, det = self._gate(detalhes=True)
+        for arquivo in ("instalacao.md", "copia.md", "export.parquet"):
+            self.assertIn(arquivo, det)
 
     def test_lista_privada_e_regra_da_instancia_somam(self):
         restore = self.mod.install_denylist(["acme-corp"])
@@ -356,6 +472,14 @@ class GateTests(unittest.TestCase):
             "dump.dat": b"SQLite format 3\x00texto comum que so carrega a assinatura de banco",
             "pacote.dat": b"\x28\xb5\x2f\xfdtexto comum que so carrega a assinatura de zstd",
             "imagem.iso": b"texto comum que so carrega o nome de imagem de disco",
+            "copia.backup": b"texto comum que so carrega o nome de copia de arquivo\n",
+            "estado.dump": b"texto comum que so carrega o nome de dump de banco\n",
+            "chave.p12": b"texto comum que so carrega o nome de keystore PKCS12\n",
+            "chave.pfx": b"texto comum que so carrega o nome de keystore PKCS12 da Microsoft\n",
+            "cofre.kdbx": b"texto comum que so carrega o nome de cofre de senhas\n",
+            "mensagem.gpg": b"texto comum que so carrega o nome de texto cifrado com GPG\n",
+            "mensagem.age": b"texto comum que so carrega o nome de texto cifrado com age\n",
+            "banco.dat": b"PGDMPtexto comum que so carrega a assinatura de dump do PostgreSQL",
         }
         for nome, dado in fechados.items():
             with self.subTest(nome=nome):
@@ -422,7 +546,7 @@ class GateTests(unittest.TestCase):
 
     def test_texto_forcado_a_binario_por_atributos_do_pr_e_lido_linha_a_linha(self):
         # `* -diff` num .gitattributes do próprio PR faz o git chamar de binário o que é texto: por
-        # trechos legíveis (6+ bytes), termo curto sozinho numa linha não aparecia
+        # trechos legíveis, termo curto sozinho numa linha não aparecia
         _commit_bytes(self.repo, ".gitattributes", b"* -diff\n")
         _commit_bytes(self.repo, "notas.txt", b"acme\n")
         code, out = self._gate(terms="acme\n", detalhes=True)

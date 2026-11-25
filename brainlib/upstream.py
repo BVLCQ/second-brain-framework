@@ -15,6 +15,7 @@ import re
 import shutil
 import subprocess
 import sys
+import unicodedata
 from pathlib import Path
 
 from . import config, util
@@ -530,10 +531,30 @@ _DEMO_TOKEN_RE = re.compile(r"[\w.]+-demo\b", re.IGNORECASE)   # `marina-demo`, 
 
 
 def _term_regex(term: str, kind: str) -> re.Pattern:
-    body = re.escape(term)
+    """Casa o termo nas formas equivalentes do mesmo texto — a busca recebe as leituras de `_forms`,
+    nunca a linha crua. O termo vai para NFC: nome de arquivo vindo do macOS e texto de alguns
+    editores vêm decomposto (`e` + acento em vez de `é`) e o mesmo nome não casava. O espaço do termo
+    casa qualquer quantidade de espaço: o nome com dois espaços, ou com tabulação, é o mesmo nome."""
+    body = r"\s+".join(re.escape(part) for part in unicodedata.normalize("NFC", term).split())
     if kind in PLAIN_KINDS:
         return re.compile(body, re.I)
     return re.compile(r"(?<!\w)" + body + r"(?!\w)", re.I)
+
+
+def _forms(text: str) -> list[str]:
+    """As leituras de uma linha que a busca recebe. ASCII é sempre uma só. Com acento, o texto em NFC
+    e, se ele guarda byte que não é UTF-8 (o diff é lido com `surrogateescape`), a mesma linha em
+    CP1252: planilha em pt-BR exportada pelo Excel é CP1252, e o `é` de `Soluções` chegava como um
+    surrogate que nunca casava o `é` do termo."""
+    if text.isascii():
+        return [text]
+    out = [unicodedata.normalize("NFC", text)]
+    try:
+        text.encode("utf-8")
+    except UnicodeEncodeError:
+        raw = text.encode("utf-8", "surrogateescape").decode("cp1252", "replace")
+        out.append(unicodedata.normalize("NFC", raw))
+    return out
 
 
 def term_rule(kind: str) -> str:
@@ -544,8 +565,12 @@ def term_rule(kind: str) -> str:
 def _scan_line(text: str, term_res: list[tuple[str, re.Pattern]], home: str) -> list[tuple[str, str]]:
     hits: list[tuple[str, str]] = []
     plain = _DEMO_TOKEN_RE.sub(" ", text)          # o sufixo -demo marca dado fictício: não é vazamento do ledger
+    # A isenção vale para o termo do LEDGER, que é quem declara o fictício (`marina-demo`). A lista
+    # privada (PLAIN_KINDS) casa com o texto cru: `<empresa>-demo` é host de demonstração de empresa
+    # de verdade, e o sufixo apagava o termo antes da busca.
+    raw_forms, plain_forms = (_forms(text), _forms(plain)) if term_res else ([], [])
     for kind, rx in term_res:
-        if rx.search(plain):
+        if any(rx.search(t) for t in (raw_forms if kind in PLAIN_KINDS else plain_forms)):
             hits.append((term_rule(kind), rx.pattern))
     for m in _HOME_RE.finditer(text):
         who = m.group(2).lower()
@@ -571,7 +596,7 @@ LITERAL = "--literal-pathspecs"     # caminho de arquivo como pathspec: sem isso
 MAX_BLOB_BYTES = 50 * 2**20          # acima disto o arquivo não é varrido: é achado, nunca "limpo" por tamanho
 BIG_BLOB_RULE = f"arquivo grande demais para varrer (mais de {MAX_BLOB_BYTES // 2**20} MB)"
 UNREADABLE_BLOB_RULE = "arquivo que a varredura não conseguiu ler"
-_PRINTABLE_RUN = re.compile(rb"[\x20-\x7e\t\x80-\xff]{6,}")   # como o `strings`: só trechos legíveis de um binário
+_PRINTABLE_RUN = re.compile(rb"[\x20-\x7e\t\x80-\xff]{%d,}" % MIN_TERM)   # como o `strings`, do tamanho do menor termo: trecho menor que o termo não o contém
 _WIDE_SAMPLE = 1 << 16               # amostra que decide se um binário é texto em UTF-16/UTF-32
 _PLAIN_CHARS = re.compile(r"[\x20-\x7e\t\n\r]")               # texto comum: distingue a decodificação certa da trocada
 _C_ESCAPES = {"a": 7, "b": 8, "t": 9, "n": 10, "v": 11, "f": 12, "r": 13, '"': 34, "\\": 92}
@@ -645,14 +670,24 @@ def _wide_text(data: bytes) -> str | None:
     return data.decode(best[1], errors="replace").lstrip("\ufeff")
 
 
+def _decode_piece(piece: bytes) -> list[str]:
+    """Leituras de um trecho em bytes: em UTF-8 e, se ele não é UTF-8 válido, também em CP1252 — mesmo
+    motivo de `_forms`: a planilha em pt-BR guarda o acento num byte que o UTF-8 não entende."""
+    try:
+        return [piece.decode("utf-8")]
+    except UnicodeDecodeError:
+        return [piece.decode("utf-8", errors="replace"), piece.decode("cp1252", errors="replace")]
+
+
 def _binary_lines(data: bytes) -> list[str]:
     """Conteúdo de arquivo binário para a busca. Sem byte zero, é texto que o git tratou como binário por
-    causa de um `.gitattributes` do próprio alcance (`* -diff`): vai linha a linha, como um diff comum — por
-    trechos legíveis, termo curto sozinho numa linha não aparecia. Com byte zero, são os trechos de 6+ bytes
-    legíveis (o que o `strings` mostra) e, se é texto em UTF-16/UTF-32, o texto decodificado."""
+    causa de um `.gitattributes` do próprio alcance (`* -diff`): vai linha a linha, como um diff comum.
+    Com byte zero, são os trechos legíveis do tamanho de um termo no mínimo (o que o `strings` mostra,
+    sem perder termo de 4 ou 5 caracteres entre dois bytes nulos) e, se é texto em UTF-16/UTF-32, o
+    texto decodificado."""
     if b"\0" not in data:
-        return data.decode("utf-8", errors="replace").splitlines()
-    out = [m.group(0).decode("utf-8", errors="replace") for m in _PRINTABLE_RUN.finditer(data)]
+        return [ln for text in _decode_piece(data) for ln in text.splitlines()]
+    out = [ln for m in _PRINTABLE_RUN.finditer(data) for ln in _decode_piece(m.group(0))]
     wide = _wide_text(data)
     if wide is not None:
         out += wide.splitlines()
