@@ -1,3 +1,7 @@
+## 2.47.0 — os cartões do TODO filtram o quadro
+
+- **A visão geral do TODO filtra.** Clicar em Atrasadas, Vencem em 7 dias ou qualquer outro cartão deixa no quadro só esse recorte, nas colunas de sempre. Outro clique soma. Clicar de novo tira. "Limpar filtros" volta ao quadro inteiro. O filtro se junta ao de projeto, vista e ordem. Cartão selecionado fica marcado; os outros esmaecem enquanto houver filtro. Enter e Espaço alternam, e o estado é anunciado.
+
 ## 2.46.0 — o push não chama falha de git de dado pessoal, e o diálogo de atualização cabe na janela
 
 - **Falha do git na varredura não é dado pessoal.** Se o git falha ou estoura o tempo no meio do `upstream scan`, o comando sai com código 1. O hook diz para corrigir o erro acima e tentar de novo. Código 4 continua só para achado de verdade. Quem usa o git direto no `update` não muda.
