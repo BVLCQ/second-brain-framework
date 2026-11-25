@@ -8,7 +8,7 @@ para achar mais rápido. Se o servidor cair, nada se perde.
 | | `embed` | `full` |
 |---|---|---|
 | Banco | **1** (`bank`, default `brain`), chunks | **1** (`bank`, default `brain`) com extração de fatos |
-| LLM em operação | nenhum | extração + consolidação (modelo barato); mental models (Fase 8, ainda não aterrissado) |
+| LLM em operação | nenhum | extração + consolidação (modelo barato); mental models (Fase 8 — opcional, `mental_models = true`) |
 | Sai da máquina? | **não** | sim — texto do vault à API de LLM **com a chave do dono** (`config/.env`) |
 | Chaves no `.env` | nenhuma | 1 por conta de nuvem (LLM sempre; embeddings e reranker quando de nuvem — a OpenAI nos dois papéis usa a mesma) |
 | Custo de API | US$ 0 | medido por `brain memory cost` (medidor mensal, sem teto — decisão do dono) |
