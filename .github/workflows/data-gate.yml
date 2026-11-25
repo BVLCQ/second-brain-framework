@@ -72,11 +72,12 @@ jobs:
       - name: Status pendente na ponta do PR (antes de qualquer checkout)
         # Sem status nenhum publicado, o GitHub aceita só o check de mesmo nome que o fork emite no
         # workflow do PR. Este passo não lê nada do repositório — só o curl da imagem e o token do job.
+        # Com nova tentativa: sem este status e sem o do último passo, só existiria o check do fork.
         if: github.event_name == 'pull_request_target'
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          curl -fsS -m 60 -X POST "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/statuses/$TARGET_SHA" \
+          curl -fsS -m 60 --retry 5 --retry-all-errors --retry-delay 5 -X POST "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/statuses/$TARGET_SHA" \
             -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" -H "Content-Type: application/json" \
             -d '{"state":"pending","context":"data-gate (status)","description":"pendente: o portão de dados ainda está rodando"}'
@@ -131,7 +132,7 @@ jobs:
             python3 scripts/dev/public_gate.py status --sha "$TARGET_SHA" --rc "$RC" --run "$RUN"
           else
             echo "sem o checkout da main: publica erro direto, sem o script"
-            curl -fsS -m 60 -X POST "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/statuses/$TARGET_SHA" \
+            curl -fsS -m 60 --retry 5 --retry-all-errors --retry-delay 5 -X POST "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/statuses/$TARGET_SHA" \
               -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
               -H "X-GitHub-Api-Version: 2022-11-28" -H "Content-Type: application/json" \
               -d '{"state":"error","context":"data-gate (status)","description":"erro: o portão de dados não rodou até o fim — não atesta nada desta ponta"}'

@@ -32,6 +32,10 @@ PRIVATE_LIST = "${{ secrets.PUBLIC_DENYLIST_B64 }}"
 CHECKOUT_HEADER = "AUTHORIZATION: basic $(echo -n \"x-access-" + "token:$GITHUB_TOKEN\" | base64 -w0)"
 GATE_IMAGE_DIGEST = "sha256:9dd21fafb95870b99f9faa703a947d08feeb673048ad556e92ce503d0c086a95"   # python:3.12
 STATUS_CONTEXT = "data-gate (status)"
+# o pedido de status sem o script, com nova tentativa: se o primeiro e o último falhassem, só existiria
+# o check de mesmo nome que um fork emite
+STATUS_CURL = ('curl -fsS -m 60 --retry 5 --retry-all-errors --retry-delay 5 -X POST '
+               '"$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/statuses/$TARGET_SHA"')
 
 
 def _gate_script():
@@ -316,7 +320,7 @@ class GateWorkflowTest(unittest.TestCase):
         self.assertRegex(first, r"(?m)^        if: github\.event_name == 'pull_request_target'$")  # em push não há status
         run = _run(first)
         self.assertEqual(self._curl_posts(run), [("pending", STATUS_CONTEXT)])
-        self.assertIn('curl -fsS -m 60 -X POST "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/statuses/$TARGET_SHA"', run)
+        self.assertIn(STATUS_CURL, run)
         self.assertIn("          GITHUB_TOKEN: ${{ github.token }}\n", first)       # token de passo, não de job
         self.assertNotIn("git ", run)
         self.assertNotIn("secrets.", first)                                          # a lista privada não entra aqui
@@ -329,6 +333,7 @@ class GateWorkflowTest(unittest.TestCase):
         self.assertIn("if [ -f scripts/dev/public_gate.py ]; then\n", run)
         self.assertIn('python3 scripts/dev/public_gate.py status --sha "$TARGET_SHA" --rc "$RC" --run "$RUN"', run)
         self.assertEqual(self._curl_posts(run.split("else", 1)[1]), [("error", STATUS_CONTEXT)])
+        self.assertIn(STATUS_CURL, run.split("else", 1)[1])
 
     def test_the_pr_tip_and_the_base_come_from_the_event_not_from_the_pr_itself(self):
         env = _job_env(self.job)
