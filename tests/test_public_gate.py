@@ -322,6 +322,25 @@ class GateTests(unittest.TestCase):
         self.assertRegex(linhas[0], r"^  ✗ dados\.dat \(commit [0-9a-f]{9}\) \[binário\]:1 — "
                          + re.escape(self.mod.PRIVATE_RULE))
 
+    def test_texto_sem_byte_zero_e_com_byte_invalido_e_achado_uma_vez(self):
+        # o mesmo, no caminho sem byte zero: texto que o `* -diff` do próprio alcance faz o git chamar
+        # de binário (commitado) e arquivo solto que não é UTF-8 (árvore de trabalho). Este caminho
+        # não depende do sistema de arquivos — os testes de nome com byte inválido pulam no macOS
+        _commit_bytes(self.repo, ".gitattributes", b"* -diff\n")
+        head = _git(self.repo, "rev-parse", "HEAD")
+        _commit_bytes(self.repo, "notas.txt", b"\xffconta da acme-corp\n")
+        code, out = self._gate(base=head, detalhes=True)
+        self.assertEqual(code, self.mod.FOUND)
+        linhas = [ln for ln in out.splitlines() if "notas.txt" in ln]
+        self.assertEqual(len(linhas), 1, linhas)
+        self.assertRegex(linhas[0], r"^  ✗ notas\.txt \(commit [0-9a-f]{9}\) \[binário\]:1 — "
+                         + re.escape(self.mod.PRIVATE_RULE))
+        _git(self.repo, "reset", "-q", "--hard", head)
+        _write(self.repo, "solto.txt", b"\xffconta da acme-corp\n")
+        achados = [(f["file"], f["line"]) for f in self._scan(base=head, terms=("acme-corp",))
+                   if f["rule"] == self.mod.PRIVATE_RULE]
+        self.assertEqual(achados, [("solto.txt [binário]", 1)])
+
     def test_nome_decomposto_ou_com_espaco_a_mais_e_o_mesmo_nome(self):
         # nome de arquivo vindo do macOS e texto de vários editores estão decompostos (NFD: `e` +
         # acento em vez de `é`). E `acme  corp` com dois espaços, ou com tabulação, é o mesmo nome
@@ -330,9 +349,16 @@ class GateTests(unittest.TestCase):
                                    ("clientes.md", "cliente;Quasaré Labs\n".encode(), "quasare\u0301 labs\n"),
                                    ("clientes.md", "cliente;Quasare\u0301 Labs\n".encode(), "quasare\u0301 labs\n"),
                                    ("notas.md", b"cliente: acme  corp\n", "acme corp\n"),
-                                   ("notas.md", b"cliente: acme\tcorp\n", "acme corp\n")):
+                                   ("notas.md", b"cliente: acme\tcorp\n", "acme corp\n"),
+                                   # termo sem acento, texto decomposto com o acento logo depois da
+                                   # última letra: a NFC funde `e` + acento em `é` — só a leitura do
+                                   # texto como veio casa, como casava antes
+                                   ("clientes.md", "cliente;ZetaCafe\u0301 Ltd\n".encode(), "zetacafe\n")):
             with self.subTest(arquivo=nome, conteudo=data, termos=termos):
                 self._commitado_e_solto(nome, data, termos)
+        # o mesmo para o termo do ledger, com fronteira de palavra
+        res = [("pessoa", upstream._term_regex("jose", "pessoa"))]
+        self.assertTrue(upstream._scan_line("falei com o Jose\u0301 ontem", res, ""))
         # texto sem acento e com um espaço só continua limpo
         _git(self.repo, "reset", "-q", "--hard", "HEAD")
         _git(self.repo, "clean", "-fdqx")
@@ -484,6 +510,7 @@ class GateTests(unittest.TestCase):
             "pacote.dat": b"\x28\xb5\x2f\xfdtexto comum que so carrega a assinatura de zstd",
             "imagem.iso": b"texto comum que so carrega o nome de imagem de disco",
             "copia.backup": b"texto comum que so carrega o nome de copia de arquivo\n",
+            "copia.bak": b"texto comum que so carrega o nome de copia .bak\n",
             "estado.dump": b"texto comum que so carrega o nome de dump de banco\n",
             "chave.p12": b"texto comum que so carrega o nome de keystore PKCS12\n",
             "chave.pfx": b"texto comum que so carrega o nome de keystore PKCS12 da Microsoft\n",

@@ -542,13 +542,18 @@ def _term_regex(term: str, kind: str) -> re.Pattern:
 
 
 def _forms(text: str) -> list[str]:
-    """As leituras de uma linha que a busca recebe. ASCII é sempre uma só. Com acento, o texto em NFC
-    e, se ele guarda byte que não é UTF-8 (o diff é lido com `surrogateescape`), a mesma linha em
-    CP1252: planilha em pt-BR exportada pelo Excel é CP1252, e o `é` de `Soluções` chegava como um
-    surrogate que nunca casava o `é` do termo."""
+    """As leituras de uma linha que a busca recebe. ASCII é sempre uma só. Com acento, o texto como veio
+    e em NFC — só a NFC funde a letra com o acento que vem depois dela (`Cafe` + acento vira `Café`), e
+    o termo sem acento (`Cafe`) deixava de casar o texto decomposto, que antes casava. E, se a linha
+    guarda byte que não é UTF-8 (o diff é lido com `surrogateescape`), a mesma linha em CP1252:
+    planilha em pt-BR exportada pelo Excel é CP1252, e o `é` de `Soluções` chegava como um surrogate
+    que nunca casava o `é` do termo."""
     if text.isascii():
         return [text]
-    out = [unicodedata.normalize("NFC", text)]
+    out = [text]
+    nfc = unicodedata.normalize("NFC", text)
+    if nfc != text:
+        out.append(nfc)
     try:
         text.encode("utf-8")
     except UnicodeEncodeError:
