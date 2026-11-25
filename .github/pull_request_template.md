@@ -14,7 +14,7 @@ Fecha #
 
 ## Gates
 
-- [ ] CI verde: status `data-gate (status)` e os quatro `tests` (Python 3.11–3.14)
+- [ ] CI verde: status `data-gate (status)` e os quatro `tests` (Python 3.11–3.14), com o run do portão já terminado
 - [ ] `python3 scripts/dev/public_gate.py gate --base origin/main --denylist <lista privada> --detalhes` rodou limpo na máquina
 
 ## Fora do escopo

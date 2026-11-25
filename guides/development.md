@@ -16,7 +16,8 @@ portão de dados. É o mesmo fluxo dos outros projetos do mantenedor.
    e os quatro `tests`. Mudança no portão só vale para os PR abertos depois do merge: o evento dele
    só lê o workflow da `main`.
 4. **"ok" do dono.** O PR fica aberto até o "ok" literal do dono; o "ok" é o merge. Nada entra na
-   `main` sem PR com o CI verde (proteção de branch) e sem o "ok".
+   `main` sem PR com o CI verde (proteção de branch) e sem o "ok". Merge só com o run do portão já
+   terminado — status `data-gate (status)` verde, não pendente.
 
 ## O que nunca entra no repositório
 
@@ -43,8 +44,12 @@ curto demais) o portão falha: ele não atesta nada.
 
 Além dos termos, contam como dado: nome e e-mail de autor e de quem commitou em commit novo (de
 e-mail novo, só o domínio; identidade que já aparece num commit público não conta), texto em UTF-16
-e UTF-32, e arquivo que a varredura não varre — grande demais (mais de 50 MB) ou ilegível. Não varrido
-nunca é "limpo".
+e UTF-32 e em CP1252 (planilha em pt-BR exportada pelo Excel), e arquivo que a varredura não varre —
+grande demais (mais de 50 MB) ou ilegível. Não varrido nunca é "limpo".
+
+O termo casa nas formas do mesmo texto: nome de arquivo decomposto (NFD, como vem do macOS) e nome
+com espaço a mais (dois espaços, tabulação) são o mesmo nome. O sufixo `-demo` marca dado fictício do
+ledger (`marina-demo`) e só dele: `<termo da lista privada>-demo` é dado de empresa de verdade.
 
 **O push da `main` é alarme, não bloqueio.** No push o portão roda depois que o conteúdo já está público, e
 com o workflow do próprio push. O que bloqueia é o status no PR, exigido pela proteção da `main`.
@@ -57,9 +62,17 @@ portão rodar, e publica o resultado como status de commit `data-gate (status)` 
 token do job. PR de fork só tem token de leitura: não consegue emitir um igual. A proteção da `main`
 exige esse status — nunca o check `data-gate`. `tests/test_ci_hardening.py` trava tudo isso.
 
+**O status nasce antes de qualquer checkout.** O GitHub exige status e check de mesmo nome os dois
+só quando os dois existem: até o último passo publicar, só existiria o check do fork — e bastaria. Por
+isso o primeiro passo do job publica o status `pending` (só o curl da imagem e o token do job), e o
+último o troca por `success`, `failure` ou `error` — sem o script quando o checkout da `main`
+falhou. A imagem do job é fixada por digest: com tag móvel, a imagem mudaria sem passar pelo
+repositório. Para atualizar, troque o digest de `python:3.12` num PR (`crane digest python:3.12`).
+
 Só o CI barra também **anexo fechado**: arquivo compactado ou documento (zip, gzip, 7z, RAR, PDF,
-Office) que o PR acrescenta é achado por si, mesmo sem termo — o portão não lê o que está comprimido
-dentro. Imagem e vídeo não são bloqueados: captura de tela com dado interno só é vista por quem revisa.
+Office), cópia de banco e de arquivo (`.dump`, `.backup`, `.bak`; dump do PostgreSQL também pela
+assinatura), keystore (`.p12`, `.pfx`, `.kdbx`) e texto cifrado (`.gpg`, `.age`) que o PR acrescenta
+é achado por si, mesmo sem termo — o portão não lê o que está comprimido dentro. Imagem e vídeo não são bloqueados: captura de tela com dado interno só é vista por quem revisa.
 
 Para rodar na máquina, da pasta do checkout, com a sua cópia da lista:
 
@@ -67,9 +80,12 @@ Para rodar na máquina, da pasta do checkout, com a sua cópia da lista:
 
 Códigos de saída: 0 limpo · 4 achado (só arquivo, linha e regra: o valor achado nunca é ecoado) · 1 erro.
 
-No CI, achado da lista privada sai sem arquivo nem linha, e sem contagem: o log é público, e quem abre
-PR de fork escolhe o conteúdo do alcance — cada execução com "onde" seria uma medida da lista privada.
-Na máquina, acrescente `--detalhes` para ver onde bateu.
+No CI, nenhum achado sai com caminho — nem o da lista privada, nem o das regras públicas. O log é
+público, e quem abre PR de fork escolhe os nomes de arquivo do alcance: caminho impresso de um
+candidato a termo e omitido de outro diz qual deles está na lista. Da lista privada sai um bit por
+execução ("ao menos um termo aparece no alcance"); das demais regras, só os nomes. Erro imprime só a
+classe da exceção. Na máquina, acrescente `--detalhes` para ver onde bateu (e a mensagem do erro,
+com termo da lista mascarado).
 
 ## Onde o CI roda
 
