@@ -1575,7 +1575,8 @@ def build_parser() -> argparse.ArgumentParser:
                                 "sem a flag, mantém o atual")
             x.add_argument("--model", help="modelo do LLM (exigido quando --provider openai)")
             x.add_argument("--embeddings", choices=_flat_memory_providers("embeddings"),
-                           help="provedor de embeddings (full é só-nuvem: local não); sem a flag, mantém o atual")
+                           help="provedor de embeddings (local = bge-m3 no LM Studio, nos dois modos; no full o default segue o de nuvem); "
+                                "sem a flag, mantém o atual")
             x.add_argument("--reranker", choices=_flat_memory_providers("reranker"),
                            help="reranker; sem a flag, mantém o atual (nunca configurado = off, fusão RRF)")
             x.add_argument("--key", help="chave do LLM (full) — vai ao config/.env, nunca sai em output")

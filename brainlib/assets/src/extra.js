@@ -779,10 +779,12 @@ SETUP.memoria = box => {
   const m = SS.memory, cur = m.mode === "lite" ? "embed" : m.mode;
   let sel = cur;
   const opts = [["none", "Nenhuma", "Busca por palavras. Nada a instalar."], ["embed", "Embed", "Busca por significado — local (bge-m3) ou provedor de nuvem."],
-    ["full", "Full", "Também extrai fatos e liga assuntos. Só-nuvem: LLM e embeddings de provedor, com as suas chaves e custo por uso."]];
-  const embOpts = full => full ? [["fireworks", "Fireworks — Qwen3-Embedding-8B"], ["openai", "OpenAI — text-embedding-3-small"]]
+    ["full", "Full", "Também extrai fatos e liga assuntos. O LLM é de nuvem (a sua chave ou assinatura, custo por uso); os embeddings, locais ou de nuvem."]];
+  const embOpts = full => full ? [["fireworks", "Fireworks — Qwen3-Embedding-8B"], ["openai", "OpenAI — text-embedding-3-small"], ["local", "Local — LM Studio bge-m3 (vetores locais; o LLM continua na nuvem)"]]
     : [["local", "Local — LM Studio bge-m3 (nada sai)"], ["fireworks", "Fireworks — Qwen3-Embedding-8B"], ["openai", "OpenAI — text-embedding-3-small"]];
-  const curEmb = full => embOpts(full).some(o => o[0] === m.emb_provider) ? m.emb_provider : (full ? "fireworks" : "local");
+  // no full o recomendado é o de nuvem: `local` só vem pré-selecionado se a instância já usa memória (veio do embed) —
+  // numa instância nova o `local` do config é o padrão de fábrica, não uma escolha
+  const curEmb = full => embOpts(full).some(o => o[0] === m.emb_provider) && !(full && m.emb_provider === "local" && (!m.mode || m.mode === "none")) ? m.emb_provider : (full ? "fireworks" : "local");
   const rerOpts = [["off", "Desligado — fusão RRF"], ["fireworks", "Fireworks — Qwen3-Reranker-8B"], ["cohere", "Cohere — rerank-v3.5"]];
   const curRer = () => rerOpts.some(o => o[0] === m.rer_provider) ? m.rer_provider : "off";
   const selHTML = (list, curv, id) => '<select id="' + id + '">' + list.map(o => '<option value="' + o[0] + '"' + (o[0] === curv ? " selected" : "") + ">" + esc(o[1]) + "</option>").join("") + "</select>";
@@ -797,7 +799,7 @@ SETUP.memoria = box => {
             ? '<span class="late">⚠</span> OrbStack instalado, parado — ativar sobe'
             : '<span class="late">✗</span> OrbStack ausente — o Brain instala ao ativar';
         })() +
-        '<span id="s-lms"' + (sel === "embed" ? "" : " hidden") + '> · ' + (() => {
+        '<span id="s-lms"' + ((sel === "embed" || (sel === "full" && curEmb(true) === "local")) ? "" : " hidden") + '> · ' + (() => {
           const lst = m.lmstudio_state || (m.lmstudio ? "up" : "missing");
           if (lst === "up") return '<span class="ok">✓</span> LM Studio com <code>text-embedding-bge-m3</code> pronto';
           return lst === "installed"
@@ -816,7 +818,8 @@ SETUP.memoria = box => {
           "A credencial nasce aqui mesmo (job narrado) — nunca passa pela tela.") + "</div></div>" +
         '<div class="stgrid" id="s-model-wrap">' + fld("Modelo do LLM", '<input type="text" id="s-model" placeholder="vazio = recomendado do provedor">') + "</div>" +
         '<div class="stgrid">' + fld("Embeddings", selHTML(embOpts(true), curEmb(true), "s-emb")) +
-        '<div id="s-ekey-wrap">' + fld("API key do embeddings" + keyChip(m.emb_key), keyInp("s-ekey"), "Fireworks ou OpenAI — conta própria do embeddings.") + "</div></div>" +
+        '<div id="s-ekey-wrap"' + (curEmb(true) === "local" ? " hidden" : "") + ">" + fld("API key do embeddings" + keyChip(m.emb_key), keyInp("s-ekey"), "Fireworks ou OpenAI — conta própria do embeddings.") + "</div></div>" +
+        '<p class="small" id="s-emb-local"' + (curEmb(true) === "local" ? "" : " hidden") + '>Embeddings local; o LLM continua na nuvem: o texto do vault vai a ele para extrair, os vetores não saem da máquina. Trocar os embeddings exige reconstruir a memória (<code>memory rebuild</code>), que no full reenvia o vault inteiro e paga a extração de novo.</p>' +
         '<div class="stgrid">' + fld("Reranking", selHTML(rerOpts, curRer(), "s-rer")) +
         '<div id="s-rkey-wrap">' + fld("API key do reranker" + keyChip(m.rer_key), keyInp("s-rkey"), "Fireworks ou Cohere.") + "</div></div>" +
         '<div class="stgrid">' + fld("Decisão (opcional)", selHTML([["off", "Desligado — só os tokens do LLM (padrão)"],
@@ -847,7 +850,10 @@ SETUP.memoria = box => {
         if (q("#s-key-wrap")) q("#s-key-wrap").hidden = !!subscr;
         if (q("#s-auth-wrap")) q("#s-auth-wrap").hidden = !subscr;
         const same = openai && q("#s-emb").value === "openai";
-        if (q("#s-ekey-wrap")) q("#s-ekey-wrap").hidden = same;
+        const embLocal = q("#s-emb").value === "local";
+        if (q("#s-ekey-wrap")) q("#s-ekey-wrap").hidden = same || embLocal;
+        if (q("#s-emb-local")) q("#s-emb-local").hidden = !embLocal;
+        if (q("#s-lms")) q("#s-lms").hidden = !embLocal;
         if (q("#s-samekey")) q("#s-samekey").hidden = !same;
         const rer = q("#s-rer") ? q("#s-rer").value : "off";
         const rsame = rer === "fireworks" && q("#s-emb").value === "fireworks";
@@ -884,7 +890,7 @@ SETUP.memoria = box => {
         if (subscr && (m.llm_auth || {}).state === "pending" && (m.llm_auth || {}).provider === body.provider)
           return stMsg(q("#s-m"), "late", "autentique a assinatura primeiro (botão Autenticar ao lado)");
         const sameAcct = body.provider === "openai" && body.embeddings === "openai";
-        if (!sameAcct && !body.emb_key && !m.emb_key) return stMsg(q("#s-m"), "late", "cole a API key do embeddings (" + (body.embeddings === "fireworks" ? "Fireworks" : "OpenAI") + ")");
+        if (body.embeddings !== "local" && !sameAcct && !body.emb_key && !m.emb_key) return stMsg(q("#s-m"), "late", "cole a API key do embeddings (" + (body.embeddings === "fireworks" ? "Fireworks" : "OpenAI") + ")");
         const rsame = body.reranker === "fireworks" && body.embeddings === "fireworks";
         if (rsame && !body.emb_key && !m.emb_key && !body.reranker_key)
           return stMsg(q("#s-m"), "late", "cole a API key do Fireworks (embeddings e reranker usam a mesma conta)");
@@ -3174,7 +3180,7 @@ OBV.memoria = () => {
         ],
         embeddings: [
           {key: "local", label: "Local — LM Studio bge-m3 (zero egress)", recommended: true, cloud: false, key_set: false},
-          {key: "fireworks", label: "Fireworks — Qwen3-Embedding-8B", recommended: false, cloud: true, key_set: !!m.emb_key},
+          {key: "fireworks", label: "Fireworks — Qwen3-Embedding-8B", recommended: false, recommended_cloud: true, cloud: true, key_set: !!m.emb_key},
           {key: "openai", label: "OpenAI — text-embedding-3-small", recommended: false, cloud: true, key_set: !!m.emb_key},
           {key: "cohere", label: "Cohere — embed-multilingual-v3.0", recommended: false, cloud: true, key_set: !!m.emb_key},
           {key: "custom", label: "Outro (OpenAI-compatível)", recommended: false, cloud: true, key_set: !!m.emb_key},
@@ -3216,6 +3222,17 @@ OBV.memoria = () => {
     chosen[slot] = found ? found.key : "";
   });
   const getProv = (slot, key) => listFor(slot).find(p => p.key === key) || null;
+  // no full o recomendado dos embeddings é o de nuvem (`local` é escolha, não padrão) — e uma instância nova traz o `local`
+  // de fábrica no config: sem o dono ter tocado no slot, o default acompanha o modo
+  const isRec = (slot, it) => slot === "embeddings" && sel === "full" ? !!it.recommended_cloud : !!it.recommended;
+  const embInit = chosen.embeddings;
+  let embTouched = false;
+  const syncEmbDefault = () => {
+    if (embTouched || normMode !== "none") return;
+    const cloud = (listFor("embeddings").find(p => p.recommended_cloud) || {}).key;
+    chosen.embeddings = sel === "full" && cloud ? cloud : embInit;
+  };
+  syncEmbDefault();
   const isRecallActive = () => sel === "full" && chosen.decision === "hindsight" && decRecall === "on";
 
   const pre = (on, t, link, midNote) => {
@@ -3258,9 +3275,9 @@ OBV.memoria = () => {
     const urlVal = (slot === "decision" && curKey === "local") ? (m.dec_base_url || p.base_url || "") : "";
     const showRecall = slot === "decision" && sel === "full" && curKey === "hindsight";
     return '<div class="slot" data-slot="' + slot + '">' +
-      '<div class="sh"><span>' + esc(title) + "</span>" + (p.recommended ? '<span class="pill rec">✓ recomendado</span>' : "") + "</div>" +
+      '<div class="sh"><span>' + esc(title) + "</span>" + (isRec(slot, p) ? '<span class="pill rec">✓ recomendado</span>' : "") + "</div>" +
       '<select id="prov-' + slot + '">' +
-        list.map(it => '<option value="' + esc(it.key) + '" ' + (it.key === curKey ? "selected" : "") + ">" + esc(it.label) + (it.recommended ? " — ✓ recomendado" : "") + "</option>").join("") +
+        list.map(it => '<option value="' + esc(it.key) + '" ' + (it.key === curKey ? "selected" : "") + ">" + esc(it.label) + (isRec(slot, it) ? " — ✓ recomendado" : "") + "</option>").join("") +
       "</select>" +
       (p.subscription ? '<label class="f" style="margin-top:10px;margin-bottom:0">' +
         "<span>Assinatura — sem chave de API" + authChip(curKey) + "</span>" +
@@ -3308,7 +3325,8 @@ OBV.memoria = () => {
       ? (recallActive ? ["llm", "embeddings", "decision"] : ["llm", "embeddings", "reranker", "decision"])
       : ["embeddings", "reranker"];
     const anyCloud = visibleSlots.some(sl => (getProv(sl, chosen[sl]) || {}).cloud);
-    const usesLocal = sel === "embed" && ["local", "lmstudio"].includes((getProv("embeddings", chosen.embeddings) || {}).key);
+    const usesLocal = (sel === "embed" || sel === "full") && ["local", "lmstudio"].includes((getProv("embeddings", chosen.embeddings) || {}).key);
+    const embLocalFull = sel === "full" && usesLocal;
     const prereqs = '<div class="rowline" style="margin-top:12px;padding-bottom:0;border-top:1px solid var(--line2)">' +
       '<div class="info"><b>Servidor e modelos locais</b>' +
         pre(m.docker_state || m.docker, "<b>OrbStack</b> — roda o servidor de memória (o Brain instala e sobe ao ativar)",
@@ -3323,13 +3341,13 @@ OBV.memoria = () => {
       renderSlot("embeddings", "Embeddings") +
       (recallActive ? "" : renderSlot("reranker", "Reranker")) +
       (sel === "full" ? renderSlot("decision", "Decisão — juiz rápido (opcional)") : "") +
-      (anyCloud ? '<div class="egress">⚠ Provedor em nuvem: texto do vault sai da máquina — o doctor narra enquanto estiver ativo.</div>' : "") +
+      (anyCloud ? '<div class="egress">⚠ ' + (embLocalFull ? "Embeddings local; o LLM continua na nuvem: o texto do vault vai a ele para extrair, os vetores não saem da máquina" : "Provedor em nuvem: texto do vault sai da máquina") + " — o doctor narra enquanto estiver ativo.</div>" : "") +
       prereqs +
       (sel === "full" ? '<label class="check"><input type="checkbox" id="consent"> Entendo que trechos das minhas reuniões, mensagens e documentos serão enviados à API do provedor, com a minha chave, e que isso tem custo por uso.</label>' : "");
 
     visibleSlots.forEach(slot => {
       const sEl = $("#prov-" + slot);
-      if (sEl) sEl.onchange = () => { chosen[slot] = sEl.value; drawDetails(); };
+      if (sEl) sEl.onchange = () => { chosen[slot] = sEl.value; if (slot === "embeddings") embTouched = true; drawDetails(); };
     });
     const recEl = $("#recall-decision");
     if (recEl) recEl.onchange = () => {
@@ -3363,7 +3381,7 @@ OBV.memoria = () => {
     };
   };
 
-  obAll("#view .opt").forEach(o => o.onclick = () => { sel = o.dataset.m; drawDetails(); });
+  obAll("#view .opt").forEach(o => o.onclick = () => { sel = o.dataset.m; syncEmbDefault(); drawDetails(); });
   drawDetails();
 
   const readSlot = slot => {

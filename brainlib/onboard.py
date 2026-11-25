@@ -420,6 +420,7 @@ def state(brain) -> dict:
                    "dec_candidates": int(cfg["memory"].get("decision_max_candidates")
                                          or env.get("HINDSIGHT_API_RERANKER_MAX_CANDIDATES") or 0),
                    "providers": {slot: [{"key": k, "label": v["label"], "recommended": bool(v.get("recommended")),
+                                         "recommended_cloud": bool(v.get("recommended_cloud")),
                                          "cloud": not (v.get("local") or k == "off"),
                                          "local": bool(v.get("local")),
                                          "subscription": slot == "llm" and v.get("family") == "subscription",

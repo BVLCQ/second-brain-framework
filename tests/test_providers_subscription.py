@@ -215,6 +215,52 @@ class DoctorSlotAwareTests(unittest.TestCase):
             self.assertEqual(by_title["memória · reranker"]["level"], "error")
 
 
+class DoctorFullLocalEmbeddingsTests(unittest.TestCase):
+    """Full + embeddings `local`: o aviso de \"só-nuvem\" saiu; o estado real do LM Studio decide ok/warn."""
+
+    def _slot(self, b: Brain, state: str) -> dict:
+        with mock.patch.object(setup, "brain_command_status", return_value="/usr/local/bin/brain"), \
+                mock.patch.object(setup, "FRAMEWORK", Path("/nonexistent-fw")), \
+                mock.patch.object(setup, "lmstudio_state", return_value=state):
+            cks = doctor.checks(b)
+        return {c["title"]: c for c in cks if c["title"].startswith("memória · ")}
+
+    def _full(self, b: Brain, emb: str) -> None:
+        config.set_keys(b.inst, "memory", {
+            "engine": "hindsight", "extract": True, "cloud_llm": True, "raw_awaiting_dump": "hold",
+            "llm_provider": "claude-code", "embeddings_provider": emb,
+            "cloud_embeddings": emb != "local", "reranker_provider": "off"})
+        b.inst.env_file.write_text("HINDSIGHT_API_LLM_API_KEY=sk-ant-demo\n", encoding="utf-8")
+        b.inst = config.load(b.inst.root)
+
+    def test_lmstudio_up_is_ok_and_states_the_egress(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            self._full(b, "local")
+            emb = self._slot(b, "up")["memória · embeddings"]
+            self.assertEqual(emb["level"], "ok")
+            self.assertIn("o LLM continua na nuvem", emb["detail"])
+            self.assertNotIn("só-nuvem", emb["detail"])
+
+    def test_lmstudio_down_or_missing_warns_with_the_command(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            self._full(b, "local")
+            for state, why in (("installed", "servidor desligado"), ("missing", "ausente")):
+                emb = self._slot(b, state)["memória · embeddings"]
+                self.assertEqual(emb["level"], "warn", state)
+                self.assertIn(why, emb["detail"])
+                self.assertIn("brain setup --only memoria", emb["detail"])
+
+    def test_cloud_embeddings_without_key_is_still_an_error_in_full(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            self._full(b, "fireworks")
+            emb = self._slot(b, "up")["memória · embeddings"]
+            self.assertEqual(emb["level"], "error")
+            self.assertIn("sem a chave", emb["detail"])
+
+
 class CostAndCliTests(unittest.TestCase):
     def test_memory_cost_subscription_text_and_json(self):
         with tempfile.TemporaryDirectory() as td:

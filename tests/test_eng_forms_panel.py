@@ -42,8 +42,9 @@ class MemoryModeFormTest(unittest.TestCase):
         self.assertEqual([k for k, _ in forms.options(f_rer, m, {}, {})], self._flat("reranker"))
         self.assertEqual([k for k, _ in forms.options(f_emb, m, {"mode": "embed"}, {})],
                          self._flat("embeddings"))
-        self.assertEqual([k for k, _ in forms.options(f_emb, m, {"mode": "full"}, {})],
-                         [k for k in self._flat("embeddings") if k != "local"])
+        full = [k for k, _ in forms.options(f_emb, m, {"mode": "full"}, {})]
+        self.assertEqual(sorted(full), sorted(self._flat("embeddings")))     # `local` vale nos dois modos…
+        self.assertEqual((full[0], full[-1]), ("fireworks", "local"))        # …e no full o de nuvem abre a lista
 
     def test_every_offered_option_is_accepted_by_the_memory_setup_parser(self):
         """Cardápio só vale se o comando que o formulário monta aceitar a opção. O parser do

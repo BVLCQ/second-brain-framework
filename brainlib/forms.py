@@ -538,7 +538,7 @@ def _forms() -> list[Form]:
         Form("memory.mode", "Memória: modo e provedores", ("memory", "setup", "--mode", "{mode}"), (
             F("mode", "modo", choices=(("none", "nenhuma — busca por palavra"),
                                        ("embed", "embed — semântica; local ou nuvem"),
-                                       ("full", "full — fatos; só-nuvem")), value="embed", init="mode"),
+                                       ("full", "full — fatos; LLM de nuvem")), value="embed", init="mode"),
             F("provider", "LLM", choices="@memory_llm", init="provider",
               show={"mode": ["full"]}, arg="--provider"),
             F("model", "modelo do LLM", ph="gpt-… (exigido no OpenAI)",
@@ -556,9 +556,10 @@ def _forms() -> list[Form]:
               show={"mode": ["embed", "full"], "reranker!": ["", "off"]}, arg="--reranker-key"),
             F("quote", "sua aprovação", req=True, ph="digite a resposta literal, ex.: ok",
               show={"mode": ["full"]}, arg="--approval")),
-            sub="O modo define o cardápio: embed aceita embeddings locais (bge-m3) ou de nuvem; full é "
-                "só-nuvem (LLM + embeddings de provedor). As chaves vão ao config/.env (nunca voltam em "
-                "output) e o container é recriado pelo fluxo. No painel: Configurações › Memória.",
+            sub="Embeddings local (bge-m3 no LM Studio) ou de nuvem, nos dois modos; o LLM do full é sempre de "
+                "nuvem (o texto do vault vai a ele). No full, o recomendado dos embeddings é o de nuvem. As chaves "
+                "vão ao config/.env (nunca voltam em output) e o container é recriado pelo fluxo. No painel: "
+                "Configurações › Memória.",
             edit=True, gate=True, where="tui",
             why="o painel tem o passo Memória dedicado (Configurações), com o mesmo resultado"),
         Form("memory.provider", "Provedor da memória", ("memory", "providers", "set", "{slot}", "--provider", "{provider}"), (
@@ -585,8 +586,9 @@ def _forms() -> list[Form]:
                 "<provedor>`. Trocou embeddings? vetores "
                 "antigos ficam incompatíveis — brain memory rebuild. Depois recrie o container (modo full inclui o "
                 "override): docker compose -f services/compose.yaml -f services/compose.full.yaml "
-                "--env-file config/.env up -d — no embed, sem o segundo -f. Full é só-nuvem para LLM e embeddings "
-                "(decisor local /v1/systemone é a única exceção sem egress)."),
+                "--env-file config/.env up -d — no embed, sem o segundo -f. No full, trocar embeddings (local ↔ nuvem) "
+                "exige o rebuild e repaga a extração; o LLM é sempre de nuvem (embeddings local e decisor local "
+                "/v1/systemone não mandam texto para fora)."),
     ]
     del watch
     return out
@@ -674,8 +676,6 @@ def _src_memory_embs(m, v, ctx):
     mode = (v or {}).get("mode") or "embed"
     opts = [tuple(x) for x in tbl.get(mode, tbl.get("embed", []))]
     cur = ((ctx or {}).get("item") or {}).get("embeddings", "")
-    if mode == "full" and cur == "local":
-        return opts
     return _with_current(opts, cur)
 
 

@@ -266,17 +266,39 @@ class MachineChecksTests(unittest.TestCase):
             cks = doctor._machine_checks(cfg, which=lambda c: which_ok.get(c))
         self.assertTrue(any(c["level"] == "ok" and "LM Studio respondendo" in c["detail"] for c in cks))
 
-    def test_lmstudio_check_so_no_embed_local(self):
+    def test_lmstudio_check_so_com_embeddings_locais(self):
         from unittest import mock
         from brainlib import setup
         with mock.patch.object(setup, "lmstudio_state", return_value="missing") as ms:
-            # full é só-nuvem; nuvem de embeddings; e dict mínimo sem a chave não probeia rede
-            doctor._machine_checks({"memory": {"engine": "hindsight", "extract": True,
-                                               "embeddings_provider": "local"}}, which=lambda c: None)
+            # nuvem de embeddings (em qualquer modo), nuvem no flag e dict mínimo sem a chave não probeiam rede
             doctor._machine_checks({"memory": {"engine": "hindsight",
                                                "embeddings_provider": "fireworks"}}, which=lambda c: None)
+            doctor._machine_checks({"memory": {"engine": "hindsight", "extract": True, "cloud_llm": True,
+                                               "embeddings_provider": "fireworks"}}, which=lambda c: None)
+            doctor._machine_checks({"memory": {"engine": "hindsight", "extract": True,
+                                               "embeddings_provider": "local",
+                                               "cloud_embeddings": True}}, which=lambda c: None)
             doctor._machine_checks({"memory": {"engine": "hindsight"}}, which=lambda c: None)
+            doctor._machine_checks({"memory": {"engine": "none", "embeddings_provider": "local"}},
+                                   which=lambda c: None)
         self.assertFalse(ms.called)
+
+    def test_lmstudio_check_roda_no_full_com_embeddings_locais(self):
+        """A checagem de máquina que era só do embed vale no full + local: ok / warn conforme o estado real."""
+        from unittest import mock
+        from brainlib import setup
+        cfg = {"memory": {"engine": "hindsight", "extract": True, "cloud_llm": True,
+                          "embeddings_provider": "local", "cloud_embeddings": False}}
+        which_ok = {"git": "/g", "mise": "/m", "docker": "/d"}
+        for state, level, fragment in (("up", "ok", "LM Studio respondendo"),
+                                       ("installed", "warn", "servidor desligado"),
+                                       ("missing", "warn", "LM Studio ausente")):
+            with mock.patch.object(setup, "lmstudio_state", return_value=state):
+                cks = doctor._machine_checks(cfg, which=lambda c: which_ok.get(c))
+            lms = [c for c in cks if "LM Studio" in c["detail"]]
+            self.assertEqual([(c["level"], fragment in c["detail"]) for c in lms], [(level, True)], state)
+            if level == "warn":
+                self.assertIn("setup --only memoria", lms[0]["detail"])      # o comando que resolve
 
 
 if __name__ == "__main__":

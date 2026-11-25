@@ -9,8 +9,8 @@ para achar mais rápido. Se o servidor cair, nada se perde.
 |---|---|---|
 | Banco | **1** (`bank`, default `brain`), chunks | **1** (`bank`, default `brain`) com extração de fatos |
 | LLM em operação | nenhum | extração + consolidação (modelo barato); mental models (Fase 8 — opcional, `mental_models = true`) |
-| Sai da máquina? | **não** | sim — texto do vault à API de LLM **com a chave do dono** (`config/.env`) |
-| Chaves no `.env` | nenhuma | 1 por conta de nuvem (LLM sempre; embeddings e reranker quando de nuvem — a OpenAI nos dois papéis usa a mesma) |
+| Sai da máquina? | **não** | sim — texto do vault à API de LLM **com a chave do dono** (`config/.env`); com embeddings `local`, só o LLM é de nuvem — os vetores ficam na máquina |
+| Chaves no `.env` | nenhuma | 1 por conta de nuvem (LLM sempre; embeddings e reranker quando de nuvem — a OpenAI nos dois papéis usa a mesma; embeddings `local` não pedem chave) |
 | Custo de API | US$ 0 | medido por `brain memory cost` (medidor mensal, sem teto — decisão do dono) |
 | RAW sem `/dump` | entra como está | **hold**: fica retido até o artefato existir (`raw_awaiting_dump = "hold"`) |
 
@@ -22,7 +22,8 @@ sem chave `HINDSIGHT_API_*_API_KEY` no `.env`.
 
 ### O que muda no `full`
 
-- **Embeddings e reranker de provedor de nuvem** (só-nuvem): o boot não depende do LM Studio.
+- **Embeddings de provedor de nuvem** (o default do `full`) e reranker de nuvem: o boot não depende do LM Studio.
+  Com embeddings `local` (escolha, não padrão) o boot volta a depender dele — veja "Embeddings locais no `full`" nos provedores.
 - Todo documento viaja com um bloco **CONTEXTO** (caminho, data do mundo, pessoas com id e
   grafias, projetos) derivado do ledger — a extração usa só esses nomes/IDs, nunca inventa.
 - **Data do mundo** em todo RAW (ordem: artefato do `/dump` → carimbo no nome → cabeçalho
@@ -269,15 +270,17 @@ Três slots independentes, escolhidos no wizard e re-editáveis a qualquer momen
 | Slot | Default | Nuvem recomendada | Onde muda |
 |---|---|---|---|
 | **LLM** (só `full`) | — | Anthropic ✓ (Haiku 5.5 em TUDO, esforço high — régua do dono) · claude-code/xai-oauth (assinatura com login guiado) · Fireworks (DeepSeek v4.1) · Z.ai (glm-5.3-flash) · OpenAI (gpt-6-luna) · Gemini (3.1-flash-lite) · MiniMax (M3.1-Flash) · custom | wizard · `brain memory providers set llm …` · TUI Configurações · painel |
-| **Embeddings** | embed: local — LM Studio bge-m3 (zero egress) · **full: Fireworks `qwen3-embedding-8b` @1536 (só-nuvem)** | Fireworks `qwen3-embedding-8b` @1536 · OpenAI · Cohere · custom | idem |
+| **Embeddings** | embed: local — LM Studio bge-m3 (zero egress) · **full: Fireworks `qwen3-embedding-8b` @1536 (nuvem; `local` é escolha, não padrão)** | Fireworks `qwen3-embedding-8b` @1536 · OpenAI · Cohere · custom — ou `local` (bge-m3, nos dois modos) | idem |
 | **Reranker** | off — fusão RRF (veredito 2026-11-07: local reprovado no gate de 400 ms) | Fireworks `qwen3-reranker-8b` (top-50) · Cohere · ZeroEntropy · OpenRouter · custom | idem |
 | **Decisão** (só `full`) | **off — cada um paga só os tokens do próprio LLM (pular é normal)** | Hindsight `hs-decide-1-flash` — US$ 0,02/1M de entrada, chave `hsk_` por uso (`--recall on --candidates N` opcional) · ou `local` (`/v1/systemone`, zero egress) | idem |
 
 Regras do desenho:
 
-- **O modo define o cardápio (decisão 2026-11-17).** `embed`: embeddings local (default) ou de nuvem.
-  **`full` é só-nuvem** — o wizard não oferece `local`, o CLI recusa (`providers set embeddings --provider
-  local`) e o doctor avisa instâncias legadas. O passo Memória monta os três pares (LLM · embeddings ·
+- **O LLM é de nuvem no `full`; os embeddings escolhem.** `embed`: embeddings local (default) ou de
+  nuvem. `full`: o default recomendado é o de nuvem, mas `local` (bge-m3 no LM Studio) entra no cardápio
+  de todas as superfícies. Uma instância que já usa `local` no `embed` sobe para o `full` com `local`
+  pré-selecionado; um payload headless que não nomeia embeddings no `full` cai no de nuvem. LLM local
+  segue proibido. O passo Memória monta os três pares (LLM · embeddings ·
   reranker, cada um com provedor e chave; reranker: off/RRF default · Fireworks · Cohere) no painel
   (Configurações › Memória), na TUI (Configurações › Provedores, tecla `m`) e no CLI headless
   (`brain memory setup --mode full --provider … --approval ok`). Fireworks embeddings+reranker usam a
@@ -289,11 +292,26 @@ Regras do desenho:
 - **Egress é dito na tela**: qualquer provedor de nuvem manda texto do vault para fora
   (LLM para extrair, embeddings para vetorizar, reranker para ranquear, decisor em nuvem para julgar) — o wizard avisa
   em cada escolha e o doctor narra (`cloud_embeddings`/`cloud_reranker`/`cloud_decision`/`cloud_llm`).
+  `full` + embeddings `local` grava `cloud_llm = true` e `cloud_embeddings = false`: wizard, painel, TUI e doctor
+  dizem "embeddings local; o LLM continua na nuvem" — o texto do vault segue indo ao LLM. A promessa "nada sai da
+  máquina" é só do `embed`.
 - **Compose**: o `env_file: ../config/.env` injeta as chaves `HINDSIGHT_API_*` no container;
   os cinco campos do stack local são fallback de fábrica. Trocou provedor? Recrie com
   `--env-file config/.env`. **Trocou embeddings?** Vetores antigos ficam incompatíveis —
-  `brain memory rebuild` re-deriva tudo do vault.
-- **Doctor**: provedor de nuvem sem chave = erro; operações falhas do servidor
+  `brain memory rebuild` re-deriva tudo do vault. Isso vale para `local` ↔ nuvem nos dois sentidos, e **no `full`
+  o rebuild reenvia o vault inteiro ao LLM e paga a extração de novo** (`brain memory cost` mede): a saída da
+  troca avisa isso antes de gravar.
+- **Embeddings locais no `full`**: o Hindsight checa o LM Studio no boot e o contêiner morre sem ele. Todo caminho
+  que sobe ou recria o servidor no `full` + `local` (wizard, `brain setup --only memoria`, job do painel, login do
+  provedor de assinatura) roda antes do `up -d` o mesmo pré-voo do `embed`: LM Studio instalado, servidor em
+  `:1234` e `text-embedding-bge-m3` carregado. Faltou? O fluxo **para antes de subir**, narra o que faltou e manda
+  rodar `brain setup --only memoria` — o job do painel termina em erro, não em sucesso. O watchdog
+  (`services/watchdog.sh`) também não recria em loop um contêiner `full` + `local` enquanto o `:1234` não responde;
+  ele registra a causa no log. A saída de `brain memory providers set embeddings --provider local` narra o estado
+  do LM Studio e o próximo passo (recriar com o override do `full`, depois `brain memory rebuild`).
+- **Doctor**: `full` + embeddings `local`: LM Studio respondendo = ok; instalado com o servidor desligado, ou
+  ausente = aviso com o comando que resolve (`brain setup --only memoria`). Provedor de nuvem sem chave = erro;
+  operações falhas do servidor
   (`failed_operations`, ex.: `No models loaded`) = aviso com a causa nomeada e o
   comando que corrige (`lms load` ou `brain memory providers set llm …`).
 - `jina-mlx` existe no servidor mas **fica fora do menu** — benchmark 2026-11-07 reprovou

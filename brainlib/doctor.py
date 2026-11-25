@@ -73,14 +73,14 @@ def _machine_checks(cfg: dict, which=shutil.which, exists=None) -> list[dict]:
 
 
 def _lms_machine_check(cfg: dict, out: list) -> None:
-    """Embeddings locais do modo embed: o LM Studio precisa existir e responder. Warn, nunca
+    """Embeddings locais (embed ou full): o LM Studio precisa existir e responder. Warn, nunca
     error (a saída gateia o modal da TUI) — e a dica acompanha o estado real: instalado com
     servidor desligado ≠ ausente (o `brain setup --only memoria` resolve os dois sozinho)."""
     from . import memory as _memory, setup
     mem = cfg.get("memory") or {}
     # exige a chave explícita (configs carregadas sempre a trazem pelo DEFAULTS): dict de teste
     # mínimo não aciona probe de rede
-    if _memory.mode(mem) != "embed" or mem.get("cloud_embeddings") \
+    if _memory.mode(mem) not in ("embed", "full") or mem.get("cloud_embeddings") \
             or mem.get("embeddings_provider") != "local":
         return
     state = setup.lmstudio_state()
@@ -92,6 +92,20 @@ def _lms_machine_check(cfg: dict, out: list) -> None:
     else:
         out.append(_c("warn", "máquina", "LM Studio ausente — `brain setup --only memoria` baixa e "
                                          "configura (instalador oficial, embeddings locais)"))
+
+
+def _lms_embeddings_item(label: str, mem_mode: str) -> dict:
+    """Item do slot Embeddings quando o provedor é `local`. No full o LLM segue na nuvem — o egresso é
+    dito aqui — e o contêiner morre no boot sem o LM Studio: o estado real da máquina decide ok/warn."""
+    from . import setup
+    where = "embeddings local; o LLM continua na nuvem" if mem_mode == "full" else "local, sem chave"
+    state = setup.lmstudio_state()
+    if state == "up":
+        return _c("ok", "memória · embeddings", f"{label} ({where}) — LM Studio respondendo em :1234")
+    why = "instalado com o servidor desligado" if state == "installed" else "ausente"
+    return _c("warn", "memória · embeddings",
+              f"{label} ({where}) — LM Studio {why}: o Hindsight não sobe sem ele; "
+              "`brain setup --only memoria` resolve")
 
 
 def _lms_reachable(http_get=None) -> bool:
@@ -434,9 +448,7 @@ def checks(brain, online: bool = False, probe_agent: bool = False, docker_probe=
         emb_p = _prov.PROVIDERS["embeddings"].get(emb_prov)
         if emb_prov == "local" or (emb_p and not emb_p.get("key_env")):
             if mem_mode == "full":
-                out.append(_c("warn", "memória · embeddings",
-                              "full com embeddings locais (LM Studio) — o full é só-nuvem: "
-                              "`brain memory providers set embeddings --provider fireworks --key …`"))
+                out.append(_lms_embeddings_item(emb_s["label"], mem_mode))
             else:
                 out.append(_c("ok", "memória · embeddings", f"{emb_s['label']} (local, sem chave)"))
         elif emb_p is None:

@@ -917,9 +917,11 @@ def _providers_step(brain, ui, slots: list[str], going_full: bool | None = None)
               "embeddings": "embeddings", "reranker": "reranker",
               "decision": "decisão (juiz rápido System-1 — opcional)"}
     changed = False
-    # full é só-nuvem: embeddings locais não entram no menu. No fluxo headless a lista pode vir só com o LLM
-    # ou só com os embeddings (`only`): por isso o chamador diz se está indo ao full, em vez de deduzir da lista.
+    # No fluxo headless a lista pode vir só com o LLM ou só com os embeddings (`only`): por isso o chamador diz
+    # se está indo ao full, em vez de deduzir da lista.
     going_full = "llm" in slots if going_full is None else going_full
+    from . import memory
+    mem_on = memory.mode(brain.inst.cfg["memory"]) != "none"
     # modelo/endpoint que o payload (painel, formulário, CLI) trouxe para ESTE slot — hook só da UI roteirizada; no
     # wizard interativo o padrão segue vazio (`custom` não tem registro) e o dono digita
     preset = getattr(ui, "preset", None) or (lambda _slot: {})
@@ -931,11 +933,12 @@ def _providers_step(brain, ui, slots: list[str], going_full: bool | None = None)
             slot, include_custom=True, include_unavailable=False,
             mode="full" if going_full else "embed",
         )]
-        if slot == "embeddings" and going_full and cur == "local":
-            ui.say("  ☁ modo full é só-nuvem: embeddings locais (bge-m3 no LM Studio) ficam para o embed")
-        default = cur if cur in opts else ("off" if slot in ("reranker", "decision") else
-                                           "fireworks" if (slot == "embeddings" and going_full) else
-                                           "local" if slot == "embeddings" else "anthropic")
+        # `local` só vem pré-selecionado no full quando a instância JÁ usa memória (veio do embed): o `local` do
+        # config de uma instância nova é o padrão de fábrica, não uma escolha — o recomendado do full é o de nuvem.
+        keep_cur = cur in opts and not (slot == "embeddings" and going_full and cur == "local" and not mem_on)
+        default = cur if keep_cur else ("off" if slot in ("reranker", "decision") else
+                                        "fireworks" if (slot == "embeddings" and going_full) else
+                                        "local" if slot == "embeddings" else "anthropic")
         p = ui.choice(f"Provedor de {labels[slot]}", opts, default)
         info = reg[p]
         if slot == "llm" and info.get("docker_auth") == "manual":
@@ -943,9 +946,24 @@ def _providers_step(brain, ui, slots: list[str], going_full: bool | None = None)
                 ui.say(f"  ⚠ {info['setup_hint']}")
             if info.get("auth_command"):
                 ui.say(f"  comando: {info['auth_command']}")
+        if slot == "embeddings" and prov.embeddings_change_pending(brain, p, info.get("model", "")):
+            ui.say(f"  ⚠ {prov.rebuild_warning(brain, going_full)}")  # antes de gravar: o rebuild repaga a extração no full
         if p == "off" or (p == "local" and not info.get("key_env")):
+            if slot == "embeddings" and p == "local" and going_full:
+                # antes de gravar: o pré-voo olha a escolha, não o config atual — senão fireworks → local
+                # grava, o contêiner saudável não recria, e a nova tentativa acha que não há o que fazer
+                if not _local_emb_preflight(brain, ui, "full", provider="local"):
+                    raise util.BrainError(
+                        "full com embeddings local precisa do LM Studio no ar — nada foi gravado nem recriado",
+                        code=4,
+                    )
             res = prov.set_slot(brain, slot, p)
             ui.say(f"✓ {slot}: {info['label']}")
+            if slot == "embeddings" and p == "local" and going_full:
+                ui.say("  embeddings local — os vetores não saem da máquina; o LLM continua na nuvem "
+                       "(o texto do vault vai a ele no full)")
+                if res["provider"] != cur or res["env"]:
+                    _recreate_mark(brain).write_text("embeddings\n", encoding="utf-8")
             changed = changed or bool(res["env"])
             continue
         if slot != "llm" and not info.get("local"):
@@ -984,8 +1002,8 @@ def _providers_step(brain, ui, slots: list[str], going_full: bool | None = None)
                             candidates=candidates, key=key, recall=recall)
         ui.say(f"✓ {slot} → {res['label']}" + (" (chave gravada no config/.env)" if key else ""))
         if res["rebuild_needed"]:
-            ui.say("⚠ embeddings mudaram: vetores antigos são incompatíveis — `brain memory rebuild` "
-                   "re-deriva tudo do vault depois do wizard")
+            ui.say("→ rode `brain memory rebuild` depois do wizard"
+                   + (f" — {prov.REBUILD_COST_NOTE}" if going_full else ""))
         changed = changed or bool(res["env"])
     return changed
 
@@ -1055,6 +1073,8 @@ def _auth_xai_device(brain, ui) -> bool:
     env_file = brain.inst.env_file if brain.inst.env_file.exists() else None
     ui.say("subindo o servidor de memória com o volume de credenciais…")
     mode = memory.mode(mem)
+    if mode == "full" and not _local_emb_preflight(brain, ui, mode):
+        return False                        # o login não sobe um contêiner que morreria sem o LM Studio
     if not compose_up(mode, ui, env_file=env_file) or not wait_hindsight(mem["url"], 120):
         ui.say(f"✗ Hindsight não respondeu em {mem['url']} — veja `docker logs hindsight`")
         return False
@@ -1100,6 +1120,33 @@ def _local_emb_model(brain) -> str:
                or prov.PROVIDERS["embeddings"]["local"].get("model", "text-embedding-bge-m3"))
 
 
+def _recreate_mark(brain):
+    """Sinal de que o .env de embeddings mudou e o contêiner ainda não foi recriado com ele."""
+    return brain.inst.root / ".memory-recreate-pending"
+
+
+def _local_emb_preflight(brain, ui, mode: str, *, provider: str | None = None) -> bool:
+    """Pré-voo dos embeddings locais: o Hindsight pinga o LM Studio no boot, então servidor e modelo precisam
+    estar prontos ANTES de qualquer `up -d`. True = pode subir. `provider`, quando dado, é a escolha que ainda
+    não foi gravada — senão o pré-voo olha o config e deixa passar uma troca fireworks → local. No embed a falha
+    é narrada e o fluxo segue (o aviso final repete o que faltou); no full ela PARA — o contêiner morreria na
+    checagem de boot e o watchdog o recriaria em loop."""
+    mem = brain.inst.cfg["memory"]
+    intended = mem.get("embeddings_provider") if provider is None else provider
+    if intended != "local" or lmstudio_up():
+        return True
+    if lmstudio_ensure(ui, model=_local_emb_model(brain)):
+        ui.say("✓ LM Studio pronto para o Brain")
+        return True
+    if mode != "full":
+        return True
+    ui.say("✗ full com embeddings local precisa do LM Studio no ar (servidor em :1234 e o modelo bge-m3) antes de "
+           "subir o contêiner — sem ele o Hindsight morre no boot. Nada foi recriado. Resolva o que está narrado "
+           "acima e rode `brain setup --only memoria` de novo (ou volte aos embeddings de nuvem: "
+           "`brain memory providers set embeddings --provider fireworks --key …`)")
+    return False
+
+
 def _run_memoria(brain, ui, mode_hint: str | None = None, only: list[str] | None = None,
                  env_dirty: bool = False) -> None:
     """Passo Memória. `only` limita os slots de provedor que o roteiro regrava (fluxo headless: o que o
@@ -1135,18 +1182,24 @@ def _run_memoria(brain, ui, mode_hint: str | None = None, only: list[str] | None
     slots = only if only is not None else (full_slots if mode == "full" else ["embeddings", "reranker"])
     if skip_rer:
         slots = [s for s in slots if s != "reranker"]
-    env_changed = env_dirty or _providers_step(brain, ui, slots, going_full=mode == "full")
+    owed = _recreate_mark(brain).exists()
+    step_changed = _providers_step(brain, ui, slots, going_full=mode == "full")
+    env_changed = env_dirty or owed or step_changed
     mem = brain.inst.cfg["memory"]                       # set_slot recarregou a config
-    if mode == "embed" and mem.get("embeddings_provider") == "local" and not lmstudio_up():
-        # o Hindsight pinga as embeddings no boot: o LM Studio precisa estar pronto ANTES do up -d
-        if lmstudio_ensure(ui, model=_local_emb_model(brain)):
-            ui.say("✓ LM Studio pronto para o Brain")
-    if hindsight_health(url) is None:
+    health = hindsight_health(url)
+    # embed: sempre (o up -d vem logo); full: quando vai subir, recriar, ou ainda deve uma recriação
+    if (mode == "embed" or health is None or env_changed) and not _local_emb_preflight(brain, ui, mode):
+        raise util.BrainError(
+            "o modo full com embeddings local não foi aplicado — o LM Studio precisa estar no ar antes do contêiner",
+            code=4,
+        )
+    if health is None:
         ui.say("subindo o Hindsight (docker compose)…")
         if compose_up(mode, ui, env_file=env_file) and not wait_hindsight(url, 120):
             ui.say(f"✗ Hindsight não respondeu em {url} — veja `docker logs hindsight`")
             return
         ui.say("✓ Hindsight no ar")
+        _recreate_mark(brain).unlink(missing_ok=True)
     elif env_changed:
         ui.say("recriando o Hindsight com os provedores do config/.env…")
         if compose_up(mode, ui, env_file=env_file) and not wait_hindsight(url, 120):
@@ -1155,6 +1208,7 @@ def _run_memoria(brain, ui, mode_hint: str | None = None, only: list[str] | None
                    + "--env-file config/.env up -d")
         else:
             ui.say("✓ Hindsight recriado com os provedores escolhidos")
+            _recreate_mark(brain).unlink(missing_ok=True)
     if mode == "embed":
         if mem["embeddings_provider"] == "local" and not lmstudio_up():
             ui.say("⚠ LM Studio ainda não responde em :1234 — o que faltou está narrado acima; "
@@ -1290,13 +1344,11 @@ def validate_memory_setup(data: dict) -> dict:
         if provider == "custom" and not llm_base_url:
             raise util.BrainError("provedor custom precisa de base_url", code=4)
 
-    emb_default = "local" if mode == "embed" else "fireworks"
+    emb_default = "local" if mode == "embed" else "fireworks"      # o default do full segue o de nuvem
     emb_flat = "" if isinstance(raw_emb, dict) else str(raw_emb or data.get("emb") or "")
     emb = str(emb_in.get("provider") or emb_flat or emb_default).strip()
-    if mode == "full" and emb == "local":
-        raise util.BrainError("no modo full os embeddings são de nuvem — fireworks ou openai", code=4)
     if emb not in prov.PROVIDERS["embeddings"]:
-        raise util.BrainError("provedor de embeddings inválido (embed: local ou nuvem)", code=4)
+        raise util.BrainError("provedor de embeddings inválido (local ou nuvem)", code=4)
     emb_reg = prov.PROVIDERS["embeddings"][emb]
     emb_model = str(emb_in.get("model") or emb_reg.get("model", "")).strip()
     emb_base_url = str(emb_in.get("base_url") or emb_reg.get("base_url", "")).strip()
@@ -1419,6 +1471,8 @@ def _headless_slots(brain, mode: str, given: dict) -> list[str]:
             continue
         cur = st[slot]["provider"]
         reg = prov.PROVIDERS[slot].get(cur) or {}
+        # `local` gravado e não nomeado no payload do full: o payload manda (default de nuvem) — `local` no full é
+        # escolha dita, não herança do embed (um payload que nomeia `local` entra pelo `given`, acima)
         if not reg or (mode == "full" and slot == "embeddings" and cur == "local") \
                 or (reg.get("key_env") and not env.get(reg["key_env"])):
             out.append(slot)
@@ -1441,7 +1495,8 @@ def configure_memory(brain, data: dict, say=print) -> str:
         cur = st[slot]["provider"]
         reg = prov.PROVIDERS[slot].get(cur) or {}
         if not reg or (mode == "full" and slot == "embeddings" and cur == "local"):
-            continue                # sem escolha que sirva ao modo: o payload manda (padrão do modo, como antes)
+            continue                # sem escolha que sirva ao modo: o payload manda (padrão do modo, como antes;
+                                    # no full, `local` só vale quando o payload o nomeia)
         if s["provider"] != cur and v["named"][slot]:
             continue                # provedor outro, nomeado no payload: o passo de provedores aplica
         s["provider"] = cur         # sem provedor nomeado (ou o mesmo): vale o atual
@@ -1523,6 +1578,8 @@ def configure_memory(brain, data: dict, say=print) -> str:
     final = memory.mode(config.reload(brain.inst).cfg["memory"])
     if final == "none":
         raise util.BrainError("a memória não ligou — veja o que faltou acima", code=4)
+    if mode == "full" and final != "full":
+        raise util.BrainError("o modo full não foi aplicado — veja o que faltou acima", code=4)
     return final
 
 

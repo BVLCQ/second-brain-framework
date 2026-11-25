@@ -188,11 +188,23 @@ class StepTests(unittest.TestCase):
         with self.assertRaises(util.BrainError):
             onboard.apply_memory(self.b, {"mode": "turbo"})
 
-    def test_memory_full_is_cloud_only_and_openai_default_model(self):
-        # full é só-nuvem: embeddings locais recusados antes do job
+    def test_memory_full_accepts_local_embeddings_with_a_cloud_default_and_openai_default_model(self):
+        # a exigência de nuvem do full vale só para o LLM: embeddings local passa pela validação do painel…
+        from brainlib import setup as _setup
+        v = _setup.validate_memory_setup({"mode": "full", "consent": True, "key": "sk-x",
+                                          "provider": "anthropic", "embeddings": "local"})
+        self.assertEqual((v["mode"], v["emb"]), ("full", "local"))
+        # …mas um payload que não nomeia embeddings no full segue caindo no default de nuvem
+        v = _setup.validate_memory_setup({"mode": "full", "consent": True, "key": "sk-x", "provider": "anthropic"})
+        self.assertEqual(v["emb"], "fireworks")
+        # e o painel descreve o cardápio do full com o recomendado de nuvem (o `local` não é o padrão)
+        emb = {x["key"]: x for x in onboard.state(self.b)["memory"]["providers"]["embeddings"]}
+        self.assertTrue(emb["fireworks"]["recommended_cloud"])
+        self.assertFalse(emb["local"].get("recommended_cloud"))
+        # provedor fora do registro segue recusado antes do job
         with self.assertRaises(util.BrainError):
             onboard.apply_memory(self.b, {"mode": "full", "consent": True, "key": "sk-x",
-                                          "provider": "anthropic", "embeddings": "local"})
+                                          "provider": "anthropic", "embeddings": "turbo"})
         # openai sem modelo é caminho válido (2.32.1): vazio = default do servidor pinado,
         # gravado explícito no set_slot — a validação de porta não recusa mais
         from brainlib import setup as _setup
