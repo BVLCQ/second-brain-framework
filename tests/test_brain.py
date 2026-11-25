@@ -1535,9 +1535,10 @@ class UpstreamTests(unittest.TestCase):
 
     def setUp(self):
         self._env = {k: os.environ.get(k) for k in ("GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_NAME",
-                                                    "GIT_COMMITTER_EMAIL", "BRAIN_NIGHTLY")}
+                                                    "GIT_COMMITTER_EMAIL", "BRAIN_NIGHTLY", "BRAIN_PUBLIC_DENYLIST")}
+        # o hook de verdade não lê a lista privada de quem roda a suíte (tests/test_prepush_gate.py cobre a lista)
         os.environ.update(GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@example.org",
-                          GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@example.org")
+                          GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@example.org", BRAIN_PUBLIC_DENYLIST="")
         os.environ.pop("BRAIN_NIGHTLY", None)
         self._td = tempfile.TemporaryDirectory()
         tmp = Path(self._td.name)

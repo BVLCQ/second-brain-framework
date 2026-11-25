@@ -219,7 +219,7 @@ código 4. É rede de segurança — leia o diff.
 | `scan` | à frente/atrás (sem rede), arquivos pendentes, achados, e o que está em `scripts/local/` (ignorado pelo git; gradue movendo para `scripts/` ou `brainlib/`) |
 | `scan --committed` | só commits — o que um `git push` enviaria (é o que o hook roda) |
 | `scan --fetch` · `--json` | atualiza o remoto antes · saída estruturada |
-| `hook install\|remove\|status` | hook `pre-push` que roda `scan --committed` e **barra o push** se achar algo. `brain init` e `brain update` instalam; `git push --no-verify` ignora; não sobrescreve um pre-push que não seja do brain |
+| `hook install\|remove\|status` | hook `pre-push` que roda `scan --committed` e **barra o push** se achar algo. Com a lista privada na máquina (`~/.config/brain/public-denylist` ou `BRAIN_PUBLIC_DENYLIST`), roda o portão de dados inteiro: a lista e o anexo fechado (`guides/development.md`). `brain init` e `brain update` instalam; `git push --no-verify` ignora; não sobrescreve um pre-push que não seja do brain |
 
 O `brain doctor` avisa de melhorias locais ainda não enviadas, de achados e de hook ausente.
 

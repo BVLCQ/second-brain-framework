@@ -663,9 +663,11 @@ Já coberto na seção 3. Gatilho: PROFILE e PLANNING vazios.
   Faz pull em avanço rápido com autostash, semeia arquivos novos de template sem sobrescrever
   nada seu, avisa quando um template que você já tem mudou e roda o doctor no fim.
 - **Subir (git puro):** melhoria de código ou estrutura nascida na sua instância volta ao repo do
-  framework com `git add`/`commit`/`push`, depois do seu "ok". Um hook `pre-push` roda
-  `./brain upstream scan` e barra o envio se houver dado pessoal (nome, e-mail, pessoas do ledger,
-  caminho da máquina, tokens) — o repo é público.
+  framework com `git add`/`commit`/`push` num branch, e um PR — a `main` só muda por PR —, depois do
+  seu "ok". Um hook `pre-push` roda `./brain upstream scan` e barra o envio se houver dado pessoal
+  (nome, e-mail, pessoas do ledger, caminho da máquina, tokens) — o repo é público. Na máquina de
+  quem mantém o repositório, com a lista privada, o hook roda o portão de dados inteiro
+  (`guides/development.md`).
 - **Pegadinha:** nunca force-push; nunca commitar `vault/` ou `.env`.
 
 ### Direto no terminal (sem agente)

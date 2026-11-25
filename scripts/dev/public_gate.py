@@ -6,7 +6,9 @@ já varre na máquina de quem sobe (`brain upstream scan`); o CI repete a varred
 independente, antes de rodar a suíte — a mesma varredura do brain (caminho da máquina, segredo,
 workspace do Slack, dado pessoal da instância) mais uma lista privada de termos (nome de empresa,
 de rede interna, o que o mantenedor nunca quiser ver lá), que mora num segredo do repositório
-(Actions) e nunca vai ao código.
+(Actions) e nunca vai ao código. Na máquina de quem mantém, com a cópia da lista
+(`~/.config/brain/public-denylist`, ou `$BRAIN_PUBLIC_DENYLIST`), o hook roda este portão (`prepush`)
+sobre os commits do push: o branch só fica público depois de passar por ele.
 
     public_gate.py gate --base <ref|sha> [--root <repo>] --denylist <arquivo> [--detalhes]
     public_gate.py status --sha <sha> --rc <código do gate> [--run <url>]
@@ -224,14 +226,17 @@ def _zlib_stream(head: bytes) -> bool:
     return _zlib_header(head) and not _is_text(head[2:])
 
 
-def opaque_attachments(root: Path, base: str | None) -> list[dict]:
+def opaque_attachments(root: Path, base: str | None, revs: list[str] | None = None) -> list[dict]:
     """Anexos do alcance que a varredura não abre: compactado, documento, banco, binário — pelo nome ou
     pela assinatura.
 
     Olha todo blob que `<base>..HEAD` cria — inclusive num commit que outro commit do mesmo PR apagou,
     porque o conteúdo continua no histórico que o PR leva. O achado é o arquivo, nunca um valor.
+    `revs` troca o alcance por um já montado: o do hook pre-push (`<novo> ^<publicado>` ou
+    `<novo> --not --remotes=<remoto>`).
     """
-    revs = [f"{base}..HEAD"] if base else ["HEAD"]
+    if revs is None:
+        revs = [f"{base}..HEAD"] if base else ["HEAD"]
     paths: dict[str, str] = {}
     listing = _git_bytes(root, "rev-list", "--objects", *revs, "--")
     for line in listing.decode("utf-8", "replace").splitlines():
@@ -254,6 +259,27 @@ def opaque_attachments(root: Path, base: str | None) -> list[dict]:
             for sha, path in blobs.items()
             if path.lower().endswith(OPAQUE_SUFFIXES) or heads.get(sha, b"").startswith(OPAQUE_MAGIC)
             or _zlib_stream(wide.get(sha, b""))]
+
+
+def prepush(inst: config.Instance, revsets: list[list[str]], denylist: Path) -> list[dict]:
+    """O portão no hook pre-push, na máquina de quem mantém: a varredura do brain sobre os commits do push
+    (`revsets`, de `upstream.push_revsets`) com os termos da lista privada somados aos da instância, mais o
+    anexo fechado que esses commits criam. É o portão do CI antes de o branch ficar público; a saída é a
+    do hook, na máquina de quem sobe — com onde, nunca com o valor. Lista ilegível, vazia ou com termo
+    curto sobe como `GateError`, e o hook barra o push."""
+    restore = install_denylist(load_denylist(denylist))
+    try:
+        findings = upstream.scan(inst, None, committed=True, revsets=revsets)
+    finally:
+        upstream._leak_terms = restore
+        upstream.PLAIN_KINDS.discard(KIND)
+    seen: set[tuple[str, str]] = set()
+    for revs in revsets:
+        for f in opaque_attachments(inst.root, None, revs=revs) if revs else []:
+            if (f["file"], f["hint"]) not in seen:           # blob em dois refs do mesmo push: um achado só
+                seen.add((f["file"], f["hint"]))
+                findings.append(f)
+    return findings
 
 
 def _tail(data: bytes | str) -> str:

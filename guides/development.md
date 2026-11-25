@@ -19,6 +19,17 @@ portão de dados. É o mesmo fluxo dos outros projetos do mantenedor.
    `main` sem PR com o CI verde (proteção de branch) e sem o "ok". Merge só com o run do portão já
    terminado — status `data-gate (status)` verde, não pendente.
 
+## Proteção da `main`
+
+Um ruleset do repositório: a `main` só muda por PR, com o status `data-gate (status)` e os quatro
+`tests` verdes; push forçado e apagar a `main` são recusados — sem exceção, nem para quem administra
+o repositório. Push direto na `main` volta recusado pelo GitHub.
+
+O PR não exige aprovação: quem mantém é um só, e o GitHub não deixa ninguém aprovar o próprio PR — o
+"ok" do dono é o merge. Pelo mesmo motivo não há `CODEOWNERS`: revisão obrigatória de dono de código
+travaria todo PR que mexe no portão. E o portão não depende dela: roda com o workflow e os scripts
+da `main` (abaixo), e um PR não consegue enfraquecê-lo para si mesmo.
+
 ## O que nunca entra no repositório
 
 O repositório é público. Nada do dono vai para lá: nomes, e-mails, pessoas do ledger, canais do
@@ -32,9 +43,13 @@ Duas varreduras, em lugares diferentes, com as regras do `brain upstream scan` (
 segredo, workspace do Slack, dado pessoal da instância). A do CI soma uma **lista privada de termos**
 — nome de empresa, de rede interna, o que o mantenedor nunca quiser ver lá — e o anexo fechado:
 
-- **Na máquina, antes do push.** O hook `pre-push` varre os commits que o push leva e barra achados —
-  só com as regras públicas: sem a lista privada e sem anexo fechado. Para ter as duas antes do push,
-  rode o portão com a sua cópia da lista (abaixo); é um dos gates do molde de PR.
+- **Na máquina, antes do push.** O hook `pre-push` varre os commits que o push leva e barra achados.
+  Na máquina de quem mantém, com a cópia da lista privada (`~/.config/brain/public-denylist`, ou o
+  caminho em `BRAIN_PUBLIC_DENYLIST`), ele roda o portão inteiro — a lista privada e o anexo fechado
+  — antes de o branch ficar público; a saída do push diz `com a lista privada desta máquina e o anexo
+  fechado`. Lista ilegível, vazia ou com termo curto barra o push; `BRAIN_PUBLIC_DENYLIST=` (vazio)
+  desliga para um push. Sem a lista, o hook segue só com as regras públicas — é o caso de toda outra
+  instância.
 - **No CI, em todo PR e em todo push na `main`.** O job `data-gate` (`data-gate.yml`) varre o que o
   PR acrescenta à `main` (`origin/main` até a ponta do branch), commit a commit.
 
@@ -71,12 +86,12 @@ isso o primeiro passo do job publica o status `pending` (só o curl da imagem e 
 falhou. A imagem do job é fixada por digest: com tag móvel, a imagem mudaria sem passar pelo
 repositório. Para atualizar, troque o digest de `python:3.12` num PR (`crane digest python:3.12`).
 
-Só o CI barra também **anexo fechado**: arquivo compactado ou documento (zip, gzip, 7z, RAR, PDF,
+O portão — no CI, e no hook com a lista — barra também **anexo fechado**: arquivo compactado ou documento (zip, gzip, 7z, RAR, PDF,
 Office), cópia de banco e de arquivo (`.dump`, `.backup`, `.bak`; dump do PostgreSQL também pela
 assinatura), keystore (`.p12`, `.pfx`, `.kdbx`) e texto cifrado (`.gpg`, `.age`) que o PR acrescenta
 é achado por si, mesmo sem termo — o portão não lê o que está comprimido dentro. Imagem e vídeo não são bloqueados: captura de tela com dado interno só é vista por quem revisa.
 
-Para rodar na máquina, da pasta do checkout, com a sua cópia da lista:
+Para rodar à mão, da pasta do checkout, com a sua cópia da lista (o hook já roda o mesmo no push):
 
     python3 scripts/dev/public_gate.py gate --base origin/main --denylist ~/.config/brain/public-denylist
 
@@ -103,6 +118,10 @@ O workflow não usa actions em JavaScript: o checkout é git puro, o Python vem 
 `python:` e o `node` entra por um tarball com versão e checksum fixados. O `pip` só instala o que o
 `requirements` trava por hash.
 
+O repositório aceita só actions e workflows dele mesmo (`local_only`): nenhum `uses:` de fora roda,
+nem num PR que tente acrescentar um. O token do job nasce só de leitura — cada job pede o que
+precisa —, e workflow de PR de quem vem de fora só roda depois que quem mantém aprova.
+
 ### Trocar a lista privada
 
 A lista nasce na máquina do mantenedor (`~/.config/brain/public-denylist`, 0600) e vai para o
@@ -114,6 +133,9 @@ Um termo por linha, ou separado por vírgula. Linha que começa com `#` é comen
 meio de um termo não existe (vira parte dele). Termo com menos de 4 caracteres é recusado: o portão
 falha em vez de varrer uma lista menor do que a pedida. O valor novo vale para a próxima execução
 do CI.
+
+Acento conta: `cafe` não acha `café`, nem o contrário (a forma decomposta do macOS acha — é a mesma
+grafia). Termo que aparece com e sem acento entra na lista nas duas grafias.
 
 ## Evidência no PR
 

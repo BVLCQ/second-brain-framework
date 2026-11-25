@@ -9,6 +9,7 @@ caminhos da máquina, tokens) roda num hook pre-push e no `doctor`. Rede de segu
 from __future__ import annotations
 
 import getpass
+import importlib.util
 import json
 import os
 import re
@@ -1004,16 +1005,61 @@ def push_revsets(inst: config.Instance, remote: str, stdin_text: str) -> list[li
     return out
 
 
-def pre_push_scan(inst: config.Instance, remote: str, stdin_text: str) -> dict:
+# Lista privada da máquina de quem mantém (nome de empresa, de rede interna…). Com ela, o hook roda o portão
+# de dados inteiro (`scripts/dev/public_gate.py`): os termos da lista somados aos da instância e o anexo fechado.
+# Sem o hook, os dois só chegavam no CI — depois do push, com o branch já público.
+PRIVATE_DENYLIST_ENV = "BRAIN_PUBLIC_DENYLIST"
+PRIVATE_DENYLIST_HOME = Path(".config") / "brain" / "public-denylist"          # relativo à home
+GATE_SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "dev" / "public_gate.py"
+
+
+def private_denylist() -> Path | None:
+    """A lista privada desta máquina, ou None (sem lista: o push segue só com as regras públicas).
+
+    `$BRAIN_PUBLIC_DENYLIST` manda quando definida: um caminho — que tem de ser lido; se não for, o push
+    para — ou vazio, que desliga. Sem a variável, `~/.config/brain/public-denylist`, se existir."""
+    env = os.environ.get(PRIVATE_DENYLIST_ENV)
+    if env is not None:
+        return Path(env.strip()).expanduser() if env.strip() else None
+    path = Path.home() / PRIVATE_DENYLIST_HOME
+    return path if path.exists() or path.is_symlink() else None
+
+
+def _public_gate():
+    """O portão de dados que vem com este código, como módulo. Ausente com a lista na máquina é erro: o push
+    não passa sem ele (fail-closed, como a varredura)."""
+    if not GATE_SCRIPT.is_file():
+        raise util.BrainError("há lista privada nesta máquina, mas esta árvore não tem o portão "
+                              "(scripts/dev/public_gate.py) — atualize o clone, ou rode o push com "
+                              f"{PRIVATE_DENYLIST_ENV}= (vazio) para varrer só com as regras públicas", 1)
+    spec = importlib.util.spec_from_file_location("brain_public_gate", GATE_SCRIPT)
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def pre_push_scan(inst: config.Instance, remote: str, stdin_text: str, denylist: Path | None = None) -> dict:
     """O que o hook pre-push roda: varre exatamente os commits que este push envia (qualquer branch,
-    tag, HEAD solto ou ref nova), sem depender do branch atual."""
+    tag, HEAD solto ou ref nova), sem depender do branch atual.
+
+    `denylist`: a lista privada da máquina (`private_denylist`). Com ela, a varredura é a do portão de dados
+    sobre os mesmos commits; lista ilegível, vazia ou com termo curto barra o push (código 1)."""
     revsets = push_revsets(inst, remote, stdin_text)
     tracked = [f for f in _paths(_git(inst.root, "ls-files", "-z", raw=True)) if _private_path(f)]
     findings = [{"file": f, "line": 0, "rule": "arquivo do dono rastreado pelo git",
                  "hint": "git rm --cached antes de enviar"} for f in tracked]
-    findings += scan(inst, None, committed=True, revsets=revsets) if revsets else []
+    private = bool(revsets) and denylist is not None
+    if private:
+        gate = _public_gate()
+        try:
+            findings += gate.prepush(inst, revsets, denylist)
+        except gate.GateError as e:                    # mensagem fixa do portão: nunca traz termo da lista
+            raise util.BrainError(f"portão de dados: {e}", 1) from e
+    elif revsets:
+        findings += scan(inst, None, committed=True, revsets=revsets)
     return {"remote": remote, "branch": "(pre-push)", "ref": None, "ahead": 0, "behind": 0, "changed": [], "new": [],
-            "local_scripts": [], "committed_only": True, "revsets": revsets, "findings": findings}
+            "local_scripts": [], "committed_only": True, "revsets": revsets, "private": private, "findings": findings}
 
 
 def _local_scripts(root: Path) -> list[str]:
@@ -1127,7 +1173,8 @@ def _print_findings(findings: list[dict]) -> None:
 
 def _print_scan(st: dict) -> None:
     if "revsets" in st:
-        print(f"pre-push → {st['remote']}: {len(st['revsets'])} ref(s) com commits a varrer")
+        extra = " · com a lista privada desta máquina e o anexo fechado" if st.get("private") else ""
+        print(f"pre-push → {st['remote']}: {len(st['revsets'])} ref(s) com commits a varrer{extra}")
     elif st.get("unpushed_base"):
         print(f"{st['remote']}/{st['branch']} ainda sem referência no {st['remote']} — o que um push enviaria: "
               f"{st['ahead']} commit(s)")
@@ -1147,7 +1194,7 @@ def _print_scan(st: dict) -> None:
     if st["findings"]:
         print(f"✗ {len(st['findings'])} achado(s) de dado pessoal/segredo — não envie ao repo público até limpar:")
         _print_findings(st["findings"])
-    elif st["ahead"] or st["changed"] or st["new"]:
+    elif st["ahead"] or st["changed"] or st["new"] or st.get("revsets"):   # pre-push: varreu os commits do push
         print("✓ varredura limpa (leia o diff mesmo assim: ela é rede de segurança, não revisão)")
     else:
         print("✓ nada pendente — o framework já tem tudo que a instância tem")
@@ -1305,7 +1352,7 @@ def cli_upstream(args, _b) -> None:
         return
     pre_push = os.environ.get("BRAIN_PRE_PUSH")
     if args.committed and pre_push is not None:          # chamado pelo hook: refs do push no stdin
-        st = pre_push_scan(inst, args.remote or pre_push or "origin", sys.stdin.read())
+        st = pre_push_scan(inst, args.remote or pre_push or "origin", sys.stdin.read(), denylist=private_denylist())
     else:
         st = upstream_scan(inst, args.remote, args.branch, committed=args.committed, fetch=args.fetch)
     if args.json:
