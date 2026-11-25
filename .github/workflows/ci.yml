@@ -1,20 +1,24 @@
-# CI — GitHub Actions nos runners do mantenedor (workers em containers Docker, na máquina dele):
-# o repositório é público e é a origem; o CI roda aqui e não consome minutos do GitHub.
+# CI — GitHub Actions nos runners hospedados do GitHub (`ubuntu-24.04`, máquina nova para cada job).
+# O repositório é público, e nele os runners padrão do GitHub são gratuitos: não há minuto a poupar.
 #
 # Dois eventos de PR, um de cada lado da fronteira de confiança:
 #
 # pull_request_target roda o PORTÃO DE DADOS, com o workflow da main — não o do PR: nenhum PR
 # consegue enfraquecer o próprio portão. O que o PR acrescenta à main passa pela varredura do
-# `brain upstream scan` mais uma lista privada de termos que nunca vai ao repo. Só texto entra (o
-# job não executa nada que venha do PR), por isso pode rodar para PR de fork também.
+# `brain upstream scan` mais uma lista privada de termos, que mora num segredo do repositório
+# (`PUBLIC_DENYLIST_B64`) e nunca vai ao código. Só texto entra (o job não executa nada que venha
+# do PR), por isso roda para PR de fork também.
 #
-# pull_request roda a SUÍTE, que executa o código do PR, em Python 3.11–3.14. Só para PR cujo
-# branch mora neste repositório: `pull_request` usa o workflow do próprio PR, e o de um fork fica
-# sem CI — não alcança a máquina do mantenedor. Quem é de fora propõe por issue; o mantenedor
-# traz o código para um branch daqui.
+# pull_request roda a SUÍTE, que executa o código do PR, em Python 3.11–3.14 — para PR de fork
+# também: a máquina é do GitHub e descartável, o job não recebe segredo, e o token do job é só de
+# leitura e sai do ar antes da suíte.
 #
 # push em main: os dois, sobre o que acabou de entrar. Os dois jobs são independentes: ficam em
 # execuções diferentes, e o que segura o merge é a proteção da main exigir os dois.
+#
+# Nenhum job em runner próprio: o workflow do `pull_request` é o do PR, e quem abre o PR escolhe
+# onde o job roda — num repositório público isso entrega a máquina do mantenedor a qualquer fork.
+# `tests/test_ci_hardening.py` trava isso.
 #
 # Sem actions em JavaScript (nenhum checkout@v4): o checkout é git puro com o token do job, e a
 # imagem `python:` oficial já traz git. O que ela não traz é o `node`, que os testes do painel
@@ -27,7 +31,7 @@ on:
   push:
     branches: [main]
 
-# Um push novo cancela a execução anterior do mesmo PR (os workers são poucos); em main, nunca.
+# Um push novo cancela a execução anterior do mesmo PR; em main, nunca.
 # O grupo leva o evento: em pull_request_target o `github.ref` é o da main, e sem isso todos os PRs
 # cairiam num grupo só, e a execução da suíte cancelaria a do portão.
 concurrency:
@@ -43,13 +47,10 @@ jobs:
     name: data-gate
     # push em main e pull_request_target (workflow da main). Nunca no `pull_request`, que é o do PR.
     if: github.event_name != 'pull_request'
-    runs-on: [self-hosted, linux, ARM64, brain]
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     container:
       image: python:3.12
-      volumes:
-        # a lista privada de termos mora no host do runner (volume nomeado, só leitura) e nunca no repo
-        - brain-public-denylist:/denylist:ro
     env:
       GIT_CONFIG_COUNT: 1
       GIT_CONFIG_KEY_0: safe.directory
@@ -62,36 +63,37 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          # O workspace vem do job anterior, que pode ter executado código de um PR daqui. O `.git`
-          # dele não serve: uma config a mais (hook, fsmonitor) faria este job executar o que ele barra.
-          rm -rf -- "${GITHUB_WORKSPACE:-$PWD}/.git"
           git init -q
           git config http.extraheader "AUTHORIZATION: basic $(echo -n "x-access-token:$GITHUB_TOKEN" | base64 -w0)"
           git remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
           git fetch -q --no-tags origin "+refs/heads/main:refs/remotes/origin/main" "$TARGET_SHA"
           git checkout -q --force origin/main
-          git clean -ffdxq # o que o job anterior deixou sem rastrear não entra nesta varredura
       - name: Portão de dados (o que entra na main)
+        env:
+          # a lista privada chega só a este job, que não executa nada do PR; o job da suíte não a recebe
+          PUBLIC_DENYLIST_B64: ${{ secrets.PUBLIC_DENYLIST_B64 }}
         run: |
           # A varredura procura o caminho do HOME no diff. O do container (/root) é caminho de servidor
           # que documentação legítima cita: passa a ser uma pasta dentro do workspace.
           export HOME="$PWD/.home-do-portao"
-          rm -rf -- "$HOME" # a pasta vem do job anterior: nenhuma config global é herdada
           case "$GATE_BASE" in
             0000000000000000000000000000000000000000) echo "push sem base conhecida: não dá para varrer só o que entrou"; exit 1 ;;
           esac
-          # o PR entra por um worktree: os scripts que varrem são os da main, o PR só fornece os commits.
-          # Exceção que só existe enquanto a main não tem o portão (este é o PR que o cria): aí usa-se o do PR.
+          # O segredo é o arquivo da lista privada em base64: vira um arquivo 0600 que só este job lê
+          # e sai com ele. Sem a lista o portão falha — ele não atesta nada.
+          umask 077
+          LISTA="$(mktemp)"
+          trap 'rm -f "$LISTA"' EXIT
+          printf '%s' "$PUBLIC_DENYLIST_B64" | base64 -d > "$LISTA"
+          # o PR entra por um worktree: os scripts que varrem são os da main, o PR só fornece os commits
           git worktree add --detach /tmp/entrada "$TARGET_SHA"
-          PORTAO=scripts/dev/public_gate.py
-          if [ ! -f "$PORTAO" ]; then echo "main ainda sem o portão: varrendo com o do PR"; PORTAO=/tmp/entrada/$PORTAO; fi
-          python3 "$PORTAO" gate --root /tmp/entrada --base "$GATE_BASE" --denylist /denylist/denylist
+          python3 scripts/dev/public_gate.py gate --root /tmp/entrada --base "$GATE_BASE" --denylist "$LISTA"
 
   tests:
     name: tests (py${{ matrix.python }})
-    # a suíte executa o código do PR: só push em main e PR cujo branch mora neste repositório
-    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
-    runs-on: [self-hosted, linux, ARM64, brain]
+    # a suíte executa o código do PR — de qualquer PR, inclusive de fork: o job não recebe segredo
+    # e a máquina é do GitHub, nova para cada job
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -100,29 +102,27 @@ jobs:
     container:
       image: python:${{ matrix.python }}
     env:
-      GITHUB_TOKEN: ${{ github.token }}
       GIT_CONFIG_COUNT: 1
       GIT_CONFIG_KEY_0: safe.directory
       GIT_CONFIG_VALUE_0: "*"
     steps:
       - name: Checkout (git puro, com o token do job)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
-          # mesma pasta de trabalho do runner: o `.git` que estiver nela é de outro job, e não serve
-          rm -rf -- "${GITHUB_WORKSPACE:-$PWD}/.git"
           git init -q
           git config http.extraheader "AUTHORIZATION: basic $(echo -n "x-access-token:$GITHUB_TOKEN" | base64 -w0)"
           git remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
           git fetch -q --depth=1 --no-tags origin "+$GITHUB_SHA:refs/remotes/origin/ci"
           git checkout -q --force refs/remotes/origin/ci
           git config --unset http.extraheader
-          git clean -ffdxq # o workspace é o mesmo de job para job: sobra do anterior não entra na suíte
           [ "$(git rev-parse HEAD)" = "$GITHUB_SHA" ] || { echo "HEAD não é GITHUB_SHA"; exit 1; }
       - name: Identidade do git (testes criam repos falsos e commitam)
         run: |
           git config --global user.email "ci@example.invalid"
           git config --global user.name "CI"
       - name: TUI opcional (hashes travados) — ativa os testes do cockpit
-        run: pip install --no-cache-dir -r requirements-tui.txt
+        run: pip install --no-cache-dir --require-hashes -r requirements-tui.txt
       - name: Node (os testes do painel avaliam o JavaScript, e a imagem não o traz)
         run: |
           ARCH="$(uname -m)"
@@ -139,9 +139,9 @@ jobs:
           rm -f "/tmp/$F" /tmp/node-shasums
           node --version
       - name: unittest discover (todos os arquivos de tests/, sem rede)
-        # O job recebe o token só para o checkout. A suíte roda com ele fora do ambiente: `config.load_env`
-        # dá ao ambiente a precedência sobre o config/.env, e com o token do job no ar um teste que grava
-        # um token falso no .env leria o real.
+        # O token do job é do passo do checkout, em `env` próprio. Aqui ele sai do ambiente de vez:
+        # `config.load_env` dá ao ambiente a precedência sobre o config/.env, e com o token do job no
+        # ar um teste que grava um token falso no .env leria o real.
         env:
           GITHUB_TOKEN: ""
         run: python -m unittest discover -s tests

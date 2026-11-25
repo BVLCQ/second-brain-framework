@@ -1,7 +1,7 @@
 # Desenvolvimento do framework
 
-Como uma mudança no framework chega ao repositório público: branch, pull request, CI nos runners do
-mantenedor e portão de dados. É o mesmo fluxo dos outros projetos do mantenedor.
+Como uma mudança no framework chega ao repositório público: branch, pull request, CI no GitHub e
+portão de dados. É o mesmo fluxo dos outros projetos do mantenedor.
 
 ## O fluxo
 
@@ -10,7 +10,7 @@ mantenedor e portão de dados. É o mesmo fluxo dos outros projetos do mantenedo
 2. **Branch e pull request.** Um branch por mudança, a partir da `main`; o PR referencia a issue e
    segue o molde de `.github/pull_request_template.md`. Criar o branch, commitar e abrir o PR é do
    agente — não espera aprovação.
-3. **CI.** O PR roda no runner do mantenedor (abaixo), em duas execuções: o portão de dados — com o
+3. **CI.** O PR roda no GitHub (abaixo), em duas execuções: o portão de dados — com o
    workflow da `main`, para o PR não enfraquecer o próprio portão — e a suíte em Python 3.11–3.14.
    Os dois precisam ficar verdes. Mudança no portão só vale para os PR abertos depois do merge: o
    evento dele só lê o workflow da `main`.
@@ -32,12 +32,13 @@ máquina, segredo, workspace do Slack, dado pessoal da instância) mais uma **li
 
 - **Na máquina, antes do push.** O hook `pre-push` varre os commits que o push leva e barra achados.
 - **No CI, em todo PR e em todo push na `main`.** O job `data-gate` varre o que o PR acrescenta à
-  `main` (`origin/main` até a ponta do branch), commit a commit. A suíte só roda depois dele limpo.
+  `main` (`origin/main` até a ponta do branch), commit a commit.
 
-No CI a lista privada mora no host do runner, num volume Docker (`brain-public-denylist`) que só
-esse job monta, como só leitura — nunca vai ao repositório, nem como segredo. O job varre com os
-scripts e a configuração da `main`, num worktree do PR: o PR traz os commits, não as regras. Sem a
-lista (ausente ou vazia) o portão falha: ele não atesta nada.
+No CI a lista privada mora num segredo do repositório (`PUBLIC_DENYLIST_B64`: o arquivo da lista em
+base64), que só o job `data-gate` recebe — nunca vai ao código, e o job da suíte, que executa o
+código do PR, não a vê. O job varre com os scripts e a configuração da `main`, num worktree do PR:
+o PR traz os commits, não as regras. Sem a lista (ausente, vazia, toda em comentário ou com termo
+curto demais) o portão falha: ele não atesta nada.
 
 Para rodar na máquina, da pasta do checkout, com a sua cópia da lista:
 
@@ -45,28 +46,31 @@ Para rodar na máquina, da pasta do checkout, com a sua cópia da lista:
 
 Códigos de saída: 0 limpo · 4 achado (só arquivo, linha e regra: o valor achado nunca é ecoado) · 1 erro.
 
-## Runner do mantenedor
+## Onde o CI roda
 
-O CI roda em workers do mantenedor (containers Docker na máquina dele), não nos runners do GitHub:
-não consome minutos. Cada worker é um runner registrado só neste repositório, com o label `brain`.
+Nos runners hospedados do GitHub (`ubuntu-24.04`), numa máquina nova para cada job. O repositório é
+público, e nele os runners padrão do GitHub são gratuitos.
 
-    scripts/dev/runner-setup.sh --tag m3              # registra e sobe; idempotente
-    scripts/dev/runner-setup.sh --tag m3 --workers 2  # quantos jobs rodam em paralelo
-    scripts/dev/runner-setup.sh --tag m3 --remove     # descadastra e apaga
-
-Pré-requisitos: Docker (OrbStack), `gh` como administrador do repositório e a lista privada em
-`~/.config/brain/public-denylist` (0600). Cada máquina do mantenedor tem a sua (`--tag m3`, `--tag m4`).
-A imagem do runner é fixada no script; para subir a versão, mude `RUNNER_IMAGE` e rode de novo.
-
-**Runner em repositório público.** A suíte só roda no runner código que veio de dentro do
-repositório: PR de fork não a roda (o `if` do job), e quem é de fora propõe por issue — o
-mantenedor traz o código para um branch daqui. O que roda para qualquer PR é o portão de dados,
-que só lê texto e usa o workflow da `main`. O token do job é só de leitura e nenhum job usa
-segredo. Não registre esse runner em outro repositório: a máquina fica exposta ao código que ele
-receber.
+**Nunca em runner próprio.** O workflow do `pull_request` é o do PR: quem abre o PR escolhe onde o
+job roda e o que ele executa. Num repositório público, um job desse evento em runner próprio entrega
+essa máquina a qualquer fork — por isso o workflow não tem nenhum, e `tests/test_ci_hardening.py`
+barra um `runs-on` que não seja `ubuntu-24.04`.
 
 O workflow não usa actions em JavaScript: o checkout é git puro, o Python vem da imagem oficial
-`python:` e o `node` entra por um tarball com versão e checksum fixados.
+`python:` e o `node` entra por um tarball com versão e checksum fixados. O `pip` só instala o que o
+`requirements` trava por hash.
+
+### Trocar a lista privada
+
+A lista nasce na máquina do mantenedor (`~/.config/brain/public-denylist`, 0600) e vai para o
+segredo em base64; quem faz isso precisa ser administrador do repositório:
+
+    base64 < ~/.config/brain/public-denylist | gh secret set PUBLIC_DENYLIST_B64 --repo BVLCQ/second-brain-framework
+
+Um termo por linha, ou separado por vírgula. Linha que começa com `#` é comentário; comentário no
+meio de um termo não existe (vira parte dele). Termo com menos de 4 caracteres é recusado: o portão
+falha em vez de varrer uma lista menor do que a pedida. O valor novo vale para a próxima execução
+do CI.
 
 ## Evidência no PR
 

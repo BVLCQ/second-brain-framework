@@ -1,6 +1,8 @@
-"""CI com `permissions` mínimo, actions fixadas por SHA (#113) e runner do mantenedor isolado de fork.
+"""CI com `permissions` mínimo, actions fixadas por SHA (#113) e nenhum job fora dos runners do GitHub.
 
-O runner é do mantenedor e o repositório é público: nenhum job pode rodar código que veio de fora.
+O repositório é público e o workflow do `pull_request` é o do PR: quem abre o PR escolhe onde o job
+roda. Por isso nenhum job pode rodar em runner próprio, e a lista privada do portão — um segredo —
+só pode chegar ao job que não executa nada do PR.
 O workflow é lido como texto — o repo não depende de parser de YAML.
 """
 from __future__ import annotations
@@ -20,11 +22,11 @@ sys.path.insert(0, str(ROOT))
 from brainlib import upstream  # noqa: E402
 
 WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
-FORK_GUARD = "github.event.pull_request.head.repo.full_name == github.repository"
-# a suíte executa o código do PR: push em main, ou PR cujo branch mora neste repositório
-ONLY_INSIDE = f"github.event_name == 'push' || (github.event_name == 'pull_request' && {FORK_GUARD})"
+GITHUB_RUNNER = "ubuntu-24.04"
 # o portão só lê texto do PR: roda em todo PR, pelo evento que usa o workflow da main
 GATE_EVENTS = "github.event_name != 'pull_request'"
+# a lista privada é um segredo do repositório; só o portão o recebe
+PRIVATE_LIST = "${{ secrets.PUBLIC_DENYLIST_B64 }}"
 # um HOME que não existe: a varredura o procura no texto como "caminho da máquina"
 NO_HOME = "/lugar/que/nao/existe-em-arquivo-nenhum"
 
@@ -33,6 +35,16 @@ def _jobs(text: str) -> dict[str, str]:
     """Cada job do workflow, do cabeçalho (2 espaços sob `jobs:`) até o próximo."""
     parts = re.split(r"(?m)^(?=  [A-Za-z][\w-]*:[ \t]*$)", text[text.index("\njobs:\n") + 1:])
     return {part.split(":", 1)[0].strip(): part for part in parts[1:]}
+
+
+def _guards(job: str) -> list[str]:
+    return re.findall(r"(?m)^    if: (.+)$", job)
+
+
+def _job_env(job: str) -> str:
+    """O bloco `env:` do job (4 espaços): vale para todos os passos."""
+    block = re.search(r"(?m)^    env:\n((?:      .*\n|\n)+)", job)
+    return block.group(1) if block else ""
 
 
 class WorkflowHardeningTest(unittest.TestCase):
@@ -61,17 +73,20 @@ class WorkflowHardeningTest(unittest.TestCase):
         self.assertRegex(self.text, r"(?m)^  pull_request_target:\s*$")
         self.assertNotIn("pull_request_target", self.jobs["tests"])
 
-    def test_no_job_runs_pull_request_code_from_a_fork(self):
+    def test_no_job_runs_outside_the_github_runners(self):
+        # O repositório é público: o workflow do `pull_request` é o do PR, e quem abre o PR escolhe
+        # onde o job roda e o que ele executa. Um job em runner próprio entregaria a máquina do
+        # mantenedor a qualquer fork — por isso a suíte roda para todo PR, inclusive de fork, e só
+        # numa máquina do GitHub, nova para cada job.
         self.assertEqual(sorted(self.jobs), ["data-gate", "tests"])
         for name, job in self.jobs.items():
             with self.subTest(job=name):
-                self.assertRegex(job, r"(?m)^    runs-on: \[self-hosted, [^\]]+\]$")
-
-        def guards(job: str) -> list[str]:
-            return re.findall(r"(?m)^    if: (.+)$", job)
-
-        self.assertEqual(guards(self.jobs["tests"]), [ONLY_INSIDE], "a suíte executa o código do PR: nunca para fork, nunca em pull_request_target")
-        self.assertEqual(guards(self.jobs["data-gate"]), [GATE_EVENTS], "o portão roda em todo PR")
+                self.assertEqual(re.findall(r"(?m)^    runs-on: (.+)$", job), [GITHUB_RUNNER])
+        for proibido in ("self-hosted", "docker.sock", "privileged", "volumes:"):
+            with self.subTest(proibido=proibido):
+                self.assertNotIn(proibido, self.text)
+        self.assertEqual(_guards(self.jobs["tests"]), [], "a suíte roda para todo PR, sem guarda de repositório")
+        self.assertEqual(_guards(self.jobs["data-gate"]), [GATE_EVENTS], "o portão roda em todo PR")
         # no evento do workflow da main, o único contato com o PR é texto: a ponta do PR entra num
         # worktree destacado, e quem varre é o script da main
         self.assertIn("git checkout -q --force origin/main", self.jobs["data-gate"])
@@ -83,11 +98,19 @@ class WorkflowHardeningTest(unittest.TestCase):
                 for rule, _ in upstream._scan_line(line, [], NO_HOME)]
         self.assertEqual(hits, [], "o workflow tem linha que o portão de dados acusaria")
 
-    def test_data_gate_reads_the_private_list_from_the_runner_host(self):
-        gate = self.jobs["data-gate"]
-        self.assertIn("- brain-public-denylist:/denylist:ro", gate)
-        self.assertIn("--denylist /denylist/denylist", gate)
-        self.assertNotIn("secrets.", self.text)
+    def test_the_private_list_is_a_secret_that_only_the_gate_receives(self):
+        gate, tests = self.jobs["data-gate"], self.jobs["tests"]
+        self.assertEqual(re.findall(r"\$\{\{ secrets\.\w+ \}\}", self.text), [PRIVATE_LIST])
+        self.assertIn(PRIVATE_LIST, gate)
+        self.assertNotIn("secrets.", tests, "o job que executa o código do PR não pode ver a lista privada")
+        # a lista vira um arquivo 0600 que sai com o job, e entra no portão por esse caminho só
+        self.assertIn("umask 077\n", gate)
+        self.assertIn("trap 'rm -f \"$LISTA\"' EXIT", gate)
+        self.assertIn('--denylist "$LISTA"', gate)
+        self.assertNotIn("--denylist /", gate)
+        # nada no workflow pede rastro de shell: o eco dos comandos levaria o segredo ao log
+        for rastro in ("set -x", "set -v", "set -o xtrace", "set -o verbose"):
+            self.assertNotIn(rastro, self.text)
 
     def test_data_gate_scans_with_the_scripts_from_main(self):
         gate = self.jobs["data-gate"]
@@ -96,18 +119,14 @@ class WorkflowHardeningTest(unittest.TestCase):
         self.assertIn("git checkout -q --force origin/main", gate)
         self.assertIn("--root /tmp/entrada", gate)
         self.assertIn("git worktree add --detach /tmp/entrada", gate)
-        # a exceção (portão do PR) só se abre quando a MAIN não tem o script: o PR não escolhe as regras
-        self.assertIn('if [ ! -f "$PORTAO" ]', gate)
+        # sem exceção de bootstrap: o portão é sempre o da main, nunca o do PR — o PR não escolhe as regras
+        self.assertNotIn("/tmp/entrada/scripts", gate)
+        self.assertIn('python3 scripts/dev/public_gate.py gate --root /tmp/entrada', gate)
 
-    def test_no_job_inherits_the_git_directory_of_the_previous_job(self):
-        # os jobs dividem a pasta de trabalho do runner, e um deles (a suíte) executa código de PR. Um
-        # `.git` deixado por ele — uma config a mais, um hook — faria o portão executar o que ele barra.
-        # Cada job apaga o `.git` antes de construir o seu; o portão não herda nem o HOME.
-        for name, job in self.jobs.items():
-            with self.subTest(job=name):
-                self.assertLess(job.index('rm -rf -- "${GITHUB_WORKSPACE:-$PWD}/.git"'), job.index("git init -q"))
-        gate = self.jobs["data-gate"]
-        self.assertRegex(gate, r'export HOME="\$PWD/\.home-do-portao"\n *rm -rf -- "\$HOME"')
+    def test_the_gate_does_not_take_the_server_root_for_a_machine_path(self):
+        # a varredura procura o caminho do HOME no diff; no container ele é /root, que documentação de
+        # servidor cita legitimamente — o job aponta o HOME para uma pasta do workspace antes de varrer
+        self.assertRegex(self.jobs["data-gate"], r'(?m)^ *export HOME="\$PWD/\.home-do-portao"$')
 
     def test_checkout_header_is_what_git_and_github_accept(self):
         # `git config chave=valor` num argumento só: o git das imagens do CI recusa ("invalid key") e o
@@ -134,7 +153,22 @@ class WorkflowHardeningTest(unittest.TestCase):
         tests = self.jobs["tests"]
         self.assertNotRegex(tests, r"(?m)^    needs:")
         self.assertIn('python: ["3.11", "3.12", "3.13", "3.14"]', tests)
-        self.assertIn('image: python:${{ matrix.python }}', tests)
+        self.assertIn("image: python:${{ matrix.python }}", tests)
+
+    def test_the_suite_installs_only_pinned_code(self):
+        # nada entra no job por confiança: o `pip` só instala o que o requirements trava por hash, e o
+        # `node` só entra pelo tarball cujo checksum está fixado no workflow
+        tests = self.jobs["tests"]
+        self.assertIn("pip install --no-cache-dir --require-hashes -r requirements-tui.txt", tests)
+        self.assertIn("sha256sum --ignore-missing -c node-shasums", tests)
+
+    def test_the_suite_runs_without_the_job_token(self):
+        # o token do job é do passo do checkout, em `env` próprio: nunca no `env` do job, que vale para
+        # todos os passos — a suíte executa o código do PR. E o passo da suíte o tira do ambiente de vez.
+        tests = self.jobs["tests"]
+        self.assertEqual(re.findall(r"\$\{\{ github\.token \}\}", tests), ["${{ github.token }}"])
+        self.assertNotIn("GITHUB_TOKEN", _job_env(tests))
+        self.assertRegex(tests, r'(?m)^        env:\n          GITHUB_TOKEN: ""\n        run: python -m unittest discover -s tests$')
 
     def test_concurrency_group_keeps_the_two_pull_request_events_apart(self):
         # em pull_request_target o `github.ref` é o da main: sem o evento no grupo, todos os PRs
