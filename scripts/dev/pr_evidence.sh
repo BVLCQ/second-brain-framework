@@ -34,7 +34,7 @@ for f in "$@"; do
   [[ "$(basename "$f")" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "nome de arquivo fora do permitido: $(basename "$f")" >&2; exit 1; }
 done
 
-RID=$(gh api "repos/$REPO/releases?per_page=100" \
+RID=$(gh api --paginate "repos/$REPO/releases?per_page=100" \
   --jq "[.[] | select(.draft and .tag_name == \"$TAG\")] | first | .id // empty")
 if [ -z "$RID" ]; then
   RID=$(gh api -X POST "repos/$REPO/releases" \
