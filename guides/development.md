@@ -10,10 +10,11 @@ portão de dados. É o mesmo fluxo dos outros projetos do mantenedor.
 2. **Branch e pull request.** Um branch por mudança, a partir da `main`; o PR referencia a issue e
    segue o molde de `.github/pull_request_template.md`. Criar o branch, commitar e abrir o PR é do
    agente — não espera aprovação.
-3. **CI.** O PR roda no GitHub (abaixo), em duas execuções: o portão de dados — com o
-   workflow da `main`, para o PR não enfraquecer o próprio portão — e a suíte em Python 3.11–3.14.
-   Os dois precisam ficar verdes. Mudança no portão só vale para os PR abertos depois do merge: o
-   evento dele só lê o workflow da `main`.
+3. **CI.** O PR roda no GitHub (abaixo), em dois workflows: o portão de dados (`data-gate.yml`, com
+   o workflow da `main`, para o PR não enfraquecer o próprio portão) e a suíte em Python 3.11–3.14
+   (`ci.yml`). Os dois precisam ficar verdes: a proteção da `main` exige o status `data-gate (status)`
+   e os quatro `tests`. Mudança no portão só vale para os PR abertos depois do merge: o evento dele
+   só lê o workflow da `main`.
 4. **"ok" do dono.** O PR fica aberto até o "ok" literal do dono; o "ok" é o merge. Nada entra na
    `main` sem PR com o CI verde (proteção de branch) e sem o "ok".
 
@@ -31,14 +32,30 @@ máquina, segredo, workspace do Slack, dado pessoal da instância) mais uma **li
 — nome de empresa, de rede interna, o que o mantenedor nunca quiser ver lá:
 
 - **Na máquina, antes do push.** O hook `pre-push` varre os commits que o push leva e barra achados.
-- **No CI, em todo PR e em todo push na `main`.** O job `data-gate` varre o que o PR acrescenta à
-  `main` (`origin/main` até a ponta do branch), commit a commit.
+- **No CI, em todo PR e em todo push na `main`.** O job `data-gate` (`data-gate.yml`) varre o que o
+  PR acrescenta à `main` (`origin/main` até a ponta do branch), commit a commit.
 
 No CI a lista privada mora num segredo do repositório (`PUBLIC_DENYLIST_B64`: o arquivo da lista em
 base64), que só o job `data-gate` recebe — nunca vai ao código, e o job da suíte, que executa o
 código do PR, não a vê. O job varre com os scripts e a configuração da `main`, num worktree do PR:
 o PR traz os commits, não as regras. Sem a lista (ausente, vazia, toda em comentário ou com termo
 curto demais) o portão falha: ele não atesta nada.
+
+Além dos termos, contam como dado: nome e e-mail de autor e de quem commitou em commit novo (de
+e-mail novo, só o domínio; identidade que já aparece num commit público não conta), texto em UTF-16
+e UTF-32, e arquivo que a varredura não varre — grande demais (mais de 50 MB) ou ilegível. Não varrido
+nunca é "limpo".
+
+**O push da `main` é alarme, não bloqueio.** No push o portão roda depois que o conteúdo já está público, e
+com o workflow do próprio push. O que bloqueia é o status no PR, exigido pela proteção da `main`.
+
+**O portão é outro arquivo, e o que vale é um status de commit.** `ci.yml` é o workflow DO PR: quem
+abre o PR pode editá-lo. Se o portão morasse nele, bastaria apagar um `if:` — no `pull_request`, job
+"skipped" conta como sucesso — ou acrescentar um job de mesmo nome: o check run casa pelo texto. Por
+isso o portão vive em `data-gate.yml`, no evento que usa o workflow da `main`, sem `if:` nenhum até o
+portão rodar, e publica o resultado como status de commit `data-gate (status)` na ponta do PR, com o
+token do job. PR de fork só tem token de leitura: não consegue emitir um igual. A proteção da `main`
+exige esse status — nunca o check `data-gate`. `tests/test_ci_hardening.py` trava tudo isso.
 
 Só o CI barra também **anexo fechado**: arquivo compactado ou documento (zip, gzip, 7z, RAR, PDF,
 Office) que o PR acrescenta é achado por si, mesmo sem termo — o portão não lê o que está comprimido
@@ -49,6 +66,10 @@ Para rodar na máquina, da pasta do checkout, com a sua cópia da lista:
     python3 scripts/dev/public_gate.py gate --base origin/main --denylist ~/.config/brain/public-denylist
 
 Códigos de saída: 0 limpo · 4 achado (só arquivo, linha e regra: o valor achado nunca é ecoado) · 1 erro.
+
+No CI, achado da lista privada sai sem arquivo nem linha, e sem contagem: o log é público, e quem abre
+PR de fork escolhe o conteúdo do alcance — cada execução com "onde" seria uma medida da lista privada.
+Na máquina, acrescente `--detalhes` para ver onde bateu.
 
 ## Onde o CI roda
 

@@ -14,7 +14,7 @@ Fecha #
 
 ## Gates
 
-- [ ] CI verde: `data-gate` e `tests` (Python 3.11–3.14)
-- [ ] `python3 scripts/dev/public_gate.py gate --base origin/main --denylist <lista privada>` rodou limpo na máquina
+- [ ] CI verde: status `data-gate (status)` e os quatro `tests` (Python 3.11–3.14)
+- [ ] `python3 scripts/dev/public_gate.py gate --base origin/main --denylist <lista privada> --detalhes` rodou limpo na máquina
 
 ## Fora do escopo
