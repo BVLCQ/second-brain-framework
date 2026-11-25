@@ -2,6 +2,11 @@
 
 - **Aprovar uma sugestão grava o texto exato.** `feedback approve` guarda o hash do título com a tag e do corpo com molde e rodapé. Depois desse ok, `feedback push` publica sem pedir o ok de novo. Se o texto mudar depois, o push recusa até um novo ok. Sem aprovação nenhuma, o push mostra o texto e para, e diz os dois comandos que fecham a publicação. O clique no painel continua publicando o texto que está na tela. A aba Sugestões mostra o título e o corpo finais, não só o rascunho cru.
 
+## 2.46.0 — o push não chama falha de git de dado pessoal, e o diálogo de atualização cabe na janela
+
+- **Falha do git na varredura não é dado pessoal.** Se o git falha ou estoura o tempo no meio do `upstream scan`, o comando sai com código 1. O hook diz para corrigir o erro acima e tentar de novo. Código 4 continua só para achado de verdade. Quem usa o git direto no `update` não muda.
+- **O diálogo de atualização cabe na janela.** Título e botões ficam visíveis. Só a lista de mudanças rola, dentro do diálogo. Rolar em cima dele não move a página atrás.
+
 ## 2.45.0 — o decisor local se instala sozinho, e o Brain religa o que estiver fora
 
 - **Escolher Local instala o servidor.** Decisão → Local (wizard, painel ou CLI) instala o `hs-decide-1-flash` num venv próprio, sobe o `/v1/systemone` (MLX no Apple Silicon, vLLM no Linux com GPU) e só grava o slot depois de um julgamento de verdade. Sem Apple Silicon e sem GPU NVIDIA, a escolha é recusada e nada é instalado. Chave, modelo e URL não são pedidos: a chave local fica numa variável separada da `hsk_` da nuvem. Se o teste falha, o slot volta a desligado.
