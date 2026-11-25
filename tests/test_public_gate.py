@@ -84,11 +84,19 @@ class GateTests(unittest.TestCase):
                                   "--denylist", str(deny)], trusted=self.tmp / "confiavel")
         return code, out.getvalue()
 
-    def test_lista_privada_uma_por_linha_ou_virgula_sem_curto_e_sem_repeticao(self):
+    def test_lista_privada_uma_por_linha_ou_virgula_comentario_ignorado_e_termo_curto_e_erro(self):
         parse = self.mod.parse_denylist
-        self.assertEqual(parse("acme-corp\n, rede-interna,, e:\n"), ["acme-corp", "rede-interna"])
+        self.assertEqual(parse("acme-corp\n, rede-interna,,\n"), ["acme-corp", "rede-interna"])
         self.assertEqual(parse("ACME-corp, acme-corp"), ["ACME-corp"])
         self.assertEqual(parse(""), [])
+        # linha que começa com `#` é comentário inteiro: a vírgula dentro dela não vira termo
+        self.assertEqual(parse("# nota, com vírgula\nacme-corp\n\n   \n"), ["acme-corp"])
+        # termo curto demais ao lado de um válido não some em silêncio: a lista deixaria de cobrir
+        for lista in ("acme-corp\nab\n", "acme-corp, e:"):
+            with self.subTest(lista=lista), self.assertRaises(RuntimeError) as cm:
+                parse(lista)
+            self.assertNotIn("ab", str(cm.exception))                 # o erro não ecoa o termo
+            self.assertNotIn("e:", str(cm.exception))
 
     def test_diff_limpo_passa(self):
         _commit(self.repo, "cliente.md", "conta da marina-demo no relatório\n")
@@ -120,15 +128,19 @@ class GateTests(unittest.TestCase):
             upstream._leak_terms = restore
         self.assertIn(self.mod.KIND, kinds)
 
-    def test_lista_privada_ausente_vazia_ou_so_com_termo_curto_e_erro_nao_limpo(self):
+    def test_lista_privada_sem_termo_valido_e_erro_nao_limpo(self):
         _commit(self.repo, "notas.md", "diff limpo\n")                  # o erro é da lista, não do diff
         out = io.StringIO()
-        for path in (self.tmp / "nao-existe", _denylist(self.tmp, ""), _denylist(self.tmp, "e:\nab\n")):
+        sem_termo = (self.tmp / "nao-existe", _denylist(self.tmp, ""), _denylist(self.tmp, "e:\nab\n"),
+                     _denylist(self.tmp, "# tudo comentado, nada vale\n"), _denylist(self.tmp, "acme-corp\nab\n"))
+        for path in sem_termo:
             with self.subTest(lista=path.name), mock.patch("sys.stdout", out):
                 code = self.mod.main(["gate", "--base", self.base, "--root", str(self.repo),
                                       "--denylist", str(path)], trusted=self.tmp)
             self.assertEqual(code, self.mod.ERROR)
             self.assertIn("✗ portão de dados: lista privada", out.getvalue())
+        # a lista veio inteira em comentário ou perdeu um termo: o portão não atesta "limpo"
+        self.assertNotIn("limpo", out.getvalue())
         self.assertNotIn("nao-existe", out.getvalue())                  # nem o caminho da lista sai
 
     def test_o_pr_nao_dita_as_regras_da_varredura(self):

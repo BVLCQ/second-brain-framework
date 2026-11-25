@@ -5,24 +5,25 @@ O repositório é público e é a origem: cada pull request acrescenta commits a
 já varre na máquina de quem sobe (`brain upstream scan`); o CI repete a varredura de forma
 independente, antes de rodar a suíte — a mesma varredura do brain (caminho da máquina, segredo,
 workspace do Slack, dado pessoal da instância) mais uma lista privada de termos (nome de empresa,
-de rede interna, o que o mantenedor nunca quiser ver lá), que mora no host do runner e nunca vai ao
-repo.
+de rede interna, o que o mantenedor nunca quiser ver lá), que mora num segredo do repositório
+(Actions) e nunca vai ao código.
 
     public_gate.py gate --base <ref|sha> [--root <repo>] --denylist <arquivo>
 
 Varre `<base>..HEAD` do repositório `--root` (padrão: a pasta de onde se chama — nunca a do script,
 que chamado de outro checkout varria o lugar errado e dá "limpo"), commit a commit. A lista
-privada é um termo por linha (ou separado por vírgula). No CI o `--root` é um worktree do PR: os
-scripts e a configuração da varredura vêm do checkout da main — o PR nunca diz quais são os termos.
+privada é um termo por linha (ou separado por vírgula); linha que começa com `#` é comentário. No
+CI o `--root` é um worktree do PR: os scripts e a configuração da varredura vêm do checkout da
+main — o PR nunca diz quais são os termos.
 
 Códigos de saída: 0 limpo · 4 achado (o valor achado nunca é ecoado: só arquivo, linha e regra) ·
-1 erro — inclusive lista privada ausente ou vazia: sem ela o portão não atesta nada.
+1 erro — inclusive lista privada ausente, vazia, toda em comentário ou com termo curto demais:
+sem os termos pedidos o portão não atesta nada.
 """
 from __future__ import annotations
 
 import argparse
 import os
-import re
 import subprocess
 import sys
 from pathlib import Path
@@ -38,12 +39,25 @@ CLEAN, FOUND, ERROR = 0, 4, 1
 
 
 def parse_denylist(text: str) -> list[str]:
-    """Uma linha ou vírgula por termo; sem repetição, na ordem de chegada; termo curto demais não entra."""
+    """Uma linha ou vírgula por termo; sem repetição, na ordem de chegada.
+
+    Linha que começa com `#` é comentário, inteiro (comentário no meio de um termo não existe: vira
+    parte dele). Termo curto demais não entra — e não é pulado em silêncio: é erro, porque a lista
+    deixaria de cobrir o que o mantenedor pediu sem que ninguém visse.
+    """
     out: list[str] = []
-    for raw in re.split(r"[\n,]+", text or ""):
-        term = raw.strip()
-        if len(term) >= MIN_TERM and term.casefold() not in {t.casefold() for t in out}:
-            out.append(term)
+    for line in (text or "").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        for raw in line.split(","):
+            term = raw.strip()
+            if not term:
+                continue
+            if len(term) < MIN_TERM:
+                raise RuntimeError(f"lista privada com termo curto demais (menos de {MIN_TERM} caracteres)")
+            if term.casefold() not in {t.casefold() for t in out}:
+                out.append(term)
     return out
 
 
