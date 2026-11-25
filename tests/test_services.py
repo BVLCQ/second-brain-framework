@@ -89,6 +89,17 @@ class NightlyTests(unittest.TestCase):
             self.assertIn("não instala", row["deps"]["decider"]["detail"])
             self.assertFalse(any("pip" in " ".join(c) for c in calls))
 
+    def test_scratch_with_real_probes_does_not_sleep(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            config.set_keys(b.inst, "memory", {"engine": "hindsight", "decision_provider": "local"})
+            b.inst = config.load(b.inst.root)
+            slept = []
+            row = services.ensure(b.inst, reason="nightly", sleep=lambda _s: slept.append(1))
+            self.assertEqual(slept, [])
+            self.assertEqual(row["state"], "ready")
+            self.assertIn("temporária", row["detail"])
+
 
 class StackMapTests(unittest.TestCase):
     def test_required_follows_memory(self):

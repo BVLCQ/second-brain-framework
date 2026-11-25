@@ -265,7 +265,7 @@ def prepare(brain, *, key: str | None = None, run=None, http_post=None,
     write_key(inst, local_key)
     (h / "kind").write_text(kind + "\n", encoding="utf-8")
     if run is None:
-        run = _default_run
+        run = lambda cmd: _default_run(cmd, timeout=1800)
     log_path = inst.logs / "decider-install.log"
     for cmd in install_commands(h, kind, py):
         code, out = run(cmd)
@@ -300,10 +300,10 @@ def _wait_smoke(url: str, key: str, *, http_post, sleep, attempts: int = 30, pau
     return False
 
 
-def _default_run(cmd: list[str]) -> tuple[int, str]:
+def _default_run(cmd: list[str], timeout: int = 60) -> tuple[int, str]:
     import subprocess
     try:
-        p = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
         return p.returncode, (p.stdout or "") + (p.stderr or "")
     except (OSError, subprocess.SubprocessError) as e:
         return 1, str(e)

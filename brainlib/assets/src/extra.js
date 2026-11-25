@@ -3987,7 +3987,8 @@ window.exitOnboarding = exitOnboarding;
       } catch (e) {}
     };
     pollSvc();
-    setInterval(pollSvc, 8000);
+    const svcTimer = setInterval(pollSvc, 8000);
+    if (svcTimer && typeof svcTimer.unref === "function") svcTimer.unref();
   }
 })();
 

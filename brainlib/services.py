@@ -154,6 +154,13 @@ def ensure(inst, *, reason: str = "cli", install: bool = False, probes=None, run
                                    "detail": "memória desligada — nada a conferir"})
         _log(inst, "modo none — pulando")
         return row
+    # Instância temporária (teste) com as sondas reais: não dorme nem chama docker/systemctl.
+    # O teste que quer o religar injeta probes e run.
+    if probes is None and run is None and decider._scratch(Path(inst.root)):
+        row = _write_status(inst, {"state": "ready", "reason": reason, "deps": {},
+                                   "detail": "instância temporária — não religa"})
+        _log(inst, "scratch — pulando")
+        return row
     probes = probes or _default_probes()
     if run is None:
         run = decider._default_run
