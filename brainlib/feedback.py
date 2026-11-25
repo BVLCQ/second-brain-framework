@@ -308,14 +308,26 @@ def push(brain: Brain, fid: str, *, approval: str = "", by: str = "owner") -> di
     if by != "owner":
         raise util.BrainError(f"{fid}: publicar issue exige o dono (--by owner)", code=4)
     sha = public_sha(f)
-    if not str(approval or "").strip():
-        raise util.BrainError(public_text(f) + f"\n\n{fid}: sem aprovação — o texto acima é o que subiria. "
-                              f"`brain feedback approve {fid} --quote ok`", code=4)
-    bound = _bound_sha(f)
+    bound_ev = next((e for e in reversed(f.history) if e["type"] == "feedback.approved"), None)
+    bound_data = (bound_ev or {}).get("data") or {}
+    bound = bound_data.get("text_sha", "")
     if bound and bound != sha:
         raise util.BrainError(f"{fid}: o texto mudou depois do ok — aprove de novo "
-                              f"(`brain feedback approve {fid} --quote ok`)", code=4)
-    quote, origin = gates.verify_approval(approval, what=f"feedback push {fid}")
+                              f"(`brain feedback approve {fid} --quote ok`) e publique com "
+                              f"`brain feedback push {fid}`", code=4)
+    approval = str(approval or "").strip()
+    if approval:
+        quote, origin = gates.verify_approval(approval, what=f"feedback push {fid}")
+        if not bound:
+            approve(brain, fid, approval, by=by)
+            f = brain.state.feedbacks[fid]
+    elif bound:
+        quote = bound_data.get("quote", "")
+        origin = "surface" if bound_data.get("surface") else "literal"
+    else:
+        raise util.BrainError(public_text(f) + f"\n\n{fid}: sem aprovação — o texto acima é o que subiria. "
+                              f"`brain feedback approve {fid} --quote ok` e, em seguida, "
+                              f"`brain feedback push {fid}`", code=4)
     repo = brain.inst.cfg["feedback"]["repo"]
     public_text_guard(brain.inst, f.title, f.body)    # público: regra dura, sem override (título e corpo CRUS)
     title, body = issue_title(f), issue_body(f)
@@ -323,9 +335,6 @@ def push(brain: Brain, fid: str, *, approval: str = "", by: str = "owner") -> di
     if not config.load_env(brain.inst).get("GITHUB_TOKEN"):
         raise util.BrainError("GITHUB_TOKEN ausente no config/.env — grave um token com permissão de criar "
                               "issues no repo de [feedback] e tente de novo (o valor nunca aparece no chat)", code=4)
-    if not bound:
-        approve(brain, fid, approval, by=by)
-        f = brain.state.feedbacks[fid]
     try:
         res = create_issue(brain.inst, repo, title, body, [KIND_LABEL[f.kind]])
     except _InvalidResponseUrl as e:

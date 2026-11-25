@@ -333,7 +333,23 @@ class FeedbackFlowTests(unittest.TestCase):
             feedback.push(self.brain, "FB-0001", approval="")
         self.assertIn("[Sugestão] Lembrete de fornada", str(cm.exception))
         self.assertIn("sem aprovação", str(cm.exception))
+        self.assertIn("brain feedback push FB-0001", str(cm.exception))
         self.assertEqual(self.brain.state.feedbacks["FB-0001"].status, "pendente")
+
+    def test_push_depois_do_ok_publica_sem_novo_approval(self):
+        feedback.add(self.brain, "sugestao", "Lembrete de fornada", "A marina-demo esquece o timer")
+        self._fake_env()
+        feedback.approve(self.brain, "FB-0001", "ok")
+        orig = feedback.create_issue
+        feedback.create_issue = lambda *a, **k: {
+            "number": 8, "url": "https://github.com/BVLCQ/second-brain-framework/issues/8"}
+        try:
+            ev = feedback.push(self.brain, "FB-0001", approval="")
+        finally:
+            feedback.create_issue = orig
+        self.assertEqual(ev["type"], "feedback.pushed")
+        self.assertEqual(ev["data"]["quote"], "ok")
+        self.assertEqual(self.brain.state.feedbacks["FB-0001"].status, "criado")
 
     def test_revise_depois_do_ok_recusa_o_push(self):
         feedback.add(self.brain, "sugestao", "Lembrete de fornada", "A marina-demo esquece o timer")
