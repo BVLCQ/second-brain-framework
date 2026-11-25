@@ -803,6 +803,26 @@ class FullLocalEmbeddingsTests(unittest.TestCase):
             self.assertTrue(mem["cloud_llm"])
             self.assertFalse(setup._recreate_mark(b).exists())
 
+    def test_cli_set_deixa_recriacao_pendente_e_o_setup_sobe(self):
+        """`providers set` grava e aponta o setup; o setup tem de recriar, mesmo com o contêiner saudável."""
+        from brainlib import providers
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            config.set_keys(b.inst, "memory", {
+                "engine": "hindsight", "extract": True, "cloud_llm": True,
+                "embeddings_provider": "fireworks", "cloud_embeddings": True,
+            })
+            b.inst = config.load(b.inst.root)
+            b.reload()
+            providers.set_slot(b, "embeddings", "local")
+            self.assertTrue(setup._recreate_mark(b).exists())
+            (b.inst.config_dir / ".env").write_text("HINDSIGHT_API_LLM_API_KEY=sk-demo\n", encoding="utf-8")
+            self.assertEqual(config.load(b.inst.root).cfg["memory"]["embeddings_provider"], "local")
+            _, calls, err = self._run(b, lms_up=True, ensure=True, health={"status": "ok"})
+            self.assertIsNone(err)
+            self.assertEqual(calls, ["compose"])
+            self.assertFalse(setup._recreate_mark(b).exists())
+
 
 class DockerEnsureTests(unittest.TestCase):
     """docker_state + docker_ensure: OrbStack no macOS, Docker Engine no Linux/WSL — o Brain

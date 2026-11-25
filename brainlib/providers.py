@@ -582,6 +582,12 @@ def set_slot(brain, slot: str, provider: str, *, model: str = "", models: dict |
     from .core import Brain                       # recarga completa (lição do _apply_mode)
     brain.inst = config.load(brain.inst.root)
     brain.reload()
+    # CLI (`memory providers set`) não passa pelo wizard: sem este sinal, o `setup --only memoria`
+    # que a saída indica vê o contêiner saudável e não recria — o config já diz local, o processo não.
+    if (slot == "embeddings" and mem.get("engine") == "hindsight"
+            and (mem.get("embeddings_provider") != provider or changed_env)):
+        from .setup import _recreate_mark
+        _recreate_mark(brain).write_text("embeddings\n", encoding="utf-8")
 
     return {
         "slot": slot,
