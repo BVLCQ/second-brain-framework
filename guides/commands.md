@@ -496,7 +496,7 @@ Muda qualquer campo da ação.
 | `--status aberta\|fazendo\|aguardando` | status de trabalho |
 | `--title`, `--owner`, `--list`, `--due`, `--effort`, `--project`, `--deliverable`, `--blocked-by`, `--unblocks`, `--people`, `--priority` | como no `open` |
 | `--clear-due` | remove o prazo |
-| `--park` / `--unpark` | "não agora": adia de propósito (só `--by owner`); o foco não agenda e a ação sai da vista "esta semana" da TUI. `--unpark` desfaz |
+| `--park` / `--unpark` | "depois": adia de propósito (só `--by owner`); o foco não agenda, a ação sai da vista "esta semana" da TUI, vai para a coluna **Depois** do painel e **não conta como atrasada** (nem em "vencem em 7 dias"). `--unpark` desfaz |
 | + opções de registro | |
 
 ```bash

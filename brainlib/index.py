@@ -133,7 +133,7 @@ def _materialize_entities(con: sqlite3.Connection, brain) -> None:
     today = util.today()
     for a in st.actions.values():
         blocked = bool(st.blocked(a))
-        overdue = int(bool(a.open and a.due and a.due < today))
+        overdue = int(bool(a.open and not a.parked and a.due and a.due < today))   # "depois" não atrasa
         cur.execute("INSERT OR REPLACE INTO actions VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", (
             a.id, a.title, a.owner, a.list, a.status, _dt(a.due), int(a.due_suggested), a.priority,
             int(a.parked), a.project, a.deliverable, _dt(a.opened), _dt(a.closed), _dt(a.last_activity),
@@ -480,7 +480,7 @@ def query_actions(con, **f) -> list[dict]:
     if f.get("open"):
         sql += " AND is_open = 1"
     if f.get("overdue"):
-        sql += " AND is_open = 1 AND due IS NOT NULL AND due < date('now', 'localtime')"
+        sql += " AND is_open = 1 AND parked = 0 AND due IS NOT NULL AND due < date('now', 'localtime')"
     if f.get("due_within") is not None:
         sql += " AND is_open = 1 AND due BETWEEN date('now', 'localtime') AND date('now', ?)"
         args.append(f"+{int(f['due_within'])} day")
@@ -534,7 +534,7 @@ def query_person(con, ref: str) -> dict | None:
     p["actions_open"] = con.execute(
         "SELECT COUNT(*) FROM actions WHERE owner = ? AND is_open = 1", (pid,)).fetchone()[0]
     p["actions_overdue"] = con.execute(
-        "SELECT COUNT(*) FROM actions WHERE owner = ? AND is_open = 1 AND due < date('now', 'localtime')",
+        "SELECT COUNT(*) FROM actions WHERE owner = ? AND is_open = 1 AND parked = 0 AND due < date('now', 'localtime')",
         (pid,)).fetchone()[0]
     return p
 

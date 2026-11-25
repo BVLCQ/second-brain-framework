@@ -586,7 +586,7 @@ function wireOppKanban(){
 }
 
 // ── kanban: botões rápidos + arrastar e soltar (ponte CLI) ──────────────
-function colOf(a){ if (!a.open) return "fechada"; return ((a.blocked_by && a.blocked_by.length) || a.status === "bloqueada" || a.status === "aguardando") ? "aguardando" : a.status; }
+function colOf(a){ if (!a.open) return "fechada"; if (a.parked) return "depois"; return ((a.blocked_by && a.blocked_by.length) || a.status === "bloqueada" || a.status === "aguardando") ? "aguardando" : a.status; }
 function dropPlan(a, target){                    // → {cmd, mut, dialog?, deny?}
   const from = colOf(a);
   if (from === target) return null;
@@ -594,10 +594,15 @@ function dropPlan(a, target){                    // → {cmd, mut, dialog?, deny
     return {dialog: () => closeForm(a)};          // como foi + resultado opcional (WIN)
   if (!a.open)
     return {dialog: () => reopenForm(a)};         // motivo, como a TUI pede
+  if (target === "depois")                        // adiar de propósito: só o dono (ownerCmd põe --by owner); fazendo volta a "a fazer"
+    return {cmd: "brain action update " + a.id + " --park" + (a.status === "fazendo" ? " --status aberta" : ""),
+      mut: m => { const y = m.actions.find(y => y.id === a.id); y.parked = true; y.overdue_days = 0; if (y.status === "fazendo") y.status = "aberta"; }};
+  const unpark = from === "depois" ? " --unpark" : "";
   if (a.blocked_by.length && target !== "aguardando")
     return {deny: a.id + " segue bloqueada por " + a.blocked_by.join(", ") + " — resolva o bloqueio para movê-la"};
-  return {cmd: "brain action update " + a.id + " --status " + (target === "aguardando" ? "aguardando" : target),
-    mut: m => { m.actions.find(y => y.id === a.id).status = target === "aguardando" ? "aguardando" : target; }};
+  const st = target === "aguardando" ? "aguardando" : target;
+  return {cmd: "brain action update " + a.id + unpark + (a.status !== st ? " --status " + st : ""),
+    mut: m => { const y = m.actions.find(y => y.id === a.id); y.status = st; if (unpark) y.parked = false; }};
 }
 let dragId = null, lastMoved = null;
 
@@ -1062,13 +1067,16 @@ window.afterRoute = function(view){
         document.querySelectorAll(".col.drop-hint").forEach(c => c.classList.remove("drop-hint")); });
     }
     const qa = document.createElement("div"); qa.className = "qa";
-    if (a.open && a.status === "aberta") qa.innerHTML = '<button class="btn" data-c="fazendo">▶ fazendo</button>';
+    if (a.open && a.parked) qa.innerHTML = '<button class="btn" data-c="voltar" title="tira de Depois">↩ voltar</button>';
+    else if (a.open && a.status === "aberta") qa.innerHTML = '<button class="btn" data-c="fazendo">▶ fazendo</button>';
     if (a.open) qa.innerHTML += '<button class="btn" data-c="fechar">✓ fechar</button>';
     if (qa.innerHTML) el.appendChild(qa);
     qa.querySelectorAll("button").forEach(b => b.onclick = ev => {
       ev.preventDefault(); ev.stopPropagation();
       if (b.dataset.c === "fechar")
         closeForm(a);                                    // diálogo com "como foi" + resultado, como a TUI
+      else if (b.dataset.c === "voltar")
+        runCommand("brain action update " + id + " --unpark", m => { m.actions.find(x => x.id === id).parked = false; lastMoved = id; });
       else
         runCommand("brain action update " + id + " --status fazendo", m => { m.actions.find(x => x.id === id).status = "fazendo"; lastMoved = id; });
     });
@@ -1703,7 +1711,7 @@ function ctxKeys(k){
     if (k === "n" && h.startsWith("#todo")) { newAction(); return true; }
     if (["v", "O", "T"].includes(k) && h.startsWith("#todo")) {        // vista · ordem · todas: da página, não do cartão
       const qs = new URLSearchParams((location.hash.split("?")[1]) || "");
-      if (k === "v") { const order = ["todas", "semana", "depois", "nao-agora"];
+      if (k === "v") { const order = ["todas", "semana", "adiante"];
         const cur = qs.get("v") || "todas"; qs.set("v", order[(order.indexOf(cur) + 1) % order.length]); }
       if (k === "O") qs.set("o", (qs.get("o") || "prazo") === "prazo" ? "id" : "prazo");
       if (k === "T") qs.get("a") === "1" ? qs.delete("a") : qs.set("a", "1");
@@ -1902,7 +1910,7 @@ function helpOverlay(){
     ["Fontes", ""], ["n", "adicionar"], ["e", "editar"], ["d", "remover"], ["w", "incluir no watch"], ["c u", "(agente) puxar · atualizar tudo"],
     ["TODO (com cartão selecionado)", ""],
     ["n", "nova ação"], ["e", "editar"], ["c", "fechar"], ["s", "status (ciclo)"], ["t", "prazo"],
-    ["d", "descartar"], ["z", "não agora / voltar"], ["o", "reabrir"], ["m", "cobrar (rascunho de msg)"], ["M", "mesclar duplicada"],
+    ["d", "descartar"], ["z", "depois / voltar"], ["o", "reabrir"], ["m", "cobrar (rascunho de msg)"], ["M", "mesclar duplicada"],
     ["v / O / T", "vista · ordem · todas (como o TUI)"],
     ["Foco", ""], ["A", "aprovar plano (gate)"], ["a", "aplicar no calendário (gate · ics ou google)"], ["s", "sync (dry-run ou aplicar)"], ["p", "planejar (focus plan --days)"],
     ["Mensagens", ""], ["A", "aprovar rascunho (gate)"], ["S", "enviar (agente)"], ["d", "cancelar"],
@@ -1995,10 +2003,10 @@ function keyLegend(){
   if (h.startsWith("#todo")) {
     add("n", "nova");
     add("e", "editar", !t || !t.open); add("c", "fechar", !t || !t.open); add("s", "status", !t || !t.open);
-    add("t", "prazo", !t || !t.open); add("d", "descartar", !t || !t.open); add("z", t && t.parked ? "voltar" : "não agora", !t || !t.open);
+    add("t", "prazo", !t || !t.open); add("d", "descartar", !t || !t.open); add("z", t && t.parked ? "voltar" : "depois", !t || !t.open);
     add("o", "reabrir", !(t && !t.open)); add("m", "cobrar", !(t && t.open && t.list === "waiting"));
     const qs0 = new URLSearchParams((location.hash.split("?")[1]) || "");
-    const vl = {todas: "todas", semana: "esta semana", depois: "depois", "nao-agora": "não agora"}[qs0.get("v") || "todas"];
+    const vl = {todas: "todas", semana: "esta semana", adiante: "mais adiante"}[qs0.get("v") || "todas"] || "todas";
     add("v", "vista: " + vl); add("O", "ordem: " + ((qs0.get("o") || "prazo") === "prazo" ? "prazo" : "id"));
     add("T", qs0.get("a") === "1" ? "só recentes" : "todas");
   } else if (h.startsWith("#action/")) { add("e", "editar"); add("c", "fechar"); add("d", "descartar"); add("M", "mesclar"); }

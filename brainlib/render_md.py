@@ -199,7 +199,7 @@ class Pages:
                   ("A fazer", lambda a: a["open"] and not a["parked"] and a["status"] == "aberta"),
                   ("Bloqueadas", lambda a: a["open"] and not a["parked"] and a["status"] == "bloqueada"),
                   ("Aguardando terceiros", lambda a: a["open"] and not a["parked"] and a["status"] == "aguardando"),
-                  ("Não agora (adiadas de propósito)", lambda a: a["open"] and a["parked"]),
+                  ("Depois (adiadas de propósito)", lambda a: a["open"] and a["parked"]),
                   ("Feitas (14 dias)", lambda a: a["status"] == "fechada" and a["closed"]
                    and date.fromisoformat(a["closed"]).toordinal() >= recent_cut)]
         checks: dict[str, bool] = {}
