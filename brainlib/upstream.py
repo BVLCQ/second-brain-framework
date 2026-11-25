@@ -15,6 +15,7 @@ import re
 import shutil
 import subprocess
 import sys
+import unicodedata
 from pathlib import Path
 
 from . import config, util
@@ -32,6 +33,9 @@ PUBLIC_MAIL = {"gmail.com", "googlemail.com", "outlook.com", "hotmail.com", "liv
 HOME_PLACEHOLDERS = {"you", "user", "usuario", "seu-usuario", "name", "nome", "voce", "me", "example"}
 MIN_TERM = 4
 MAX_SCAN_BYTES = 1_000_000
+# Tipos de termo que casam como substring pura, sem fronteira de palavra: nome de empresa colado noutro
+# (`<termo>_prod`, `<termo>VPN`) é dado igual. O portão público registra aqui a lista privada.
+PLAIN_KINDS: set[str] = set()
 
 _HOME_RE = re.compile(r"(/Users|/home)/([A-Za-z0-9._-]+)/")
 _SECRET_RES = [
@@ -526,12 +530,53 @@ def _user() -> str:
 _DEMO_TOKEN_RE = re.compile(r"[\w.]+-demo\b", re.IGNORECASE)   # `marina-demo`, `Marina-demo`: nome fictício declarado
 
 
+def _term_regex(term: str, kind: str) -> re.Pattern:
+    """Casa o termo nas formas equivalentes do mesmo texto — a busca recebe as leituras de `_forms`,
+    nunca a linha crua. O termo vai para NFC: nome de arquivo vindo do macOS e texto de alguns
+    editores vêm decomposto (`e` + acento em vez de `é`) e o mesmo nome não casava. O espaço do termo
+    casa qualquer quantidade de espaço: o nome com dois espaços, ou com tabulação, é o mesmo nome."""
+    body = r"\s+".join(re.escape(part) for part in unicodedata.normalize("NFC", term).split())
+    if kind in PLAIN_KINDS:
+        return re.compile(body, re.I)
+    return re.compile(r"(?<!\w)" + body + r"(?!\w)", re.I)
+
+
+def _forms(text: str) -> list[str]:
+    """As leituras de uma linha que a busca recebe. ASCII é sempre uma só. Com acento, o texto como veio
+    e em NFC — só a NFC funde a letra com o acento que vem depois dela (`Cafe` + acento vira `Café`), e
+    o termo sem acento (`Cafe`) deixava de casar o texto decomposto, que antes casava. E, se a linha
+    guarda byte que não é UTF-8 (o diff é lido com `surrogateescape`), a mesma linha em CP1252:
+    planilha em pt-BR exportada pelo Excel é CP1252, e o `é` de `Soluções` chegava como um surrogate
+    que nunca casava o `é` do termo."""
+    if text.isascii():
+        return [text]
+    out = [text]
+    nfc = unicodedata.normalize("NFC", text)
+    if nfc != text:
+        out.append(nfc)
+    try:
+        text.encode("utf-8")
+    except UnicodeEncodeError:
+        raw = text.encode("utf-8", "surrogateescape").decode("cp1252", "replace")
+        out.append(unicodedata.normalize("NFC", raw))
+    return out
+
+
+def term_rule(kind: str) -> str:
+    """Nome da regra, nos achados, de um termo pessoal (`kind`) — o portão público casa por ele."""
+    return f"dado pessoal ({kind})"
+
+
 def _scan_line(text: str, term_res: list[tuple[str, re.Pattern]], home: str) -> list[tuple[str, str]]:
     hits: list[tuple[str, str]] = []
     plain = _DEMO_TOKEN_RE.sub(" ", text)          # o sufixo -demo marca dado fictício: não é vazamento do ledger
+    # A isenção vale para o termo do LEDGER, que é quem declara o fictício (`marina-demo`). A lista
+    # privada (PLAIN_KINDS) casa com o texto cru: `<empresa>-demo` é host de demonstração de empresa
+    # de verdade, e o sufixo apagava o termo antes da busca.
+    raw_forms, plain_forms = (_forms(text), _forms(plain)) if term_res else ([], [])
     for kind, rx in term_res:
-        if rx.search(plain):
-            hits.append((f"dado pessoal ({kind})", rx.pattern))
+        if any(rx.search(t) for t in (raw_forms if kind in PLAIN_KINDS else plain_forms)):
+            hits.append((term_rule(kind), rx.pattern))
     for m in _HOME_RE.finditer(text):
         who = m.group(2).lower()
         if _DEMO_TOKEN_RE.fullmatch(who):
@@ -553,8 +598,12 @@ EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 LITERAL = "--literal-pathspecs"     # caminho de arquivo como pathspec: sem isso, nome com `*` casa vizinhos e um que começa com `:` é mágica
 
 
-MAX_BLOB_BYTES = 50 * 2**20          # binário maior que isto não é varrido (o framework não carrega blobs assim)
-_PRINTABLE_RUN = re.compile(rb"[\x20-\x7e\t\x80-\xff]{6,}")   # como o `strings`: só trechos legíveis de um binário
+MAX_BLOB_BYTES = 50 * 2**20          # acima disto o arquivo não é varrido: é achado, nunca "limpo" por tamanho
+BIG_BLOB_RULE = f"arquivo grande demais para varrer (mais de {MAX_BLOB_BYTES // 2**20} MB)"
+UNREADABLE_BLOB_RULE = "arquivo que a varredura não conseguiu ler"
+_PRINTABLE_RUN = re.compile(rb"[\x20-\x7e\t\x80-\xff]{%d,}" % MIN_TERM)   # como o `strings`, do tamanho do menor termo: trecho menor que o termo não o contém
+_WIDE_SAMPLE = 1 << 16               # amostra que decide se um binário é texto em UTF-16/UTF-32
+_PLAIN_CHARS = re.compile(r"[\x20-\x7e\t\n\r]")               # texto comum: distingue a decodificação certa da trocada
 _C_ESCAPES = {"a": 7, "b": 8, "t": 9, "n": 10, "v": 11, "f": 12, "r": 13, '"': 34, "\\": 92}
 
 
@@ -587,8 +636,76 @@ def _strip_side(path: str, side: str) -> str:
     return path[2:] if path.startswith(f"{side}/") else ("" if path == "/dev/null" else path)
 
 
+def _wide_text(data: bytes) -> str | None:
+    """Texto em UTF-16 ou UTF-32 (arquivo "Unicode" do Windows e do Excel, redirecionamento do PowerShell 5):
+    entre uma letra e outra vem um byte zero, os trechos legíveis somem e a busca passa direto. Devolve o
+    texto decodificado, ou None se não é texto largo.
+
+    Sem BOM, testa as codificações e fica com a que dá mais texto comum (ASCII): onde a decodificação trocada
+    põe ideograma, a certa põe letra. Amostra que não decodifica inteira, ou que dá mais de 5% de controle e
+    sobra de byte, não é texto."""
+    sample = data[:_WIDE_SAMPLE]
+    if sample[:4] == b"\xff\xfe\x00\x00":
+        candidates = ("utf-32-le",)
+    elif sample[:4] == b"\x00\x00\xfe\xff":
+        candidates = ("utf-32-be",)
+    elif sample[:2] == b"\xff\xfe":
+        candidates = ("utf-16-le",)
+    elif sample[:2] == b"\xfe\xff":
+        candidates = ("utf-16-be",)
+    else:
+        candidates = ("utf-16-le", "utf-16-be", "utf-32-le", "utf-32-be")
+    best: tuple[int, str] | None = None
+    for enc in candidates:
+        chunk = sample[:len(sample) - len(sample) % (4 if "32" in enc else 2)]
+        try:
+            text = chunk.decode(enc).lstrip("\ufeff")
+        except UnicodeDecodeError:
+            continue
+        if not text:
+            continue
+        odd = sum(1 for ch in text if not ch.isprintable() and ch not in "\t\n\r")
+        if odd * 20 > len(text):
+            continue
+        score = sum(1 for ch in text if _PLAIN_CHARS.match(ch))
+        if best is None or score > best[0]:
+            best = (score, enc)
+    if best is None:
+        return None
+    return data.decode(best[1], errors="replace").lstrip("\ufeff")
+
+
+def _decode_piece(piece: bytes) -> str:
+    """Um trecho em bytes como texto, em UTF-8 — o byte que não é UTF-8 fica guardado como surrogate
+    (`surrogateescape`), como na linha de diff. A leitura em CP1252 (planilha em pt-BR exportada pelo
+    Excel) é a de `_forms`, na busca. Duas leituras aqui viravam duas linhas: o mesmo trecho, achado
+    duas vezes."""
+    return piece.decode("utf-8", "surrogateescape")
+
+
 def _binary_lines(data: bytes) -> list[str]:
-    return [m.group(0).decode("utf-8", errors="replace") for m in _PRINTABLE_RUN.finditer(data)]
+    """Conteúdo de arquivo binário para a busca. Sem byte zero, é texto que o git tratou como binário por
+    causa de um `.gitattributes` do próprio alcance (`* -diff`): vai linha a linha, como um diff comum.
+    Com byte zero, são os trechos legíveis do tamanho de um termo no mínimo (o que o `strings` mostra,
+    sem perder termo de 4 ou 5 caracteres entre dois bytes nulos) e, se é texto em UTF-16/UTF-32, o
+    texto decodificado."""
+    if b"\0" not in data:
+        return _decode_piece(data).splitlines()
+    out = [_decode_piece(m.group(0)) for m in _PRINTABLE_RUN.finditer(data)]
+    wide = _wide_text(data)
+    if wide is not None:
+        out += wide.splitlines()
+    return out
+
+
+def _blob_size(root: Path, sha: str, path: str) -> int | None:
+    """Tamanho do arquivo no commit (ou na árvore de trabalho, sem `sha`). None quando não dá para saber."""
+    try:
+        if not sha:
+            return os.stat(_fs_path(root, path)).st_size
+        return int(_git(root, "cat-file", "-s", f"{sha}:{path}", check=False).stdout.strip())
+    except (OSError, ValueError, util.BrainError):
+        return None
 
 
 def _blob_via_stdin(root: Path, sha: str, path: str) -> bytes | None:
@@ -645,7 +762,9 @@ def _scan_diff(root: Path, text: str, check) -> None:
     def label(path: str) -> str:
         return f"{path} (commit {sha[:9]})" if path and sha else path
 
-    for ln in text.splitlines():
+    # `split("\\n")`, não `splitlines()`: `splitlines` corta também em \x0b, \x0c, \x1c, \x85, U+2028…, e o
+    # pedaço depois do corte vinha sem marcador de diff — ficava fora da varredura.
+    for ln in text.split("\n"):
         if ln.startswith("\x01"):
             sha, cur, in_hunk = ln[1:].strip(), "", False
             continue
@@ -672,6 +791,9 @@ def _scan_diff(root: Path, text: str, check) -> None:
                 if m and _strip_side(m.group(1), "b"):
                     target = _strip_side(m.group(1), "b")
                 data = _blob(root, sha, target) if target else None
+                size = _blob_size(root, sha, target) if target else None
+                if data is None and size is not None:      # existe no commit e não foi lido: não varrido não é limpo
+                    check(label(target), 0, "", only=BIG_BLOB_RULE if size > MAX_BLOB_BYTES else UNREADABLE_BLOB_RULE)
                 for n, piece in enumerate(_binary_lines(data or b""), start=1):
                     check(f"{label(target)} [binário]", n, piece)
             elif ln.startswith("@@"):
@@ -701,6 +823,60 @@ def _private_path(path: str) -> bool:
     return path in PRIVATE_FILES or path.startswith(PRIVATE_PREFIXES)
 
 
+IDENTITY_FMT = "%an%x00%ae%x00%cn%x00%ce"      # autor e committer: nome e e-mail, um commit por linha
+# Endereço `noreply` em mensagem de commit traz quem commita, não dado do ledger. Do endereço sai só o que
+# não é dado: o local inteiro do endereço do GitHub (`<id>+<login>@users.noreply.github.com` — o login é o
+# nome de quem commita) ou a palavra `noreply` do local. O domínio fica: `noreply@<empresa>` é dado da empresa.
+# Antes a linha inteira era pulada (o dado entrava na mesma linha do trailer) — e o padrão `noreply@` não
+# casava o formato do GitHub, que traz o `noreply` no domínio.
+_ADDR_RE = re.compile(r"[^\s<>|,;\"']+@[^\s<>|,;\"']+", re.A)
+_NOREPLY_WORD_RE = re.compile(r"(^|[.\-_+])no[-_.]?reply(?=$|[.\-_+])", re.I)
+
+
+def _without_noreply(text: str) -> str:
+    def sub(m: re.Match) -> str:
+        local, _, domain = m.group(0).rpartition("@")
+        if domain.lower() == "users.noreply.github.com":
+            return " @" + domain
+        return _NOREPLY_WORD_RE.sub(r"\1 ", local) + "@" + domain
+    return _ADDR_RE.sub(sub, text)
+
+
+def _identities(root: Path, *revs: str) -> list[list[str]]:
+    """`(autor, e-mail do autor, quem commitou, e-mail de quem commitou)` de cada commit do alcance."""
+    rows = _git(root, "log", f"--format={IDENTITY_FMT}", *revs).stdout.split("\n")
+    return [row for row in (r.split("\x00") for r in rows) if len(row) == 4]
+
+
+def _scan_identities(root: Path, revs: list[str], check) -> None:
+    """Autor e committer de cada commit do alcance: commit feito com a identidade do trabalho publica o nome
+    ou o domínio do empregador — é metadado, não passa pela busca do diff.
+
+    Só entra identidade que o histórico público ainda não mostra (o que as refs remotas têm fora deste
+    alcance): a que já está lá é pública por definição, e o próprio dono é termo da instância. Do e-mail novo
+    entra o domínio — a parte antes do @ costuma trazer o nome de quem commita. Nome novo entra sempre,
+    com e-mail conhecido ou não."""
+    shown, invert = ["--remotes"], False
+    for r in revs:
+        if r == "--not":
+            invert = not invert
+        elif invert != r.startswith("^"):            # lado que fica de fora do alcance: já é público
+            shown.append(r[1:] if r.startswith("^") else r)
+        elif ".." in r:
+            was, _, tip = r.partition("..")          # `a..b`: a já era público (sob --not, é b)
+            shown.append((tip or "HEAD") if invert else (was or "HEAD"))
+    public = _identities(root, *shown)
+    names = {row[i] for row in public for i in (0, 2)}
+    mails = {row[i] for row in public for i in (1, 3)}
+    for n, (author, author_mail, by, by_mail) in enumerate(_identities(root, *revs), start=1):
+        for who, name, mail in (("autor", author, author_mail), ("committer", by, by_mail)):
+            where = f"(identidade do commit {n}: {who})"
+            if name not in names:
+                check(where, 0, name)
+            if mail not in mails:
+                check(where, 0, mail.rpartition("@")[2])           # só o domínio do e-mail novo
+
+
 def scan(inst: config.Instance, ref: str | None, committed: bool = False,
          revsets: list[list[str]] | None = None, keep: list[str] | None = None) -> list[dict]:
     """Procura dado pessoal/segredo no que subiria: linhas adicionadas, nomes de arquivo, binários,
@@ -714,13 +890,13 @@ def scan(inst: config.Instance, ref: str | None, committed: bool = False,
     mágica para o git e o diff vinha vazio, em silêncio.
     """
     root = inst.root
-    term_res = [(kind, re.compile(r"(?<![\w])" + re.escape(t) + r"(?![\w])", re.I)) for t, kind in _leak_terms(inst)]
+    term_res = [(kind, _term_regex(t, kind)) for t, kind in _leak_terms(inst)]
     home = str(Path.home())
     findings: list[dict] = []
     seen: set[tuple[str, int, str]] = set()
 
-    def check(file: str, line: int, text: str) -> None:
-        for rule, _ in _scan_line(text, term_res, home):
+    def check(file: str, line: int, text: str, only: str | None = None) -> None:
+        for rule, _ in ([(only, "")] if only else _scan_line(text, term_res, home)):
             if (file, line, rule) not in seen:
                 seen.add((file, line, rule))
                 stripped = text.strip()
@@ -742,9 +918,12 @@ def scan(inst: config.Instance, ref: str | None, committed: bool = False,
         for revs in revsets:
             if not revs:
                 continue
+            # em bytes, decodificado aqui: o byte que não é UTF-8 volta inteiro (o nome do cabeçalho vira rótulo
+            # do achado) e o CR no meio de uma linha não vira `\n` — em modo texto o Python faz a troca, a linha
+            # do diff virava duas e a segunda vinha sem marcador, fora da varredura
             diff = _git(root, *q, "log", "-p", "-U0", "--no-color", "--cc", "--reverse", "--format=%x01%H", *revs,
-                        errors="surrogateescape")          # nome de arquivo vem no cabeçalho: o byte volta inteiro
-            _scan_diff(root, diff.stdout, check)
+                        raw=True)
+            _scan_diff(root, diff.stdout.decode("utf-8", "surrogateescape"), check)
             for f in _paths(_git(root, *q, "log", "--name-only", "-z", "--format=", *revs, raw=True)):
                 if _private_path(f):
                     key = (f, 0, "arquivo do dono no histórico")
@@ -757,13 +936,20 @@ def scan(inst: config.Instance, ref: str | None, committed: bool = False,
         groups = [()] if keep is None else [("--", *keep[i:i + 400]) for i in range(0, len(keep), 400)]
         for scope in groups:
             _scan_diff(root, _git(root, LITERAL, *q, "diff", "-U0", "--no-color", ref or EMPTY_TREE, *scope,
-                                  errors="surrogateescape").stdout, check)         # idem: nome no cabeçalho
+                                  raw=True).stdout.decode("utf-8", "surrogateescape"), check)   # idem: em bytes
     for f in ([] if committed else _paths(_git(root, *q, "ls-files", "-z", "--others", "--exclude-standard", raw=True))):
         p = _fs_path(root, f)
         check(f, 0, f)
         try:
-            if not os.path.isfile(p) or os.stat(p).st_size > MAX_BLOB_BYTES:
-                continue
+            size = os.stat(p).st_size if os.path.isfile(p) else None
+        except (OSError, ValueError):
+            continue
+        if size is None:
+            continue
+        if size > MAX_BLOB_BYTES:
+            check(f, 0, "", only=BIG_BLOB_RULE)      # não varrido não é limpo
+            continue
+        try:
             with open(p, "rb") as fh:
                 raw = fh.read()
         except (OSError, ValueError):
@@ -779,8 +965,11 @@ def scan(inst: config.Instance, ref: str | None, committed: bool = False,
         if not revs:
             continue
         for n, text in enumerate(_git(root, "log", "--format=%B", *revs).stdout.splitlines(), start=1):
-            if "noreply@" not in text:
-                check("(mensagem de commit)", n, text)
+            check("(mensagem de commit)", n, _without_noreply(text))   # o noreply traz o login de quem commita; o resto da linha entra
+    if committed:
+        for revs in revsets:
+            if revs:
+                _scan_identities(root, revs, check)
     return findings
 
 
@@ -920,12 +1109,18 @@ def upstream_scan(inst: config.Instance, remote: str | None = None, branch: str 
             "findings": scan(inst, base, committed=committed, revsets=revsets, keep=keep)}
 
 
+def _format_finding(f: dict) -> str:
+    """Uma linha por achado: onde e qual regra — nunca o valor achado."""
+    if f.get("hint"):
+        return f"  ✗ {f['file']}:{f['line']} — {f['rule']}: {f['hint']}"
+    if not f.get("length"):
+        return f"  ✗ {f['file']}:{f['line']} — {f['rule']}"     # achado do arquivo inteiro: sem linha, não há impressão digital
+    return f"  ✗ {f['file']}:{f['line']} — {f['rule']} (sha:{f.get('fingerprint', '')}, {f.get('length', 0)} chars)"
+
+
 def _print_findings(findings: list[dict]) -> None:
     for f in findings[:25]:
-        if f.get("hint"):
-            print(_show(f"  ✗ {f['file']}:{f['line']} — {f['rule']}: {f['hint']}"))
-        else:
-            print(_show(f"  ✗ {f['file']}:{f['line']} — {f['rule']} (sha:{f.get('fingerprint', '')}, {f.get('length', 0)} chars)"))
+        print(_show(_format_finding(f)))
     if len(findings) > 25:
         print(f"  … e mais {len(findings) - 25}")
 

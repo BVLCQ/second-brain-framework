@@ -103,7 +103,9 @@ def owner_slug(name: str, max_len: int = 32) -> str:
 
 
 def sha(text: str | bytes, n: int = 16) -> str:
-    data = text.encode("utf-8") if isinstance(text, str) else text
+    # `surrogateescape`: linha de diff lida com byte que não é UTF-8 (o nome do arquivo vira rótulo do
+    # achado) chega aqui com surrogate; sem ele a impressão digital caía em vez de sair.
+    data = text.encode("utf-8", "surrogateescape") if isinstance(text, str) else text
     return hashlib.sha256(data).hexdigest()[:n]
 
 

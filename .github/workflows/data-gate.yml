@@ -1,0 +1,139 @@
+# Portão de dados — o que entra na main passa pela varredura do brain, com a lista privada de termos.
+# Workflow próprio, só com este job; a suíte fica no ci.yml. Os dois não dividem o arquivo: é isso
+# que separa o que é do mantenedor do que é do PR.
+#
+# pull_request_target roda este workflow, que é o DA MAIN — não o do PR: nenhum PR consegue
+# enfraquecer o próprio portão. O que o PR acrescenta à main passa pela varredura do
+# `brain upstream scan` mais uma lista privada de termos, que mora num segredo do repositório
+# (`PUBLIC_DENYLIST_B64`) e nunca vai ao código. Só texto entra — o job não executa nada que venha
+# do PR —, por isso roda para PR de fork também.
+#
+# O mesmo PR dispara também o ci.yml, pelo evento `pull_request`, e aquele workflow é o DO PR: um
+# fork pode editar o arquivo, apagar um `if:` e devolver `exit 0`. Como o GitHub casa check pelo
+# nome, um job de mesmo nome no workflow do PR produziria um check "data-gate" de sucesso na ponta
+# do fork. Por isso:
+#
+#   · este job não tem `if:` — nunca fica "skipped", que o GitHub conta como sucesso;
+#   · o resultado que vale é o status de commit `data-gate (status)`, publicado no último passo com
+#     o token do job (`statuses: write`). PR de fork só tem token de leitura: não consegue emitir um.
+#
+# Só que o GitHub exige status e check de mesmo nome OS DOIS apenas quando os dois existem. Enquanto
+# nenhum status foi publicado, basta o check do fork. Por isso o PRIMEIRO passo, antes de qualquer
+# checkout, publica o status `pending` — só com o curl da imagem e o token do job — e o último o
+# troca por success/failure/error, com o script quando ele está no disco e sem ele quando não está.
+#
+# A proteção da main exige `data-gate (status)` e os quatro `tests (py3.x)` — nunca o check run
+# `data-gate`. `tests/test_ci_hardening.py` trava tudo isso.
+#
+# push em main: o mesmo, sobre o que acabou de entrar (sem publicar status).
+#
+# O log do job é público. Nenhum achado sai com caminho — nem o da lista privada, nem o das regras
+# públicas: o portão não é oráculo de quem abre PR de fork cheio de candidatos a termo
+# (`public_gate.py`). Quem mantém vê onde rodando o gate com `--detalhes` na própria máquina.
+#
+# Sem action de marketplace e sem JavaScript: o checkout é git puro com o token do job, e a imagem
+# `python:` oficial já traz git e curl.
+name: Portão de dados
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, edited]
+  push:
+    branches: [main]
+
+# token de leitura; escrita só de status de commit, e só neste job
+permissions:
+  contents: read
+
+jobs:
+  data-gate:
+    name: data-gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    container:
+      # Imagem fixada por digest: este job carrega a lista privada, e com tag móvel (`python:3.12`)
+      # qualquer republicação da imagem entraria aqui sem passar pelo repositório. Para atualizar
+      # (Debian com correção de segurança, patch do Python), troque pelo digest atual de `python:3.12`
+      # (`crane digest python:3.12`, ou o cabeçalho `docker-content-digest` do registro) num PR.
+      image: python:3.12@sha256:9dd21fafb95870b99f9faa703a947d08feeb673048ad556e92ce503d0c086a95
+    permissions:
+      contents: read
+      # só para publicar o status de commit do último passo. Em pull_request_target o token é o da
+      # main; o de PR de fork é de leitura e não alcança este endpoint.
+      statuses: write
+    env:
+      GIT_CONFIG_COUNT: 1
+      GIT_CONFIG_KEY_0: safe.directory
+      GIT_CONFIG_VALUE_0: "*"
+      # o commit a varrer e a base: em PR, a ponta do branch contra a main; em push, o que acabou de entrar
+      TARGET_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      GATE_BASE: ${{ github.event.pull_request.head.sha && 'origin/main' || github.event.before }}
+    steps:
+      - name: Status pendente na ponta do PR (antes de qualquer checkout)
+        # Sem status nenhum publicado, o GitHub aceita só o check de mesmo nome que o fork emite no
+        # workflow do PR. Este passo não lê nada do repositório — só o curl da imagem e o token do job.
+        # Com nova tentativa: sem este status e sem o do último passo, só existiria o check do fork.
+        if: github.event_name == 'pull_request_target'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          curl -fsS -m 60 --retry 5 --retry-all-errors --retry-delay 5 -X POST "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/statuses/$TARGET_SHA" \
+            -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" -H "Content-Type: application/json" \
+            -d '{"state":"pending","context":"data-gate (status)","description":"pendente: o portão de dados ainda está rodando"}'
+      - name: Checkout da main (quem varre é a main, não o PR)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          git init -q
+          git config http.extraheader "AUTHORIZATION: basic $(echo -n "x-access-token:$GITHUB_TOKEN" | base64 -w0)"
+          git remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
+          git fetch -q --no-tags origin "+refs/heads/main:refs/remotes/origin/main" "$TARGET_SHA"
+          git checkout -q --force origin/main
+          # Daqui em diante o job lê objetos que vêm do PR: o token sai da configuração deste
+          # workspace antes, e não passa por nenhum `.gitattributes` nem configuração do PR.
+          git config --unset http.extraheader
+      - name: Portão de dados (o que entra na main)
+        id: gate
+        env:
+          # a lista privada chega só a este job, que não executa nada do PR
+          PUBLIC_DENYLIST_B64: ${{ secrets.PUBLIC_DENYLIST_B64 }}
+        run: |
+          # A varredura procura o caminho do HOME no diff. O do container (/root) é caminho de servidor
+          # que documentação legítima cita: passa a ser uma pasta dentro do workspace.
+          export HOME="$PWD/.home-do-portao"
+          case "$GATE_BASE" in
+            0000000000000000000000000000000000000000) echo "push sem base conhecida: não dá para varrer só o que entrou"; exit 1 ;;
+          esac
+          # O segredo é o arquivo da lista privada em base64: vira um arquivo 0600 que só este job lê
+          # e sai com ele. Sem a lista o portão falha — ele não atesta nada.
+          umask 077
+          LISTA="$(mktemp)"
+          trap 'rm -f "$LISTA"' EXIT
+          printf '%s' "$PUBLIC_DENYLIST_B64" | base64 -d > "$LISTA"
+          # o PR entra por um worktree: os scripts que varrem são os da main, o PR só fornece os commits
+          git worktree add --detach /tmp/entrada "$TARGET_SHA"
+          # O código de saída vai para o passo seguinte publicar; o passo falha com ele.
+          rc=0
+          python3 scripts/dev/public_gate.py gate --root /tmp/entrada --base "$GATE_BASE" --denylist "$LISTA" || rc=$?
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          exit "$rc"
+      - name: Resultado na ponta do PR (status `data-gate (status)`)
+        # `always()`: job que morreu antes do portão publica `error` — o status nunca fica pendente.
+        # Sem o checkout da main (fetch que falhou) o script não está no disco: o pedido sai com curl,
+        # como no primeiro passo — o resultado não depende de nada que o job tenha baixado.
+        if: always() && github.event_name == 'pull_request_target'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RC: ${{ steps.gate.outputs.rc }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -f scripts/dev/public_gate.py ]; then
+            python3 scripts/dev/public_gate.py status --sha "$TARGET_SHA" --rc "$RC" --run "$RUN"
+          else
+            echo "sem o checkout da main: publica erro direto, sem o script"
+            curl -fsS -m 60 --retry 5 --retry-all-errors --retry-delay 5 -X POST "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/statuses/$TARGET_SHA" \
+              -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" -H "Content-Type: application/json" \
+              -d '{"state":"error","context":"data-gate (status)","description":"erro: o portão de dados não rodou até o fim — não atesta nada desta ponta"}'
+          fi
