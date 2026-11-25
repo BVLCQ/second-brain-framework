@@ -1354,10 +1354,18 @@ def cli_upstream(args, _b) -> None:
                "sem-git": "esta instância não é um clone git"}[state])
         return
     pre_push = os.environ.get("BRAIN_PRE_PUSH")
-    if args.committed and pre_push is not None:          # chamado pelo hook: refs do push no stdin
-        st = pre_push_scan(inst, args.remote or pre_push or "origin", sys.stdin.read(), denylist=private_denylist())
-    else:
-        st = upstream_scan(inst, args.remote, args.branch, committed=args.committed, fetch=args.fetch)
+    try:
+        if args.committed and pre_push is not None:          # chamado pelo hook: refs do push no stdin
+            st = pre_push_scan(inst, args.remote or pre_push or "origin", sys.stdin.read(), denylist=private_denylist())
+        else:
+            st = upstream_scan(inst, args.remote, args.branch, committed=args.committed, fetch=args.fetch)
+    except util.BrainError as e:
+        # _git usa 4 para falha e para tempo esgotado — o mesmo código do achado. O hook lê 4 como
+        # dado pessoal. Aqui, no caminho da varredura, falha do git vira 1; o achado continua 4
+        # (SystemExit abaixo). Quem chama _git direto (o update) segue com o 4 de sempre.
+        if e.code == 4 and str(e).startswith("git "):
+            raise util.BrainError(str(e), 1) from e
+        raise
     if args.json:
         _print_json(st)
     else:

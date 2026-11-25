@@ -212,7 +212,8 @@ pessoal **dentro** de arquivo do framework — e o repo é **público**. A varre
 ainda não foi enviado (linhas adicionadas, arquivos novos, mensagens de commit): seu
 nome/id/e-mail e domínio da empresa, pessoas do ledger, destinatários e destinos da config,
 caminhos da sua máquina (`/Users/<você>`), workspace do Slack e padrões de segredo. Achado =
-código 4. É rede de segurança — leia o diff.
+código 4. Falha do próprio git no meio da varredura (objeto ilegível, tempo esgotado) sai com
+código 1: o hook diz que a varredura falhou, não que há dado pessoal. É rede de segurança — leia o diff.
 
 | Comando | Uso |
 |---|---|

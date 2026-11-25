@@ -1713,6 +1713,50 @@ class UpstreamTests(unittest.TestCase):
         good = subprocess.run(["git", "-C", str(self.b), "push", "origin", "HEAD:main"], capture_output=True, text=True)
         self.assertEqual(good.returncode, 0, good.stderr)
 
+    def test_cli_upstream_git_failure_is_not_a_finding(self):
+        """Falha ou tempo do git na varredura não é achado: código 4 fica só para dado pessoal."""
+        ns = argparse.Namespace(ucmd="scan", committed=False, remote=None, branch=None, fetch=False, json=False)
+        for msg in ("git diff falhou: fatal: unable to read abc", "git log não respondeu em 600s"):
+            with self.subTest(msg=msg):
+                from unittest.mock import patch
+                boom = util.BrainError(msg, 4)
+                with patch.object(upstream, "_git", side_effect=boom), \
+                     patch.object(upstream.config, "load", return_value=self.inst):
+                    with self.assertRaises(util.BrainError) as cm:
+                        upstream.cli_upstream(ns, None)
+                self.assertEqual(cm.exception.code, 1, msg)
+                self.assertEqual(str(cm.exception), msg)
+
+    def test_hook_unreadable_object_is_scan_failure_not_personal_data(self):
+        self.assertEqual(upstream.hook(self.inst, "install"), "instalado")
+        (self.b / "brain").write_text(
+            f"#!/bin/sh\nBRAIN_HOME={self.b} exec {sys.executable} {ROOT / 'brain'} \"$@\"\n", encoding="utf-8")
+        (self.b / "brain").chmod(0o755)
+        self._git(self.b, "update-index", "--assume-unchanged", "brain")
+        (self.b / "notas.md").write_text("receitas da semana\n", encoding="utf-8")
+        self._commit(self.b, "notas")
+        blob = self._git(self.b, "rev-parse", "HEAD:notas.md").strip()
+        (self.b / ".git" / "objects" / blob[:2] / blob[2:]).unlink()
+        bad = subprocess.run(["git", "-C", str(self.b), "push", "origin", "HEAD:main"],
+                             capture_output=True, text=True)
+        saida = bad.stdout + bad.stderr
+        self.assertNotEqual(bad.returncode, 0, saida)
+        self.assertIn("a varredura do brain falhou", saida)
+        self.assertNotIn("dado pessoal/segredo", saida)
+        head = self._git(self.b, "rev-parse", "HEAD").strip()
+        remote = self._git(self.b, "rev-parse", "origin/main").strip()
+        env = os.environ.copy()
+        env["BRAIN_HOME"] = str(self.b)
+        env["BRAIN_PRE_PUSH"] = "origin"
+        env["BRAIN_PUBLIC_DENYLIST"] = ""
+        scan = subprocess.run(
+            [sys.executable, str(ROOT / "brain"), "upstream", "scan", "--committed"],
+            input=f"refs/heads/main {head} refs/heads/main {remote}\n",
+            capture_output=True, text=True, env=env, cwd=self.b)
+        self.assertEqual(scan.returncode, 1, scan.stderr)
+        self.assertNotEqual(scan.returncode, 4)
+        self.assertIn("git", scan.stderr)
+
     def test_hook_install_respects_foreign_hook_and_remove(self):
         path = upstream._hook_path(self.b)
         path.parent.mkdir(parents=True, exist_ok=True)
