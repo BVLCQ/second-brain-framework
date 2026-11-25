@@ -28,11 +28,13 @@ demonstração.
 
 ## Portão de dados
 
-Duas varreduras iguais, em lugares diferentes, com as regras do `brain upstream scan` (caminho de
-máquina, segredo, workspace do Slack, dado pessoal da instância) mais uma **lista privada de termos**
-— nome de empresa, de rede interna, o que o mantenedor nunca quiser ver lá:
+Duas varreduras, em lugares diferentes, com as regras do `brain upstream scan` (caminho de máquina,
+segredo, workspace do Slack, dado pessoal da instância). A do CI soma uma **lista privada de termos**
+— nome de empresa, de rede interna, o que o mantenedor nunca quiser ver lá — e o anexo fechado:
 
-- **Na máquina, antes do push.** O hook `pre-push` varre os commits que o push leva e barra achados.
+- **Na máquina, antes do push.** O hook `pre-push` varre os commits que o push leva e barra achados —
+  só com as regras públicas: sem a lista privada e sem anexo fechado. Para ter as duas antes do push,
+  rode o portão com a sua cópia da lista (abaixo); é um dos gates do molde de PR.
 - **No CI, em todo PR e em todo push na `main`.** O job `data-gate` (`data-gate.yml`) varre o que o
   PR acrescenta à `main` (`origin/main` até a ponta do branch), commit a commit.
 
