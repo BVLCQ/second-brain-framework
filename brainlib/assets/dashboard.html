@@ -451,10 +451,14 @@ body.con-open .clidot{display:none}
 .verbadge{font-weight:500}
 .verbadge.behind{border-color:var(--accent);color:var(--accent);font-weight:600}
 .verbadge.behind::before{content:"⚡";font-weight:700}
-#newsback .palette{max-width:520px}
+#newsback .palette{display:flex;flex-direction:column;max-width:520px;max-height:calc(100vh - 12vh - 16px);max-height:calc(100dvh - 12vh - 16px);overflow:hidden}
+#newsback .pin,#newsback .news-meta,#newsback .palette>.row{flex-shrink:0}
+html:has(#newsback.open){overflow:hidden}
+#newsback.open{overscroll-behavior:contain}
 .news-meta{margin:0;padding:8px 14px 4px;font-size:12.5px;color:var(--muted)}
 .news-meta:empty{display:none}
 #newslist{overflow:auto;padding:4px 14px}
+#newsback #newslist{position:static;flex:1 1 auto;min-height:0;max-height:none;overflow-y:auto;overscroll-behavior:contain}
 #newslist .ni{padding:8px 2px;border-bottom:1px solid var(--line);font-size:14px;line-height:1.45}
 #newslist .ni:last-child{border-bottom:none}
 #newslist .nv{color:var(--accent);font-weight:700;margin-right:6px}
@@ -925,7 +929,7 @@ body.obmode #faces, body.obmode #tabs, body.obmode #openpal { display: none; }
   <div class="palette" role="dialog" aria-label="Novidades da versão">
     <div class="pin"><b id="newstitle">Novidades</b><span class="hint">esc fecha</span></div>
     <p class="news-meta" id="newsmeta"></p>
-    <div class="pal-list" id="newslist" style="position:static;max-height:60vh"></div>
+    <div class="pal-list" id="newslist"></div>
     <div class="news-log" id="newslog" hidden></div>
     <div class="row" style="padding:10px 14px;gap:8px">
       <span class="note-s" id="newshow"></span>

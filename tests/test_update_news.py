@@ -239,5 +239,28 @@ class StaleCacheTests(_RepoCase):
         self.assertTrue(any("sem confirmação" in c["detail"] for c in got))
 
 
+class UpdateDialogLayoutTests(unittest.TestCase):
+    """O diálogo de atualização cabe na janela: título e ações ficam, só a lista rola."""
+
+    def test_news_dialog_is_capped_to_the_viewport(self):
+        css = (ROOT / "brainlib/assets/src/dashboard.css").read_text(encoding="utf-8")
+        shell = (ROOT / "brainlib/assets/src/shell.html").read_text(encoding="utf-8")
+        row = next(ln for ln in shell.splitlines() if 'id="newslist"' in ln)
+        self.assertNotIn("60vh", row)
+        self.assertNotIn("max-height", row)
+        card = css[css.index("#newsback .palette"):css.index("#newsback .palette") + 280]
+        self.assertIn("display:flex", card.replace(" ", ""))
+        self.assertIn("flex-direction:column", card.replace(" ", ""))
+        self.assertIn("100vh - 12vh", card)
+        listing = css[css.index("#newsback #newslist"):css.index("#newsback #newslist") + 220]
+        squashed = listing.replace(" ", "")
+        self.assertIn("min-height:0", squashed)
+        self.assertIn("overflow-y:auto", squashed)
+        self.assertIn("max-height:none", squashed)
+        self.assertIn("overscroll-behavior:contain", squashed)
+        self.assertIn("html:has(#newsback.open){overflow:hidden}", css.replace(" ", ""))
+        self.assertIn(".pal-list{max-height:46vh", css.replace(" ", ""))
+
+
 if __name__ == "__main__":
     unittest.main()
