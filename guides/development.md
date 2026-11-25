@@ -40,6 +40,10 @@ código do PR, não a vê. O job varre com os scripts e a configuração da `mai
 o PR traz os commits, não as regras. Sem a lista (ausente, vazia, toda em comentário ou com termo
 curto demais) o portão falha: ele não atesta nada.
 
+Só o CI barra também **anexo fechado**: arquivo compactado ou documento (zip, gzip, 7z, RAR, PDF,
+Office) que o PR acrescenta é achado por si, mesmo sem termo — o portão não lê o que está comprimido
+dentro. Imagem e vídeo não são bloqueados: captura de tela com dado interno só é vista por quem revisa.
+
 Para rodar na máquina, da pasta do checkout, com a sua cópia da lista:
 
     python3 scripts/dev/public_gate.py gate --base origin/main --denylist ~/.config/brain/public-denylist

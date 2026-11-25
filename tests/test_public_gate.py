@@ -5,6 +5,7 @@ eco do valor, lista ausente ou vazia, regras do brain e o PR que tenta ditar a p
 """
 from __future__ import annotations
 
+import gzip
 import importlib.util
 import io
 import os
@@ -171,6 +172,35 @@ class GateTests(unittest.TestCase):
         code, out = self._gate(base="ref-que-nao-existe")
         self.assertEqual(code, self.mod.ERROR)
         self.assertIn("✗ portão de dados:", out)
+
+    def _commit_bytes(self, name: str, data: bytes, msg: str = "anexo") -> None:
+        (self.repo / name).write_bytes(data)
+        _git(self.repo, "add", ".")
+        _git(self.repo, "commit", "-q", "-m", msg)
+
+    def test_anexo_fechado_e_achado_pelo_nome_ou_pela_assinatura(self):
+        # o dado pode estar comprimido dentro do anexo, e a varredura de texto passa direto: o arquivo
+        # em si é o achado, pelo nome ou pela assinatura. Binário comum, que o portão lê em bytes, não é.
+        self._commit_bytes("binario-comum.bin", b"\x00\xff\xfe dado comum\x00")
+        self.assertEqual(self._gate()[0], self.mod.CLEAN)
+        self._commit_bytes("relatorio.gz", gzip.compress(b"texto comum, sem termo nenhum\n"))
+        self._commit_bytes("documento.pdf", b"texto comum que so carrega o nome de documento\n")
+        self._commit_bytes("dados.bin", b"PK\x03\x04compactado, sem extensao que entregue")
+        code, out = self._gate()
+        self.assertEqual(code, self.mod.FOUND)
+        self.assertIn("anexo fechado", out)
+        for nome in ("relatorio.gz", "documento.pdf", "dados.bin"):
+            self.assertIn(nome, out)
+        self.assertNotIn("binario-comum.bin", out)
+
+    def test_anexo_fechado_apagado_no_mesmo_pr_ainda_e_achado(self):
+        # o arquivo sai da árvore, mas o blob continua no histórico que o PR leva para a main
+        self._commit_bytes("clientes.xlsx", b"PK\x03\x04planilha")
+        _git(self.repo, "rm", "-q", "clientes.xlsx")
+        _git(self.repo, "commit", "-q", "-m", "apaga o anexo")
+        code, out = self._gate()
+        self.assertEqual(code, self.mod.FOUND)
+        self.assertIn("clientes.xlsx", out)
 
 
 if __name__ == "__main__":
