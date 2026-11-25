@@ -1,3 +1,9 @@
+## 2.45.0 — o decisor local se instala sozinho, e o Brain religa o que estiver fora
+
+- **Escolher Local instala o servidor.** Decisão → Local (wizard, painel ou CLI) instala o `hs-decide-1-flash` num venv próprio, sobe o `/v1/systemone` (MLX no Apple Silicon, vLLM no Linux com GPU) e só grava o slot depois de um julgamento de verdade. Sem Apple Silicon e sem GPU NVIDIA, a escolha é recusada e nada é instalado. Chave, modelo e URL não são pedidos: a chave local fica numa variável separada da `hsk_` da nuvem. Se o teste falha, o slot volta a desligado.
+- **Trocar de Local não apaga a chave da nuvem.** O serviço para e sai do gerenciador; os pesos ficam. A chave `hsk_` que estava guardada volta para o lugar.
+- **Abrir o Brain confere o stack.** `brain services ensure` sabe o que a memória exige (contêiner, LM Studio, decisor) e religa o que estiver fora, sem travar a abertura. O watchdog chama a mesma função e o setup o instala. O noturno só religa — não instala. A tela de Saúde mostra pronto, subindo ou falhou.
+
 ## 2.44.0 — no modo full, embeddings podem ficar na máquina
 
 - **Embeddings locais no full.** O modo full deixa de exigir embeddings de nuvem. O LLM continua só na nuvem (assinatura ou chave); o bge-m3 do LM Studio volta ao cardápio, como escolha — o recomendado do full segue o de nuvem. Quem já usa o local no embed sobe para o full com ele pré-selecionado; um pedido que não nomeia embeddings cai no de nuvem.

@@ -568,7 +568,11 @@ def _forms() -> list[Form]:
                                        ("decision", "decisão — opcional (só full): juiz rápido que corta ~40% das chamadas")),
               value="embeddings"),
             F("provider", "provedor", choices="@providers", depends="slot", init="@provider"),
-            F("model", "modelo", ph="vazio = recomendado do provedor", hint="provider_model", arg="--model"),
+            F("model", "modelo", ph="vazio = recomendado do provedor", hint="provider_model",
+              show="need_model", arg="--model"),
+            F("advanced", "avançado",
+              choices=(("off", "não — o Brain instala e preenche"), ("on", "sim — informar a URL")),
+              value="off", show={"slot": ["decision"], "provider": ["local"]}),
             F("base_url", "base URL", ph="custom / openai-wire / local /v1/systemone", show="need_base_url", arg="--base-url"),
             F("key", "API key", ph="vazio = mantém a do config/.env", secret=True,
               show="need_provider_key", arg="--key"),
@@ -887,9 +891,12 @@ PRED = {   # (valores, ctx, m) → bool — visibilidade de campo e comandos ext
     "prop_merge": lambda v, ctx, m: ctx.get("kind") == "unificar-acao" and bool(ctx.get("target")) and bool(ctx.get("into")),
     "prop_drop": lambda v, ctx, m: ctx.get("kind") == "descartar-acao" and bool(ctx.get("target")) and bool(ctx.get("into")),
     "need_base_url": lambda v, ctx, m: v.get("provider") == "custom"
-                                       or (v.get("slot") == "decision" and v.get("provider") == "local"),
+                                       or (v.get("slot") == "decision" and v.get("provider") == "local"
+                                           and v.get("advanced") == "on"),
+    "need_model": lambda v, ctx, m: not (v.get("slot") == "decision" and v.get("provider") == "local"),
     "need_provider_key": lambda v, ctx, m: v.get("provider", "") not in ("off", "", *_LLM_SUBSCRIPTIONS)
-                                           and not (v.get("slot") == "embeddings" and v.get("provider") == "local"),
+                                           and not (v.get("slot") == "embeddings" and v.get("provider") == "local")
+                                           and not (v.get("slot") == "decision" and v.get("provider") == "local"),
     "show_candidates": lambda v, ctx, m: (v.get("slot") == "reranker" and v.get("provider", "") not in ("", "off"))
                                          or (v.get("slot") == "decision" and v.get("provider") == "hindsight"
                                              and v.get("recall") == "on"),

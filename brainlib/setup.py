@@ -1228,6 +1228,10 @@ def _run_memoria(brain, ui, mode_hint: str | None = None, only: list[str] | None
             ui.say("✓ LLM verificado no servidor (health/llm) — valide o custo com `brain memory cost`")
         except util.BrainError as e:
             ui.say(f"⚠ verificação do LLM falhou: {e} — confira chave/provedor (docker logs hindsight)")
+    from . import services as _services
+    note = _services.install_watchdog(brain.inst)
+    if note:
+        ui.say(note)
 
 
 class _SayOnly:

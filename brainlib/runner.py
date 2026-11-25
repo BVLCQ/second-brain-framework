@@ -310,6 +310,8 @@ def nightly(brain, skip_agent: bool = False, run=None) -> dict:
 
     from . import perms
     perms.try_sync(brain.inst)    # o brain.toml pode ter mudado desde a última vez: o chat do dono acompanha
+    from . import services as _services
+    step("serviços", lambda: _services.ensure(brain.inst, reason="nightly", install=False).get("label", ""))
     step("render", lambda: render.summary(render.render_all(brain)).splitlines()[0])
     window: dict | None = None
     if not skip_agent:

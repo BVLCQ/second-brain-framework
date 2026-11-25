@@ -1052,6 +1052,7 @@ class DashboardAssetTests(unittest.TestCase):
         "review list", "review accept",                        # wave 1 (#61): núcleo/CLI da fila de revisão; painel entra na wave 2
         "seed folder",                                         # backfill único via terminal
         "note write",                                          # wave 1 (#60): narrativa derivada gravada pelo /update e runner (FRESH/notes/)
+        "services ensure", "services status",
     }
     DYNAMIC = {"memory recall", "memory reflect"}       # formulário do TUI monta; o painel busca no índice
 

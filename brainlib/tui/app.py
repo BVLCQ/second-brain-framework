@@ -390,6 +390,8 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
             return
         self.set_interval(4, self._watch)
         self.log_line("TUI pronto · ? ajuda · : comandos · g buscar", "dim")
+        from .. import services as _services
+        _services.kick(self.inst, reason="open")
         warn = sum(1 for c in self.store.health if c["level"] != "ok")
         if warn:
             self.log_line(f"⚠ {warn} aviso(s) de saúde · painel 1, aba Saúde", "yellow")

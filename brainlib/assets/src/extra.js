@@ -3196,7 +3196,7 @@ OBV.memoria = () => {
         decision: [
           {key: "off", label: "Desligado — só os tokens do próprio LLM (padrão)", recommended: true, cloud: false, key_set: false},
           {key: "hindsight", label: "Hindsight — hs-decide-1-flash · US$ 0,02/1M de entrada (corta ~40% das chamadas do LLM)", recommended: false, cloud: true, key_required: true, model: "hs-decide-1-flash", key_set: !!m.dec_key},
-          {key: "local", label: "Local — hs-decide-1-flash (/v1/systemone, zero egress)", recommended: false, cloud: false, local: true, key_required: true, model: "hs-decide-1-flash", base_url: "http://host.docker.internal:8000", key_set: !!m.dec_key},
+          {key: "local", label: "Local — hs-decide-1-flash (/v1/systemone, zero egress)", recommended: false, cloud: false, local: true, managed: true, key_required: false, model: "hs-decide-1-flash", key_set: false},
         ],
       };
 
@@ -3267,8 +3267,9 @@ OBV.memoria = () => {
     const list = listFor(slot);
     const curKey = chosen[slot];
     const p = getProv(slot, curKey) || {};
-    const needUrl = curKey === "custom" || (slot === "decision" && curKey === "local");
-    const needModel = slot === "llm" || needUrl;
+    const localDecider = slot === "decision" && curKey === "local";
+    const needUrl = curKey === "custom";
+    const needModel = slot === "llm" || curKey === "custom";
     const needKey = !p.subscription && (p.cloud || p.key_required);
     const modelPh = p.model ? "vazio = " + p.model : "ex.: gpt-4o-mini";
     const urlPh = p.base_url || "https://…/v1";
@@ -3279,6 +3280,7 @@ OBV.memoria = () => {
       '<select id="prov-' + slot + '">' +
         list.map(it => '<option value="' + esc(it.key) + '" ' + (it.key === curKey ? "selected" : "") + ">" + esc(it.label) + (isRec(slot, it) ? " — ✓ recomendado" : "") + "</option>").join("") +
       "</select>" +
+      (localDecider ? '<p class="muted" id="decider-status">' + esc((m.services && m.services.label) || "o Brain instala e liga o servidor ao confirmar — sem chave, sem URL") + '</p><details><summary>avançado</summary><label class="f"><span>Base URL</span><input type="text" id="url-' + slot + '" placeholder="só se o servidor já existe"></label></details>' : "") +
       (p.subscription ? '<label class="f" style="margin-top:10px;margin-bottom:0">' +
         "<span>Assinatura — sem chave de API" + authChip(curKey) + "</span>" +
         '<small>' + esc(p.hint || "Autentique pelo botão abaixo; a credencial nunca passa pela tela.") + "</small>" +
@@ -3966,6 +3968,30 @@ window.exitOnboarding = exitOnboarding;
       setUpdateTriggersDisabled(false);
     }
   });
+  if (typeof TOK !== "undefined" && TOK) {
+    const paintSvc = (row) => {
+      const el = document.getElementById("svc-pill");
+      if (!el || !row || row.state === "skipped" || row.state === "ready" && !(row.deps && Object.keys(row.deps).length)) {
+        if (el && row && row.state === "ready") { el.hidden = true; }
+        return;
+      }
+      const word = row.label || row.state || "";
+      el.hidden = false;
+      el.textContent = "serviços: " + word;
+      el.onclick = () => { if (window.go) window.go("cfg/saude"); };
+    };
+    const pollSvc = async () => {
+      try {
+        const r = await api("/api/services");
+        if (r && r.ok) paintSvc(r);
+      } catch (e) {}
+    };
+    pollSvc();
+    if (typeof setInterval === "function") {
+      const svcTimer = setInterval(pollSvc, 8000);
+      if (svcTimer && typeof svcTimer.unref === "function") svcTimer.unref();
+    }
+  }
 })();
 
 })();

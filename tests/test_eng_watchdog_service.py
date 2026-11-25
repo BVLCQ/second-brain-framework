@@ -30,185 +30,35 @@ def _write_stub(path: Path, body: str) -> Path:
 
 
 @unittest.skipUnless(shutil.which("zsh"), "zsh ausente (CI Linux sem zsh)")
+class TestWatchdogDelegates(unittest.TestCase):
+    """O shell só chama `brain services ensure`. A escolha de compose mora no Python."""
+
+    def test_script_calls_ensure_and_honors_pause(self) -> None:
+        text = WATCHDOG_SH.read_text(encoding="utf-8")
+        self.assertIn("services ensure --reason watchdog", text)
+        self.assertIn(".brain-watchdog-off", text)
+        self.assertNotIn("docker compose", text)
+        with tempfile.TemporaryDirectory() as td:
+            home = Path(td) / "home"
+            home.mkdir()
+            (home / ".brain-watchdog-off").write_text("", encoding="utf-8")
+            env = os.environ.copy()
+            env["HOME"] = str(home)
+            env["BRAIN_DIR"] = str(ROOT)
+            res = subprocess.run(["zsh", str(WATCHDOG_SH)], env=env, capture_output=True, text=True)
+            self.assertEqual(res.returncode, 0, res.stderr)
+
+
+class _RetiredComposeShell:
+    """O contrato de compose (full/embed/LM Studio) mudou de shell para brainlib/services.py.
+    Os casos vivem em tests/test_services.py. Esta classe não roda."""
+
+
 class TestWatchdogComposeMode(unittest.TestCase):
-    """services/watchdog.sh deriva docker compose do modo em config/brain.toml."""
+    def test_moved(self) -> None:
+        self.assertIn("def compose_argv", (ROOT / "brainlib" / "services.py").read_text(encoding="utf-8"))
+        self.assertIn("def hindsight_blocked", (ROOT / "brainlib" / "services.py").read_text(encoding="utf-8"))
 
-    def setUp(self) -> None:
-        self._tmp = tempfile.TemporaryDirectory()
-        self.root = Path(self._tmp.name)
-        self.brain_dir = self.root / "inst"
-        (self.brain_dir / "config").mkdir(parents=True)
-        (self.brain_dir / "vault" / "logs").mkdir(parents=True)
-        self.stubs = self.root / "bin"
-        self.stubs.mkdir()
-        self.docker_args_file = self.root / "docker_args.txt"
-        self.log_file = self.brain_dir / "vault" / "logs" / "watchdog.log"
-
-        self.curl_stub = _write_stub(
-            self.stubs / "curl",
-            'case "$*" in\n'
-            '  *:1234/v1/models*) exit 0 ;;\n'
-            '  *:8888/health*) exit 1 ;;\n'
-            '  *) exit 1 ;;\n'
-            'esac',
-        )
-        self.orbctl_stub = _write_stub(self.stubs / "orbctl", 'echo "Running"')
-        self.docker_stub = _write_stub(
-            self.stubs / "docker",
-            f'if [ "$1" = "inspect" ]; then\n'
-            f'  echo "exited|false"\n'
-            f'  exit 0\n'
-            f'fi\n'
-            f'printf "%s\\n" "$@" > "{self.docker_args_file}"\n'
-            f'echo "Container hindsight Recreated"\n'
-            f'exit 0',
-        )
-
-    def tearDown(self) -> None:
-        self._tmp.cleanup()
-
-    def _run_watchdog(self) -> subprocess.CompletedProcess[str]:
-        env = os.environ.copy()
-        env.update({
-            "HOME": str(self.root / "home"),
-            "PATH": f"{self.stubs}:{env.get('PATH', '')}",
-            "BRAIN_DIR": str(self.brain_dir),
-            "WATCHDOG_LOG": str(self.log_file),
-            "LMS": str(self.root / "no-lms"),
-            "CURL": str(self.curl_stub),
-            "ORBCTL": str(self.orbctl_stub),
-            "DOCKER": str(self.docker_stub),
-            "WATCHDOG_LMS_TRIES": "1",
-            "WATCHDOG_LMS_SLEEP": "0",
-            "WATCHDOG_HEALTH_TRIES": "1",
-            "WATCHDOG_SLEEP": "0",
-        })
-        (self.root / "home").mkdir(exist_ok=True)
-        return subprocess.run(
-            ["zsh", str(WATCHDOG_SH)],
-            env=env,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-
-    def test_full_mode_uses_full_compose_and_env_file(self) -> None:
-        (self.brain_dir / "config" / "brain.toml").write_text(
-            '[memory]\n'
-            'engine = "hindsight"\n'
-            'extract = true  # nuvem\n'
-            'cloud_llm = true\n',
-            encoding="utf-8",
-        )
-        env_file = self.brain_dir / "config" / ".env"
-        env_file.write_text("HINDSIGHT_API_LLM_PROVIDER=openai\n", encoding="utf-8")
-
-        res = self._run_watchdog()
-        self.assertEqual(res.returncode, 0, res.stderr)
-        args = self.docker_args_file.read_text(encoding="utf-8").splitlines()
-        self.assertEqual(args[0], "compose")
-        self.assertIn("--env-file", args)
-        env_idx = args.index("--env-file")
-        self.assertEqual(args[env_idx + 1], str(env_file))
-        self.assertIn(str(ROOT / "services" / "compose.yaml"), args)
-        self.assertIn(str(ROOT / "services" / "compose.full.yaml"), args)
-        self.assertEqual(args[-2:], ["up", "-d"])
-
-        log = self.log_file.read_text(encoding="utf-8")
-        self.assertIn("modo: full", log)
-        self.assertIn("subido/recriado", log)
-
-    def test_embed_mode_uses_base_compose_only(self) -> None:
-        (self.brain_dir / "config" / "brain.toml").write_text(
-            '[memory]\n'
-            'engine = "hindsight"\n'
-            'extract = false\n',
-            encoding="utf-8",
-        )
-        (self.brain_dir / "config" / ".env").write_text("DUMMY=1\n", encoding="utf-8")
-
-        res = self._run_watchdog()
-        self.assertEqual(res.returncode, 0, res.stderr)
-        args = self.docker_args_file.read_text(encoding="utf-8").splitlines()
-        self.assertEqual(
-            args,
-            ["compose", "-f", str(ROOT / "services" / "compose.yaml"), "up", "-d"],
-        )
-        self.assertNotIn("--env-file", args)
-        self.assertNotIn(str(ROOT / "services" / "compose.full.yaml"), args)
-
-    def test_embed_mode_with_quoted_false_extract_does_not_enable_full(self) -> None:
-        (self.brain_dir / "config" / "brain.toml").write_text(
-            '[memory]\n'
-            'engine = "hindsight"\n'
-            'extract = "false"  # explícito como string\n',
-            encoding="utf-8",
-        )
-
-        res = self._run_watchdog()
-        self.assertEqual(res.returncode, 0, res.stderr)
-        args = self.docker_args_file.read_text(encoding="utf-8").splitlines()
-        self.assertNotIn(str(ROOT / "services" / "compose.full.yaml"), args)
-        log = self.log_file.read_text(encoding="utf-8")
-        self.assertIn("modo: embed", log)
-
-    def test_missing_config_defaults_to_embed(self) -> None:
-        res = self._run_watchdog()
-        self.assertEqual(res.returncode, 0, res.stderr)
-        args = self.docker_args_file.read_text(encoding="utf-8").splitlines()
-        self.assertEqual(
-            args,
-            ["compose", "-f", str(ROOT / "services" / "compose.yaml"), "up", "-d"],
-        )
-        self.assertNotIn(str(ROOT / "services" / "compose.full.yaml"), args)
-
-    def _lmstudio_down(self) -> None:
-        self.curl_stub = _write_stub(self.stubs / "curl-lms-down", 'exit 1')     # :1234 e :8888 fora do ar
-
-    def test_full_with_local_embeddings_does_not_recreate_while_lmstudio_is_down(self) -> None:
-        """O contêiner morreria no boot sem o LM Studio: recriar a cada 5 min só enche o log."""
-        (self.brain_dir / "config" / "brain.toml").write_text(
-            '[memory]\nengine = "hindsight"\nextract = true\ncloud_llm = true\n'
-            'embeddings_provider = "local"\n', encoding="utf-8")
-        (self.brain_dir / "config" / ".env").write_text("HINDSIGHT_API_LLM_PROVIDER=openai\n", encoding="utf-8")
-        self._lmstudio_down()
-        res = self._run_watchdog()
-        self.assertEqual(res.returncode, 0, res.stderr)
-        self.assertFalse(self.docker_args_file.exists())
-        log = self.log_file.read_text(encoding="utf-8")
-        self.assertIn("não recrio o contêiner", log)
-        self.assertIn("brain setup --only memoria", log)
-
-    def test_full_without_embeddings_key_defaults_to_local_and_waits_for_lmstudio(self) -> None:
-        (self.brain_dir / "config" / "brain.toml").write_text(
-            '[memory]\nengine = "hindsight"\nextract = true\ncloud_llm = true\n', encoding="utf-8")
-        self._lmstudio_down()
-        res = self._run_watchdog()
-        self.assertEqual(res.returncode, 0, res.stderr)
-        self.assertFalse(self.docker_args_file.exists())
-
-    def test_full_with_cloud_embeddings_still_recreates_without_lmstudio(self) -> None:
-        (self.brain_dir / "config" / "brain.toml").write_text(
-            '[memory]\nengine = "hindsight"\nextract = true\ncloud_llm = true\n'
-            'embeddings_provider = "fireworks"\n', encoding="utf-8")
-        (self.brain_dir / "config" / ".env").write_text("HINDSIGHT_API_LLM_PROVIDER=openai\n", encoding="utf-8")
-        self._lmstudio_down()
-        res = self._run_watchdog()
-        self.assertEqual(res.returncode, 0, res.stderr)
-        self.assertEqual(self.docker_args_file.read_text(encoding="utf-8").splitlines()[-2:], ["up", "-d"])
-
-    def test_none_mode_skips_recreate(self) -> None:
-        (self.brain_dir / "config" / "brain.toml").write_text(
-            '[memory]\n'
-            'engine = "none"\n',
-            encoding="utf-8",
-        )
-
-        res = self._run_watchdog()
-        self.assertEqual(res.returncode, 0, res.stderr)
-        self.assertFalse(self.docker_args_file.exists())
-        log = self.log_file.read_text(encoding="utf-8")
-        self.assertIn("modo none", log)
 
 
 class TestWatchdogPlistAndGuide(unittest.TestCase):

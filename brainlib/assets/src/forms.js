@@ -229,9 +229,11 @@ const BRAIN_FORMS = (function(){
     prop_effort: (v, ctx) => ctx.kind === "reestimar" && !!ctx.target,
     prop_merge: (v, ctx) => ctx.kind === "unificar-acao" && !!ctx.target && !!ctx.into,
     prop_drop: (v, ctx) => ctx.kind === "descartar-acao" && !!ctx.target && !!ctx.into,
-    need_base_url: v => v.provider === "custom" || (v.slot === "decision" && v.provider === "local"),
+    need_base_url: v => v.provider === "custom" || (v.slot === "decision" && v.provider === "local" && v.advanced === "on"),
+    need_model: v => !(v.slot === "decision" && v.provider === "local"),
     need_provider_key: v => !["off", "", "claude-code", "xai-oauth", "chatgpt", "nous", "github-copilot", "cursor"].includes(v.provider || "")
-      && !(v.slot === "embeddings" && v.provider === "local"),
+      && !(v.slot === "embeddings" && v.provider === "local")
+      && !(v.slot === "decision" && v.provider === "local"),
     show_candidates: v => (v.slot === "reranker" && !["", "off"].includes(v.provider || ""))
       || (v.slot === "decision" && v.provider === "hindsight" && v.recall === "on"),
   };

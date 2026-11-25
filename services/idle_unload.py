@@ -137,6 +137,66 @@ def _sanitize_state(raw_state):
     return clean
 
 
+def maybe_stop_decider(hindsight_busy, now, *, dry=False, up=None, stop=None, flag=None,
+                       last_busy=0.0, idle_s=None):
+    """Para o decisor local depois de ficar ocioso, para não segurar memória à toa.
+
+    A primeira vez que o servidor está no ar e o Hindsight não tem trabalho só marca o relógio.
+    O watchdog não religa enquanto o arquivo de ociosidade existir. Abrir o Brain apaga o arquivo.
+    Devolve (estado, last_busy) para o chamador gravar.
+    """
+    if idle_s is None:
+        idle_s = float(os.environ.get("BRAIN_IDLE_DECIDER_MIN", "15")) * 60
+    if up is None:
+        up = _decider_up
+    if stop is None:
+        stop = _stop_decider
+    if hindsight_busy:
+        if flag is not None and flag.exists():
+            try:
+                flag.unlink()
+            except OSError:
+                pass
+        return "ocupado", now
+    if not up():
+        return "fora", last_busy
+    seen = last_busy if last_busy > 0 else now
+    if now - seen < idle_s:
+        return "aguardando", seen
+    if dry:
+        log("(dry-run) pararia o decisor local — ocioso")
+        return "pararia", seen
+    stop()
+    if flag is not None:
+        try:
+            flag.parent.mkdir(parents=True, exist_ok=True)
+            flag.write_text(str(now), encoding="utf-8")
+        except OSError:
+            pass
+    log(f"decisor local parado — ocioso há {(now - seen) / 60:.0f} min (limite {idle_s / 60:.0f})")
+    return "parado", seen
+
+
+def _decider_up():
+    url = os.environ.get("BRAIN_DECIDER_URL", "http://127.0.0.1:8000/health")
+    try:
+        with urllib.request.urlopen(url, timeout=2):
+            return True
+    except Exception:
+        return False
+
+
+def _stop_decider():
+    import shutil
+    if shutil.which("launchctl"):
+        uid = os.getuid()
+        subprocess.run(["launchctl", "bootout", f"gui/{uid}/com.segundo-cerebro.decider"],
+                       capture_output=True, text=True, timeout=20)
+        return
+    subprocess.run(["systemctl", "--user", "stop", "segundo-cerebro-decider.service"],
+                   capture_output=True, text=True, timeout=20)
+
+
 def main(argv):
     if os.environ.get("BRAIN_IDLE_UNLOAD_OFF") == "1" or (Path.home() / ".brain-watchdog-off").exists():
         return 0
@@ -148,8 +208,10 @@ def main(argv):
     try:
         parsed = json.loads(state_path.read_text())
         raw_models = parsed.get("models", {}) if isinstance(parsed, dict) else {}
+        decider_last = _num(parsed.get("decider_last_busy"), 0.0) if isinstance(parsed, dict) else 0.0
     except Exception:
         raw_models = {}
+        decider_last = 0.0
     state = _sanitize_state(raw_models)
     state_loaded = True
 
@@ -229,11 +291,15 @@ def main(argv):
                 ua = _num(v.get("unloaded_at"), -1.0, min_v=0.0)
                 if ua <= 0 or now - ua > 24 * 3600:
                     del state[k]
+        brain_dir = state_path.resolve().parent.parent.parent
+        note, decider_last = maybe_stop_decider(
+            bool(hs), now, dry=dry, last_busy=decider_last,
+            flag=brain_dir / ".decider" / "idle-stopped")
     finally:
         if not dry and state_loaded:
             state_path.parent.mkdir(parents=True, exist_ok=True)
             tmp = state_path.with_name(state_path.name + ".tmp")   # troca atômica: morte no meio não trunca o estado
-            tmp.write_text(json.dumps({"models": state}, indent=1))
+            tmp.write_text(json.dumps({"models": state, "decider_last_busy": decider_last}, indent=1))
             os.replace(str(tmp), str(state_path))
     return 0
 

@@ -518,7 +518,7 @@ def checks(brain, online: bool = False, probe_agent: bool = False, docker_probe=
                 if not reach_ok:
                     out.append(_c("warn", "memória · decisão",
                                   f"{dec_s['label']} — servidor local inacessível em {probed_url} "
-                                  "(o Brain não sobe o processo local; guides/memory.md)"))
+                                  "(o Brain religa ao abrir; ver vault/logs/decider.log)"))
                 elif recall_on:
                     out.append(_c("warn", "memória · decisão",
                                   f"{dec_s['label']} (respondendo em {probed_url}) — recall local não é suportado "
@@ -614,6 +614,10 @@ def checks(brain, online: bool = False, probe_agent: bool = False, docker_probe=
     elif c:
         out.append(_c("ok", "framework", f"em dia (v{_ver}, verificado "
                                          + str(c.get("checked_at", ""))[:10] + ")"))
+    from . import services as _services
+    item = _services.doctor_item(inst)
+    if item:
+        out.append(_c(item["level"], item["title"], item["detail"]))
     return out
 
 
