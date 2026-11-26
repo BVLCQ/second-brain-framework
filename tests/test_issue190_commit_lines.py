@@ -1,7 +1,9 @@
 """#190: o diálogo lista o assunto do commit, aparado em 140 caracteres."""
+import contextlib
+import io
 import unittest
 
-from brainlib.upstream import clip_subject, commit_lines
+from brainlib.upstream import _print_update, clip_subject, commit_lines
 
 
 class CommitLineTests(unittest.TestCase):
@@ -40,3 +42,14 @@ class CommitLineTests(unittest.TestCase):
         subject = rows[0].split(" ", 1)[1]
         self.assertLessEqual(len(subject), 141)
         self.assertNotIn(long, rows[0])
+
+    def test_terminal_limita_a_lista_e_diz_quantos_faltam(self):
+        res = {"remote": "origin", "branch": "main", "behind": 30, "checked_only": True, "version_before": "1.0.0",
+               "incoming": [f"abc{i:04d} assunto {i}" for i in range(30)], "areas": {"brainlib": 3}}
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            _print_update(res)
+        text = out.getvalue()
+        self.assertIn("abc0019 assunto 19", text)
+        self.assertNotIn("abc0020", text)
+        self.assertIn("e mais 10", text)

@@ -466,7 +466,7 @@ def _print_update(res: dict) -> None:
     else:
         verb = "disponíveis" if res["checked_only"] else "trazidos"
         print(f"{res['behind']} commit(s) {verb} de {ref}:")
-        for ln in commit_lines(res.get("incoming") or []):
+        for ln in commit_lines(res.get("incoming") or [], limit=20):      # o diálogo rola; o terminal não
             print(f"  · {ln}")
         print("  arquivos por área: " + " · ".join(f"{k} {v}" for k, v in sorted(res["areas"].items())))
     news = res.get("news") or []
