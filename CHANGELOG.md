@@ -1,3 +1,9 @@
+## 2.54.0 — a barra lateral ganha seções, e Fontes sai do dia
+
+- **Rótulos, nada some.** Execução separa Agora, Atenção e Registro. Portfólio separa Mapa, Trabalho e Cadastro. Configurações separa Conta, Conexões, Instância e Meta. O rótulo não é link.
+- **Sugestões foi para Configurações.** É sobre o cérebro, não sobre o dia. A paleta continua achando a página.
+- **Fontes foi para o lado de Conectores.** Na Execução fica só o badge, e só quando há falha de pull. O clique abre a página, que mora em Configurações.
+
 ## 2.53.0 — o diálogo de atualização lista o assunto de cada commit
 
 - **Uma linha por commit, no máximo 140 caracteres.** O assunto aparece inteiro se cabe. Se passa, corta no último espaço e põe reticências. A conta é de caracteres, não de bytes. O hash curto fica ao lado e não entra na conta.
