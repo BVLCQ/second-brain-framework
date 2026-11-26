@@ -7,7 +7,7 @@ import webbrowser  # noqa: F401 — os testes interceptam render.webbrowser.open
 import subprocess
 from pathlib import Path
 
-from . import doctor, forms, model, render_md, render_portfolio, schema, util, watch
+from . import doctor, forms, linked, model, render_md, render_portfolio, schema, util, watch
 from . import harvest as harvest_mod
 
 ASSET = Path(__file__).resolve().parent / "assets" / "dashboard.html"
@@ -76,13 +76,15 @@ def _sources(brain) -> list[dict]:
         st = watch.source_status(s, c)
         out.append({**s, "in_watch": True, "last_ok": c.last_ok if c else "", "last_error": c.last_error if c else "",
                     "failures": c.consecutive_failures if c else 0, "pulls": c.pulls if c else 0,
-                    "last_changed": c.last_changed if c else "",
+                    "last_changed": c.last_changed if c else "", "last_snapshot": c.last_snapshot if c else "",
                     "enabled": st["enabled"], "problem": st["problem"], "problem_reason": st["problem_reason"]})
     for k, c in conns.items():
         if k not in seen:
             out.append({"key": k, "kind": "", "in_watch": False, "last_ok": c.last_ok, "last_error": c.last_error,
                         "failures": c.consecutive_failures, "pulls": c.pulls, "last_changed": c.last_changed,
-                        "enabled": True, "problem": False, "problem_reason": ""})
+                        "last_snapshot": c.last_snapshot, "enabled": True, "problem": False, "problem_reason": ""})
+    for row in out:                                          # o snapshot que o último pull gravou é um arquivo do vault
+        row["files"] = linked.collect(brain.inst, {}, [], sources=(row.get("last_snapshot") or "",))
     return out
 
 
