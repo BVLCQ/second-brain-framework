@@ -359,10 +359,10 @@ def push(brain: Brain, fid: str, *, approval: str = "", by: str = "owner") -> di
             f"confira e registre com `brain feedback pushed {fid} --number {num_hint} --url <url>`",
             code=5,
         ) from e
-    if approval and not bound:
-        approve(brain, fid, approval, by=by)
-        f = brain.state.feedbacks[fid]
     try:
+        if approval and not bound:
+            approve(brain, fid, approval, by=by)
+            f = brain.state.feedbacks[fid]
         data: dict = {"number": res["number"], "url": url, "quote": quote, "text_sha": public_sha(f)}
         if origin == "surface":
             data["surface"] = quote
