@@ -1,8 +1,25 @@
-## 2.51.0 — a barra lateral ganha seções, e Fontes sai do dia
+## 2.54.0 — a barra lateral ganha seções, e Fontes sai do dia
 
 - **Rótulos, nada some.** Execução separa Agora, Atenção e Registro. Portfólio separa Mapa, Trabalho e Cadastro. Configurações separa Conta, Conexões, Instância e Meta. O rótulo não é link.
 - **Sugestões foi para Configurações.** É sobre o cérebro, não sobre o dia. A paleta continua achando a página.
 - **Fontes foi para o lado de Conectores.** Na Execução fica só o badge, e só quando há falha de pull. O clique abre a página, que mora em Configurações.
+
+## 2.53.0 — o diálogo de atualização lista o assunto de cada commit
+
+- **Uma linha por commit, no máximo 140 caracteres.** O assunto aparece inteiro se cabe. Se passa, corta no último espaço e põe reticências. A conta é de caracteres, não de bytes. O hash curto fica ao lado e não entra na conta.
+- **O changelog deixa de ser a leitura padrão.** Os parágrafos longos continuam no CHANGELOG.md e atrás de "ver changelog". A checagem não descarta assunto depois do vigésimo. A mesma lista sai no `brain update --check`.
+
+## 2.52.0 — a suíte roda em paralelo e uma thread do OAuth deixa de vazar
+
+- **`scripts/dev/run_tests.py` roda a suíte em paralelo** (só stdlib, um worker por CPU; `-j N` muda; aceita prefixo de módulo, classe ou teste). O CI passa a usá-lo. O resultado é o mesmo do `unittest discover`, em bem menos tempo.
+- **O fluxo OAuth do Google não deixa mais uma thread rodando.** A thread que atende o redirect seguia até `wait_s` (300 s) depois de a função voltar. Agora `stop` a encerra no `finally`.
+- **Os testes pararam de se atrasar uns aos outros.** Aquela thread, com um servidor falso, virava laço ocupado e travava o que rodasse depois no mesmo processo. A instância demo dos testes de TUI é montada uma vez por processo e copiada, em vez de remontada a cada teste.
+- **Um teste que não testava nada foi corrigido.** `WatchdogShTests` procurava no `watchdog.sh` texto de uma implementação que já tinha saído de lá. Falhava em quem tem zsh e o CI o pulava.
+
+## 2.51.0 — o ícone do Dock não troca a página
+
+- **O clique no ícone traz a aba, não recarrega.** Se a ponte já está no ar, o Dock só ativa a aba do Brain. A página em que o dono estava continua. Sem nonce, sem URL nova.
+- **Ponte que subiu de novo entrega o token sem apagar a rota.** O fragmento que sobra depois do token é a página, não vazio. Sem aba, ou sem rota, abre no Início.
 
 ## 2.50.0 — o texto da sugestão aparece formatado, e o rascunho do agente espera leitura
 

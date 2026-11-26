@@ -150,7 +150,7 @@ class AppleScriptSyntaxTest(unittest.TestCase):
                 continue                                    # osacompile precisa do dicionário do app
             with tempfile.TemporaryDirectory() as td:
                 src = Path(td) / "a.applescript"
-                src.write_text(util._FIND_TAB[family].format(app=app), encoding="utf-8")
+                src.write_text(util._FIND_TAB[family].format(app=app, mode="set"), encoding="utf-8")
                 r = subprocess.run(["osacompile", "-o", str(Path(td) / "a.scpt"), str(src)], capture_output=True, text=True)
                 self.assertEqual(r.returncode, 0, r.stderr)
 

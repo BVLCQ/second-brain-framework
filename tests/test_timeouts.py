@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -296,6 +297,41 @@ class TestSetupOAuthTimeouts(unittest.TestCase):
         argv, kw = calls[0]
         self.assertEqual(argv[0], "/usr/bin/xdg-open")
         self.assertEqual(kw.get("timeout"), 15)
+
+    def test_setup_google_refresh_token_stops_serving_thread_on_return(self):
+        """A thread que atende o redirect do Google morre com a função. Antes ela seguia até `wait_s` (300 s):
+        no teste, um servidor falso fazia dela um laço ocupado que atrasava tudo que rodava depois no processo."""
+        served = []
+
+        class SpyServer:
+            def __init__(self, addr, handler_cls):
+                self.timeout = None
+                handler_cls.code = "test-auth-code"
+
+            def handle_request(self):
+                served.append(1)
+                time.sleep(0.01)
+
+            def server_close(self):
+                pass
+
+        class Resp:
+            def read(self):
+                return b'{"refresh_token": "rt"}'
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                pass
+
+        with mock.patch("brainlib.setup.HTTPServer", SpyServer), \
+             mock.patch("urllib.request.urlopen", return_value=Resp()):
+            setup.google_refresh_token("cid", "sec", open_browser=False, say=lambda *a: None)
+        time.sleep(0.1)                                   # dá tempo de uma chamada em voo terminar
+        before = len(served)
+        time.sleep(0.3)
+        self.assertEqual(len(served), before, "a thread de atendimento continuou rodando depois do retorno")
 
     def test_setup_google_refresh_token_opener_timeout_does_not_break(self):
         def timeout_side_effect(argv, **kw):

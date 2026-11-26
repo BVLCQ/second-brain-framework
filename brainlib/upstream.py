@@ -228,6 +228,31 @@ def parse_changelog(text: str) -> list[tuple[str, str, list[str]]]:
     return out
 
 
+def clip_subject(text: str, limit: int = 140) -> str:
+    """Assunto de commit em no máximo `limit` caracteres Unicode. Corta no espaço, senão no limite."""
+    text = (text or "").strip()
+    if len(text) <= limit:
+        return text
+    cut = text[:limit]
+    sp = cut.rfind(" ")
+    if sp > 0:
+        cut = cut[:sp]
+    return cut.rstrip() + "…"
+
+
+def commit_lines(incoming: list[str], limit: int | None = None) -> list[str]:
+    """Uma linha por commit: hash curto fora da conta de 140. `limit` acrescenta 'e mais N'."""
+    rows = []
+    for raw in incoming or []:
+        short, _, subject = str(raw).partition(" ")
+        text = clip_subject(subject)
+        rows.append(f"{short} {text}".strip() if short else text)
+    if limit is not None and len(rows) > limit:
+        extra = len(rows) - limit
+        rows = rows[:limit] + [f"e mais {extra}"]
+    return rows
+
+
 def news_between(text: str, from_v: str, to_v: str | None = None) -> list[str]:
     """Bullets das versões em (from_v, to_v] — as novidades de quem vinha de from_v."""
     lo, hi = _vkey(from_v), (_vkey(to_v) if to_v else (1 << 30,))
@@ -287,7 +312,7 @@ def check_update(inst, force: bool = False, git=None) -> dict:
         git_fn(root, "fetch", "--quiet", remote, branch, check=True)
         ahead, behind = _ahead_behind(root, ref, git=git_fn)  # (só-HEAD, só-remote) = (ahead, behind)
         out.update(remote=remote, branch=branch, behind=behind, ahead=ahead,
-                   incoming=[ln for ln in _lines(git_fn(root, "log", "--format=%h %s", f"HEAD..{ref}"))][:20],
+                   incoming=[ln for ln in _lines(git_fn(root, "log", "--format=%h %s", f"HEAD..{ref}"))],
                    remote_version=_version_at(root, ref, git=git_fn), error="")
         changelog_remote = _file_at(root, ref, "CHANGELOG.md", git=git_fn)
         if changelog_remote and out["remote_version"] != "?":
@@ -441,10 +466,8 @@ def _print_update(res: dict) -> None:
     else:
         verb = "disponíveis" if res["checked_only"] else "trazidos"
         print(f"{res['behind']} commit(s) {verb} de {ref}:")
-        for ln in res["incoming"][:15]:
+        for ln in commit_lines(res.get("incoming") or [], limit=20):      # o diálogo rola; o terminal não
             print(f"  · {ln}")
-        if len(res["incoming"]) > 15:
-            print(f"  … e mais {len(res['incoming']) - 15}")
         print("  arquivos por área: " + " · ".join(f"{k} {v}" for k, v in sorted(res["areas"].items())))
     news = res.get("news") or []
     if news:

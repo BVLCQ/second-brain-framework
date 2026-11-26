@@ -1703,9 +1703,23 @@ function syncVerBadge(){
     const commitsTxt = u.behind + (u.behind === 1 ? " commit atrás" : " commits atrás");
     const verTxt = "v" + (u.version || "?");
     const transTxt = verTxt + " → v" + (u.remote_version || "?");
-    const news = (u.news && u.news.length) ? u.news : semNovidade(u);
-    document.getElementById("newslist").innerHTML =
-      news.map(n => '<div class="ni">' + esc(n) + "</div>").join("");
+    const lines = (u.lines && u.lines.length) ? u.lines : [];
+    const changelog = (u.news && u.news.length) ? u.news : [];
+    let showLog = false;
+    const paint = () => {
+      const list = showLog ? changelog : lines;
+      const body = list.length ? list : semNovidade(u);
+      document.getElementById("newslist").innerHTML =
+        body.map(n => '<div class="ni">' + esc(n) + "</div>").join("");
+      const toggle = document.getElementById("newschangelog");
+      if (toggle) {
+        toggle.hidden = !changelog.length;
+        toggle.textContent = showLog ? "ver commits" : "ver changelog";
+      }
+    };
+    paint();
+    const toggle = document.getElementById("newschangelog");
+    if (toggle) toggle.onclick = () => { showLog = !showLog; paint(); };
     document.getElementById("newstitle").textContent = behind ? "Atualização disponível" : "Novidades da versão";
     if (meta) {
       meta.textContent = behind
