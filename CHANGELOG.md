@@ -1,3 +1,8 @@
+## 2.51.0 — o ícone do Dock não troca a página
+
+- **O clique no ícone traz a aba, não recarrega.** Se a ponte já está no ar, o Dock só ativa a aba do Brain. A página em que o dono estava continua. Sem nonce, sem URL nova.
+- **Ponte que subiu de novo entrega o token sem apagar a rota.** O fragmento que sobra depois do token é a página, não vazio. Sem aba, ou sem rota, abre no Início.
+
 ## 2.50.0 — o texto da sugestão aparece formatado, e o rascunho do agente espera leitura
 
 - **A aba Sugestões mostra o texto que sobe, formatado.** Título com a tag, molde e rodapé entram no leitor de Markdown. Um `<script>` no texto aparece escapado. O hash do texto fica ao lado do link da issue.
