@@ -158,6 +158,12 @@ document.addEventListener("click", e => {
     }
     return;
   }
+  const grpBtn = e.target.closest("[data-src-grp]");
+  if (grpBtn) {
+    e.preventDefault();
+    toggleSrcGroup(grpBtn.dataset.srcGrp);
+    return;
+  }
   const sortBtn = e.target.closest("[data-src-sort]");
   if (sortBtn) {
     e.preventDefault();
@@ -1152,6 +1158,19 @@ function oppRow(o, i){
 }
 // ── Fontes (watch.toml) — a aba Fontes do TUI ──
 var S_SORT = "desc";
+// grupos de tipo recolhidos na aba Fontes: vale na sessão (recarregar a página abre tudo de novo)
+var S_COLLAPSED = new Set();
+function toggleSrcGroup(k){
+  S_COLLAPSED.has(k) ? S_COLLAPSED.delete(k) : S_COLLAPSED.add(k);
+  route();
+}
+document.addEventListener("keydown", e => {
+  if ((e.key === "Enter" || e.key === " ") && e.target && e.target.matches && e.target.matches("[data-src-grp]")) {
+    e.preventDefault();
+    e.stopPropagation();
+    toggleSrcGroup(e.target.dataset.srcGrp);
+  }
+}, true);
 const qArg = s => {
   s = String(s ?? "");
   if (/^[\w@%+=:,./-]+$/.test(s)) return s;
@@ -1219,10 +1238,14 @@ V.sources = () => {
   groups.forEach(g => {
     const probCount = g.rows.filter(x => !!x.problem).length;
     const badge = probCount ? ' ' + chip("atencao", "⚠ " + probCount + " com problema") : "";
-    tableHtml += '<tr class="src-group-hdr"><td colspan="6"><div class="src-group-title">' +
-      '<span class="src-group-name">▾ ' + esc(g.label) + '</span>' +
+    const closed = S_COLLAPSED.has(g.kind);
+    tableHtml += '<tr class="src-group-hdr"><td colspan="6">' +
+      '<div class="src-group-title" data-src-grp="' + esc(g.kind) + '" role="button" tabindex="0" aria-expanded="' + (closed ? "false" : "true") +
+      '" title="' + (closed ? "Mostrar" : "Recolher") + ' este grupo">' +
+      '<span class="src-group-name">' + (closed ? "▸ " : "▾ ") + esc(g.label) + '</span>' +
       ' <span class="src-group-count">(' + g.rows.length + ')</span>' +
       badge + '</div></td></tr>';
+    if (closed) return;                                  // recolhido: só o cabeçalho, com a contagem e o selo
 
     g.rows.forEach(s => {
       const isProblem = !!s.problem;
@@ -1242,7 +1265,7 @@ V.sources = () => {
         stateHtml = '<span class="chip h-em-risco late">⚠ ' + esc(s.problem_reason || "problema") + '</span>' +
           (s.last_error ? ' <span class="late small">· ' + esc(s.last_error.slice(0, 80)) + '</span>' : '');
       } else if (!s.in_watch) {
-        stateHtml = chip("atencao", "fora do watch") + ' <span class="muted small">w inclui</span>';
+        stateHtml = chip("atencao", "fora do watch") + ' <span class="muted small">w inclui · d tira da lista</span>';
       } else {
         stateHtml = '<span class="ok">✓</span>';
       }
@@ -1573,7 +1596,7 @@ function route(){
   window.scrollTo(0, 0);
 }
 window.BRAIN = {M, A, D, P, G, PE, OPP, PROC, AREA, docUrl, safeUrl, normalizeBrain, go, route, chip, aL, dL, pL, peL, fmtD, fmtDW, donut, bar, esc, renderSafeMd,
-  qArg, V, get S_SORT(){ return S_SORT; }, set S_SORT(v){ S_SORT = v; },
+  qArg, V, S_COLLAPSED, get S_SORT(){ return S_SORT; }, set S_SORT(v){ S_SORT = v; },
   refresh: function(nm){                       // ponte CLI (./brain serve): novo view model → índices + views (troca atômica)
     let nextM, nA, nD, nP, nG, nPE, nART, nDL, nDD, nPF, nAREA, nOPP, nPROC;
     try {

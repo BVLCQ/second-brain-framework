@@ -619,10 +619,14 @@ def apply(st: State, ev: dict) -> None:
             gone = {r.get("event_id") or r.get("uid") for r in data["removed"]}
             f.applied = [b for b in f.applied if (b.get("event_id") or b.get("uid")) not in gone]
 
+    elif t == "connector.forgotten":
+        if eid:
+            st.connectors.pop(eid, None)
     elif t.startswith("connector."):
         c = st.connectors.setdefault(eid, Connector(eid))
         if t == "connector.pulled":
-            c.last_ok, c.consecutive_failures, c.pulls = ev["ts"], 0, c.pulls + 1
+            # uma leitura saudável limpa o erro também: sem isto o texto do último erro fica ao lado da fonte já boa
+            c.last_ok, c.consecutive_failures, c.pulls, c.last_error = ev["ts"], 0, c.pulls + 1, ""
             if data.get("changed"):
                 c.last_changed, c.last_snapshot = ev["ts"], data.get("snapshot", "")
         else:

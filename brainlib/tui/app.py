@@ -415,16 +415,22 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
         return self._items[key]
 
     @staticmethod
+    def _is_header(it: Item) -> bool:
+        """Cabeçalho de grupo que a seleção pula. Um grupo RECOLHIDO não tem linhas: o cabeçalho é o que sobra
+        dele, então precisa poder ser selecionado (é nele que o espaço reabre o grupo)."""
+        return it.kind == "sgrp" and not it.data.get("collapsed")
+
+    @staticmethod
     def _skip_header(its: list[Item], i: int, step: int = 1) -> int:
         i = min(max(i, 0), len(its) - 1)
-        if its[i].kind != "sgrp":
+        if not BrainApp._is_header(its[i]):
             return i
         d = 1 if step >= 0 else -1
         for j in range(i + d, len(its) if d > 0 else -1, d):
-            if its[j].kind != "sgrp":
+            if not BrainApp._is_header(its[j]):
                 return j
         for j in range(i - d, -1 if d > 0 else len(its), -d):
-            if its[j].kind != "sgrp":
+            if not BrainApp._is_header(its[j]):
                 return j
         return i
 
@@ -436,7 +442,7 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
         want = self.sel_id.get(key)
         if want is not None:
             for i, it in enumerate(its):
-                if it.id == want and it.kind != "sgrp":
+                if it.id == want and not self._is_header(it):
                     self.sel_idx[key] = i
                     return i
         i = self._skip_header(its, self.sel_idx.get(key, 0), 1)
@@ -1000,10 +1006,14 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
                 add("o", "painel HTML", lambda: self.run_sys("sys:open"))
             elif t == 1:
                 add("n", "adicionar", self.f_source_add)
+                if w(it and it.kind in ("src", "sgrp")):
+                    add("space", "mostrar grupo" if it and it.kind == "sgrp" and it.data.get("collapsed") else "recolher grupo",
+                        self.toggle_source_group)
                 if w(it and it.kind == "src" and it.data["in_watch"]):
                     add("e", "editar", self.f_source_edit)
                     add("x", "ligar" if it and not it.data.get("enabled", True) else "desligar", self.toggle_source_enabled)
-                    add("d", "remover", self.f_source_remove)
+                if w(it and it.kind == "src"):
+                    add("d", "remover" if it and it.data["in_watch"] else "tirar da lista", self.f_source_remove)
                 if w(it and it.kind == "src" and not it.data["in_watch"]):
                     add("w", "incluir no watch", self.f_source_include)
                 if w(it and it.kind == "src"):
@@ -1987,6 +1997,17 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
 
         self.open_form("watch.edit", {"key0": old["key"], "item": old}, wrap=remember, render=False,
                        after=lambda: self._source_after(lambda: made.get("key")))
+
+    def toggle_source_group(self) -> None:
+        """Espaço na aba Fontes: recolhe ou reabre o grupo da fonte (ou do cabeçalho) selecionada."""
+        it = self.cur()
+        if not it or it.kind not in ("src", "sgrp"):
+            return
+        gid = it.id if it.kind == "sgrp" else f"sgrp:{it.data.get('kind') or 'avulsa'}"
+        self.collapsed ^= {gid}
+        if gid in self.collapsed:                     # o cabeçalho recolhido é o que sobra do grupo: a seleção vai para ele
+            self.sel_id[(self.p, self.tab[self.p])] = gid
+        self.redraw()
 
     def f_source_remove(self) -> None:
         it = self.cur()

@@ -570,7 +570,7 @@ class Store:
             if tab == 0:
                 out = [Item("resumo", "resumo", q="resumo hoje")]
             elif tab == 1:
-                out = self._source_items(sort, filt)
+                out = self._source_items(sort, filt, collapsed)
             else:
                 out = [Item(o["id"], "sys", o, q=f"{o['name']} {' '.join(o.get('args', []))} {o.get('agent', '')}") for o in SYS_OPS]
         elif panel == 2:
@@ -646,8 +646,12 @@ class Store:
                 out = [i for i in out if f in util.fold(i.q)]
         return out
 
-    def _source_items(self, sort: int = 0, filt: str = "") -> list[Item]:
-        """Fontes agrupadas por tipo (grupos com problema primeiro, depois alfabético), problemas no topo."""
+    def _source_items(self, sort: int = 0, filt: str = "", collapsed: set[str] | None = None) -> list[Item]:
+        """Fontes agrupadas por tipo (grupos com problema primeiro, depois alfabético), problemas no topo.
+
+        `collapsed`: ids `sgrp:<tipo>` recolhidos. O cabeçalho fica, com a contagem e o selo de problema; as
+        linhas somem. Filtrando não há cabeçalho, então o filtro mostra tudo que casa."""
+        collapsed = set() if filt else (collapsed or set())
         kind_labels = dict(watch.KINDS)
         groups: dict[str, list[dict]] = defaultdict(list)
         for s in self.sources:
@@ -670,10 +674,14 @@ class Store:
             rows.sort(key=_bucket)
             label = kind_labels.get(k, k or "avulsas (fora do watch)")
             probs = sum(1 for x in rows if x.get("problem"))
+            gid = f"sgrp:{k or 'avulsa'}"
+            closed = gid in collapsed
             if not filt:
-                out.append(Item(f"sgrp:{k or 'avulsa'}", "sgrp",
-                                {"kind": k, "label": label, "count": len(rows), "problems": probs},
+                out.append(Item(gid, "sgrp",
+                                {"kind": k, "label": label, "count": len(rows), "problems": probs, "collapsed": closed},
                                 q=f"{k} {label}"))
+            if closed:
+                continue
             for s in rows:
                 out.append(Item(f"src:{s['key']}", "src", s,
                                 q=f"{s['key']} {s.get('kind', '')} {s.get('channel', '')} {s.get('problem_reason', '')}"))

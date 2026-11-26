@@ -532,7 +532,8 @@ def _forms() -> list[Form]:
         Form("watch.edit", "Editar a fonte {key0}", ("watch", "edit", "{key0}"), _source_fields(edit=True),
              sub="Mudar a key renomeia a fonte; o histórico de pulls fica na key antiga.", edit=True, order=_SRC_ORDER),
         Form("watch.remove", "Remover a fonte {key}", ("watch", "remove", "{key}"),
-             sub="O /update e o noturno deixam de puxá-la. Snapshots já gravados e o ledger ficam como estão."),
+             sub="O /update e o noturno deixam de puxá-la, e o registro de pulls sai da lista (inclusive o aviso de erro). "
+                 "Fonte avulsa, que não está no watch.toml, só sai da lista. Snapshots já gravados e o ledger ficam."),
 
         # ── configurações ────────────────────────────────────────────────────
         Form("memory.mode", "Memória: modo e provedores", ("memory", "setup", "--mode", "{mode}"), (

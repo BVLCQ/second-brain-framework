@@ -1,3 +1,9 @@
+## 2.56.0 — Fontes: grupos recolhem, avulsas saem da lista e o erro some quando a fonte se recupera
+
+- **Cada tipo de fonte recolhe e reabre sozinho.** No painel, clique (ou Enter/Espaço) no cabeçalho; na TUI, Espaço na linha ou no cabeçalho. Recolhido, o grupo mostra só a contagem e o selo de problema. Vale na sessão; o liga/desliga por fonte não mudou.
+- **Fonte avulsa sai da lista.** `brain watch remove KEY` agora também esquece o registro de pulls (evento `connector.forgotten`), e o `d` do painel e da TUI funciona em fonte avulsa. Tirar uma fonte do `watch.toml` não deixa mais um fantasma em "avulsas". Snapshots e eventos antigos ficam.
+- **O erro some quando a fonte volta.** Um pull saudável limpa o texto do último erro, e uma checagem "inalterado" numa fonte com falha em aberto grava o pull que limpa o chip e o selo do grupo. Fonte saudável continua em silêncio.
+
 ## 2.53.0 — o diálogo de atualização lista o assunto de cada commit
 
 - **Uma linha por commit, no máximo 140 caracteres.** O assunto aparece inteiro se cabe. Se passa, corta no último espaço e põe reticências. A conta é de caracteres, não de bytes. O hash curto fica ao lado e não entra na conta.

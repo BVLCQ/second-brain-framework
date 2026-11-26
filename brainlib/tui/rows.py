@@ -181,7 +181,7 @@ def row(store, it, width: int) -> Text:
         agent = (it.extra.get("fix") or {}).get("agent")
         return two(T((mark, st), " ", f"{d['title']}: {d['detail']}"), T(("⚡", VIO) if agent else ""), width)
     if k == "sgrp":
-        left = T(("▾ ", DIM), (d["label"], "bold"), (f" ({d['count']})", DIM))
+        left = T(("▸ " if d.get("collapsed") else "▾ ", DIM), (d["label"], "bold"), (f" ({d['count']})", DIM))
         right = T((f"⚠ {d['problems']}", RED)) if d["problems"] else T("")
         return two(left, right, width)
     if k == "src":
@@ -409,7 +409,9 @@ def d_doc(store, it) -> Doc:
 def d_sgrp(store, it) -> Doc:
     d = it.data
     sub = f"{d['count']} fonte(s)" + (f" · {d['problems']} com problema" if d["problems"] else "")
-    return Doc().h(d["label"]).p((sub, DIM)).blank().p(("Cabeçalho de grupo: as fontes abaixo pertencem a este tipo.", DIM))
+    hint = ("Grupo recolhido: espaço mostra as fontes." if d.get("collapsed")
+            else "Cabeçalho de grupo: as fontes abaixo pertencem a este tipo.")
+    return Doc().h(d["label"]).p((sub, DIM)).blank().p((hint, DIM))
 
 
 def d_src(store, it) -> Doc:
