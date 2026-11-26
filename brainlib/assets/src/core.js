@@ -984,6 +984,43 @@ V.outbox = (q) => {
       (m.sent ? ' <span class="muted">· enviada ' + fmtD(m.sent) + "</span>" : "") + "</header>" + '<div class="msg">' + esc(m.text) + "</div></div>").join("") || empty("—")), ' style="margin-top:14px"');
   }).join("");
 };
+function renderSafeMd(text) {
+  const lines = String(text || "").replace(/\r\n/g, "\n").split("\n");
+  let out = "", i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (line.startsWith("```")) {
+      const buf = [];
+      i++;
+      while (i < lines.length && !lines[i].startsWith("```")) { buf.push(esc(lines[i])); i++; }
+      out += "<pre><code>" + buf.join("\n") + "</code></pre>";
+      i++;
+      continue;
+    }
+    if (/^#{1,6} /.test(line)) { out += "<h3>" + esc(line.replace(/^#+ /, "")) + "</h3>"; }
+    else if (/^\s*[-*] /.test(line)) {
+      out += "<ul>";
+      while (i < lines.length && /^\s*[-*] /.test(lines[i])) {
+        out += "<li>" + esc(lines[i].replace(/^\s*[-*] /, "")) + "</li>";
+        i++;
+      }
+      out += "</ul>";
+      continue;
+    } else if (line.includes("|") && i + 1 < lines.length && /^\s*\|[\s\-:|]+\|/.test(lines[i + 1])) {
+      const head = line.replace(/^\|/, "").replace(/\|$/, "").split("|");
+      i += 2;
+      out += "<table><tr>" + head.map(c => "<th>" + esc(c.trim()) + "</th>").join("") + "</tr>";
+      while (i < lines.length && lines[i].includes("|")) {
+        out += "<tr>" + lines[i].replace(/^\|/, "").replace(/\|$/, "").split("|").map(c => "<td>" + esc(c.trim()) + "</td>").join("") + "</tr>";
+        i++;
+      }
+      out += "</table>";
+      continue;
+    } else if (line.trim()) out += "<p>" + esc(line) + "</p>";
+    i++;
+  }
+  return out;
+}
 V.feedback = (q) => {
   const all = !!(q && q.get("a") === "1");                      // T: só pendentes (padrão, como o TUI) ↔ todas
   const glyph = {sugestao: "💡", bug: "🐞"};
@@ -1004,6 +1041,8 @@ V.feedback = (q) => {
     return "<div class=\"msgrow\" data-sel=\"" + esc(f.id) + "\"><header><b>" + f.id + "</b> " + glyph[f.kind] + " " + esc(f.title) + " " +
       statusChip(f.status) +
       (f.number && issueUrl ? ' · <a href="' + esc(issueUrl) + '" target="_blank" rel="noopener">issue #' + esc(f.number) + "</a>" : "") +
+      (f.text_sha ? ' <span class="muted small">hash ' + esc(String(f.text_sha).slice(0, 12)) + "</span>" : "") +
+      (f.added_by === "agent" && f.status === "pendente" ? " " + chip("atencao", "aguardando leitura") : "") +
       issueChip(f) +
       (f.added ? ' <span class="muted">· ' + fmtD(f.added) + "</span>" : "") +
       (f.status === "pendente" || f.status === "falhou"
@@ -1013,7 +1052,7 @@ V.feedback = (q) => {
       (f.status === "criado"
         ? ' · <button class="btn tiny" data-fbretract="' + esc(f.id) + '" title="retratar issue publicada (fechar ou corrigir texto)">r retratar</button>'
         : "") +
-      "</header>" + (f.issue_diverged ? '<p class="late">O texto no GitHub divergiu do que foi enviado.</p>' : "") + ((f.issue_body || f.body) ? '<div class="msg">' + esc(f.issue_title || "") + "\n\n" + esc(f.issue_body || f.body) + "</div>" : "") +
+      "</header>" + (f.issue_diverged ? '<p class="late">O texto no GitHub divergiu do que foi enviado.</p>' : "") + ((f.issue_body || f.body) ? '<div class="msg md">' + renderSafeMd("# " + (f.issue_title || f.title || "") + "\n\n" + (f.issue_body || f.body)) + "</div>" : "") +
       ((f.status === "retirado" || f.status === "retratado") && f.reason
         ? '<div class="msg muted"><b>Motivo' + (f.retract_mode ? " (" + esc(f.retract_mode) + ")" : "") + ":</b> " + esc(f.reason) +
           (commentUrl ? ' · <a href="' + esc(commentUrl) + '" target="_blank" rel="noopener">comentário</a>' : "") + "</div>"
@@ -1533,7 +1572,7 @@ function route(){
   if (typeof window.afterRoute === "function") window.afterRoute(view, q, arg);
   window.scrollTo(0, 0);
 }
-window.BRAIN = {M, A, D, P, G, PE, OPP, PROC, AREA, docUrl, safeUrl, normalizeBrain, go, route, chip, aL, dL, pL, peL, fmtD, fmtDW, donut, bar, esc,
+window.BRAIN = {M, A, D, P, G, PE, OPP, PROC, AREA, docUrl, safeUrl, normalizeBrain, go, route, chip, aL, dL, pL, peL, fmtD, fmtDW, donut, bar, esc, renderSafeMd,
   qArg, V, get S_SORT(){ return S_SORT; }, set S_SORT(v){ S_SORT = v; },
   refresh: function(nm){                       // ponte CLI (./brain serve): novo view model → índices + views (troca atômica)
     let nextM, nA, nD, nP, nG, nPE, nART, nDL, nDD, nPF, nAREA, nOPP, nPROC;

@@ -10,7 +10,7 @@ from datetime import date
 from rich.style import Style
 from rich.text import Text
 
-from .. import ice_rubric, schema, util
+from .. import feedback as feedback_mod, ice_rubric, schema, util
 from . import dates
 
 RED, AMB, GRN, CYN, VIO, DIM, FAINT = "red", "yellow", "green", "cyan", "magenta", "dim", "dim italic"
@@ -164,6 +164,8 @@ def row(store, it, width: int) -> Text:
                 right.append({"open": " aberta", "gone": " apagada"}.get(d.issue_state, " fechada"), DIM)
         else:
             right = T((d.status, st))
+            if d.added_by == "agent" and d.status == "pendente":
+                right.append(" aguardando leitura", AMB)
         return two(T((mark, st), " ", (d.id, DIM), " ", (f"[{tag}] ", DIM), d.title), right, width)
     if k == "dec":
         return two(T((d["id"], DIM), " ", d["title"]), T((util.fmt_date(d["date"]), DIM)), width)
@@ -770,12 +772,42 @@ def d_pub(store, it) -> Doc:
     return doc
 
 
+def md_text(raw: str) -> Text:
+    """Markdown mínimo como texto estilizado. Cada linha entra como texto, nunca como marca."""
+    out = Text()
+    lines = (raw or "").replace("\r\n", "\n").split("\n")
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        if line.startswith("```"):
+            i += 1
+            while i < len(lines) and not lines[i].startswith("```"):
+                out.append(lines[i] + "\n", "dim")
+                i += 1
+            i += 1
+            continue
+        if line.startswith("#"):
+            out.append(line.lstrip("#").strip() + "\n", "bold")
+        elif line.lstrip().startswith(("- ", "* ")):
+            out.append("• " + line.lstrip()[2:] + "\n")
+        elif line.strip():
+            out.append(line + "\n")
+        else:
+            out.append("\n")
+        i += 1
+    return out
+
+
 def d_fb(store, it) -> Doc:
     f = it.data
     tag = "sugestão" if f.kind == "sugestao" else "bug"
-    doc = Doc().h(f"{f.id} · {tag} do cérebro", (f" · {f.status}", DIM)).blank().p(f.title)
-    if f.body:
-        doc.sec("Descrição").p(f.body)
+    doc = Doc().h(f"{f.id} · {tag} do cérebro", (f" · {f.status}", DIM)).blank()
+    if f.added_by == "agent" and f.status == "pendente":
+        doc.p(("Rascunho do agente aguardando leitura.", AMB))
+    shown = feedback_mod.issue_title(f)
+    body = feedback_mod.issue_body(f)
+    doc.sec("Texto que sobe").lines.append(Text(shown, "bold"))
+    doc.lines.append(md_text(body))
     issue = "— ainda não publicada"
     if f.url:
         estado = {("open", ""): "aberta", ("closed", "completed"): "fechada · concluída",
@@ -785,6 +817,7 @@ def d_fb(store, it) -> Doc:
         issue = f"#{f.number}  {f.url}  ·  issue {estado}"
     doc.blank().kv([
         ("issue", Text(issue, CYN) if f.url else Text(issue, DIM)),
+        ("hash", Text(feedback_mod.public_sha(f)[:12], DIM)),
         ("motivo", Text(f.reason)) if f.reason else None,
         ("modo retratação", Text(f.retract_mode, DIM)) if f.retract_mode else None,
         ("comentário", Text(f.comment_url, CYN)) if f.comment_url else None,

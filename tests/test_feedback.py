@@ -721,6 +721,32 @@ class FeedbackClientTests(unittest.TestCase):
         self.assertEqual(seen[1][3], {"state": "closed", "state_reason": "not_planned"})
 
 
+class FeedbackExactTextTests(FeedbackFlowTests):
+    def test_modelo_expoe_o_texto_do_show(self):
+        from brainlib import model
+        feedback.add(self.brain, "sugestao", "Lembrete de fornada", "Hoje só há claro.\n\n- avisar cedo", force=True)
+        f = self.brain.state.feedbacks["FB-0001"]
+        item = model.build(self.brain)["feedback"][0]
+        self.assertEqual(item["issue_title"], feedback.issue_title(f))
+        self.assertEqual(item["issue_body"], feedback.issue_body(f))
+        self.assertEqual(item["issue_title"] + "\n\n" + item["issue_body"], feedback.public_text(f))
+        self.assertIn("[Sugestão]", item["issue_title"])
+
+    def test_doctor_marca_rascunho_do_agente(self):
+        from brainlib import doctor
+        feedback.add(self.brain, "sugestao", "Lembrete de fornada", by="agent", prov="observado")
+        texts = [c["detail"] for c in doctor.checks(self.brain) if c["title"] == "feedback"]
+        self.assertTrue(any("aguardando leitura" in t for t in texts), texts)
+
+    def test_skill_nao_manda_ler_arquivo_temporario(self):
+        text = (ROOT / "commands/feedback/SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("nunca um caminho", text)
+        self.assertNotIn("o texto está em", text)
+        src = (ROOT / "brainlib/assets/src/core.js").read_text(encoding="utf-8")
+        self.assertIn("renderSafeMd", src)
+        self.assertIn("aguardando leitura", src)
+
+
 class FeedbackIdsTests(unittest.TestCase):
     def test_prefixo_e_normalizacao(self):
         self.assertEqual(ids.make("feedback", 3), "FB-0003")
