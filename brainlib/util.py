@@ -305,14 +305,14 @@ _FIND_TAB = {   # argv: prefixo da aba · URL de destino. Só roda com o app já
     "safari": '''on run argv
   set prefix to item 1 of argv
   set target to item 2 of argv
-  set mode to "{mode}"
+  set brainMode to "{mode}"
   tell application "{app}"
     repeat with w in windows
       repeat with t in tabs of w
         try
           if (URL of t) starts with prefix then
-            if mode is "read" then return URL of t
-            if mode is not "focus" then
+            if brainMode is "read" then return URL of t
+            if brainMode is not "focus" then
               if (URL of t) is not target then set URL of t to target
             end if
             set current tab of w to t
@@ -332,7 +332,7 @@ end run''',
     "chromium": '''on run argv
   set prefix to item 1 of argv
   set target to item 2 of argv
-  set mode to "{mode}"
+  set brainMode to "{mode}"
   tell application "{app}"
     repeat with w in windows
       set i to 0
@@ -340,8 +340,8 @@ end run''',
         set i to i + 1
         try
           if (URL of t) starts with prefix then
-            if mode is "read" then return URL of t
-            if mode is not "focus" then
+            if brainMode is "read" then return URL of t
+            if brainMode is not "focus" then
               if (URL of t) is not target then set URL of t to target
             end if
             set active tab index of w to i

@@ -433,7 +433,7 @@ class TabReuseNonceAndServeQueryTests(unittest.TestCase):
                 mock.patch("subprocess.run", fake_run):
             self.assertTrue(util.focus_open_tab("http://127.0.0.1:8787/#t=tok1", focus_only=True))
         osa = next(c for c in calls if c[0].endswith("osascript"))
-        self.assertIn('set mode to "focus"', osa[2])
+        self.assertIn('set brainMode to "focus"', osa[2])
         self.assertEqual(len([c for c in calls if c[0].endswith("osascript")]), 1)
 
     def test_keep_route_puts_the_page_before_the_new_token(self):
@@ -443,7 +443,7 @@ class TabReuseNonceAndServeQueryTests(unittest.TestCase):
             calls.append(argv)
             if argv[0].endswith("pgrep"):
                 return subprocess.CompletedProcess(argv, 0, "", "")
-            mode = "read" if 'set mode to "read"' in argv[2] else "set"
+            mode = "read" if 'set brainMode to "read"' in argv[2] else "set"
             out = "http://127.0.0.1:8787/#todo" if mode == "read" else "ok"
             return subprocess.CompletedProcess(argv, 0, out, "")
 
