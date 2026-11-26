@@ -16,6 +16,20 @@ from pathlib import Path
 from . import planning, util
 
 LEDGER = "PROCESSED/_ledger/events.jsonl"
+
+
+def _file_links(files: list | None) -> list[str]:
+    """Caminhos do vault como link Markdown. Fora do vault, não vira link."""
+    lines = []
+    for f in files or []:
+        rel = str(f.get("rel") or "")
+        if not rel or ".." in Path(rel).parts:
+            continue
+        name = str(f.get("name") or Path(rel).name)
+        lines.append(f"- {f.get('kind', 'arquivo')} · [{name}]({rel})")
+    if not lines:
+        return []
+    return ["", "## Arquivos linkados", "", *lines]
 PLANNING = "PLANNING/goals.md"
 HEALTH_ICON = {"em-risco": "⚠", "travado": "⚠", "atencao": "·", "em-dia": "✓", "concluido": "✓",
                "congelado": "·", "depois": "·", "fechado": "·"}
@@ -610,6 +624,7 @@ class Pages:
                 body.append("destrava: " + ", ".join(a["unblocks"]))
             if a["outcome"]:
                 body.append(f"Resultado: {a['outcome']}")
+            body += _file_links(a.get("files"))
             body += ["", "## Histórico", ""]
             body += [f"- {h['date']} · {h['type']} · {h['note']} ({h['by']})" for h in a["history"]]
             self.put(f, _frontmatter(fm) + "\n".join(body))
@@ -627,7 +642,13 @@ class Pages:
                 body.append(f"**Contexto:** {d['context']}")
             if d["rationale"]:
                 body.append(f"**Por quê:** {d['rationale']}")
-            body.append(f"**Fonte:** {d['source_label']} (`{d['source']}`) [{d['prov']}]")
+            src = d.get("source") or ""
+            if "/" in src and ".." not in Path(src).parts:
+                fonte = f"[{d['source_label']}]({src})"
+            else:
+                fonte = d["source_label"]
+            body.append(f"**Fonte:** {fonte} [{d['prov']}]")
+            body += _file_links(d.get("files"))
             if d["supersedes"]:
                 body.append(f"Substitui {self.dec(f, d['supersedes'])}")
             if d["superseded_by"]:

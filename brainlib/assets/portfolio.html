@@ -6564,7 +6564,7 @@ V.action = (q, id) => {
     (a.open ? '<button class="btn primary" data-act="close" data-id="' + esc(a.id) + '">c fechar</button>' : '<button class="btn" data-act="reopen" data-id="' + esc(a.id) + '">o reabrir</button>') +
     '<button class="btn" data-act="merge" data-id="' + esc(a.id) + '">m mesclar duplicada</button></div></div>' +
     panel("", (a.blocked_by.length ? "<p>⛔ bloqueada por " + a.blocked_by.map(aL).join(", ") + "</p>" : "") + (a.unblocks.length ? "<p>destrava: " + a.unblocks.map(u => A[u] ? aL(u) : esc(u)).join(", ") + "</p>" : "") +
-    (a.people.length ? "<p>envolvidos: " + a.people.map(peL).join(", ") + "</p>" : "") + '<p class="muted small">origem: ' + esc(a.source_label) + " [" + esc(a.prov) + "]</p>" + filesBlock(a.files) + (a.outcome ? "<p><b>Resultado:</b> " + esc(a.outcome) + "</p>" : "") +
+    (a.people.length ? "<p>envolvidos: " + a.people.map(peL).join(", ") + "</p>" : "") + '<p class="muted small">origem: ' + (a.source ? pathLink(a.source) : esc(a.source_label)) + " [" + esc(a.prov) + "]</p>" + filesBlock(a.files) + (a.outcome ? "<p><b>Resultado:</b> " + esc(a.outcome) + "</p>" : "") +
     "<h2>Histórico</h2>" + '<ul class="feed">' + a.history.map(x => '<li><span class="muted">' + fmtD(x.date) + "</span> · " + esc(x.type) + " · " + esc(x.note) + ' <span class="muted">(' + esc(x.by) + ")</span></li>").join("") + "</ul>");
 };
 V.decision = (q, id) => {

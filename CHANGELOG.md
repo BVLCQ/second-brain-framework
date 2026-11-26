@@ -1,3 +1,9 @@
+## 2.51.0 — arquivos do vault viram link na ficha e no FRESH
+
+- **A ficha mostra os arquivos ligados.** Ação, decisão, projeto, pessoa, oportunidade, processo, pergunta, foco, publicação e goal trazem a mesma lista da TUI: tipo, nome e para onde abre. O clique passa pelo servidor local, só dentro do vault. Fora do vault, ou com `..`, é recusado.
+- **Sem editor, o leitor embutido.** Markdown com títulos, listas e tabelas. Um `<script>` no texto aparece escapado. Na própria ficha dá para trocar entre editor e leitor, e abrir todos de uma vez.
+- **A nota em FRESH também liga o arquivo.** A ficha da ação e da decisão lista os arquivos como link, em vez de caminho solto.
+
 ## 2.49.0 — o sync avisa se o texto no GitHub divergiu
 
 - **O sync avisa se o GitHub divergiu.** `feedback sync` compara o corpo da issue com o texto que o Brain enviou. Se alguém editou lá fora, o evento marca a divergência. A aba Sugestões e a lista da TUI mostram o aviso. Sem corpo na resposta, não acusa.

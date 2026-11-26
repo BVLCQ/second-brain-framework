@@ -63,6 +63,12 @@ class LinkedFileTests(unittest.TestCase):
             m = model.build(b)
             rels = [f["rel"] for f in m["actions"][0]["files"]]
             self.assertIn(rel, rels)
+            from brainlib.render_md import Pages
+            pages = Pages(b.inst, m)
+            pages.records()
+            note = next(t for p, t in pages.files.items() if p.name.startswith("TASK-"))
+            self.assertIn(f"]({rel})", note)
+            self.assertIn("## Arquivos linkados", note)
 
     def test_pergunta_com_fonte_em_arquivo_entra_na_lista(self):
         import os
