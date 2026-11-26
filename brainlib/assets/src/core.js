@@ -1555,7 +1555,8 @@ function route(){
     const f = FACES.some(x => x[0] === seg[1]) ? seg[1] : "execucao";
     const last = localStorage.getItem("mock-face-" + f);
     const entry = FACES.find(x => x[0] === f) || FACES[0];
-    location.hash = last || entry[2][0][0];      // default = primeira aba da própria face (carrossel: toda face é alcançável)
+    const home = (entry[2] || []).find(t => t[0] && t[3] !== "badge");
+    location.hash = last || (home ? home[0] : "home");
     return;
   }
   if (path === "onboarding") {                   // F8: o wizard é um modo do painel, não uma página
