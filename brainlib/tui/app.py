@@ -786,15 +786,29 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
             self.log_line(str(e), "yellow")
             return
         body = Text()
-        for i, line in enumerate(raw.splitlines()):
-            if i:
+        lines = raw.splitlines()
+        i = 0
+        while i < len(lines):
+            line = lines[i]
+            if body.plain:
                 body.append("\n")
-            if line.startswith("#"):
-                body.append(line.lstrip("# ").strip(), "bold")
+            if line.startswith("```"):
+                i += 1
+                while i < len(lines) and not lines[i].startswith("```"):
+                    if body.plain:
+                        body.append("\n")
+                    body.append(lines[i], "dim")
+                    i += 1
+                i += 1
+                continue
+            marks, _, rest = line.partition(" ")
+            if rest and 1 <= len(marks) <= 6 and set(marks) == {"#"}:
+                body.append(rest, "bold")
             elif line.startswith(("- ", "* ")):
                 body.append("• " + line[2:])
             else:
                 body.append(line)
+            i += 1
         self.push_screen(TextModal(Path(rel).name, body))
 
     # ── teclado ────────────────────────────────────────────────────────────

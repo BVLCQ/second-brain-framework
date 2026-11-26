@@ -842,6 +842,7 @@ V.project = (q, id) => {
     '<button class="dmark ' + (d.status === "feito" ? "is-done" : d.status === "cancelado" ? "is-cancel" : d.status === "em-andamento" ? "is-doing" : "") + '">' +
     (d.status === "feito" ? "✓" : d.status === "cancelado" ? "×" : d.status === "em-andamento" ? "◐" : "○") + "</button> <b>" + d.id + "</b> " + esc(d.title) + ' <span class="muted">· ' +
     (d.done_date ? "feito " + fmtD(d.done_date) : d.due ? "prazo " + fmtDW(d.due) : "sem prazo") + "</span>" + (d.overdue_days ? ' <span class="late">⚠ venceu há ' + d.overdue_days + "d</span>" : "") +
+    ((d.files || []).map(f => ' <button type="button" class="btn tiny" data-read="' + esc(f.rel) + '">' + esc(f.name) + "</button>").join("")) +
     "</li>").join("") + "</ul>" : empty("Sem entregáveis — progresso não calculável.")));
   h += panel("Pessoas", (p.people.length ? '<ul class="feed">' + p.people.map(x => "<li>" + peL(x.id) + ' <span class="muted">— ' + x.roles.map(esc).join(", ") + " (" + x.count + ")</span></li>").join("") + "</ul>" : empty("—"))) + "</div>";
   h += panel("Decisões — quem decidiu o quê, quando", decisionTable(p.decisions.map(d => D[d])), ' style="margin-top:14px"');
