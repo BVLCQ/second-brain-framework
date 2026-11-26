@@ -1,3 +1,9 @@
+## 2.56.0 — Fontes: grupos recolhem, avulsas saem da lista e o erro some quando a fonte se recupera
+
+- **Cada tipo de fonte recolhe e reabre sozinho.** No painel, clique (ou Enter/Espaço) no cabeçalho; na TUI, Espaço na linha ou no cabeçalho. Recolhido, o grupo mostra só a contagem e o selo de problema. Vale na sessão; o liga/desliga por fonte não mudou.
+- **Fonte avulsa sai da lista.** `brain watch remove KEY` agora também esquece o registro de pulls (evento `connector.forgotten`), e o `d` do painel e da TUI funciona em fonte avulsa. Tirar uma fonte do `watch.toml` não deixa mais um fantasma em "avulsas". Snapshots e eventos antigos ficam.
+- **O erro some quando a fonte volta.** Um pull saudável limpa o texto do último erro, e uma checagem "inalterado" numa fonte com falha em aberto grava o pull que limpa o chip e o selo do grupo. Fonte saudável continua em silêncio.
+
 ## 2.55.0 — arquivos do vault viram link na ficha e no FRESH
 
 - **A ficha mostra os arquivos ligados.** Ação, decisão, projeto, pessoa, oportunidade, processo, pergunta, foco, publicação e goal trazem a mesma lista da TUI: tipo, nome e para onde abre. O clique passa pelo servidor local, só dentro do vault. Fora do vault, ou com `..`, é recusado.

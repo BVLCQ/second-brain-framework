@@ -52,7 +52,9 @@ def _pulled(brain, key: str, item: str | None, changed: bool, **extra) -> None:
         data["item"] = item
         if not changed:
             c = brain.state.connectors.get(key)
-            if c and c.last_ok and util.now() - util.parse_dt(c.last_ok) < timedelta(minutes=HEARTBEAT_MIN):
+            # com falha em aberto o pull saudável tem de ser gravado: é ele que limpa o chip de erro
+            if c and not c.consecutive_failures and c.last_ok \
+                    and util.now() - util.parse_dt(c.last_ok) < timedelta(minutes=HEARTBEAT_MIN):
                 return
     brain.record_one({"type": "connector.pulled", "id": key, "by": "system", "data": data})
 
@@ -171,6 +173,11 @@ def cli(args, brain) -> None:
         if not args.rev:
             raise util.BrainError("--check pede --rev (a revisão atual do item, ex.: modifiedTime)", code=2)
         same = unchanged(brain, args.key, args.rev, item)
+        c = brain.state.connectors.get(args.key)
+        if same and c and c.consecutive_failures:
+            # a fonte voltou a responder e nada mudou: sem este pull o chip de erro nunca sairia (hash idêntico
+            # é silêncio no ledger, e só quem está com falha em aberto precisa deste registro)
+            _pulled(brain, args.key, item, False, rev=args.rev)
         print(f"{'inalterado' if same else 'mudou'}: {label}")
         return
     if args.fail:

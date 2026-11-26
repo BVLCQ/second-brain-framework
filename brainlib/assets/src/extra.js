@@ -1811,7 +1811,7 @@ function ctxKeys(k){
     if (!["e", "d", "w", "c"].includes(k)) return false;
     if (!src) { needSel(); return true; }
     if (k === "e") { if (src.in_watch) srcEditForm(src); else toast(src.key + " é pull avulso — w inclui no watch.toml"); return true; }
-    if (k === "d") { if (src.in_watch) srcRemoveForm(src); else toast(src.key + " não está no watch.toml"); return true; }
+    if (k === "d") { srcRemoveForm(src); return true; }          // no watch: remove de lá; avulsa: sai da lista
     if (k === "w") { if (!src.in_watch) srcAddForm({key: src.key}); else toast(src.key + " já está no watch.toml"); return true; }
     runAgent("connect", src.key, "puxar " + src.key, "/connect " + src.key); return true; }
   if (h.startsWith("#projects")) {

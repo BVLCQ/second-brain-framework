@@ -440,6 +440,31 @@ def remove(inst, key: str) -> None:
     _commit(inst, new)
 
 
+def forget(brain, key: str) -> bool:
+    """Tira da lista o registro de pulls da fonte (o que a aba Fontes mostra como avulsa, com chip de erro).
+
+    O ledger é append-only: o registro sai por um evento `connector.forgotten`, não por apagar linha.
+    Snapshots já gravados e os eventos antigos ficam. Devolve False se não havia registro."""
+    _forbid_nightly("remove")
+    if key not in brain.state.connectors:
+        return False
+    brain.record_one({"type": "connector.forgotten", "id": key, "by": "owner", "data": {}})
+    return True
+
+
+def remove_source(brain, key: str) -> str:
+    """`watch remove`: tira do watch.toml (se está lá) e esquece o registro de pulls. 'watch' | 'avulsa'.
+
+    Sem esquecer o registro, a fonte removida voltava à aba Fontes como avulsa, e a lista só crescia."""
+    in_watch = any(s.get("key") == key for s in list_sources(brain.inst))
+    if in_watch:
+        remove(brain.inst, key)
+    elif key not in brain.state.connectors:
+        raise util.BrainError(f"fonte '{key}' não está no watch.toml nem no registro de pulls", code=3)   # 3 = não existe, como o `remove` sempre deu
+    forget(brain, key)
+    return "watch" if in_watch else "avulsa"
+
+
 def drive_doc_id(ref: str) -> str | None:
     """Id do Drive a partir de uma URL (`/d/<id>`, `?id=<id>`) ou do próprio id. None = não parece do Drive."""
     ref = (ref or "").strip()
@@ -582,6 +607,7 @@ def unlink_playbook(brain, target: str, ref: str) -> bool:
     if src is None or doc is None:
         return False
     remove(brain.inst, src["key"])
+    forget(brain, src["key"])
     return True
 
 
@@ -670,5 +696,9 @@ def cli(args, brain) -> None:
         extra = (" · o histórico de pulls fica na key antiga" if args.rename and args.rename != args.key else "")
         print(f"✓ fonte {args.rename or args.key} atualizada{extra}")
     elif c == "remove":
-        remove(inst, args.key)
-        print(f"✓ fonte {args.key} removida do watch.toml — o /update deixa de puxá-la (snapshots e ledger ficam)")
+        if remove_source(brain, args.key) == "watch":
+            print(f"✓ fonte {args.key} removida do watch.toml — o /update deixa de puxá-la "
+                  "(snapshots e ledger ficam; o registro de pulls sai da lista)")
+        else:
+            print(f"✓ fonte avulsa {args.key} tirada da lista (snapshots e ledger ficam; "
+                  "um novo pull a traz de volta)")

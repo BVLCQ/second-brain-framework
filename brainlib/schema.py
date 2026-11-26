@@ -82,6 +82,7 @@ TYPES: dict[str, dict] = {
     "focus.removed": {"entity": "focus", "req": ["removed"]},
     "connector.pulled": {"entity": "connector", "req": ["changed"]},
     "connector.failed": {"entity": "connector", "req": ["error"]},
+    "connector.forgotten": {"entity": "connector", "req": []},     # o dono tirou a fonte da lista: o registro de pulls sai
     "run.completed": {"entity": "run", "req": ["ok"]},
     "question.asked": {"entity": "question", "new": True, "prefix": ids.prefix("question"), "req": ["text"]},
     "question.answered": {"entity": "question", "req": ["answer"]},
