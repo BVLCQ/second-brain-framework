@@ -1086,7 +1086,7 @@ V.action = (q, id) => {
     (a.open ? '<button class="btn primary" data-act="close" data-id="' + esc(a.id) + '">c fechar</button>' : '<button class="btn" data-act="reopen" data-id="' + esc(a.id) + '">o reabrir</button>') +
     '<button class="btn" data-act="merge" data-id="' + esc(a.id) + '">m mesclar duplicada</button></div></div>' +
     panel("", (a.blocked_by.length ? "<p>⛔ bloqueada por " + a.blocked_by.map(aL).join(", ") + "</p>" : "") + (a.unblocks.length ? "<p>destrava: " + a.unblocks.map(u => A[u] ? aL(u) : esc(u)).join(", ") + "</p>" : "") +
-    (a.people.length ? "<p>envolvidos: " + a.people.map(peL).join(", ") + "</p>" : "") + '<p class="muted small">origem: ' + (a.source ? pathLink(a.source) : esc(a.source_label)) + " [" + esc(a.prov) + "]</p>" + filesBlock(a.files) + (a.outcome ? "<p><b>Resultado:</b> " + esc(a.outcome) + "</p>" : "") +
+    (a.people.length ? "<p>envolvidos: " + a.people.map(peL).join(", ") + "</p>" : "") + '<p class="muted small">origem: ' + esc(a.source_label) + (a.source && a.source.indexOf("/") >= 0 ? " (" + pathLink(a.source) + ")" : "") + " [" + esc(a.prov) + "]</p>" + filesBlock(a.files) + (a.outcome ? "<p><b>Resultado:</b> " + esc(a.outcome) + "</p>" : "") +
     "<h2>Histórico</h2>" + '<ul class="feed">' + a.history.map(x => '<li><span class="muted">' + fmtD(x.date) + "</span> · " + esc(x.type) + " · " + esc(x.note) + ' <span class="muted">(' + esc(x.by) + ")</span></li>").join("") + "</ul>");
 };
 V.decision = (q, id) => {
@@ -1124,7 +1124,7 @@ const areaName = a => AREA[a] ? AREA[a].name : a;
 function pathLink(ref) {
   if (!ref) return "";
   const u = docUrl(ref);
-  if (u) return '<a href="' + u + '" target="_blank" rel="noopener">' + esc(ref) + "</a>";
+  if (u) return '<a href="' + esc(u) + '" target="_blank" rel="noopener">' + esc(ref) + "</a>";
   if (ref.indexOf("/") >= 0 && !/^[A-Za-z][A-Za-z0-9+.-]*:/.test(ref))
     return '<button type="button" class="btn tiny" data-read="' + esc(ref) + '">' + esc(ref) + "</button>";
   return esc(ref);
@@ -1277,7 +1277,7 @@ V.sources = () => {
 function docName(d) {
   const label = esc(d.title || d.ref || "");
   const u = docUrl(d.ref);
-  if (u) return '<a href="' + u + '" target="_blank" rel="noopener">' + label + "</a>";
+  if (u) return '<a href="' + esc(u) + '" target="_blank" rel="noopener">' + label + "</a>";
   if (d.ref && !/^[A-Za-z][A-Za-z0-9+.-]*:/.test(d.ref))
     return '<button type="button" class="btn tiny" data-read="' + esc(d.ref) + '">' + label + "</button>";
   return label;
@@ -1515,7 +1515,7 @@ V.ask = (q) => {
         chip(x.status === "solicitada" ? "atencao" : x.status === "publicada" ? "em-dia" : "info", x.status) +
         ' <span class="muted small">→ ' + esc(x.to) + "</span></header>" +
         '<h3 class="card-title">' + esc(x.title) + "</h3>" +
-        (x.link ? '<p class="muted small">' + (pubUrl ? '<a href="' + esc(pubUrl) + '" target="_blank" rel="noopener">' + esc(x.link) + "</a>" : esc(x.link)) + "</p>" : "") +
+        (x.link ? '<p class="muted small">' + esc(x.link) + "</p>" : "") +
         filesBlock(x.files) +
         '<div class="ask-opts">' +
         (x.status === "solicitada" ? '<button class="btn primary" data-pub="approve:' + esc(x.id) + '">aprovar (gate)</button><button class="btn" data-pub="cancel:' + esc(x.id) + '">cancelar</button>' : "") +

@@ -10,7 +10,7 @@ class OpenMapTests(unittest.TestCase):
     def test_open_vence_o_sinonimo_antigo(self):
         cfg = {"tui": {"open": {"md": "Cursor"}}, "open": {"mode": "auto", "ide": "Zed", "md": "VS Code"}}
         self.assertEqual(opener.app_for(cfg, "nota.md"), "VS Code")
-        self.assertEqual(opener.app_for(cfg, "clip.mp4"), "")
+        self.assertEqual(opener.app_for(cfg, "clip.mp4"), "Zed")
 
     def test_sinonimo_antigo_segue_valendo(self):
         cfg = {"tui": {"open": {"md": "Cursor"}}}

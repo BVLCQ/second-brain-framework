@@ -20,11 +20,15 @@ def app_for(cfg: dict, path: str | Path) -> str:
     `[open]` vence. `[tui.open]` continua aceito. `mode` e `ide` não são extensões.
     """
     ext = Path(path).suffix.lstrip(".").lower()
-    section = cfg.get("open") if isinstance(cfg.get("open"), dict) else {}
+    opened = cfg.get("open")
+    section = opened if isinstance(opened, dict) else {}
     raw = (cfg.get("tui") or {}).get("open") if isinstance(cfg.get("tui"), dict) else {}
     legacy = raw if isinstance(raw, dict) else {}
     mapping = {k: v for k, v in {**legacy, **section}.items() if k not in ("mode", "ide")}
-    return str(mapping.get(ext) or "")
+    mapped = str(mapping.get(ext) or "")
+    if mapped:
+        return mapped
+    return str(section.get("ide") or "")
 
 
 def set_prefs(inst, mode: str, ide: str | None = None) -> list[str]:
@@ -67,16 +71,15 @@ def read_text(inst, rel: str, limit: int = 200_000) -> str:
 
 
 def resolve(inst, rel: str) -> Path:
-    """Caminho absoluto de um arquivo do vault; recusa o que sai do vault ou não existe."""
-    p = Path(rel)
-    if p.is_absolute() or ".." in p.parts:
-        raise util.BrainError(f"{rel}: caminho fora do vault", code=2)
-    path = (inst.vault / p).resolve()
-    if not path.is_relative_to(inst.vault.resolve()):
-        raise util.BrainError(f"{rel}: caminho fora do vault", code=2)
-    if not path.is_file():
-        raise util.BrainError(f"{rel}: arquivo não encontrado", code=3)
-    return path
+    """Caminho absoluto de um arquivo do vault; recusa o que sai do vault ou não existe.
+
+    Mesma regra do coletor e do /api/file: tira fragmento (`#L12`) e acha RAW já arquivado.
+    """
+    from . import linked
+    found = linked.vault_file(inst, rel)
+    if found is None:
+        raise util.BrainError(f"{rel}: arquivo fora do vault ou não encontrado", code=4)
+    return found
 
 
 def argv_for(cfg: dict, path: Path, platform: str | None = None) -> list[str]:
