@@ -120,7 +120,7 @@ LIST_FIELDS = ("blocked_by", "unblocks", "people", "people_add", "decided_by", "
                "blocks", "created", "removed", "not_dup", "not_dup_add")
 # aprovações e gates: a fala é do dono — só by=owner grava (o noturno recusa owner; ver core.NIGHT_FORBIDDEN)
 OWNER_ONLY = {"proposal.accepted", "proposal.rejected", "message.approved", "focus.approved",
-              "plan.changed", "opportunity.promoted"}
+              "plan.changed", "opportunity.promoted", "feedback.approved"}
 # atos que nunca são do agente. `feedback.pushed` nasce do dono desde o gate de aprovação (`feedback.push`);
 # `system` segue válido como HISTÓRICO — instâncias com eventos anteriores à regra não podem ficar inválidas
 # no `brain validate`/`doctor` (o ledger é append-only, nada é reescrito).

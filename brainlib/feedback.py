@@ -318,10 +318,8 @@ def push(brain: Brain, fid: str, *, approval: str = "", by: str = "owner") -> di
     approval = str(approval or "").strip()
     if approval:
         quote, origin = gates.verify_approval(approval, what=f"feedback push {fid}")
-        if not bound:
-            approve(brain, fid, approval, by=by)
-            f = brain.state.feedbacks[fid]
     elif bound:
+        gates.require_owner_present(what=f"feedback push {fid}")
         quote = bound_data.get("quote", "")
         origin = "surface" if bound_data.get("surface") else "literal"
     else:
@@ -361,6 +359,9 @@ def push(brain: Brain, fid: str, *, approval: str = "", by: str = "owner") -> di
             f"confira e registre com `brain feedback pushed {fid} --number {num_hint} --url <url>`",
             code=5,
         ) from e
+    if approval and not bound:
+        approve(brain, fid, approval, by=by)
+        f = brain.state.feedbacks[fid]
     try:
         data: dict = {"number": res["number"], "url": url, "quote": quote, "text_sha": public_sha(f)}
         if origin == "surface":

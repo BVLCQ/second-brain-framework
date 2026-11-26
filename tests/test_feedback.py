@@ -351,6 +351,33 @@ class FeedbackFlowTests(unittest.TestCase):
         self.assertEqual(ev["data"]["quote"], "ok")
         self.assertEqual(self.brain.state.feedbacks["FB-0001"].status, "criado")
 
+    def test_add_nao_forja_o_ok_e_agente_nao_publica_com_ele(self):
+        import argparse
+        from brainlib import cli, schema
+        feedback.add(self.brain, "sugestao", "Lembrete de fornada", "A marina-demo esquece o timer")
+        self.assertIn("feedback.approved", schema.OWNER_ONLY)
+        path = self.brain.inst.root / "lote.json"
+        path.write_text(json.dumps({"type": "feedback.approved", "id": "FB-0001", "by": "owner",
+                                    "data": {"quote": "ok", "text_sha": "forjado"}}), encoding="utf-8")
+        with self.assertRaises(util.BrainError) as cm:
+            cli.cmd_add(argparse.Namespace(file_opt=str(path), file=None, json=False), self.brain)
+        self.assertIn("não entra por lote", str(cm.exception))
+        self.assertEqual([e["type"] for e in self.brain.state.feedbacks["FB-0001"].history], ["feedback.added"])
+        feedback.approve(self.brain, "FB-0001", "ok")
+        self._fake_env()
+        old = os.environ.get("BRAIN_AGENT")
+        os.environ["BRAIN_AGENT"] = "1"
+        try:
+            with self.assertRaises(util.BrainError) as cm2:
+                feedback.push(self.brain, "FB-0001", approval="")
+        finally:
+            if old is None:
+                os.environ.pop("BRAIN_AGENT", None)
+            else:
+                os.environ["BRAIN_AGENT"] = old
+        self.assertIn("não pode aprovar", str(cm2.exception))
+        self.assertEqual(self.brain.state.feedbacks["FB-0001"].status, "pendente")
+
     def test_revise_depois_do_ok_recusa_o_push(self):
         feedback.add(self.brain, "sugestao", "Lembrete de fornada", "A marina-demo esquece o timer")
         feedback.approve(self.brain, "FB-0001", "ok")
