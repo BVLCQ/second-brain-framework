@@ -45,7 +45,8 @@ class CommitLineTests(unittest.TestCase):
 
     def test_terminal_limita_a_lista_e_diz_quantos_faltam(self):
         res = {"remote": "origin", "branch": "main", "behind": 30, "checked_only": True, "version_before": "1.0.0",
-               "incoming": [f"abc{i:04d} assunto {i}" for i in range(30)], "areas": {"brainlib": 3}}
+               "incoming": [f"abc{i:04d} assunto {i}" for i in range(30)], "areas": {"brainlib": 3},
+               "ahead": 0, "local_pending": []}
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             _print_update(res)
