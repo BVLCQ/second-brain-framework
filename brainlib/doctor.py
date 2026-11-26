@@ -300,6 +300,11 @@ def checks(brain, online: bool = False, probe_agent: bool = False, docker_probe=
                                           "config/.env — `./brain setup --only portas`, depois `brain feedback push FB-####`"))
     elif fb_wait:
         out.append(_c("warn", "feedback", f"{len(fb_wait)} sugestão(ões) ainda não publicadas — `brain feedback list`"))
+    agent_drafts = [f for f in fb_wait if f.added_by == "agent" and f.status == "pendente"]
+    if agent_drafts:
+        out.append(_c("warn", "feedback",
+                      f"{len(agent_drafts)} rascunho(s) do agente aguardando leitura — "
+                      "leia o texto na aba Sugestões antes de publicar"))
     fb_retract_asks = [
         q for q in st.questions.values()
         if q.status == "aberta" and q.kind == "permissao"
