@@ -1,3 +1,8 @@
+## 2.53.0 — o diálogo de atualização lista o assunto de cada commit
+
+- **Uma linha por commit, no máximo 140 caracteres.** O assunto aparece inteiro se cabe. Se passa, corta no último espaço e põe reticências. A conta é de caracteres, não de bytes. O hash curto fica ao lado e não entra na conta.
+- **O changelog deixa de ser a leitura padrão.** Os parágrafos longos continuam no CHANGELOG.md e atrás de "ver changelog". A checagem não descarta assunto depois do vigésimo. A mesma lista sai no `brain update --check`.
+
 ## 2.52.0 — a suíte roda em paralelo e uma thread do OAuth deixa de vazar
 
 - **`scripts/dev/run_tests.py` roda a suíte em paralelo** (só stdlib, um worker por CPU; `-j N` muda; aceita prefixo de módulo, classe ou teste). O CI passa a usá-lo. O resultado é o mesmo do `unittest discover`, em bem menos tempo.
