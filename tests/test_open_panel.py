@@ -419,6 +419,47 @@ class TabReuseNonceAndServeQueryTests(unittest.TestCase):
         self.assertRegex(osas[2][-1], r"^http://127\.0\.0\.1:8787/\?n=[0-9a-f]+#onboarding&t=tok1$")
         self.assertEqual(osas[3][-1], "file:///tmp/dashboard.html#home")
 
+    def test_focus_only_does_not_write_a_url(self):
+        calls: list[list[str]] = []
+
+        def fake_run(argv, **kw):
+            calls.append(argv)
+            if argv[0].endswith("pgrep"):
+                return subprocess.CompletedProcess(argv, 0, "", "")
+            return subprocess.CompletedProcess(argv, 0, "ok", "")
+
+        with mock.patch.object(util.sys, "platform", "darwin"), \
+                mock.patch.object(util, "_default_browser", return_value=("Safari", "safari")), \
+                mock.patch("subprocess.run", fake_run):
+            self.assertTrue(util.focus_open_tab("http://127.0.0.1:8787/#t=tok1", focus_only=True))
+        osa = next(c for c in calls if c[0].endswith("osascript"))
+        self.assertIn('set mode to "focus"', osa[2])
+        self.assertEqual(len([c for c in calls if c[0].endswith("osascript")]), 1)
+
+    def test_keep_route_puts_the_page_before_the_new_token(self):
+        calls: list[list[str]] = []
+
+        def fake_run(argv, **kw):
+            calls.append(argv)
+            if argv[0].endswith("pgrep"):
+                return subprocess.CompletedProcess(argv, 0, "", "")
+            mode = "read" if 'set mode to "read"' in argv[2] else "set"
+            out = "http://127.0.0.1:8787/#todo" if mode == "read" else "ok"
+            return subprocess.CompletedProcess(argv, 0, out, "")
+
+        with mock.patch.object(util.sys, "platform", "darwin"), \
+                mock.patch.object(util, "_default_browser", return_value=("Safari", "safari")), \
+                mock.patch("subprocess.run", fake_run):
+            self.assertTrue(util.focus_open_tab("http://127.0.0.1:8787/#t=novo", keep_route=True))
+        osas = [c for c in calls if c[0].endswith("osascript")]
+        self.assertEqual(len(osas), 2)
+        self.assertRegex(osas[1][-1], r"^http://127\.0\.0\.1:8787/\?n=[0-9a-f]+#todo&t=novo$")
+
+    def test_page_hash_drops_the_token_and_keeps_the_route(self):
+        self.assertEqual(util._page_hash("http://127.0.0.1:8787/#todo&t=velho"), "todo")
+        self.assertEqual(util._page_hash("http://127.0.0.1:8787/#t=velho"), "")
+        self.assertEqual(util._page_hash("http://127.0.0.1:8787/"), "")
+
     def test_serve_accepts_root_and_portfolio_with_query_nonce(self):
         with tempfile.TemporaryDirectory() as td:
             with contextlib.redirect_stdout(io.StringIO()):
