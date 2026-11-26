@@ -108,6 +108,9 @@ class ModelBuilder:
             q["files"] = self.files_for(q["id"], sources=(q.get("source") or "", *ctx))
         for s in m.get("shares") or []:
             s["files"] = self.files_for("", sources=(s.get("report") or "",))
+        for msg in m.get("outbox") or []:
+            ref = msg.get("ref") or ""                      # a ação (ou o arquivo) que motivou a mensagem
+            msg["files"] = self.files_for(ref, sources=(ref,))
         foc = m.get("focus")
         if isinstance(foc, dict):
             foc["files"] = self.files_for(foc.get("id") or "", sources=(foc.get("plan_file") or "",))

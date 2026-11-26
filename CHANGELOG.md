@@ -1,3 +1,9 @@
+## 2.57.0 — todo arquivo que o painel cita agora tem link
+
+- **Linha do tempo, "última interação" e busca ligam o artefato.** A linha do tempo escondia a reunião ou o documento de onde cada item nasceu; a ficha da pessoa e os resultados da busca mostravam o caminho como texto solto. Agora cada um tem o botão Ver, que abre o leitor embutido.
+- **Mensagens e fontes mostram os arquivos.** A mensagem lista os arquivos da ação ou do artefato que a motivou, e a referência no cabeçalho vira link. A fonte ganha "ver último pull", que abre o snapshot que o pull gravou. A entrega, nas conquistas e na busca, lista os arquivos dela.
+- **Um teste percorre todas as páginas.** Renderiza cada tela do painel com o modelo de uma instância demo e acusa caminho do vault fora de link. A lista de textos fixos permitidos é explícita e comentada.
+
 ## 2.55.0 — arquivos do vault viram link na ficha e no FRESH
 
 - **A ficha mostra os arquivos ligados.** Ação, decisão, projeto, pessoa, oportunidade, processo, pergunta, foco, publicação e goal trazem a mesma lista da TUI: tipo, nome e para onde abre. O clique passa pelo servidor local, só dentro do vault. Fora do vault, ou com `..`, é recusado.

@@ -247,7 +247,7 @@ function decisionTable(list){
 function timelineList(items, limit){
   if (!items.length) return empty("Sem eventos registrados.");
   return '<div class="tl">' + items.slice(0, limit || 60).map(it => '<div class="it k-' + esc(it.kind) + '"><span class="muted">' + fmtD(it.date) + "</span> · " +
-    esc(it.kind) + " · " + (it.id.startsWith("TASK-") ? aL(it.id) + " " : it.id.startsWith("DEC-") ? dL(it.id) + " " : it.id.includes("/") ? "" : esc(it.id) + " ") + esc(it.title) +
+    esc(it.kind) + " · " + (it.id.startsWith("TASK-") ? aL(it.id) + " " : it.id.startsWith("DEC-") ? dL(it.id) + " " : it.id.includes("/") ? readLink(it.id, "Ver") + " " : esc(it.id) + " ") + esc(it.title) +
     (it.who ? ' <span class="muted">(' + esc(it.who) + ")</span>" : "") + (it.project && P[it.project] ? " · " + pL(it.project) : "") + "</div>").join("") + "</div>";
 }
 
@@ -882,7 +882,7 @@ V.wins = () => {
     '<div class="kpi"><span>ações suas fechadas (30d)</span><b>' + w.closed_30d + "</b></div></div>";
   h += panel("", '<div class="legend"><span><i style="background:var(--chart-a)"></i>entregas e entregáveis</span><span><i style="background:var(--chart-b)"></i>ações fechadas</span></div>' + svg);
   w.weeks.forEach(k => {
-    const items = [...k.deliveries.map(id => { const e = DL[id]; return "<li>✓ <b>" + esc(e.title) + '</b> <span class="muted">' + fmtD(e.date) + "</span> — " + esc(e.result) + (e.impact ? " · impacto: " + esc(e.impact) : "") + (e.project ? " · " + pL(e.project) : "") + ' <span class="muted">[' + esc(e.prov) + "]</span>" + ((e.files || []).map(f => ' <button type="button" class="btn tiny" data-read="' + esc(f.rel) + '">' + esc(f.name) + "</button>").join("")) + "</li>"; }),
+    const items = [...k.deliveries.map(id => { const e = DL[id]; return "<li>✓ <b>" + esc(e.title) + '</b> <span class="muted">' + fmtD(e.date) + "</span> — " + esc(e.result) + (e.impact ? " · impacto: " + esc(e.impact) : "") + filesInline(e.files) + (e.project ? " · " + pL(e.project) : "") + ' <span class="muted">[' + esc(e.prov) + "]</span>" + ((e.files || []).map(f => ' <button type="button" class="btn tiny" data-read="' + esc(f.rel) + '">' + esc(f.name) + "</button>").join("")) + "</li>"; }),
       ...k.deliverables.map(id => { const x = DD[id]; return "<li>✓ entregável <b>" + id + "</b> " + esc(x.title) + ' <span class="muted">' + fmtD(x.date) + "</span> · " + pL(x.project) + "</li>"; })];
     h += '<h2 class="sec">' + esc(k.label) + ' <span class="muted">· ' + (k.deliveries.length + k.deliverables.length) + " entregas · " + k.closed.length + " ações fechadas · " + k.decisions.length + " decisões</span></h2>" +
       panel("", (items.length ? '<ul class="feed">' + items.join("") + "</ul>" : "") + (k.closed.length ? '<p class="muted small">Ações fechadas: ' + k.closed.map(id => aL(id) + " " + esc(A[id].title)).join(" · ") + "</p>" : "") +
@@ -902,7 +902,7 @@ V.person = (q, id) => {
   let h = '<p class="crumb muted"><a href="#people">← pessoas</a></p><div class="pagehead"><div><h1>' + esc(p.name) + "</h1>" +
     '<p class="sub">' + esc(p.role || "papel não registrado") + " · relação: " + esc(p.relation || "—") +
     " · aliases: " + ((p.aliases || []).map(esc).join(", ") || "—") + "</p></div></div>";
-  h += "<p><b>Última interação:</b> " + (p.last_interaction ? fmtDL(p.last_interaction.date) + " — " + esc(p.last_interaction.title) : "não consta") + "</p>";
+  h += "<p><b>Última interação:</b> " + (p.last_interaction ? fmtDL(p.last_interaction.date) + " — " + esc(p.last_interaction.title) + (p.last_interaction.artifact ? " " + readLink(p.last_interaction.artifact, "Ver") : "") : "não consta") + "</p>";
   h += '<div class="grid g2">' + panel("O que me deve", actionTable(p.owes_me || [], ["age", "project"]) + "<h2>O que eu devo</h2>" + actionTable(p.i_owe || [], ["project"]));
   h += panel("Decisões que tomou", ((p.decisions || []).length ? '<ul class="feed">' + (p.decisions || []).map(d => '<li><span class="muted">' + fmtD(D[d] ? D[d].date : "") + "</span> · " + dL(d) + " " + esc(D[d] ? D[d].title : d) + "</li>").join("") + "</ul>" : empty("nenhuma registrada")) +
     "<h2>Projetos</h2>" + ((p.projects || []).map(x => pL(x, true)).join(" · ") || empty("—")) +    '<h2>Menções recentes</h2><ul class="feed">' + (p.artifacts || []).filter(a => ART[a]).map(a => '<li><span class="muted">' + fmtD(ART[a].date) + "</span> · " + esc(ART[a].title) + (ART[a].raw ? " · " + pathLink(ART[a].raw) : "") + "</li>").join("") + "</ul>") + "</div>";
@@ -988,10 +988,10 @@ V.outbox = (q) => {
     const l = M.outbox.filter(m => s.includes(m.status));
     return panel(t + " · " + l.length, (l.map(m => {
       const perm = safeUrl(m.link);
-      return "<div class=\"msgrow\"><header><b>" + m.id + "</b> → " + esc(m.to_name) + (m.ref ? " · ref " + (A[m.ref] ? aL(m.ref) : esc(m.ref)) : "") + (m.why ? ' <span class="muted">· ' + esc(m.why) + "</span>" : "") +
+      return "<div class=\"msgrow\"><header><b>" + m.id + "</b> → " + esc(m.to_name) + (m.ref ? " · ref " + (A[m.ref] ? aL(m.ref) : m.ref.includes("/") ? readLink(m.ref, "ver origem") : esc(m.ref)) : "") + (m.why ? ' <span class="muted">· ' + esc(m.why) + "</span>" : "") +
       (m.sent ? ' <span class="muted">· enviada ' + fmtD(m.sent) + "</span>" : "") +
       (perm ? ' · <a href="' + esc(perm) + '" target="_blank" rel="noopener">permalink</a>' : "") +
-      "</header>" + '<div class="msg">' + esc(m.text) + "</div></div>";
+      "</header>" + '<div class="msg">' + esc(m.text) + "</div>" + filesBlock(m.files) + "</div>";
     }).join("") || empty("—")), ' style="margin-top:14px"');
   }).join("");
 };
@@ -1145,8 +1145,8 @@ V.search = (q) => {
   M.decisions.forEach(d => hit(d.id + " " + d.title + " " + d.decided_by_names.join(" ") + " " + d.context) && res.push(["decisão", dL(d.id) + " " + esc(d.title) + ' <span class="muted">' + fmtD(d.date) + " · " + d.decided_by_names.map(esc).join(", ") + "</span>"]));
   M.projects.forEach(p => hit(p.id + " " + p.title + " " + p.deliverables.map(x => x.title).join(" ")) && res.push(["projeto", pL(p.id, true)]));
   M.people.forEach(p => hit(p.name + " " + p.aliases.join(" ") + " " + p.role) && res.push(["pessoa", peL(p.id) + ' <span class="muted">' + esc(p.role) + "</span>"]));
-  M.deliveries.forEach(e => hit(e.title + " " + e.result) && res.push(["entrega", esc(e.title) + ' <span class="muted">' + fmtD(e.date) + "</span>"]));
-  M.artifacts.forEach(x => hit(x.title + " " + x.summary) && res.push(["artefato", esc(x.title) + ' <span class="muted">' + fmtD(x.date) + " · " + esc(x.id) + "</span>"]));
+  M.deliveries.forEach(e => hit(e.title + " " + e.result) && res.push(["entrega", esc(e.title) + ' <span class="muted">' + fmtD(e.date) + "</span>" + filesInline(e.files)]));
+  M.artifacts.forEach(x => hit(x.title + " " + x.summary) && res.push(["artefato", esc(x.title) + ' <span class="muted">' + fmtD(x.date) + "</span> " + readLink(x.id, "Ver")]));
   return '<div class="pagehead"><div><h1>Busca: ' + esc(q.get("q")) + "</h1></div></div>" +
     panel("", res.length ? '<ul class="feed">' + res.map(r => "<li>" + chip("info", r[0]) + " " + r[1] + "</li>").join("") + "</ul>" : empty("não consta"));
 };
@@ -1161,6 +1161,14 @@ const iceTip = o => { const ax = (PF.ice_rubric || {}).axes;
 const iceTxt = o => o.score == null ? '<span class="muted">sem ICE</span>' : '<span class="' + (o.ice_suggested ? "sug" : "") + '" title="' + iceTip(o) + '">' +
   o.impact + "×" + o.confidence + "×" + o.ease + " = <b>" + o.score + "</b>" + (o.ice_suggested ? " · sugerido" : "") + "</span>";
 const areaName = a => AREA[a] ? AREA[a].name : a;
+// Arquivos ligados a um item de LISTA (uma linha só): um botão de leitura por arquivo.
+function filesInline(files) {
+  return (files || []).map(f => " " + readLink(f.rel, f.kind + " · " + f.name)).join("");
+}
+// Botão "Ver": abre o arquivo do vault no leitor embutido. Rótulo livre; o caminho nunca aparece solto.
+function readLink(ref, label) {
+  return '<button type="button" class="btn tiny" data-read="' + esc(ref) + '">' + esc(label || "Ver") + "</button>";
+}
 function pathLink(ref) {
   if (!ref) return "";
   const u = docUrl(ref);
@@ -1278,6 +1286,7 @@ V.sources = () => {
         stateHtml = '<span class="ok">✓</span>';
       }
 
+      if (s.files && s.files.length) stateHtml += ' ' + readLink(s.files[0].rel, "ver último pull");
       tableHtml += '<tr ' + trAttrs + '>' +
         toggleCell +
         '<td><b>' + esc(s.key) + '</b></td>' +
