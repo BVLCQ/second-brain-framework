@@ -746,6 +746,21 @@ class FeedbackExactTextTests(FeedbackFlowTests):
         self.assertIn("renderSafeMd", src)
         self.assertIn("aguardando leitura", src)
 
+    def test_md_text_nao_come_cerquilha_de_texto(self):
+        from brainlib.tui.rows import md_text
+        plain = md_text("#42 já cobre\n# Título\n").plain
+        self.assertIn("#42 já cobre", plain)
+        self.assertIn("Título", plain)
+        self.assertNotIn("# Título", plain)
+
+    def test_doctor_nao_conta_falha_como_leitura(self):
+        from brainlib import doctor
+        feedback.add(self.brain, "sugestao", "Lembrete de fornada", by="agent", prov="observado")
+        self.brain.record_one({"type": "feedback.failed", "id": "FB-0001", "by": "system",
+                               "data": {"error": "token ausente"}})
+        texts = [c["detail"] for c in doctor.checks(self.brain) if c["title"] == "feedback"]
+        self.assertFalse(any("aguardando leitura" in t for t in texts), texts)
+
 
 class FeedbackIdsTests(unittest.TestCase):
     def test_prefixo_e_normalizacao(self):

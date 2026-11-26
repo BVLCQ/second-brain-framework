@@ -786,7 +786,8 @@ def md_text(raw: str) -> Text:
                 i += 1
             i += 1
             continue
-        if line.startswith("#"):
+        marks, _, rest = line.partition(" ")
+        if rest and 1 <= len(marks) <= 6 and set(marks) == {"#"}:
             out.append(line.lstrip("#").strip() + "\n", "bold")
         elif line.lstrip().startswith(("- ", "* ")):
             out.append("• " + line.lstrip()[2:] + "\n")
