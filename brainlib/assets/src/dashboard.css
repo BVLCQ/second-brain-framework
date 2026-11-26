@@ -176,7 +176,13 @@ tbody tr.src-problem:hover td{background:color-mix(in srgb,var(--riskbg) 55%,tra
 .todo-ov #todo-ov-cards{display:none;margin:10px 0 0}
 .todo-ov.is-open #todo-ov-cards{display:grid}
 .todo-ov .kpis{grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:10px}
-.todo-ov .kpi{padding:10px 12px}.todo-ov .kpi b{font-size:20px}
+.todo-ov .kpi{padding:10px 12px;appearance:none;cursor:pointer;text-align:left;font:inherit;color:inherit;width:100%}
+.todo-ov .kpi b{font-size:20px}
+.todo-ov .kpi.is-on{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.todo-ov.is-filtering .kpi.is-off{opacity:.45}
+.todo-ov .kpi:focus-visible,.todo-ov-line .ovp:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.todo-ov-line .ovp{border:0;background:none;padding:0;margin:0;cursor:pointer;font:inherit;color:inherit}
+.todo-ov-line .ovp.is-on{color:var(--accent)}
 .kpi.later b{color:var(--muted)}
 .col{background:var(--chip);border-radius:var(--r);padding:10px;min-height:120px}
 .col h2, .col h3{margin:2px 4px 10px;font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;font-weight:700;
