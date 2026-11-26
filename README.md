@@ -135,12 +135,15 @@ existir `config/brain.toml`); `BRAIN_HOME` vence se estiver setada.
 ## Testes
 
 ```bash
-python3 -m unittest discover -s tests          # tudo (o que o CI roda)
-python3 -m unittest tests.test_brain -v        # um arquivo
+python3 scripts/dev/run_tests.py               # tudo, em paralelo (o que o CI roda)
+python3 scripts/dev/run_tests.py test_brain    # um arquivo, uma classe ou um teste (prefixo do id)
+python3 -m unittest tests.test_brain -v        # um arquivo, em série e com saída
+python3 -m unittest discover -s tests          # tudo, em série (mais lento, igual no resultado)
 ```
 
 Só biblioteca padrão. Relógio congelado em `BRAIN_NOW`. Sem rede.
-O CI roda o suite em 3.11–3.14 a cada push.
+O CI roda o suite em 3.11–3.14 a cada push. O `run_tests.py` reparte as classes de teste entre um
+worker por CPU (`-j N` muda); a TUI sozinha é metade do tempo, e as classes grandes são partidas.
 
 ## Linguagem
 
