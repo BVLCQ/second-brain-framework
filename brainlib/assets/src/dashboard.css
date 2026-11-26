@@ -150,7 +150,9 @@ tbody tr:hover td{background:var(--line2)}
 tr.sup td{color:var(--muted);text-decoration:line-through}
 .src-group-hdr td{background:var(--chip);font-weight:600;padding:8px 10px;border-top:1px solid var(--line2)}
 tbody tr.src-group-hdr:hover td{background:var(--chip)}
-.src-group-title{display:inline-flex;align-items:center;gap:8px}
+.src-group-title{display:inline-flex;align-items:center;gap:8px;cursor:pointer;user-select:none;border-radius:6px;padding:2px 4px;margin:-2px -4px}
+.src-group-title:hover .src-group-name{text-decoration:underline}
+.src-group-title:focus-visible{outline:2px solid var(--accent, currentColor);outline-offset:2px}
 .src-group-name{font-weight:700;color:var(--ink)}
 .src-group-count{color:var(--muted);font-size:12.5px;font-weight:500}
 .src-th-toggle{width:32px;text-align:center}
