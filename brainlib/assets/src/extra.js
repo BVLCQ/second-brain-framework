@@ -410,10 +410,10 @@ function navEntries(){
     ["pf/visao", "Portfólio · Visão"], ["pf/opps", "Portfólio · Oportunidades"], ["pf/matrix", "Portfólio · Matriz"], ["pf/procs", "Portfólio · Processos"], ["pf/areas", "Portfólio · Áreas"], ["pf/docs", "Portfólio · Documentos"],
     ["people", "Portfólio · Pessoas"]]
     : [["face/execucao", "→ face Execução"], ["face/portfolio", "→ face Portfólio"], ["face/configuracoes", "→ face Configurações"],
-    ["home", "Início"], ["todo", "TODO"], ["focus", "Foco"], ["ask", "Perguntas"], ["outbox", "Mensagens"],
+    ["home", "Início"], ["todo", "Tarefas"], ["focus", "Foco"], ["ask", "Perguntas"], ["outbox", "Mensagens"],
     ["projects", "Projetos"], ["decisions", "Decisões"], ["wins", "Conquistas"], ["timeline", "Linha do tempo"],
     ["cfg/inicio", "Configurações · Visão geral"], ["cfg/perfil", "Configurações · Perfil"], ["cfg/rotina", "Configurações · Rotina"],
-    ["cfg/agente", "Configurações · Seu agente"], ["cfg/conectores", "Configurações · Conectores"], ["sources", "Configurações · Fontes"],
+    ["cfg/agente", "Configurações · Agentes/Harness"], ["cfg/conectores", "Configurações · Conectores"], ["sources", "Configurações · Fontes"],
     ["cfg/memoria", "Configurações · Memória"], ["cfg/integracoes", "Configurações · Integrações"],
     ["cfg/saude", "Configurações · Saúde"], ["feedback", "Configurações · Sugestões"],
     ["pf/visao", "Portfólio · Visão"], ["pf/opps", "Portfólio · Oportunidades"], ["pf/matrix", "Portfólio · Matriz"],
