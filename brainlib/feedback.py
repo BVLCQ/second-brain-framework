@@ -199,7 +199,8 @@ def issue_state(inst: config.Instance, repo: str, number: int) -> dict:
         raise util.BrainError(f"GitHub respondeu {e.code} ao issue #{number}", code=4) from e
     except (urllib.error.URLError, TimeoutError, OSError) as e:
         raise util.BrainError(f"sem contato com {API} ({e})", code=4) from e
-    return {"state": data.get("state", ""), "reason": data.get("state_reason") or ""}
+    return {"state": data.get("state", ""), "reason": data.get("state_reason") or "",
+            "body": data.get("body") or ""}
 
 
 # ── fluxo da entidade ────────────────────────────────────────────────────────
@@ -537,6 +538,15 @@ def line(f) -> str:
     return " · ".join(bits)
 
 
+def _diverged(f, got: dict) -> bool:
+    """True se o GitHub devolveu um corpo diferente do texto que o Brain enviou. Sem corpo, não acusa."""
+    body = got.get("body")
+    if not isinstance(body, str) or got.get("state") == "gone":
+        return False
+    sent = " ".join(issue_body(f).split())
+    return " ".join(body.split()) != sent
+
+
 def sync(brain: Brain) -> tuple[list[dict], list[str]]:
     """Relê o estado de cada issue no GitHub e grava `feedback.synced` quando mudou. → (eventos, avisos)
 
@@ -556,11 +566,16 @@ def sync(brain: Brain) -> tuple[list[dict], list[str]]:
         except util.BrainError as e:
             notes.append(f"⚠ {f.id}: {e}")
             continue
-        if got["state"] != f.issue_state or got["reason"] != f.issue_reason:
-            events.append({"type": "feedback.synced", "id": f.id, "by": "system",
-                           "data": {"state": got["state"], "reason": got["reason"]}})
-        notes.append(f"{f.id}: issue " + {"open": "aberta", "gone": "apagada (removida do GitHub)"}
-                     .get(got["state"], "fechada"))
+        diverged = _diverged(f, got)
+        if got["state"] != f.issue_state or got["reason"] != f.issue_reason or diverged != f.issue_diverged:
+            data = {"state": got["state"], "reason": got["reason"]}
+            if diverged or f.issue_diverged:
+                data["diverged"] = diverged
+            events.append({"type": "feedback.synced", "id": f.id, "by": "system", "data": data})
+        note = f"{f.id}: issue " + {"open": "aberta", "gone": "apagada (removida do GitHub)"}.get(got["state"], "fechada")
+        if _diverged(f, got):
+            note += " · o texto no GitHub divergiu do que foi enviado"
+        notes.append(note)
     if events:
         brain.record(events)
     return events, notes

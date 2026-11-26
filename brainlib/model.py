@@ -309,7 +309,7 @@ class ModelBuilder:
                           "status": f.status, "reason": f.reason, "comment_url": f.comment_url,
                           "retract_mode": f.retract_mode, "added_by": f.added_by,
                           "number": f.number, "url": f.url, "issue_state": f.issue_state,
-                          "issue_reason": f.issue_reason, "error": f.error, "added": _iso(f.added),
+                          "issue_reason": f.issue_reason, "issue_diverged": f.issue_diverged, "error": f.error, "added": _iso(f.added),
                           "pushed": _iso(f.pushed), "synced": _iso(f.synced)}
                          for f in sorted(st.feedbacks.values(), key=lambda f: f.id, reverse=True)],
             "portfolio": portfolio.build(st, plan, today),

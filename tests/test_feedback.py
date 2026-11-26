@@ -263,6 +263,22 @@ class FeedbackFlowTests(unittest.TestCase):
             feedback.issue_state = orig
         self.assertEqual(events2, [])
 
+    def test_sync_acusa_texto_divergente(self):
+        feedback.add(self.brain, "sugestao", "Modo escuro", "Hoje só há claro", force=True)
+        self.brain.record_one({"type": "feedback.pushed", "id": "FB-0001", "by": "owner",
+                               "data": {"number": 4, "url": "https://github.com/x/issues/4", "quote": "ok",
+                                        "text_sha": "x"}})
+        self._fake_env()
+        orig = feedback.issue_state
+        feedback.issue_state = lambda *a, **k: {"state": "open", "reason": "", "body": "texto editado fora"}
+        try:
+            events, notes = feedback.sync(self.brain)
+        finally:
+            feedback.issue_state = orig
+        self.assertTrue(events[0]["data"]["diverged"])
+        self.assertTrue(self.brain.state.feedbacks["FB-0001"].issue_diverged)
+        self.assertTrue(any("divergiu" in n for n in notes))
+
     def test_sync_sem_token_pula_sem_erro(self):
         feedback.add(self.brain, "sugestao", "Sem token")
         events, notes = feedback.sync(self.brain)
