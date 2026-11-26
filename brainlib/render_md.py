@@ -25,6 +25,8 @@ def _vault_href(frm: str, rel: str) -> str:
     `records/actions/` apontaria para uma pasta que não existe.
     """
     note_dir = os.path.dirname(frm) or "."
+    if "://" in rel:
+        return rel
     href = os.path.normpath(os.path.join(os.path.relpath(".", note_dir), "..", rel))
     return href.replace(" ", "%20")
 
@@ -655,8 +657,10 @@ class Pages:
             if d["rationale"]:
                 body.append(f"**Por quê:** {d['rationale']}")
             src = d.get("source") or ""
-            if "/" in src and ".." not in Path(src).parts:
-                label = re.sub(r"([\\\[\]|])", r"\\\1", _ln(str(d["source_label"])))
+            label = re.sub(r"([\\\[\]|])", r"\\\1", _ln(str(d["source_label"])))
+            if "://" in src:
+                fonte = f"[{label}]({src})"
+            elif "/" in src and ".." not in Path(src).parts:
                 fonte = f"[{label}]({_vault_href(f, src)})"
             else:
                 fonte = d["source_label"]

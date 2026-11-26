@@ -770,7 +770,7 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
             try:
                 opener.read_text(self.inst, rel)
             except util.BrainError as e:
-                if "não é texto" not in str(e):
+                if "não é texto" not in str(e) and "grande demais" not in str(e):
                     self.log_line(str(e), "yellow")
                     return
             else:
