@@ -1,3 +1,9 @@
+## 2.51.0 — a barra lateral ganha seções, e Fontes sai do dia
+
+- **Rótulos, nada some.** Execução separa Agora, Atenção e Registro. Portfólio separa Mapa, Trabalho e Cadastro. Configurações separa Conta, Conexões, Instância e Meta. O rótulo não é link.
+- **Sugestões foi para Configurações.** É sobre o cérebro, não sobre o dia. A paleta continua achando a página.
+- **Fontes foi para o lado de Conectores.** Na Execução fica só o badge, e só quando há falha de pull. O clique abre a página, que mora em Configurações.
+
 ## 2.50.0 — o texto da sugestão aparece formatado, e o rascunho do agente espera leitura
 
 - **A aba Sugestões mostra o texto que sobe, formatado.** Título com a tag, molde e rodapé entram no leitor de Markdown. Um `<script>` no texto aparece escapado. O hash do texto fica ao lado do link da issue.
