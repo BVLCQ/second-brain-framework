@@ -28,7 +28,7 @@ FACT_TYPES = {"action.opened", "action.closed", "decision.made", "delivery.recor
 # Gates estruturais também: mudar a árvore, aceitar/rejeitar proposta, promover oportunidade, migrar IDs.
 NIGHT_FORBIDDEN = {"question.answered", "message.approved", "message.sent", "share.approved", "share.published", "focus.approved",
                    "plan.changed", "proposal.accepted", "proposal.rejected", "opportunity.promoted", "ids.migrated",
-                   "feedback.pushed", "feedback.retracted"}
+                   "feedback.pushed", "feedback.approved", "feedback.retracted"}
 FIELD_ORDER = ["seq", "ts", "type", "id", "date", "actor", "by", "prov", "source", "data"]
 
 

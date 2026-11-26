@@ -1,3 +1,7 @@
+## 2.48.0 — o ok de uma sugestão fica amarrado ao texto que subiria
+
+- **Aprovar uma sugestão grava o texto exato.** `feedback approve` guarda o hash do título com a tag e do corpo com molde e rodapé. Depois desse ok, `feedback push` publica sem pedir o ok de novo, mas só fora do agente e do noturno. Se o texto mudar depois, o push recusa até um novo ok. Sem aprovação nenhuma, o push mostra o texto e para, e diz os dois comandos que fecham a publicação. Uma pré-checagem que falha (token, texto público) não grava o ok. O lote `brain add` não forja esse ok. O clique no painel continua publicando o texto que está na tela. A aba Sugestões mostra o título e o corpo finais, não só o rascunho cru.
+
 ## 2.47.0 — os cartões do TODO filtram o quadro
 
 - **A visão geral do TODO filtra.** Clicar em Atrasadas, Vencem em 7 dias ou qualquer outro cartão deixa no quadro só esse recorte, nas colunas de sempre. Outro clique soma. Clicar de novo tira. "Limpar filtros" volta ao quadro inteiro. O filtro se junta ao de projeto, vista e ordem. Cartão selecionado fica marcado; os outros esmaecem enquanto houver filtro. Enter e Espaço alternam, e o estado é anunciado.

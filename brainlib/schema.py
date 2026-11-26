@@ -89,6 +89,7 @@ TYPES: dict[str, dict] = {
     "question.dropped": {"entity": "question", "req": ["reason"]},
     "feedback.added": {"entity": "feedback", "new": True, "prefix": ids.prefix("feedback"), "req": ["kind", "title"]},
     "feedback.revised": {"entity": "feedback", "req": []},          # corrige texto/origem enquanto não virou issue
+    "feedback.approved": {"entity": "feedback", "req": ["quote", "text_sha"]},
     "feedback.pushed": {"entity": "feedback", "req": ["number", "url"]},
     "feedback.synced": {"entity": "feedback", "req": ["state"]},
     "feedback.failed": {"entity": "feedback", "req": ["error"]},
@@ -119,11 +120,11 @@ LIST_FIELDS = ("blocked_by", "unblocks", "people", "people_add", "decided_by", "
                "blocks", "created", "removed", "not_dup", "not_dup_add")
 # aprovações e gates: a fala é do dono — só by=owner grava (o noturno recusa owner; ver core.NIGHT_FORBIDDEN)
 OWNER_ONLY = {"proposal.accepted", "proposal.rejected", "message.approved", "focus.approved",
-              "plan.changed", "opportunity.promoted"}
+              "plan.changed", "opportunity.promoted", "feedback.approved"}
 # atos que nunca são do agente. `feedback.pushed` nasce do dono desde o gate de aprovação (`feedback.push`);
 # `system` segue válido como HISTÓRICO — instâncias com eventos anteriores à regra não podem ficar inválidas
 # no `brain validate`/`doctor` (o ledger é append-only, nada é reescrito).
-NEVER_AGENT = {"feedback.pushed": {"owner", "system"}}
+NEVER_AGENT = {"feedback.pushed": {"owner", "system"}, "feedback.approved": {"owner"}}
 
 # campos de `data` que guardam IDs (um, ou uma lista); valores que não são ID (URL, texto) passam intactos
 REF_FIELDS = ("project", "deliverable", "goal", "ref", "link", "target", "blocked_by", "unblocks", "supersedes", "by",
@@ -382,6 +383,10 @@ def _validate_feedback(t: str, ev: dict, data: dict, state) -> None:
         _need(isinstance(data["number"], int) and not isinstance(data["number"], bool) and data["number"] > 0,
               "number deve ser inteiro positivo (o número do issue no GitHub)")
         _need(f.status in ("pendente", "falhou"), f"{eid} está '{f.status}' — issue já criada")
+    elif t == "feedback.approved":
+        _need(f.status in ("pendente", "falhou"), f"{eid} está '{f.status}' — só rascunho pode ser aprovado")
+        _need(isinstance(data["quote"], str) and bool(data["quote"].strip()), "feedback.approved: quote obrigatório")
+        _need(isinstance(data["text_sha"], str) and bool(data["text_sha"]), "feedback.approved: text_sha obrigatório")
     elif t == "feedback.synced":
         _need(data["state"] in ("open", "closed", "gone"),
               f"state deve ser open|closed|gone (recebido {data['state']!r})")

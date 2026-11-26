@@ -323,6 +323,90 @@ class FeedbackFlowTests(unittest.TestCase):
         self.assertEqual(m["feedback"][0]["id"], "FB-0001")
         self.assertEqual((m["feedback"][0]["kind"], m["feedback"][0]["status"]), ("sugestao", "pendente"))
         self.assertEqual(m["counts"]["feedback_pending"], 1)
+        self.assertEqual(m["feedback"][0]["issue_title"], feedback.issue_title(self.brain.state.feedbacks["FB-0001"]))
+        self.assertEqual(m["feedback"][0]["issue_body"], feedback.issue_body(self.brain.state.feedbacks["FB-0001"]))
+        self.assertEqual(m["feedback"][0]["text_sha"], feedback.public_sha(self.brain.state.feedbacks["FB-0001"]))
+
+    def test_push_sem_aprovacao_mostra_o_texto_exato(self):
+        feedback.add(self.brain, "sugestao", "Lembrete de fornada", "A marina-demo esquece o timer")
+        with self.assertRaises(util.BrainError) as cm:
+            feedback.push(self.brain, "FB-0001", approval="")
+        self.assertIn("[Sugestão] Lembrete de fornada", str(cm.exception))
+        self.assertIn("sem aprovação", str(cm.exception))
+        self.assertIn("brain feedback push FB-0001", str(cm.exception))
+        self.assertEqual(self.brain.state.feedbacks["FB-0001"].status, "pendente")
+
+    def test_push_depois_do_ok_publica_sem_novo_approval(self):
+        feedback.add(self.brain, "sugestao", "Lembrete de fornada", "A marina-demo esquece o timer")
+        self._fake_env()
+        feedback.approve(self.brain, "FB-0001", "ok")
+        orig = feedback.create_issue
+        feedback.create_issue = lambda *a, **k: {
+            "number": 8, "url": "https://github.com/BVLCQ/second-brain-framework/issues/8"}
+        try:
+            ev = feedback.push(self.brain, "FB-0001", approval="")
+        finally:
+            feedback.create_issue = orig
+        self.assertEqual(ev["type"], "feedback.pushed")
+        self.assertEqual(ev["data"]["quote"], "ok")
+        self.assertEqual(self.brain.state.feedbacks["FB-0001"].status, "criado")
+
+    def test_add_nao_forja_o_ok_e_agente_nao_publica_com_ele(self):
+        import argparse
+        from brainlib import cli, schema
+        feedback.add(self.brain, "sugestao", "Lembrete de fornada", "A marina-demo esquece o timer")
+        self.assertIn("feedback.approved", schema.OWNER_ONLY)
+        path = self.brain.inst.root / "lote.json"
+        path.write_text(json.dumps({"type": "feedback.approved", "id": "FB-0001", "by": "owner",
+                                    "data": {"quote": "ok", "text_sha": "forjado"}}), encoding="utf-8")
+        with self.assertRaises(util.BrainError) as cm:
+            cli.cmd_add(argparse.Namespace(file_opt=str(path), file=None, json=False), self.brain)
+        self.assertIn("não entra por lote", str(cm.exception))
+        self.assertEqual([e["type"] for e in self.brain.state.feedbacks["FB-0001"].history], ["feedback.added"])
+        feedback.approve(self.brain, "FB-0001", "ok")
+        self._fake_env()
+        old = os.environ.get("BRAIN_AGENT")
+        os.environ["BRAIN_AGENT"] = "1"
+        try:
+            with self.assertRaises(util.BrainError) as cm2:
+                feedback.push(self.brain, "FB-0001", approval="")
+        finally:
+            if old is None:
+                os.environ.pop("BRAIN_AGENT", None)
+            else:
+                os.environ["BRAIN_AGENT"] = old
+        self.assertIn("não pode aprovar", str(cm2.exception))
+        self.assertEqual(self.brain.state.feedbacks["FB-0001"].status, "pendente")
+
+    def test_falha_depois_do_github_aponta_o_registro(self):
+        feedback.add(self.brain, "sugestao", "Lembrete de fornada", "A marina-demo esquece o timer")
+        self._fake_env()
+        orig_create, orig_approve = feedback.create_issue, feedback.approve
+        feedback.create_issue = lambda *a, **k: {
+            "number": 11, "url": "https://github.com/BVLCQ/second-brain-framework/issues/11"}
+
+        def boom(*a, **k):
+            raise util.BrainError("disco cheio", code=4)
+
+        feedback.approve = boom
+        try:
+            with self.assertRaises(util.BrainError) as cm:
+                feedback.push(self.brain, "FB-0001", approval="ok")
+        finally:
+            feedback.create_issue, feedback.approve = orig_create, orig_approve
+        self.assertIn("brain feedback pushed FB-0001 --number 11 --url", str(cm.exception))
+        self.assertEqual(self.brain.state.feedbacks["FB-0001"].status, "pendente")
+
+    def test_revise_depois_do_ok_recusa_o_push(self):
+        feedback.add(self.brain, "sugestao", "Lembrete de fornada", "A marina-demo esquece o timer")
+        feedback.approve(self.brain, "FB-0001", "ok")
+        feedback.revise(self.brain, "FB-0001", title="Lembrete da fornada da tarde")
+        with self.assertRaises(util.BrainError) as cm:
+            feedback.push(self.brain, "FB-0001", approval="ok")
+        self.assertIn("texto mudou", str(cm.exception))
+        feedback.approve(self.brain, "FB-0001", "ok")
+        self.assertEqual(feedback._bound_sha(self.brain.state.feedbacks["FB-0001"]),
+                         feedback.public_sha(self.brain.state.feedbacks["FB-0001"]))
 
     def test_cli_add_no_push(self):
         from brainlib import cli as cli_mod

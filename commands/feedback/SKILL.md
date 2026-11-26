@@ -6,8 +6,11 @@ description: "Registra sugestão ou bug do próprio cérebro e cria a issue no r
 # /feedback — sugestões e bugs do próprio cérebro
 
 1. **De quem é a ideia?** O dono pediu ("isso deveria…", "achou um bug") → o pedido dele é a
-   aprovação: registre e publique direto. Foi o agente que percebeu → mostre o rascunho e espere
-   um "ok" antes de publicar.
+   aprovação: registre e publique direto. Foi o agente que percebeu → mostre o texto exato
+   (`brain feedback show`, colado na resposta — nunca um caminho de arquivo) e espere um "ok".
+   O ok vira `brain feedback approve FB --quote ok`. O passo seguinte, `brain feedback push FB`,
+   publica esse texto no terminal do dono — não peça o ok de novo. Sob o agente ou o noturno
+   o push recusa. Se o texto mudar depois, o push recusa até novo ok.
 2. **O issue é público e segue um molde.** Título e corpo não carregam nada do dono: sem pessoas, e-mails,
    canais, caminhos, prints, links internos (Drive, Slack, Jira…), IDs do vault (`TASK-…`, `OPP-…`), telefones
    ou números reais. A porta recusa sozinha (`publicguard`) e diz o tipo e a linha — descreva o problema, não o

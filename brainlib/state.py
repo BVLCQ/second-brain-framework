@@ -339,6 +339,7 @@ class Feedback:
     pushed: date | None = None
     synced: date | None = None
     proposal: str = ""             # PROP-#### framework que o dono aceitou e originou este FB (só local)
+    text_sha: str = ""             # hash do texto exato que subiria, no último add/revise
     history: list[dict] = field(default_factory=list)
 
 
@@ -646,12 +647,15 @@ def apply(st: State, ev: dict) -> None:
                                          source=ev.get("source", ""),
                                          prov=ev.get("prov", ""), by=ev.get("by", ""),
                                          added_by=ev.get("by", ""), added=when,
-                                         proposal=data.get("proposal", ""))
+                                         proposal=data.get("proposal", ""),
+                                         text_sha=data.get("text_sha", ""))
             if data.get("proposal") in st.proposals:
                 st.proposals[data["proposal"]].feedback = eid
         f = st.feedbacks[eid]
         if t == "feedback.revised":
             f.title, f.body = data.get("title", f.title), data.get("body", f.body)
+            if "text_sha" in data:
+                f.text_sha = data["text_sha"]
             if data.get("proposal"):
                 f.proposal = data["proposal"]
                 st.proposals[f.proposal].feedback = eid

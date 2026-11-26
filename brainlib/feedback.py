@@ -39,6 +39,19 @@ def issue_title(f) -> str:
     return f"{issues.tag(issue_kind(f))} {issues.strip_tag(f.title)}"
 
 
+def public_text(f) -> str:
+    """O texto exato que a porta publica: título com a tag, corpo com cabeçalho, molde e rodapé."""
+    return issue_title(f) + "\n\n" + issue_body(f)
+
+
+def public_sha(f) -> str:
+    return util.sha(public_text(f))
+
+
+def _as_feedback(kind: str, title: str, body: str, proposal: str = ""):
+    return type("F", (), {"kind": kind, "title": title, "body": body, "proposal": proposal})()
+
+
 def issue_body(f, body: str | None = None) -> str:
     """O issue é público: tipo, o corpo no molde (`issues.py`) e um rodapé — nada local sai: nem refs do vault
     (TASK/PROC/OPP/PROP) nem o id do próprio FB, que é numeração da instância e geraria duplicidade."""
@@ -216,7 +229,11 @@ def revise(brain: Brain, fid: str, title: str | None = None, body: str | None = 
     if "title" in data and (dup := _dup(brain, f.kind, data["title"], skip=fid)):
         raise util.BrainError(f"já existe {dup} com o mesmo título e tipo", code=4)
     return brain.record_one({"type": "feedback.revised", "id": fid, "by": by, "prov": prov, "source": source or "chat",
-                             "data": data})
+                             "data": {**data, "text_sha": public_sha(
+                                 _as_feedback(brain.state.feedbacks[fid].kind,
+                                              data.get("title", brain.state.feedbacks[fid].title),
+                                              data.get("body", brain.state.feedbacks[fid].body),
+                                              data.get("proposal") or brain.state.feedbacks[fid].proposal))}})
 
 
 def add(brain: Brain, kind: str, title: str, body: str = "",
@@ -230,9 +247,10 @@ def add(brain: Brain, kind: str, title: str, body: str = "",
     if dup is not None and not force:
         raise util.BrainError(f"já existe {dup} com o mesmo título e tipo — acrescente detalhe ao existente "
                               f"(`brain feedback show {dup}`) ou use --force", code=4)
+    stamped = _as_feedback(kind, title, body, proposal)
     return brain.record_one({"type": "feedback.added", "by": by, "prov": prov, "source": source or "chat",
                              "date": date,
-                             "data": {"kind": kind, "title": title, "body": body,
+                             "data": {"kind": kind, "title": title, "body": body, "text_sha": public_sha(stamped),
                                       **({"proposal": proposal} if proposal else {})}})
 
 
@@ -253,6 +271,27 @@ def withdraw(brain: Brain, fid: str, reason: str, by: str = "owner", prov: str =
                              "source": source or "chat", "data": {"reason": reason}})
 
 
+def approve(brain: Brain, fid: str, quote: str, by: str = "owner") -> dict:
+    """Grava o ok amarrado ao texto exato. Um revise depois disso invalida o push até novo ok."""
+    f = _need(brain, fid)
+    if f.status not in ("pendente", "falhou"):
+        raise util.BrainError(f"{fid} está '{f.status}' — só rascunho pode ser aprovado", code=4)
+    if util.is_nightly():
+        raise util.BrainError(f"{fid}: aprovar issue é do dia — no noturno a porta não abre", code=4)
+    if by != "owner":
+        raise util.BrainError(f"{fid}: aprovar issue exige o dono (--by owner)", code=4)
+    quote, origin = gates.verify_approval(quote, what=f"feedback approve {fid}")
+    data = {"quote": quote, "text_sha": public_sha(f)}
+    if origin == "surface":
+        data["surface"] = quote
+    return brain.record_one({"type": "feedback.approved", "id": fid, "by": "owner", "data": data})
+
+
+def _bound_sha(f) -> str:
+    approved = [e for e in f.history if e["type"] == "feedback.approved"]
+    return approved[-1]["data"].get("text_sha", "") if approved else ""
+
+
 def push(brain: Brain, fid: str, *, approval: str = "", by: str = "owner") -> dict:
     """Cria a issue no GitHub e grava `feedback.pushed` (número + URL). Erros de API gravam `feedback.failed`.
 
@@ -268,7 +307,25 @@ def push(brain: Brain, fid: str, *, approval: str = "", by: str = "owner") -> di
                               f"(registrar ficou; `brain feedback push {fid} --approval ok` amanhã)", code=4)
     if by != "owner":
         raise util.BrainError(f"{fid}: publicar issue exige o dono (--by owner)", code=4)
-    quote, origin = gates.verify_approval(approval, what=f"feedback push {fid}")
+    sha = public_sha(f)
+    bound_ev = next((e for e in reversed(f.history) if e["type"] == "feedback.approved"), None)
+    bound_data = (bound_ev or {}).get("data") or {}
+    bound = bound_data.get("text_sha", "")
+    if bound and bound != sha:
+        raise util.BrainError(f"{fid}: o texto mudou depois do ok — aprove de novo "
+                              f"(`brain feedback approve {fid} --quote ok`) e publique com "
+                              f"`brain feedback push {fid}`", code=4)
+    approval = str(approval or "").strip()
+    if approval:
+        quote, origin = gates.verify_approval(approval, what=f"feedback push {fid}")
+    elif bound:
+        gates.require_owner_present(what=f"feedback push {fid}")
+        quote = bound_data.get("quote", "")
+        origin = "surface" if bound_data.get("surface") else "literal"
+    else:
+        raise util.BrainError(public_text(f) + f"\n\n{fid}: sem aprovação — o texto acima é o que subiria. "
+                              f"`brain feedback approve {fid} --quote ok` e, em seguida, "
+                              f"`brain feedback push {fid}`", code=4)
     repo = brain.inst.cfg["feedback"]["repo"]
     public_text_guard(brain.inst, f.title, f.body)    # público: regra dura, sem override (título e corpo CRUS)
     title, body = issue_title(f), issue_body(f)
@@ -303,7 +360,10 @@ def push(brain: Brain, fid: str, *, approval: str = "", by: str = "owner") -> di
             code=5,
         ) from e
     try:
-        data: dict = {"number": res["number"], "url": url, "quote": quote}
+        if approval and not bound:
+            approve(brain, fid, approval, by=by)
+            f = brain.state.feedbacks[fid]
+        data: dict = {"number": res["number"], "url": url, "quote": quote, "text_sha": public_sha(f)}
         if origin == "surface":
             data["surface"] = quote
         ev = brain.record_one({"type": "feedback.pushed", "id": fid, "by": "owner", "data": data})
@@ -563,6 +623,9 @@ def cli(args, brain: Brain) -> None:
                 print(f"⚠ {ev['label_note']}")
         except util.BrainError as e:
             print(f"⚠ {e}")
+    elif c == "approve":
+        ev = approve(brain, args.id, args.quote or args.approval or "", args.by)
+        print(f"✓ {args.id} aprovado · {ev['data']['text_sha']}")
     elif c == "push":
         ev = push(brain, args.id, approval=args.approval or "", by=args.by)
         print(f"✓ issue criada: {ev['data']['url']}")
@@ -640,6 +703,11 @@ def add_parsers(sub) -> None:
     x.add_argument("--body")
     x.add_argument("--body-file")
     x.add_argument("--proposal", help="PROP-#### framework já aceita que originou este FB (a issue usa o molde de proposta)")
+    x.add_argument("--by", choices=["owner", "agent"], default="owner")
+    x = s.add_parser("approve", help="amarra o ok do dono ao texto exato que subiria")
+    x.add_argument("id")
+    x.add_argument("--quote", default="", help="aprovação literal (ok)")
+    x.add_argument("--approval", default="", help="sinônimo de --quote")
     x.add_argument("--by", choices=["owner", "agent"], default="owner")
     x = s.add_parser("push", help="cria a issue de um FB pendente/falhou no GitHub e registra número+URL")
     x.add_argument("id")
