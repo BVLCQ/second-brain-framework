@@ -105,3 +105,8 @@ class LinkedFileTests(unittest.TestCase):
         self.assertIn("data-openall", src)
         for needle in ("filesBlock(f.files)", "filesBlock(q.files)", "filesBlock(g.files)", "filesBlock(x.files)"):
             self.assertIn(needle, src, needle)
+        outbox = src[src.index("V.outbox"):src.index("V.feedback")]
+        self.assertIn("safeUrl(m.link)", outbox)
+        self.assertIn('rel="noopener"', outbox)
+        for bad in ("esc(a.source)", "esc(d.source)", "esc(m.link)"):
+            self.assertNotIn(bad, src, bad)

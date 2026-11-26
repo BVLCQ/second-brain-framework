@@ -985,8 +985,13 @@ V.outbox = (q) => {
   let h = '<div class="pagehead"><div><h1>Mensagens</h1><p class="sub">Nada é enviado sem sua aprovação do texto exato. Todo envio fica registrado.</p></div></div>';
   return h + groups.map(([t, s]) => {
     const l = M.outbox.filter(m => s.includes(m.status));
-    return panel(t + " · " + l.length, (l.map(m => "<div class=\"msgrow\"><header><b>" + m.id + "</b> → " + esc(m.to_name) + (m.ref ? " · ref " + (A[m.ref] ? aL(m.ref) : esc(m.ref)) : "") + (m.why ? ' <span class="muted">· ' + esc(m.why) + "</span>" : "") +
-      (m.sent ? ' <span class="muted">· enviada ' + fmtD(m.sent) + "</span>" : "") + "</header>" + '<div class="msg">' + esc(m.text) + "</div></div>").join("") || empty("—")), ' style="margin-top:14px"');
+    return panel(t + " · " + l.length, (l.map(m => {
+      const perm = safeUrl(m.link);
+      return "<div class=\"msgrow\"><header><b>" + m.id + "</b> → " + esc(m.to_name) + (m.ref ? " · ref " + (A[m.ref] ? aL(m.ref) : esc(m.ref)) : "") + (m.why ? ' <span class="muted">· ' + esc(m.why) + "</span>" : "") +
+      (m.sent ? ' <span class="muted">· enviada ' + fmtD(m.sent) + "</span>" : "") +
+      (perm ? ' · <a href="' + esc(perm) + '" target="_blank" rel="noopener">permalink</a>' : "") +
+      "</header>" + '<div class="msg">' + esc(m.text) + "</div></div>";
+    }).join("") || empty("—")), ' style="margin-top:14px"');
   }).join("");
 };
 V.feedback = (q) => {
