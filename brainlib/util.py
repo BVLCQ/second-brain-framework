@@ -305,12 +305,16 @@ _FIND_TAB = {   # argv: prefixo da aba · URL de destino. Só roda com o app já
     "safari": '''on run argv
   set prefix to item 1 of argv
   set target to item 2 of argv
+  set brainMode to "{mode}"
   tell application "{app}"
     repeat with w in windows
       repeat with t in tabs of w
         try
           if (URL of t) starts with prefix then
-            if (URL of t) is not target then set URL of t to target
+            if brainMode is "read" then return URL of t
+            if brainMode is not "focus" then
+              if (URL of t) is not target then set URL of t to target
+            end if
             set current tab of w to t
             try
               set miniaturized of w to false
@@ -328,6 +332,7 @@ end run''',
     "chromium": '''on run argv
   set prefix to item 1 of argv
   set target to item 2 of argv
+  set brainMode to "{mode}"
   tell application "{app}"
     repeat with w in windows
       set i to 0
@@ -335,7 +340,10 @@ end run''',
         set i to i + 1
         try
           if (URL of t) starts with prefix then
-            if (URL of t) is not target then set URL of t to target
+            if brainMode is "read" then return URL of t
+            if brainMode is not "focus" then
+              if (URL of t) is not target then set URL of t to target
+            end if
             set active tab index of w to i
             try
               set minimized of w to false
@@ -395,16 +403,28 @@ def _tab_prefix(url: str) -> str | None:
     return url.split("#", 1)[0] if url.startswith("file://") else None
 
 
-def _reused_tab_url(url: str) -> str:
+def _page_hash(url: str) -> str:
+    """Rota que sobra no fragmento depois de tirar o token `t=`."""
+    frag = urllib.parse.urlsplit(url).fragment
+    return "&".join(p for p in frag.split("&") if p and not p.startswith("t="))
+
+
+def _reused_tab_url(url: str, page: str = "") -> str:
     """Garante mudança de query (`?n=<nonce>`) ao reaproveitar aba da ponte local,
-    forçando navegação completa para o boot consumir `#t=` uma única vez."""
+    forçando navegação completa para o boot consumir `#t=` uma única vez.
+
+    `page` entra no fragmento antes do token, para o boot deixar a rota do dono.
+    """
     if not re.match(r"https?://127\.0\.0\.1:\d+/", url):
         return url
     parts = urllib.parse.urlsplit(url)
     q = [(k, v) for k, v in urllib.parse.parse_qsl(parts.query, keep_blank_values=True) if k != "n"]
     q.append(("n", secrets.token_hex(4)))
+    frag = parts.fragment
+    if page:
+        frag = f"{page}&{frag}" if frag else page
     return urllib.parse.urlunsplit(
-        (parts.scheme, parts.netloc, parts.path, urllib.parse.urlencode(q), parts.fragment)
+        (parts.scheme, parts.netloc, parts.path, urllib.parse.urlencode(q), frag)
     )
 
 
@@ -430,28 +450,47 @@ def in_wsl() -> bool:
         return False
 
 
-def focus_open_tab(url: str) -> bool:
-    """macOS: já existe uma aba do Brain em ALGUM navegador aberto? Então a traz para a frente (e, se a ponte
-    mudou de token, aponta ela para a URL nova) em vez de abrir outra. Varre o padrão primeiro e depois os
-    demais controláveis que estiverem rodando — o dono nem sempre guarda o painel no navegador padrão.
-    False = não achou em nenhum / sem permissão — quem chama abre normalmente. Nunca abre navegador: só
-    consulta os que já estão rodando."""
+def focus_open_tab(url: str, *, focus_only: bool = False, keep_route: bool = False) -> bool:
+    """macOS: já existe uma aba do Brain em ALGUM navegador aberto? Então a traz para a frente.
+
+    `focus_only`: a ponte já estava no ar e o token vale — só ativa a aba, sem gravar URL.
+    `keep_route`: a ponte subiu de novo — entrega o token novo e conserva a rota da aba.
+    Sem os dois: aponta a aba para a URL pedida (onboarding, por exemplo).
+    False = não achou em nenhum / sem permissão — quem chama abre normalmente. Nunca abre navegador.
+    """
     import subprocess
     prefix = _tab_prefix(url)
     if not prefix or sys.platform != "darwin":
         return False
     target = _reused_tab_url(url)
+    mode = "focus" if focus_only else "set"
+    script_mode = "focus" if focus_only else ("read" if keep_route else mode)
     default = _default_browser()
     cands = ([default] if default else []) + [v for v in _SCRIPTABLE.values() if v != default]
     for app, family in cands:
+        script = _FIND_TAB[family].format(app=app, mode=script_mode)
         try:
             if subprocess.run(["/usr/bin/pgrep", "-x", app], capture_output=True, timeout=3).returncode != 0:
-                continue                                          # fechado: osascript o abriria à toa
-            r = subprocess.run(["/usr/bin/osascript", "-e", _FIND_TAB[family].format(app=app), prefix, target],
+                continue
+            r = subprocess.run(["/usr/bin/osascript", "-e", script, prefix, target],
                                capture_output=True, text=True, timeout=10)
         except (OSError, subprocess.SubprocessError):
-            continue                                              # permissão negada, osascript ausente, travou…
-        if r.returncode == 0 and r.stdout.strip() == "ok":
+            continue
+        if r.returncode != 0:
+            continue
+        got = r.stdout.strip()
+        if keep_route and not focus_only:
+            if not got.startswith(prefix):
+                continue
+            target = _reused_tab_url(url, page=_page_hash(got))
+            script = _FIND_TAB[family].format(app=app, mode="set")
+            try:
+                r = subprocess.run(["/usr/bin/osascript", "-e", script, prefix, target],
+                                   capture_output=True, text=True, timeout=10)
+            except (OSError, subprocess.SubprocessError):
+                continue
+            got = r.stdout.strip() if r.returncode == 0 else ""
+        if got == "ok":
             return True
     return False
 

@@ -47,6 +47,9 @@ aside.side{position:sticky;top:0;height:100vh;overflow-y:auto;background:var(--p
   display:inline-flex;align-items:center;justify-content:center;color:var(--accent-ink);font-size:12.5px;font-weight:800;flex:none}
 .brand small{font-weight:400;color:var(--muted);font-size:11.5px;display:block}
 nav.side-nav{display:flex;flex-direction:column;gap:2px}
+nav.side-nav .nav-sec{margin:8px 10px 1px;font-size:10.5px;font-weight:700;letter-spacing:.04em;
+  text-transform:uppercase;color:var(--muted);line-height:1.2}
+nav.side-nav .nav-sec:first-child{margin-top:2px}
 nav.side-nav a{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:9px;color:var(--muted);
   font-size:14px;font-weight:500;white-space:nowrap}
 nav.side-nav a:hover{text-decoration:none;color:var(--ink);background:var(--line2)}
@@ -936,6 +939,7 @@ body.obmode #faces, body.obmode #tabs, body.obmode #openpal { display: none; }
       <span class="spacer"></span>
       <span class="news-fb" id="newsfb" aria-live="polite"></span>
       <button type="button" class="btn primary" id="newsact" data-brain-update="1" hidden><span class="only-live">Atualizar agora</span><span class="only-portrait">Copiar comando</span></button>
+      <button type="button" class="btn tiny" id="newschangelog" hidden>ver changelog</button>
       <button class="btn ghost" id="newsclose">fechar</button>
     </div>
   </div>
@@ -1403,7 +1407,9 @@ $("#avatar").textContent = ownBootName.trim().slice(0, 1).toUpperCase() || "B";
 
 window.renderTabs = function(view, TABS, PARENT){
   document.getElementById("tabs").innerHTML = TABS.map(function(t){
+    if (!t[0]) return '<div class="nav-sec">' + t[1] + "</div>";   // rótulo fixo da tabela, não texto do vault
     const n = t[2] ? t[2]() : 0;
+    if (t[3] === "badge" && !n) return "";
     return '<a href="#' + t[0] + '" class="' + ((view === t[0] || PARENT[view] === t[0]) ? "on" : "") + '">' + t[1] +
       (n ? '<span class="badge">' + n + "</span>" : "") + "</a>";
   }).join("");
@@ -1787,11 +1793,12 @@ function navEntries(){
     ["pf/visao", "Portfólio · Visão"], ["pf/opps", "Portfólio · Oportunidades"], ["pf/matrix", "Portfólio · Matriz"], ["pf/procs", "Portfólio · Processos"], ["pf/areas", "Portfólio · Áreas"], ["pf/docs", "Portfólio · Documentos"],
     ["people", "Portfólio · Pessoas"]]
     : [["face/execucao", "→ face Execução"], ["face/portfolio", "→ face Portfólio"], ["face/configuracoes", "→ face Configurações"],
-    ["home", "Início"], ["sources", "Fontes"], ["todo", "TODO"], ["projects", "Projetos"], ["decisions", "Decisões"], ["wins", "Conquistas"],
-    ["timeline", "Linha do tempo"], ["focus", "Foco"], ["outbox", "Mensagens"], ["feedback", "Sugestões"],
+    ["home", "Início"], ["todo", "TODO"], ["focus", "Foco"], ["ask", "Perguntas"], ["outbox", "Mensagens"],
+    ["projects", "Projetos"], ["decisions", "Decisões"], ["wins", "Conquistas"], ["timeline", "Linha do tempo"],
     ["cfg/inicio", "Configurações · Visão geral"], ["cfg/perfil", "Configurações · Perfil"], ["cfg/rotina", "Configurações · Rotina"],
-    ["cfg/conectores", "Configurações · Conectores"], ["cfg/agente", "Configurações · Seu agente"], ["cfg/memoria", "Configurações · Memória"], ["cfg/integracoes", "Configurações · Integrações"],
-    ["cfg/saude", "Configurações · Saúde"],
+    ["cfg/agente", "Configurações · Seu agente"], ["cfg/conectores", "Configurações · Conectores"], ["sources", "Configurações · Fontes"],
+    ["cfg/memoria", "Configurações · Memória"], ["cfg/integracoes", "Configurações · Integrações"],
+    ["cfg/saude", "Configurações · Saúde"], ["feedback", "Configurações · Sugestões"],
     ["pf/visao", "Portfólio · Visão"], ["pf/opps", "Portfólio · Oportunidades"], ["pf/matrix", "Portfólio · Matriz"],
     ["pf/procs", "Portfólio · Processos"], ["pf/areas", "Portfólio · Áreas"], ["pf/docs", "Portfólio · Documentos"],
     ["people", "Portfólio · Pessoas"]];
@@ -7058,20 +7065,31 @@ V.ask = (q) => {
 };
 
 // ── router + faces (mesma lógica da TUI: Execução | Portfólio, cada face lembra onde estava) ──
-const TABS_EXEC = [["home", "Início"], ["sources", "Fontes", () => (M.sources || []).filter(s => s.failures).length || 0], ["todo", "TODO", () => M.counts.mine_overdue], ["projects", "Projetos"], ["decisions", "Decisões"], ["ask", "Perguntas", () => ((M.questions || []).filter(q => q.status === "aberta").length + M.proposals.length) || 0], ["wins", "Conquistas"],
-  ["timeline", "Linha do tempo"], ["focus", "Foco", () => M.focus && M.focus.status === "proposto" ? 1 : 0],
-  ["outbox", "Mensagens", () => M.counts.outbox_pending], ["feedback", "Sugestões", () => (M.feedback || []).filter(f => f.status !== "criado" && f.status !== "retirado" && f.status !== "retratado").length || 0]];
-  // (Saúde saiu daqui com a face Configurações — mesma decisão da TUI: mora só lá, com o badge de avisos)
-const TABS_PF = [["pf/visao", "Visão geral"], ["pf/opps", "Oportunidades", () => PF.opportunities.filter(o => o.status !== "descartada").length],
-  ["pf/matrix", "Matriz"], ["pf/procs", "Processos", () => PF.processes.filter(p => p.status === "ativo").length], ["pf/areas", "Áreas", () => PF.areas.length],
+const sourceFails = () => (M.sources || []).filter(s => s.failures).length || 0;
+const TABS_EXEC = [["sources", "Fontes", sourceFails, "badge"],
+  ["", "Agora"], ["home", "Início"], ["todo", "TODO", () => M.counts.mine_overdue],
+  ["focus", "Foco", () => M.focus && M.focus.status === "proposto" ? 1 : 0],
+  ["", "Atenção"], ["ask", "Perguntas", () => ((M.questions || []).filter(q => q.status === "aberta").length + M.proposals.length) || 0],
+  ["outbox", "Mensagens", () => M.counts.outbox_pending],
+  ["", "Registro"], ["projects", "Projetos"], ["decisions", "Decisões"], ["wins", "Conquistas"],
+  ["timeline", "Linha do tempo"]];
+  // Fontes e Sugestões saíram da lista (D + D2). O badge de falha fica no item "badge", sem a página.
+const TABS_PF = [["", "Mapa"], ["pf/visao", "Visão geral"], ["pf/matrix", "Matriz"],
+  ["", "Trabalho"], ["pf/opps", "Oportunidades", () => PF.opportunities.filter(o => o.status !== "descartada").length],
+  ["pf/procs", "Processos", () => PF.processes.filter(p => p.status === "ativo").length],
+  ["", "Cadastro"], ["pf/areas", "Áreas", () => PF.areas.length],
   ["pf/docs", "Documentos", () => PF.processes.concat(PF.opportunities).reduce((n, x) => n + x.docs.length, 0)],
   ["people", "Pessoas"]];
-const TABS_CFG = [["cfg/inicio", "Visão geral"], ["cfg/perfil", "Perfil"], ["cfg/rotina", "Rotina"], ["cfg/agente", "Seu agente"], ["cfg/conectores", "Conectores"],
+const TABS_CFG = [["", "Conta"], ["cfg/perfil", "Perfil"], ["cfg/rotina", "Rotina"], ["cfg/agente", "Seu agente"],
+  ["", "Conexões"], ["cfg/conectores", "Conectores"], ["sources", "Fontes", sourceFails],
   ["cfg/memoria", "Memória"], ["cfg/integracoes", "Integrações"],
-  ["cfg/saude", "Saúde", () => (M.health || []).filter(c => c.level !== "ok").length]];   // o único contador da face: passo pulado não vira pendência
+  ["", "Instância"], ["cfg/inicio", "Visão geral"],
+  ["cfg/saude", "Saúde", () => (M.health || []).filter(c => c.level !== "ok").length],
+  ["", "Meta"], ["feedback", "Sugestões", () => (M.feedback || []).filter(f => f.status !== "criado" && f.status !== "retirado" && f.status !== "retratado").length || 0]];
 const FACES = [["execucao", "Execução", TABS_EXEC], ["portfolio", "Portfólio", TABS_PF], ["configuracoes", "Configurações", TABS_CFG]];
 if (window.PF_ONLY) { FACES.length = 0; FACES.push(["portfolio", "Portfólio", TABS_PF]); }
-const faceOf = v => (v.indexOf("pf/") === 0 || v === "people" || v === "person") ? "portfolio" : (v.indexOf("cfg/") === 0 ? "configuracoes" : "execucao");
+const faceOf = v => (v.indexOf("pf/") === 0 || v === "people" || v === "person") ? "portfolio"
+  : (v.indexOf("cfg/") === 0 || v === "sources" || v === "feedback") ? "configuracoes" : "execucao";
 const PARENT = {project: "projects", person: "people", action: "todo", decision: "decisions", "pf/opp": "pf/opps", "pf/proc": "pf/procs", "pf/area": "pf/areas"};
 function go(view, params){ const q = new URLSearchParams(Object.entries(params || {}).filter(([, v]) => v)).toString(); location.hash = view + (q ? "?" + q : ""); }
 function route(){
@@ -7085,7 +7103,8 @@ function route(){
     const f = FACES.some(x => x[0] === seg[1]) ? seg[1] : "execucao";
     const last = localStorage.getItem("mock-face-" + f);
     const entry = FACES.find(x => x[0] === f) || FACES[0];
-    location.hash = last || entry[2][0][0];      // default = primeira aba da própria face (carrossel: toda face é alcançável)
+    const home = (entry[2] || []).find(t => t[0] && t[3] !== "badge");
+    location.hash = last || (home ? home[0] : "home");
     return;
   }
   if (path === "onboarding") {                   // F8: o wizard é um modo do painel, não uma página
@@ -7232,9 +7251,23 @@ function syncVerBadge(){
     const commitsTxt = u.behind + (u.behind === 1 ? " commit atrás" : " commits atrás");
     const verTxt = "v" + (u.version || "?");
     const transTxt = verTxt + " → v" + (u.remote_version || "?");
-    const news = (u.news && u.news.length) ? u.news : semNovidade(u);
-    document.getElementById("newslist").innerHTML =
-      news.map(n => '<div class="ni">' + esc(n) + "</div>").join("");
+    const lines = (u.lines && u.lines.length) ? u.lines : [];
+    const changelog = (u.news && u.news.length) ? u.news : [];
+    let showLog = false;
+    const paint = () => {
+      const list = showLog ? changelog : lines;
+      const body = list.length ? list : semNovidade(u);
+      document.getElementById("newslist").innerHTML =
+        body.map(n => '<div class="ni">' + esc(n) + "</div>").join("");
+      const toggle = document.getElementById("newschangelog");
+      if (toggle) {
+        toggle.hidden = !changelog.length;
+        toggle.textContent = showLog ? "ver commits" : "ver changelog";
+      }
+    };
+    paint();
+    const toggle = document.getElementById("newschangelog");
+    if (toggle) toggle.onclick = () => { showLog = !showLog; paint(); };
     document.getElementById("newstitle").textContent = behind ? "Atualização disponível" : "Novidades da versão";
     if (meta) {
       meta.textContent = behind

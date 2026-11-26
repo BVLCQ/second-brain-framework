@@ -185,24 +185,18 @@ class DoctorBootTransientTests(unittest.TestCase):
 
 
 class WatchdogShTests(unittest.TestCase):
-    """Critério (5): sintaxe zsh -n e verificação das ramificações de log e guarda [[ -x "$LMS" ]]."""
+    """O script do watchdog é só um invólucro: a lógica mora em `brain services ensure` (test_services,
+    test_eng_watchdog_service). Aqui ficam a sintaxe do zsh e o que o compose precisa para sobreviver a reboot.
+
+    Antes este teste procurava no script o texto da implementação antiga (guarda do LM Studio, inspect do
+    container). A lógica saiu do script e o teste ficou falhando em quem tem zsh, enquanto o CI (sem zsh) o pulava."""
 
     @unittest.skipUnless(shutil.which("zsh"), "zsh ausente (CI roda em Ubuntu sem zsh) — checagem de sintaxe é local/macOS")
     def test_5_watchdog_zsh_syntax_and_honest_logging_branches(self):
         self.assertTrue(WATCHDOG_SH.is_file(), "services/watchdog.sh deve existir")
         res = subprocess.run(["zsh", "-n", str(WATCHDOG_SH)], capture_output=True, text=True)
         self.assertEqual(res.returncode, 0, f"zsh -n services/watchdog.sh falhou: {res.stderr}")
-
-        content = WATCHDOG_SH.read_text(encoding="utf-8")
-        # Passo 1: guarda [[ -x "$LMS" ]] e espera pelo endpoint :1234/v1/models
-        self.assertIn('[[ -x "$LMS" ]]', content)
-        self.assertIn("http://127.0.0.1:1234/v1/models", content)
-
-        # Passo 3: inspeciona estado do container antes do compose up -d e registra saída real
-        self.assertIn("inspect -f '{{.State.Status}}|{{.State.Restarting}}' hindsight", content)
-        self.assertIn("subido/recriado", content)
-        self.assertIn("Container hindsight Running", content)
-        self.assertIn("compose up -d não alterou (Container hindsight Running)", content)
+        self.assertIn("services ensure", WATCHDOG_SH.read_text(encoding="utf-8"))   # o invólucro chama o CLI
 
         # compose.yaml mantém restart: unless-stopped e start_period: 120s
         compose = COMPOSE_YAML.read_text(encoding="utf-8")

@@ -164,15 +164,16 @@ class StepTests(unittest.TestCase):
         self.assertFalse(st["memoria"])                                   # nenhuma memória = depois, não erro
 
     def test_panel_hosts_the_setup_steps_in_configuracoes(self):
-        """Os passos moram em abas de Configurações (Visão geral primeiro); o atalho solto nas faces saiu."""
+        """Os passos moram em Configurações. A face cai na primeira página de verdade, não num rótulo."""
         from brainlib import render
         html = render.ASSET.read_text(encoding="utf-8")
         self.assertNotIn('id="onboard"', html)
         tabs = html.split("const TABS_CFG = [", 1)[1].split("];", 1)[0]
-        order = [t for t in ("cfg/inicio", "cfg/perfil", "cfg/rotina", "cfg/conectores", "cfg/memoria",
-                             "cfg/integracoes", "cfg/saude")]
-        self.assertEqual(sorted(order, key=tabs.index), order)
-        self.assertIn('"cfg/" + (seg[1] || "inicio")', html)               # #face/configuracoes cai na Visão geral
+        for step in ("cfg/perfil", "cfg/rotina", "cfg/conectores", "cfg/memoria", "cfg/integracoes", "cfg/inicio", "cfg/saude"):
+            self.assertIn(f'"{step}"', tabs)
+        self.assertLess(tabs.index('"cfg/perfil"'), tabs.index('"cfg/inicio"'))
+        self.assertIn('t[3] !== "badge"', html)
+        self.assertIn('"cfg/" + (seg[1] || "inicio")', html)               # #cfg sem passo cai na Visão geral
         for step in ("inicio", "perfil", "rotina", "conectores", "integracoes"):
             self.assertIn(f'V["cfg/{step}"]', html)
 

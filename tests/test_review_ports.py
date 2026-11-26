@@ -302,7 +302,9 @@ class GoogleAuthStateTests(_Base):
         server = HTTPServer(("127.0.0.1", 0), h)
         self.addCleanup(server.server_close)
         port = server.server_address[1]
-        t = threading.Thread(target=setup_mod._pump, args=(server, 5), daemon=True)
+        server.timeout = 0.2                              # sem isto o handle_request bloqueia e o join espera o prazo todo
+        stop = threading.Event()
+        t = threading.Thread(target=setup_mod._pump, args=(server, 5, stop), daemon=True)
         t.start()
         for q in ("code=ATACANTE", "code=ATACANTE&state=errado", "x=1"):
             try:
@@ -311,7 +313,9 @@ class GoogleAuthStateTests(_Base):
                 self.assertEqual(e.code, 400)
         self.assertIsNone(h.code)
         urllib.request.urlopen(f"http://127.0.0.1:{port}/?code=BOM&state=s3cr3t", timeout=5).read()
+        stop.set()
         t.join(5)
+        self.assertFalse(t.is_alive())
         self.assertEqual(h.code, "BOM")
 
 

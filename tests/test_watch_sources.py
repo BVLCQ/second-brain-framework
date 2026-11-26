@@ -15,6 +15,8 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(Path(__file__).resolve().parent))   # tests/demo_cache.py (fora do pacote)
+import demo_cache  # noqa: E402
 
 from brainlib import cli, config, demo as demo_mod, forms, oppdrive, rawsort, render, share, snapshot, state, util, watch  # noqa: E402
 from brainlib.core import Brain  # noqa: E402
@@ -300,7 +302,7 @@ class TuiSourcesGroupingAndToggleTest(unittest.IsolatedAsyncioTestCase):
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name) / "inst"
         with contextlib.redirect_stdout(io.StringIO()):
-            demo_mod.cli(argparse.Namespace(dir=str(self.root), open=False))
+            demo_cache.build(self.root)
         self.inst = config.load(self.root)
         self.old_now = os.environ.get("BRAIN_NOW")
         os.environ["BRAIN_NOW"] = self.NOW

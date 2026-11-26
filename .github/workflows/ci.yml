@@ -85,10 +85,11 @@ jobs:
           ln -sf /opt/bin/node /usr/local/bin/node
           rm -f "/tmp/$F" /tmp/node-shasums
           node --version
-      - name: unittest discover (todos os arquivos de tests/, sem rede)
+      - name: unittest discover em paralelo (todos os arquivos de tests/, sem rede)
         # O token do job é do passo do checkout, em `env` próprio. Aqui ele sai do ambiente de vez:
         # `config.load_env` dá ao ambiente a precedência sobre o config/.env, e com o token do job no
         # ar um teste que grava um token falso no .env leria o real.
         env:
           GITHUB_TOKEN: ""
-        run: python -m unittest discover -s tests
+        # os mesmos testes, repartidos por classe entre um worker por CPU (scripts/dev/run_tests.py)
+        run: python scripts/dev/run_tests.py

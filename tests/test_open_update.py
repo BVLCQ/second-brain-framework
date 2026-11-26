@@ -161,8 +161,10 @@ class UpdateNightlyAndAgentGateTests(unittest.TestCase):
 
     def test_cli_update_refuses_nightly_and_agent_without_syncing_perms(self):
         args = argparse.Namespace(check=False, rebase=False, remote=None, branch=None, json=False)
+        # BRAIN_SERVICES_NO_KICK: sem o agente em modo noturno, `cli_update` chama `services.kick`, que sobe uma
+        # thread gravando em `inst/` enquanto o tearDown apaga a pasta (falha esporádica, "Directory not empty")
         for env in ({"BRAIN_NIGHTLY": "1"}, {"BRAIN_AGENT": "1"}):
-            with self.subTest(env=env), mock.patch.dict(os.environ, env), \
+            with self.subTest(env=env), mock.patch.dict(os.environ, {**env, "BRAIN_SERVICES_NO_KICK": "1"}), \
                  mock.patch.object(config, "load", return_value=self.inst), \
                  mock.patch.object(perms, "try_sync") as sync_mock:
                 with self.assertRaises(util.BrainError) as cm:

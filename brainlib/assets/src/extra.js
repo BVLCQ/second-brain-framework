@@ -24,7 +24,9 @@ $("#avatar").textContent = ownBootName.trim().slice(0, 1).toUpperCase() || "B";
 
 window.renderTabs = function(view, TABS, PARENT){
   document.getElementById("tabs").innerHTML = TABS.map(function(t){
+    if (!t[0]) return '<div class="nav-sec">' + t[1] + "</div>";   // rótulo fixo da tabela, não texto do vault
     const n = t[2] ? t[2]() : 0;
+    if (t[3] === "badge" && !n) return "";
     return '<a href="#' + t[0] + '" class="' + ((view === t[0] || PARENT[view] === t[0]) ? "on" : "") + '">' + t[1] +
       (n ? '<span class="badge">' + n + "</span>" : "") + "</a>";
   }).join("");
@@ -408,11 +410,12 @@ function navEntries(){
     ["pf/visao", "Portfólio · Visão"], ["pf/opps", "Portfólio · Oportunidades"], ["pf/matrix", "Portfólio · Matriz"], ["pf/procs", "Portfólio · Processos"], ["pf/areas", "Portfólio · Áreas"], ["pf/docs", "Portfólio · Documentos"],
     ["people", "Portfólio · Pessoas"]]
     : [["face/execucao", "→ face Execução"], ["face/portfolio", "→ face Portfólio"], ["face/configuracoes", "→ face Configurações"],
-    ["home", "Início"], ["sources", "Fontes"], ["todo", "TODO"], ["projects", "Projetos"], ["decisions", "Decisões"], ["wins", "Conquistas"],
-    ["timeline", "Linha do tempo"], ["focus", "Foco"], ["outbox", "Mensagens"], ["feedback", "Sugestões"],
+    ["home", "Início"], ["todo", "TODO"], ["focus", "Foco"], ["ask", "Perguntas"], ["outbox", "Mensagens"],
+    ["projects", "Projetos"], ["decisions", "Decisões"], ["wins", "Conquistas"], ["timeline", "Linha do tempo"],
     ["cfg/inicio", "Configurações · Visão geral"], ["cfg/perfil", "Configurações · Perfil"], ["cfg/rotina", "Configurações · Rotina"],
-    ["cfg/conectores", "Configurações · Conectores"], ["cfg/agente", "Configurações · Seu agente"], ["cfg/memoria", "Configurações · Memória"], ["cfg/integracoes", "Configurações · Integrações"],
-    ["cfg/saude", "Configurações · Saúde"],
+    ["cfg/agente", "Configurações · Seu agente"], ["cfg/conectores", "Configurações · Conectores"], ["sources", "Configurações · Fontes"],
+    ["cfg/memoria", "Configurações · Memória"], ["cfg/integracoes", "Configurações · Integrações"],
+    ["cfg/saude", "Configurações · Saúde"], ["feedback", "Configurações · Sugestões"],
     ["pf/visao", "Portfólio · Visão"], ["pf/opps", "Portfólio · Oportunidades"], ["pf/matrix", "Portfólio · Matriz"],
     ["pf/procs", "Portfólio · Processos"], ["pf/areas", "Portfólio · Áreas"], ["pf/docs", "Portfólio · Documentos"],
     ["people", "Portfólio · Pessoas"]];

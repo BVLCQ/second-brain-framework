@@ -632,6 +632,7 @@ def google_refresh_token(client_id: str, client_secret: str, open_browser: bool 
             f"OAuth: não consegui abrir o servidor local na porta {OAUTH_PORT} ({e.strerror or e}) — rode de novo",
             code=3,
         ) from e
+    stop = threading.Event()
     try:
         if open_browser:
             opener = shutil.which("xdg-open") or shutil.which("open")
@@ -643,11 +644,12 @@ def google_refresh_token(client_id: str, client_secret: str, open_browser: bool 
                     pass
         say(f"Abrindo o navegador para autorizar (escopos: calendar.events.owned + drive.file)…")
         say(f"Se não abrir: {auth_url}")
-        threading.Thread(target=lambda: (setattr(server, "timeout", 1), _pump(server, wait_s)), daemon=True).start()
+        threading.Thread(target=lambda: (setattr(server, "timeout", 1), _pump(server, wait_s, stop)), daemon=True).start()
         deadline = time.time() + wait_s
         while not (_OAuthHandler.code or _OAuthHandler.denied) and time.time() < deadline:
             time.sleep(1)
     finally:
+        stop.set()                      # a thread de atendimento para junto: sem isto ela segue até `wait_s`
         server.server_close()
     if not _OAuthHandler.code:
         raise util.BrainError(f"OAuth: nenhum código recebido ({_OAuthHandler.denied or 'timeout'}) — rode de novo",
@@ -664,9 +666,9 @@ def google_refresh_token(client_id: str, client_secret: str, open_browser: bool 
     return tok["refresh_token"]
 
 
-def _pump(server: HTTPServer, seconds: int) -> None:
+def _pump(server: HTTPServer, seconds: int, stop: threading.Event | None = None) -> None:
     deadline = time.time() + seconds
-    while time.time() < deadline:
+    while time.time() < deadline and not (stop and stop.is_set()):
         server.handle_request()
 
 
