@@ -8,6 +8,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(Path(__file__).resolve().parent))   # tests/demo_cache.py (fora do pacote)
+import demo_cache  # noqa: E402
 
 os.environ.setdefault("BRAIN_NOW", "2026-10-09T10:00:00-03:00")
 
@@ -27,7 +29,7 @@ class CliAndModelTests(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name) / "inst"
         with contextlib.redirect_stdout(io.StringIO()):
-            demo_mod.cli(argparse.Namespace(dir=str(self.root), open=False))
+            demo_cache.build(self.root)
 
     def _run(self, *argv):
         import subprocess

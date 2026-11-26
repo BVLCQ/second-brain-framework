@@ -18,6 +18,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(Path(__file__).resolve().parent))   # tests/demo_cache.py (fora do pacote)
+import demo_cache  # noqa: E402
 os.environ.setdefault("BRAIN_NOW", "2026-10-09T10:00:00-03:00")
 
 from brainlib import config, demo as demo_mod, planning, util, watch
@@ -169,7 +171,7 @@ class AgentRunTest(unittest.TestCase):
         import json
         with tempfile.TemporaryDirectory() as tmp, contextlib.redirect_stdout(io.StringIO()):
             root = Path(tmp) / "inst"
-            demo_mod.cli(argparse.Namespace(dir=str(root), open=False))
+            demo_cache.build(root)
             inst = config.load(root)
             from brainlib import ask
             from brainlib.core import Brain
@@ -185,7 +187,7 @@ class AgentRunTest(unittest.TestCase):
         import json
         with tempfile.TemporaryDirectory() as tmp, contextlib.redirect_stdout(io.StringIO()):
             root = Path(tmp) / "inst"
-            demo_mod.cli(argparse.Namespace(dir=str(root), open=False))
+            demo_cache.build(root)
             inst = config.load(root)
             info = bridge.RunInfo(id="run-8")
             argv = ["meu-agente", "--flag", "grande", "revisão", "-x"]      # 'grande'/'revisão' saem do prompt
@@ -211,7 +213,7 @@ class DetailTest(unittest.TestCase):
         from brainlib.tui import rows, store
         with tempfile.TemporaryDirectory() as tmp, contextlib.redirect_stdout(io.StringIO()):
             root = Path(tmp) / "inst"
-            demo_mod.cli(argparse.Namespace(dir=str(root), open=False))
+            demo_cache.build(root)
             st = store.Store(config.load(root))
             self.assertTrue(any(a["unblocks"] for a in st.m["actions"]))
             for a in st.m["actions"]:
@@ -223,7 +225,7 @@ class DetailTest(unittest.TestCase):
         from brainlib.tui import rows, store
         with tempfile.TemporaryDirectory() as tmp, contextlib.redirect_stdout(io.StringIO()):
             root = Path(tmp) / "inst"
-            demo_mod.cli(argparse.Namespace(dir=str(root), open=False))
+            demo_cache.build(root)
             inst = config.load(root)
             inst.cfg["tui"]["open"] = {"md": "Cursor", "mp4": "VLC"}
             note = inst.vault / "RAW" / "2026" / "10" / "notes" / "TASK-0001-2026-10-21-note.md"
@@ -253,7 +255,7 @@ class DetailTest(unittest.TestCase):
         from brainlib.tui import rows, store
         with tempfile.TemporaryDirectory() as tmp, contextlib.redirect_stdout(io.StringIO()):
             root = Path(tmp) / "inst"
-            demo_mod.cli(argparse.Namespace(dir=str(root), open=False))
+            demo_cache.build(root)
             st = store.Store(config.load(root))
             a, g, p = st.m["actions"][0], st.m["goals"][0], st.m["projects"][0]
             d = next(d for pr in st.m["projects"] for d in pr["deliverables"])
@@ -276,7 +278,7 @@ class TuiTest(unittest.IsolatedAsyncioTestCase):
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name) / "inst"
         with contextlib.redirect_stdout(io.StringIO()):
-            demo_mod.cli(argparse.Namespace(dir=str(self.root), open=False))
+            demo_cache.build(self.root)
         fake = Path(self.tmp.name) / "fake_agent.py"
         fake.write_text(
             "import os, re, subprocess, sys\n"
@@ -2675,7 +2677,7 @@ class StoreLocateTest(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name) / "inst"
         with contextlib.redirect_stdout(io.StringIO()):
-            demo_mod.cli(argparse.Namespace(dir=str(self.root), open=False))
+            demo_cache.build(self.root)
 
     def test_status_fora_dos_grupos_cai_na_aba_resto(self):
         from brainlib.tui.store import OPP_TABS, Store
@@ -2694,7 +2696,7 @@ class PlanTabsTest(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name) / "inst"
         with contextlib.redirect_stdout(io.StringIO()):
-            demo_mod.cli(argparse.Namespace(dir=str(self.root), open=False))
+            demo_cache.build(self.root)
         planning.edit_node(self.root / "vault" / "PLANNING" / "goals.md", "GOAL-2", status="congelado")
         planning.edit_node(self.root / "vault" / "PLANNING" / "goals.md", "GOAL-3", status="depois")
         planning.edit_node(self.root / "vault" / "PLANNING" / "goals.md", "PROJ-2", status="finalizado")
