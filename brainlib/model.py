@@ -385,6 +385,7 @@ class ModelBuilder:
                          for f in sorted(st.feedbacks.values(), key=lambda f: f.id, reverse=True)],
             "portfolio": portfolio.build(st, plan, today),
             "providers": _provider_stack(self.b),
+            "memory_mode": _memory_mode(self.b),
             "questions": [{"id": q.id, "text": q.text, "kind": q.kind, "status": q.status, "options": q.options,
                            "context": q.context, "run": q.run, "answer": q.answer, "asked": _iso(q.asked),
                            "source": q.source}
@@ -608,6 +609,15 @@ def _provider_stack(brain) -> dict:
         return _prov.stack(brain)
     except Exception:                                       # noqa: BLE001 — painel não pode quebrar por config
         return {}
+
+
+def _memory_mode(brain) -> str:
+    """none · embed · full — a tela Memória mostra o modo atual também no retrato (painel aberto como arquivo)."""
+    try:
+        from . import memory as _memory
+        return _memory.mode(brain.inst.cfg["memory"])
+    except Exception:                                       # noqa: BLE001 — painel não pode quebrar por config
+        return ""
 
 
 def _agent_ok(cfg: dict) -> bool:

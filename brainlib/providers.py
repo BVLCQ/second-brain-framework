@@ -30,6 +30,10 @@ SLOT_LABELS = {"llm": "LLM (extração/consolidação/mental models)", "embeddin
 LLM_OPS = (("retain", "RETAIN_LLM_MODEL"), ("consolidation", "CONSOLIDATION_LLM_MODEL"),
            ("mental_models", "MENTAL_MODEL_REFRESH_LLM_MODEL"), ("reflect", "REFLECT_LLM_MODEL"),
            ("default", "LLM_MODEL"))
+# Rótulo de cada operação — a tela Memória do painel lê daqui (nada de lista à mão no JS). `default` é o campo
+# Modelo: vale para toda operação sem modelo próprio.
+LLM_OP_LABELS = {"retain": "retain — extração de fatos", "consolidation": "consolidação",
+                 "mental_models": "mental models", "reflect": "reflect", "default": "padrão — demais operações"}
 
 _EMB = "HINDSIGHT_API_EMBEDDINGS_"
 _RER = "HINDSIGHT_API_RERANKER_"
@@ -472,13 +476,16 @@ REBUILD_COST_NOTE = ("no modo full o rebuild reenvia o vault inteiro ao LLM e pa
                      "(`brain memory cost` mede)")
 
 
-def embeddings_change_pending(brain, provider: str, model: str = "") -> bool:
-    """Escolher `provider`/`model` nos embeddings muda os vetores de um banco já sincronizado? Quem
-    chama avisa ANTES de gravar (o `rebuild` é o que re-deriva tudo do vault)."""
+def embeddings_change_pending(brain, provider: str, model: str = "", dimensions: int | None = None) -> bool:
+    """Escolher `provider`/`model` (e a dimensão de saída, quando o chamador a diz — a efetiva: a pedida ou a do
+    provedor; 0 = a do modelo) nos embeddings muda os vetores de um banco já sincronizado? Quem chama avisa ANTES
+    de gravar (o `rebuild` é o que re-deriva tudo do vault)."""
     mem = brain.inst.cfg["memory"]
     prev_provider, prev_model = mem.get("embeddings_provider", ""), mem.get("embeddings_model", "")
+    prev_dims = str(mem.get("embeddings_dimensions") or "0").strip()
+    dims_changed = dimensions is not None and int(dimensions or 0) != (int(prev_dims) if prev_dims.isdigit() else 0)
     return (mem.get("engine") == "hindsight"
-            and (prev_provider != provider or bool(prev_model and model and prev_model != model))
+            and (prev_provider != provider or bool(prev_model and model and prev_model != model) or dims_changed)
             and (brain.inst.root / ".memory-state.json").exists())
 
 
@@ -520,7 +527,8 @@ def set_slot(brain, slot: str, provider: str, *, model: str = "", models: dict |
         raise util.BrainError("embeddings custom exige --model e --base-url", code=4)
 
     mem = brain.inst.cfg["memory"]
-    rebuild = slot == "embeddings" and embeddings_change_pending(brain, provider, model or p.get("model", ""))
+    rebuild = slot == "embeddings" and embeddings_change_pending(brain, provider, model or p.get("model", ""),
+                                                                 int(dimensions or p.get("dimensions", 0) or 0))
     if slot == "llm" and not (models or model) and p.get("models"):
         models = dict(p["models"])              # recomendados por operação (cenário B) como default
     env_updates = slot_env(slot, provider, model=model, models=models, base_url=base_url,
@@ -563,6 +571,20 @@ def set_slot(brain, slot: str, provider: str, *, model: str = "", models: dict |
     # #159: não sobrescreve um .env existente que já tem HINDSIGHT_API_LLM_REASONING_EFFORT=max
     if slot == "llm" and cur_env.get("HINDSIGHT_API_LLM_REASONING_EFFORT", "").strip().lower() == "max":
         env_updates.pop("HINDSIGHT_API_LLM_REASONING_EFFORT", None)
+    if slot == "llm":
+        # a escolha nova regrava a tabela por operação INTEIRA: modelo de operação que ela não define sai do .env —
+        # senão o retain seguia com o modelo do provedor anterior (claude-haiku no OpenAI) e falhava no servidor.
+        # O `default` (LLM_MODEL) fica: sem ele o compose do full interpola um placeholder local.
+        unset_env.extend(f"HINDSIGHT_API_{envk}" for op, envk in LLM_OPS
+                         if op != "default" and f"HINDSIGHT_API_{envk}" not in env_updates)
+    # o mesmo vale para a dimensão dos embeddings e o teto do reranker: não dito e sem padrão no provedor = o do
+    # servidor. O de antes ficava: Fireworks → local seguia pedindo 1536 dimensões ao bge-m3 (1024), e Fireworks →
+    # Cohere seguia com o teto 50 do Fireworks
+    if slot == "embeddings":
+        unset_env.extend(k for k in cur_env
+                         if k.startswith(_EMB) and k.endswith("_DIMENSIONS") and k not in env_updates)
+    if slot == "reranker" and _RER + "MAX_CANDIDATES" not in env_updates and not mem.get("decision_recall"):
+        unset_env.append(_RER + "MAX_CANDIDATES")   # com o recall do decisor ligado, a variável é do recall
     _guard_env_updates(env_updates)
     rec_on = False
     if slot == "decision":
@@ -607,10 +629,10 @@ def set_slot(brain, slot: str, provider: str, *, model: str = "", models: dict |
             cfg_updates[f"{slot}_model"] = model or p.get("model", "")
         if base_url or (provider not in ("local",) and p.get("base_url")):
             cfg_updates[f"{slot}_base_url"] = base_url or p.get("base_url", "")
-        if slot == "embeddings" and (dimensions or p.get("dimensions")):
-            cfg_updates["embeddings_dimensions"] = dimensions or p.get("dimensions", 0)
-        if slot == "reranker" and (candidates or p.get("candidates")):
-            cfg_updates["reranker_max_candidates"] = candidates or p.get("candidates", 0)
+        if slot == "embeddings":                   # 0 = a do modelo (o servidor não manda `dimensions`)
+            cfg_updates["embeddings_dimensions"] = int(dimensions or p.get("dimensions", 0) or 0)
+        if slot == "reranker":                     # 0 = o padrão do servidor
+            cfg_updates["reranker_max_candidates"] = int(candidates or p.get("candidates", 0) or 0)
     flag = CLOUD_FLAGS.get(slot)
     if flag:
         cfg_updates[flag] = provider not in ("local", "off")
@@ -642,6 +664,23 @@ def set_slot(brain, slot: str, provider: str, *, model: str = "", models: dict |
     }
 
 
+def models_of(spec: str) -> dict[str, str]:
+    """`llm_models` gravado → {operação: modelo}, tolerante (só para mostrar/preencher; quem valida é o
+    `_parse_models`): um modelo solto é o `default`; pedaço fora das operações conhecidas é ignorado."""
+    spec = (spec or "").strip()
+    if not spec:
+        return {}
+    if "=" not in spec:
+        return {"default": spec}
+    ops = dict(LLM_OPS)
+    out: dict[str, str] = {}
+    for part in spec.split(","):
+        op, sep, m = part.partition("=")
+        if sep and op.strip() in ops and m.strip():
+            out[op.strip()] = m.strip()
+    return out
+
+
 def stack(brain) -> dict:
     """O stack atual, para status/TUI/painel/doctor. Chaves: só presença, nunca valor."""
     mem = brain.inst.cfg["memory"]
@@ -666,6 +705,7 @@ def stack(brain) -> dict:
             "key_env": kenv,
             "key_present": bool(kenv and env.get(kenv)),
             "local": bool(p.get("local")) or (slot == "llm" and provider in LOCAL_LLM_BLOCKED),
+            "managed": bool(p.get("managed")),       # chave nasce no Brain (decisor local): nunca se cola
         }
         if slot == "llm":
             entry.update({
@@ -677,7 +717,20 @@ def stack(brain) -> dict:
                 "key_required": bool(p and p.get("key_env")),
                 "setup_hint": p.get("setup_hint", ""),
                 "rate_limit_note": p.get("rate_limit_note", ""),
+                # o que a tela Memória preenche para editar: modelo de cada operação e o endpoint (só na wire openai)
+                "ops": models_of(mem.get("llm_models", "")),
+                "base_url": env.get("HINDSIGHT_API_LLM_BASE_URL", "") if p.get("wire") == "openai" else "",
             })
+        elif slot in ("embeddings", "reranker"):
+            entry["base_url"] = mem.get(f"{slot}_base_url", "") if provider == "custom" else ""
+            if slot == "embeddings":
+                dims = str(mem.get("embeddings_dimensions") or "0").strip()
+                entry["dimensions"] = int(dims) if dims.isdigit() else 0
+            if slot == "reranker":
+                cands = str(mem.get("reranker_max_candidates") or "0").strip()
+                entry["candidates"] = int(cands) if provider != "off" and cands.isdigit() else 0
+                entry["inert"] = bool(mem.get("decision_recall")
+                                      or env.get("HINDSIGHT_API_RECALL_DECISION_MODEL_PROVIDER") == "hindsight")
         elif slot == "decision":
             rec_on = (bool(mem.get("decision_recall"))
                       or env.get("HINDSIGHT_API_RECALL_DECISION_MODEL_PROVIDER") == "hindsight")
@@ -691,9 +744,6 @@ def stack(brain) -> dict:
                 "candidates": rec_cands if (provider == "hindsight" and rec_on) else 0,
                 "base_url": base_u if provider == "local" else "",
             })
-        elif slot == "reranker":
-            entry["inert"] = bool(mem.get("decision_recall")
-                                  or env.get("HINDSIGHT_API_RECALL_DECISION_MODEL_PROVIDER") == "hindsight")
         out[slot] = entry
     return out
 
@@ -773,7 +823,8 @@ def _lms_state() -> str:
 def cli(args, brain) -> None:
     if getattr(args, "pcmd", "") == "set":
         if args.slot == "embeddings" and args.provider in PROVIDERS["embeddings"] and embeddings_change_pending(
-                brain, args.provider, args.model or PROVIDERS["embeddings"][args.provider].get("model", "")):
+                brain, args.provider, args.model or PROVIDERS["embeddings"][args.provider].get("model", ""),
+                int(args.dimensions or PROVIDERS["embeddings"][args.provider].get("dimensions", 0) or 0)):
             print(f"  ⚠ {rebuild_warning(brain)}")                 # antes de gravar: quem desiste ainda pode
         res = set_slot(brain, args.slot, args.provider, model=args.model or "",
                        models=_parse_models(args.models) if args.models else None,

@@ -1049,6 +1049,7 @@ class DashboardAssetTests(unittest.TestCase):
         "memory eval",                                         # Fase 0: harness do conjunto-ouro
         "memory supersede",                                    # supersessão explícita no recall (CLI/agente)
         "memory auth",                                         # autenticação de assinatura: job do wizard/painel via rota onboard (obAct), não comando CLI emitido
+        "memory providers set",                                # Configurações › Memória: modo + provedores numa tela, aplicada pela rota do passo Memória (obAct → configure_memory → set_slot, que recria o servidor); a linha fica no TUI e no terminal
         "agent permissions",                                   # gera .claude/settings.local.json: terminal/update/init cuidam; o painel não abre sessão do Claude
         "review list", "review accept",                        # wave 1 (#61): núcleo/CLI da fila de revisão; painel entra na wave 2
         "seed folder",                                         # backfill único via terminal

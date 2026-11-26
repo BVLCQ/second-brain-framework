@@ -522,6 +522,16 @@ html[data-live="1"] .only-portrait,html:not([data-live="1"]) .only-live{display:
 .stopt span{font-size:12.5px;color:var(--muted)}
 .stopt:hover{border-color:var(--accent)}
 .stopt.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+/* Configurações › Memória: modo e provedores numa tela só — um bloco por slot, com o gravado no cabeçalho */
+.memslot{border-top:1px solid var(--line2);padding:12px 0 2px}
+.memhead{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin:0 0 10px}
+.memhead b{font-size:14px}
+.memnow{margin-left:auto;font-size:11.5px;color:var(--muted);text-align:right}
+.memnote{font-size:12.5px;color:var(--muted);margin:0 0 10px}
+.memops{margin:0 0 10px}
+.memops summary{cursor:pointer;color:var(--accent);font-size:12.5px;margin:0 0 8px}
+.memops .chk{margin:0 0 8px}
+.memslot .fld>.btn{padding:7px 10px;font-size:14px;border-radius:8px;min-height:0}   /* Autenticar na altura do campo ao lado */
 
 /* ── arrastar arquivo ou pasta para a inbox ── */
 .inbox-drop-ov{position:fixed;inset:0;z-index:100;display:flex;flex-direction:column;gap:14px;padding:24px;

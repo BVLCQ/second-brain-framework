@@ -1,3 +1,10 @@
+## 2.59.0 — Memória: modo e provedores numa tela só
+
+- **Uma tela, todos os campos.** Configurações › Memória junta o modo (nenhuma · embed · full) e os provedores. Cada slot (LLM · embeddings · reranker · decisão) traz provedor, chave, modelo, modelo por operação do LLM, base URL, dimensões, teto de candidatos e decisor no recall — tudo o que `memory providers set` aceita —, pré-preenchido com o que está gravado. O cabeçalho de cada slot mostra o que vale hoje, no lugar da tabela antiga. No embed, o reranker aparece também.
+- **Aplicar usa a rota do passo Memória.** Só o slot que mudou é regravado, com exatamente o que a tela mostra: campo apagado volta ao recomendado. O servidor sobe ou é recriado e o job narra. O formulário de provedor (`memory providers set`) continua na TUI e no terminal; a ponte do painel deixou de aceitar essa linha.
+- **Trocar de provedor não deixa resto no `.env`.** O modelo de cada operação do LLM, a dimensão dos embeddings e o teto do reranker do provedor anterior ficavam: Fireworks → local seguia pedindo 1536 dimensões ao bge-m3 (que tem 1024), e Fireworks → Cohere seguia com o teto 50. Agora o que a troca não diz volta ao padrão do provedor novo, ou do servidor. Mudar a dimensão pede o `memory rebuild`, como trocar o modelo.
+- **Decisor local sem URL é instalado.** Escolher Local na Decisão sem informar a URL instala e liga o servidor. A URL de fábrica como padrão pulava a instalação e deixava o slot sem chave; o aviso do `doctor` agora diz o caminho.
+
 ## 2.57.0 — todo arquivo que o painel cita agora tem link
 
 - **Linha do tempo, "última interação" e busca ligam o artefato.** A linha do tempo escondia a reunião ou o documento de onde cada item nasceu; a ficha da pessoa e os resultados da busca mostravam o caminho como texto solto. Agora cada um tem o botão Ver, que abre o leitor embutido.

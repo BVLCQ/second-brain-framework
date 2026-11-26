@@ -533,9 +533,13 @@ def checks(brain, online: bool = False, probe_agent: bool = False, docker_probe=
             if not raw_url:
                 missing.append("base URL (HINDSIGHT_API_DECISION_MODEL_BASE_URL)")
             if missing:
+                # sem chave = o decisor gerenciado nunca foi instalado: o caminho é o do Brain instalar (painel ou CLI
+                # sem --base-url); --base-url/--key só para um servidor /v1/systemone que já existe
                 out.append(_c("warn", "memória · decisão",
-                              f"decisão local sem {' e '.join(missing)} no config/.env — "
-                              "`brain memory providers set decision --provider local --base-url … --key …`"
+                              f"decisão local sem {' e '.join(missing)} no config/.env — o decisor local ainda não foi "
+                              "instalado: Configurações › Memória (Decisão: Local → Aplicar) ou "
+                              "`brain memory providers set decision --provider local` instalam e ligam; servidor "
+                              "próprio: `--base-url … --key …`"
                               + (f" · {recall_warn_msg}" if recall_on else "")))
             elif http_get is not None or online:
                 reach_ok, probed_url = _decision_local_reachable(raw_url, http_get=http_get)

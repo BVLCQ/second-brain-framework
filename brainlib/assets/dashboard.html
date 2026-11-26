@@ -530,6 +530,16 @@ html[data-live="1"] .only-portrait,html:not([data-live="1"]) .only-live{display:
 .stopt span{font-size:12.5px;color:var(--muted)}
 .stopt:hover{border-color:var(--accent)}
 .stopt.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+/* Configurações › Memória: modo e provedores numa tela só — um bloco por slot, com o gravado no cabeçalho */
+.memslot{border-top:1px solid var(--line2);padding:12px 0 2px}
+.memhead{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin:0 0 10px}
+.memhead b{font-size:14px}
+.memnow{margin-left:auto;font-size:11.5px;color:var(--muted);text-align:right}
+.memnote{font-size:12.5px;color:var(--muted);margin:0 0 10px}
+.memops{margin:0 0 10px}
+.memops summary{cursor:pointer;color:var(--accent);font-size:12.5px;margin:0 0 8px}
+.memops .chk{margin:0 0 8px}
+.memslot .fld>.btn{padding:7px 10px;font-size:14px;border-radius:8px;min-height:0}   /* Autenticar na altura do campo ao lado */
 
 /* ── arrastar arquivo ou pasta para a inbox ── */
 .inbox-drop-ov{position:fixed;inset:0;z-index:100;display:flex;flex-direction:column;gap:14px;padding:24px;
@@ -2147,8 +2157,8 @@ const sec = (title, body, right) => '<section class="panel stsec"><div class="st
 async function wireSetup(step){
   const box = document.getElementById("setup");
   if (!box) return;
-  if (!LIVE) {
-    box.innerHTML = step === "memoria" ? "" : '<section class="panel"><p>Este painel foi aberto como arquivo (retrato). Para ver e mudar a configuração, abra o <b>Brain</b> pelo app — Aplicativos, Launchpad ou Spotlight.</p></section>';
+  if (!LIVE) {   // memória: o resumo do core (modo + provedores, só leitura) fica no lugar — ele mesmo diz como mudar
+    if (step !== "memoria") box.innerHTML = '<section class="panel"><p>Este painel foi aberto como arquivo (retrato). Para ver e mudar a configuração, abra o <b>Brain</b> pelo app — Aplicativos, Launchpad ou Spotlight.</p></section>';
     return;
   }
   try { await obState(); }
@@ -2275,151 +2285,319 @@ SETUP.conectores = box => {
     try { await obAct("permissions"); await obState(); redo("conectores"); } catch (err) { stMsg(q("#s-mp"), "late", err.message); }
   });
 };
+// ── Configurações › Memória: modo e provedores numa tela só ───────────────────────────────────────
+// Um bloco por slot (LLM · embeddings · reranker · decisão) com TODOS os campos do `memory providers set` —
+// provedor do registro, chave, assinatura, modelo, modelo por operação, base URL, teto de candidatos e decisor no
+// recall — e o modo em cima. Cada bloco mostra o que está gravado. Aplicar = a rota do passo Memória
+// (/api/onboard/memory): o job grava, sobe ou recria o servidor e narra. Só o slot que mudou vai regravado.
+const MEM_MODES = [["none", "Nenhuma", "Busca por palavras. Nada a instalar."],
+  ["embed", "Embed", "Busca por significado — local (bge-m3) ou provedor de nuvem."],
+  ["full", "Full", "Também extrai fatos e liga assuntos. O LLM é de nuvem (a sua chave ou assinatura, custo por uso); os embeddings, locais ou de nuvem."]];
+const MEM_SLOT_NAMES = {llm: "LLM", embeddings: "Embeddings", reranker: "Reranker", decision: "Decisão"};
+const MEM_VERB = {embeddings: "vetorizar", reranker: "reranquear", decision: "julgar"};
+let memLast = null;                 // log da última aplicação: sobrevive ao redesenho que vem depois do job
+const memSlotsFor = (sel, recallOn) => sel === "full" ? (recallOn ? ["llm", "embeddings", "decision"] : ["llm", "embeddings", "reranker", "decision"])
+  : sel === "embed" ? ["embeddings", "reranker"] : [];
+// o que está gravado num slot, no formato que a tela edita (campo vazio = o recomendado do provedor)
+function memDraft(slot, cur, reg){
+  const c = cur || {}, d = {provider: c.provider || "", key: "", model: "", ops: {}, base_url: "", url_on: false, candidates: "", dimensions: "", recall: "off", rcands: ""};
+  if (slot === "llm") {
+    const ops = c.ops || {};
+    d.model = ops.default || "";
+    Object.keys(ops).forEach(op => { if (op !== "default" && ops[op] && ops[op] !== d.model) d.ops[op] = ops[op]; });
+    if (c.provider === "custom") d.base_url = c.base_url || "";
+    return d;
+  }
+  const rec = (reg && reg.model) || "";
+  if (c.model && c.model !== "—" && c.model !== rec && c.provider !== "off" && !(slot === "decision" && c.provider === "local")) d.model = c.model;
+  if (c.provider === "custom") d.base_url = c.base_url || "";
+  // teto e dimensão: só o que difere do padrão do provedor (vazio = o padrão, como o modelo)
+  if (slot === "reranker" && c.provider !== "off" && c.candidates && c.candidates !== ((reg && reg.candidates) || 0)) d.candidates = String(c.candidates);
+  if (slot === "embeddings" && c.dimensions && c.dimensions !== ((reg && reg.dimensions) || 0)) d.dimensions = String(c.dimensions);
+  if (slot === "decision") {
+    d.recall = c.recall ? "on" : "off";
+    d.rcands = c.recall && c.candidates ? String(c.candidates) : "";
+    if (c.provider === "local" && c.base_url && c.base_url !== ((reg && reg.base_url) || "")) { d.base_url = c.base_url; d.url_on = true; }
+  }
+  return d;
+}
+// o slot mudou em relação ao gravado (provedor ou qualquer campo)? a chave não conta: colar chave só a troca
+function memDiff(d, c){
+  if (d.provider !== c.provider) return true;
+  const ops = Object.assign({}, d.ops, c.ops);
+  return ["model", "base_url", "candidates", "dimensions", "recall", "rcands"].some(k => String(d[k] || "") !== String(c[k] || "")) ||
+    !!d.url_on !== !!c.url_on || Object.keys(ops).some(op => (d.ops[op] || "") !== (c.ops[op] || ""));
+}
+// a parte do payload de um slot: o provedor sempre (nomeado); o resto só quando o slot mudou — e aí ele é
+// regravado com exatamente o que está na tela (`reconfigure`: campo apagado volta ao recomendado)
+function memSlotBody(slot, d, c){
+  const out = {provider: d.provider};
+  if (d.key) out.key = d.key;
+  if (!memDiff(d, c)) return out;
+  out.reconfigure = true;
+  if (d.model) out.model = d.model;
+  if (slot === "llm") {
+    const ops = {};
+    Object.keys(d.ops).forEach(op => { if (d.ops[op]) ops[op] = d.ops[op]; });
+    if (Object.keys(ops).length) out.models = ops;
+  }
+  if (d.provider === "custom" && d.base_url) out.base_url = d.base_url;
+  if (slot === "decision" && d.provider === "local" && d.url_on && d.base_url) out.base_url = d.base_url;
+  if (slot === "reranker" && d.provider !== "off" && d.candidates) out.candidates = parseInt(d.candidates, 10) || 0;
+  if (slot === "embeddings" && d.dimensions) out.dimensions = parseInt(d.dimensions, 10) || 0;
+  if (slot === "decision" && d.provider === "hindsight") {
+    out.recall = d.recall;
+    if (d.recall === "on") out.candidates = parseInt(d.rcands, 10) || 0;
+  }
+  return out;
+}
+window.BRAIN_MEM = {slotsFor: memSlotsFor, draft: memDraft, diff: memDiff, slotBody: memSlotBody};   // testes (node)
+
 SETUP.memoria = box => {
-  const m = SS.memory, cur = m.mode === "lite" ? "embed" : m.mode;
-  let sel = cur;
-  const opts = [["none", "Nenhuma", "Busca por palavras. Nada a instalar."], ["embed", "Embed", "Busca por significado — local (bge-m3) ou provedor de nuvem."],
-    ["full", "Full", "Também extrai fatos e liga assuntos. O LLM é de nuvem (a sua chave ou assinatura, custo por uso); os embeddings, locais ou de nuvem."]];
-  const embOpts = full => full ? [["fireworks", "Fireworks — Qwen3-Embedding-8B"], ["openai", "OpenAI — text-embedding-3-small"], ["local", "Local — LM Studio bge-m3 (vetores locais; o LLM continua na nuvem)"]]
-    : [["local", "Local — LM Studio bge-m3 (nada sai)"], ["fireworks", "Fireworks — Qwen3-Embedding-8B"], ["openai", "OpenAI — text-embedding-3-small"]];
-  // no full o recomendado é o de nuvem: `local` só vem pré-selecionado se a instância já usa memória (veio do embed) —
-  // numa instância nova o `local` do config é o padrão de fábrica, não uma escolha
-  const curEmb = full => embOpts(full).some(o => o[0] === m.emb_provider) && !(full && m.emb_provider === "local" && (!m.mode || m.mode === "none")) ? m.emb_provider : (full ? "fireworks" : "local");
-  const rerOpts = [["off", "Desligado — fusão RRF"], ["fireworks", "Fireworks — Qwen3-Reranker-8B"], ["cohere", "Cohere — rerank-v3.5"]];
-  const curRer = () => rerOpts.some(o => o[0] === m.rer_provider) ? m.rer_provider : "off";
-  const selHTML = (list, curv, id) => '<select id="' + id + '">' + list.map(o => '<option value="' + o[0] + '"' + (o[0] === curv ? " selected" : "") + ">" + esc(o[1]) + "</option>").join("") + "</select>";
-  const keyChip = ok => ok ? ' <span class="chip h-em-dia">já salva</span>' : "";
-  const keyInp = id => '<input type="password" id="' + id + '" autocomplete="off" placeholder="cole a chave">';
+  const m = SS.memory, curMode = m.mode === "lite" ? "embed" : (m.mode || "none");
+  const cur = slot => (m.current || {})[slot] || {};          // o gravado (o stack do `memory providers show`)
+  const list = slot => (m.providers || {})[slot] || [];       // o cardápio do registro (o mesmo do `providers set`)
+  const reg = (slot, key) => list(slot).find(x => x.key === key) || null;
+  const opLabels = m.llm_ops || [];
+  // nome do slot = o rótulo do registro (providers.SLOT_LABELS) até o parêntese; o parêntese vira a legenda
+  const slotLab = slot => String((m.slot_labels || {})[slot] || MEM_SLOT_NAMES[slot] || slot);
+  const slotName = slot => slotLab(slot).split(" (")[0];
+  const slotSub = slot => { const mm = slotLab(slot).match(/\(([^)]*)\)/); return mm ? mm[1] : ""; };
+  let sel = curMode;
+  // rascunho por slot: começa no gravado; provedor sem registro (instância nova) cai no recomendado do slot
+  const base = {}, draft = {}, touched = {};
+  const recOf = (slot, mode) => {
+    const l = list(slot);
+    const pick = slot === "embeddings" && mode === "full" ? l.find(x => x.recommended_cloud) : l.find(x => x.recommended);
+    return (pick || l[0] || {key: ""}).key;
+  };
+  const resetDraft = slot => {
+    const c = cur(slot);
+    base[slot] = memDraft(slot, c, reg(slot, c.provider));
+    draft[slot] = memDraft(slot, c, reg(slot, c.provider));
+    // fábrica não é escolha: com a memória desligada, o `local` do config vale só como padrão do embed
+    if (!reg(slot, draft[slot].provider) || (slot === "embeddings" && curMode === "none"))
+      draft[slot] = Object.assign(memDraft(slot, {}, null), {provider: recOf(slot, sel === "full" ? "full" : "embed")});
+  };
+  ["llm", "embeddings", "reranker", "decision"].forEach(resetDraft);
+  const recallOn = () => sel === "full" && draft.decision.provider === "hindsight" && draft.decision.recall === "on";
+  const embChanged = () => !!cur("embeddings").provider && ["provider", "model", "dimensions", "base_url"]
+    .some(k => String(draft.embeddings[k] || "") !== String(base.embeddings[k] || ""));
+
+  const chipNow = slot => {   // o que está gravado no slot — a antiga tabela Provedores, dentro do próprio bloco
+    const c = cur(slot);
+    if (!c.provider) return '<span class="memnow">nada gravado</span>';
+    const bits = [esc(c.label || c.provider)];
+    const uniq = slot === "llm" ? Array.from(new Set(Object.values(c.ops || {}))) : [];
+    if (uniq.length === 1) bits.push(esc(uniq[0]));                 // a mesma em toda operação: um nome só
+    else if (c.model && c.model !== "—" && !(slot === "decision" && c.provider === "local")) bits.push(esc(String(c.model).replace(/,/g, " · ")));
+    if (c.cloud) bits.push('<span class="late">☁ egress</span>'); else if (c.local) bits.push("local");
+    if (slot === "llm" && c.family === "subscription") bits.push("assinatura");
+    else if (c.managed) bits.push(c.key_present ? "gerenciado" : '<span class="late">ainda não instalado</span>');
+    else if (c.key_env) bits.push(c.key_present ? '<span class="ok">chave ok</span>' : '<span class="late">sem chave</span>');
+    if (slot === "decision" && c.recall) bits.push('<span class="late">recall top-' + esc(String(c.candidates || "?")) + "</span>");
+    if (slot === "reranker" && c.inert) bits.push("inerte (decisor no recall)");
+    if (slot === "reranker" && c.candidates) bits.push("top-" + esc(String(c.candidates)));
+    if (slot === "embeddings" && c.dimensions) bits.push(esc(String(c.dimensions)) + " dim");
+    return '<span class="memnow">gravado: ' + bits.join(" · ") + "</span>";
+  };
+  // o placeholder também vai no title: id de modelo longo corta na caixa, o passar do mouse mostra inteiro
+  const inp = (id, val, ph, type) => '<input type="' + (type || "text") + '" id="' + id + '" value="' + esc(val || "") + '" placeholder="' + esc(ph || "") +
+    '" title="' + esc(ph || "") + '" autocomplete="off">';
+  const keyFld = (slot, p) => {
+    if (!p || p.subscription || !p.key_required) return "";
+    const shared = slot === "embeddings" && sel === "full" && draft.llm.provider === p.key
+      ? "LLM e embeddings no mesmo provedor: a chave do LLM serve aqui."
+      : slot === "reranker" && p.key === "fireworks" && draft.embeddings.provider === "fireworks"
+        ? "Fireworks nos embeddings e no reranker: a mesma chave serve nos dois." : "";
+    return fld("API key" + (p.key_set ? ' <span class="chip h-em-dia">já salva</span>' : ""),
+      '<input type="password" id="m-key-' + slot + '" autocomplete="off" placeholder="' + (p.key_set ? "vazio = mantém a do config/.env" : "cole a chave") + '">',
+      shared || "Vai para o config/.env (0600) e nunca volta para a tela.");
+  };
+  const authFld = p => {
+    if (!p || !p.subscription) return "";
+    const a = m.llm_auth || {}, mine = a.provider === p.key;
+    const chipA = mine && a.state === "ok" ? ' <span class="chip h-em-dia">autenticado</span>' : mine && a.state === "pending" ? ' <span class="chip h-atencao">autenticar</span>' : "";
+    // div, não <label>: o rótulo ativa o primeiro controle de dentro — clicar no texto disparava o login
+    return '<div class="fld"><span>Assinatura — sem chave de API' + chipA + "</span>" +
+      (p.flow ? '<button class="btn" type="button" id="m-auth">' + (mine && a.state === "ok" ? "Reautenticar" : "Autenticar") + "</button>"
+        : (p.auth_command ? "<code>" + esc(p.auth_command) + "</code>" : '<span class="muted">sem login automático nesta instalação</span>')) +
+      "<small>" + (p.flow ? "A credencial nasce aqui mesmo (job narrado) — nunca passa pela tela." : esc(p.hint || "")) + "</small></div>";
+  };
+  const slotHTML = slot => {
+    const d = draft[slot], p = reg(slot, d.provider) || {};
+    const opts = list(slot).map(x => '<option value="' + esc(x.key) + '"' + (x.key === d.provider ? " selected" : "") + ">" + esc(x.label) +
+      (x.key === cur(slot).provider ? " (gravado)" : "") + "</option>").join("");
+    const isOff = d.provider === "off", localDec = slot === "decision" && d.provider === "local";
+    const needModel = !isOff && !localDec;
+    const modelPh = d.provider === "custom" ? "obrigatório no Outro" : "vazio = " + (p.model || "recomendado do provedor");
+    let h = '<div class="memslot" data-slot="' + slot + '"><div class="memhead"><b>' + esc(slotName(slot)) + "</b>" +
+      (slotSub(slot) ? '<span class="muted small">' + esc(slotSub(slot)) + "</span>" : "") + chipNow(slot) + "</div>" +
+      // o seletor tem a linha inteira (rótulos do registro são longos); chave/assinatura, modelo e endpoint vêm embaixo
+      '<div class="stgrid">' + fld("Provedor", '<select id="m-prov-' + slot + '" data-mslot="' + slot + '">' + opts + "</select>",
+        p.hint && !p.subscription ? esc(p.hint) : "") + "</div>";
+    const row = keyFld(slot, p) + (slot === "llm" ? authFld(p) : "") +
+      (needModel ? fld(slot === "llm" ? "Modelo" : "Modelo (opcional)", inp("m-model-" + slot, d.model, modelPh),
+        slot === "llm" ? "Vale para toda operação sem modelo próprio." : "Troca o modelo recomendado do provedor.") : "") +
+      (needModel && d.provider === "custom" ? fld("Base URL", inp("m-url-" + slot, d.base_url, "https://…/v1")) : "") +
+      (slot === "embeddings" && needModel ? fld("Dimensões (opcional)", inp("m-dims-embeddings", d.dimensions,
+        p.dimensions ? "vazio = " + p.dimensions + " (do provedor)" : "vazio = a do modelo", "number"),
+        "Saída MRL (ex.: 1536) — só se o modelo aceita.") : "") +
+      (slot === "reranker" && !isOff ? fld("Teto de candidatos (opcional)", inp("m-cands-reranker", d.candidates,
+        p.candidates ? "vazio = " + p.candidates + " (do provedor)" : "vazio = o do servidor", "number")) : "");
+    if (row) h += '<div class="stgrid">' + row + "</div>";
+    if (slot === "llm" && opLabels.length) {
+      const anyOp = opLabels.some(([op]) => d.ops[op]);
+      h += '<details class="memops"' + (anyOp ? " open" : "") + "><summary>Modelo por operação (opcional)</summary>" +
+        '<div class="stgrid">' + opLabels.map(([op, lab]) => fld(esc(lab), inp("m-op-" + op, d.ops[op], "vazio = o Modelo acima"))).join("") + "</div></details>";
+    }
+    if (localDec)
+      h += '<details class="memops"' + (d.url_on ? " open" : "") + '><summary>Avançado — usar um servidor /v1/systemone que já existe</summary>' +
+        '<label class="chk"><input type="checkbox" id="m-urlon-decision"' + (d.url_on ? " checked" : "") + "> informar a URL (o Brain não instala)</label>" +
+        '<div class="stgrid">' + fld("Base URL", inp("m-url-decision", d.base_url, p.base_url || "http://…:8000")) + "</div></details>";
+    if (slot === "decision" && d.provider === "hindsight")
+      h += '<div class="stgrid">' + fld("Usar também no recall", '<select id="m-recall"><option value="off"' + (d.recall !== "on" ? " selected" : "") +
+          ">Desligado — só consolidação e reflect (padrão)</option><option value=\"on\"" + (d.recall === "on" ? " selected" : "") +
+          ">Ligado — julga cada candidato no recall</option></select>",
+          d.recall === "on" ? "Cada candidato é uma requisição ao decisor; sem fallback para RRF — se ele cair, o recall falha fechado. O reranker fica inerte." : "") +
+        (d.recall === "on" ? fld('Teto de candidatos no recall <span class="late">*</span>', inp("m-rcands", d.rcands, "obrigatório (ex.: 25)", "number")) : "") + "</div>";
+    if (slot !== "llm" && !isOff && !p.local && p.cloud && !p.hint)   // com nota no registro, ela já diz o egresso
+      h += '<p class="memnote">☁ nuvem: o texto do vault vai à API do provedor para ' + MEM_VERB[slot] + ".</p>";
+    if (slot === "embeddings" && curMode !== "none")   // a nota acende ao trocar provedor, modelo, dimensão ou endpoint
+      h += '<p class="memnote late" id="m-rebuild"' + (embChanged() ? "" : " hidden") + '>Mudar os embeddings deixa os vetores antigos incompatíveis: depois de aplicar, rode <code>memory rebuild</code>' +
+        (sel === "full" ? " — no full ele reenvia o vault inteiro ao LLM e paga a extração de novo" : "") + ".</p>";
+    if (slot === "embeddings" && sel === "full" && d.provider === "local")
+      h += '<p class="memnote">Embeddings local; o LLM continua na nuvem: o texto do vault vai a ele para extrair, os vetores não saem da máquina.</p>';
+    return h + "</div>";
+  };
+  const prereq = () => {
+    if (sel === "none") return "";
+    const dst = m.docker_state || (m.docker ? "up" : "missing"), lst = m.lmstudio_state || (m.lmstudio ? "up" : "missing");
+    const dock = dst === "up" ? '<span class="ok">✓</span> OrbStack (o banco da memória) pronto'
+      : dst === "installed" ? '<span class="late">⚠</span> OrbStack instalado, parado — aplicar sobe' : '<span class="late">✗</span> OrbStack ausente — o Brain instala ao aplicar';
+    const lms = lst === "up" ? '<span class="ok">✓</span> LM Studio com <code>text-embedding-bge-m3</code> pronto'
+      : lst === "installed" ? '<span class="late">⚠</span> LM Studio instalado, servidor desligado — aplicar sobe e configura'
+        : '<span class="late">✗</span> LM Studio ausente — o Brain instala e configura ao aplicar';
+    return '<p class="small">' + dock + (draft.embeddings.provider === "local" ? " · " + lms : "") + "</p>";
+  };
+  const keepNote = () => {     // no embed, o que fica guardado para o full (a tabela antiga mostrava sempre)
+    if (sel === "full" || sel === "none") return "";
+    const l = cur("llm"), dc = cur("decision");
+    const bits = [l.provider ? "LLM " + esc(l.label || l.provider) : "", dc.provider && dc.provider !== "off" ? "Decisão " + esc(dc.label || dc.provider) : ""].filter(Boolean);
+    return bits.length ? '<p class="memnote">Guardado para o Full: ' + bits.join(" · ") + ". Escolha Full para ver e mudar.</p>" : "";
+  };
   const draw = () => {
-    box.innerHTML = sec("Modo", '<div class="stopts">' + opts.map(([k, t, d]) => '<button class="stopt' + (k === sel ? " sel" : "") + '" data-m="' + k + '"><b>' + t + (k === cur ? ' <span class="chip h-info">atual</span>' : "") + "</b><span>" + d + "</span></button>").join("") + "</div>" +
-      (sel !== "none" ? '<p class="small">' + (() => {
-          const dst = m.docker_state || (m.docker ? "up" : "missing");
-          if (dst === "up") return '<span class="ok">✓</span> OrbStack (o banco da memória) pronto';
-          return dst === "installed"
-            ? '<span class="late">⚠</span> OrbStack instalado, parado — ativar sobe'
-            : '<span class="late">✗</span> OrbStack ausente — o Brain instala ao ativar';
-        })() +
-        '<span id="s-lms"' + ((sel === "embed" || (sel === "full" && curEmb(true) === "local")) ? "" : " hidden") + '> · ' + (() => {
-          const lst = m.lmstudio_state || (m.lmstudio ? "up" : "missing");
-          if (lst === "up") return '<span class="ok">✓</span> LM Studio com <code>text-embedding-bge-m3</code> pronto';
-          return lst === "installed"
-            ? '<span class="late">⚠</span> LM Studio instalado, servidor desligado — ativar sobe e configura'
-            : '<span class="late">✗</span> LM Studio ausente — o Brain instala e configura ao ativar';
-        })() + " (só no embeddings local)</span></p>" : "") +
-      (sel === "embed" ? '<div class="stgrid">' + fld("Embeddings", selHTML(embOpts(false), curEmb(false), "s-emb")) +
-        '<div id="s-ekey-wrap"' + (curEmb(false) === "local" ? " hidden" : "") + ">" + fld("API key do embeddings" + keyChip(m.emb_key), keyInp("s-ekey"), "Fireworks ou OpenAI, conforme o escolhido.") + "</div></div>" +
-        '<p class="small" id="s-egress"' + (curEmb(false) === "local" ? " hidden" : "") + '>☁ com provedor de nuvem, o texto do vault vai à API para virar vetores.</p>' : "") +
-      (sel === "full" ?
-        '<div class="stgrid">' +
-        fld("LLM", '<select id="s-prov"><option value="anthropic"' + (m.llm_provider === "openai" ? "" : " selected") + '>Anthropic (Claude) — Haiku/Sonnet por operação</option><option value="openai"' + (m.llm_provider === "openai" ? " selected" : "") + '>OpenAI</option><option value="claude-code"' + (m.llm_provider === "claude-code" ? " selected" : "") + '>Claude Code (assinatura Pro/Max)</option><option value="xai-oauth"' + (m.llm_provider === "xai-oauth" ? " selected" : "") + ">xAI / SuperGrok (assinatura)</option></select>") +
-        '<div id="s-key-wrap">' + fld("API key (LLM)" + keyChip(m.llm_key), keyInp("s-key")) + "</div>" +
-        '<div id="s-auth-wrap" hidden>' + fld("Assinatura — sem chave de API" + ((m.llm_auth || {}).state === "ok" ? ' <span class="chip h-em-dia">autenticado</span>' : ((m.llm_auth || {}).state === "pending" ? ' <span class="chip h-late">autenticar</span>' : "")),
-          '<button class="btn" type="button" id="s-auth">' + ((m.llm_auth || {}).state === "ok" ? "Reautenticar" : "Autenticar") + "</button>",
-          "A credencial nasce aqui mesmo (job narrado) — nunca passa pela tela.") + "</div></div>" +
-        '<div class="stgrid" id="s-model-wrap">' + fld("Modelo do LLM", '<input type="text" id="s-model" placeholder="vazio = recomendado do provedor">') + "</div>" +
-        '<div class="stgrid">' + fld("Embeddings", selHTML(embOpts(true), curEmb(true), "s-emb")) +
-        '<div id="s-ekey-wrap"' + (curEmb(true) === "local" ? " hidden" : "") + ">" + fld("API key do embeddings" + keyChip(m.emb_key), keyInp("s-ekey"), "Fireworks ou OpenAI — conta própria do embeddings.") + "</div></div>" +
-        '<p class="small" id="s-emb-local"' + (curEmb(true) === "local" ? "" : " hidden") + '>Embeddings local; o LLM continua na nuvem: o texto do vault vai a ele para extrair, os vetores não saem da máquina. Trocar os embeddings exige reconstruir a memória (<code>memory rebuild</code>), que no full reenvia o vault inteiro e paga a extração de novo.</p>' +
-        '<div class="stgrid">' + fld("Reranking", selHTML(rerOpts, curRer(), "s-rer")) +
-        '<div id="s-rkey-wrap">' + fld("API key do reranker" + keyChip(m.rer_key), keyInp("s-rkey"), "Fireworks ou Cohere.") + "</div></div>" +
-        '<div class="stgrid">' + fld("Decisão (opcional)", selHTML([["off", "Desligado — só os tokens do LLM (padrão)"],
-                                                                        ["hindsight", "Hindsight — hs-decide-1-flash · US$ 0,02/1M"]], (m.dec_provider || "off"), "s-dec")) +
-        '<div id="s-dkey-wrap" hidden>' + fld("Chave hsk_ (decisão)" + keyChip(m.dec_key), keyInp("s-dkey"),
-          "inference.hindsight.vectorize.io — por uso, sem assinatura. Pular = cada um paga só os tokens do próprio LLM.") + "</div></div>" +
-        '<p class="small" id="s-samekey" hidden>LLM e embeddings no OpenAI: a mesma chave serve nos dois.</p>' +
-        '<p class="small" id="s-rsame" hidden>Fireworks no embeddings e no reranker: a mesma chave serve nos dois.</p>' +
-        '<label class="chk"><input type="checkbox" id="s-consent"> Entendo que trechos do vault vão à API dos provedores, com as minhas chaves, e que isso tem custo por uso.</label>' : "") +
-      '<pre class="stlog" id="s-log" hidden></pre><div class="stactions"><span class="stmsg" id="s-m"></span><button class="btn primary" id="s-apply"' + (sel === cur && sel !== "full" ? " disabled" : "") + ">Aplicar</button></div>");
-    const q = s => box.querySelector(s);
-    box.querySelectorAll("[data-m]").forEach(b => b.onclick = () => { sel = b.dataset.m; draw(); });
-    const sync = () => {
-      if (sel === "embed" && q("#s-emb")) {
-        const cloud = q("#s-emb").value !== "local";
-        if (q("#s-ekey-wrap")) q("#s-ekey-wrap").hidden = !cloud;
-        if (q("#s-egress")) q("#s-egress").hidden = !cloud;
-        if (q("#s-lms")) q("#s-lms").hidden = !q("#s-emb") || q("#s-emb").value !== "local";
-      } else if (sel === "full" && q("#s-emb")) {
-        const openai = q("#s-prov") && q("#s-prov").value === "openai";
-        const subscr = q("#s-prov") && ["claude-code", "xai-oauth"].includes(q("#s-prov").value);
-        if (q("#s-model-wrap")) q("#s-model-wrap").hidden = false;
-        if (q("#s-model")) {
-          const pk = q("#s-prov") ? q("#s-prov").value : "";
-          const pe = (m.providers && m.providers.llm || []).find(x => x.key === pk);
-          q("#s-model").placeholder = "vazio = " + ((pe && pe.model) || "padrão do provedor");
+    const slots = memSlotsFor(sel, recallOn());
+    box.innerHTML = sec("Modo e provedores",
+      '<div class="stopts">' + MEM_MODES.map(([k, t, dsc]) => '<button class="stopt' + (k === sel ? " sel" : "") + '" data-m="' + k + '"><b>' + t +
+        (k === curMode ? ' <span class="chip h-info">atual</span>' : "") + "</b><span>" + dsc + "</span></button>").join("") + "</div>" +
+      prereq() + slots.map(slotHTML).join("") + keepNote() +
+      (sel === "full" ? '<label class="chk"><input type="checkbox" id="m-consent"> Entendo que trechos do vault vão à API dos provedores, com as minhas chaves, e que isso tem custo por uso.</label>' : "") +
+      '<pre class="stlog" id="m-log"' + (memLast ? "" : " hidden") + ">" + esc(memLast ? memLast.log : "") + "</pre>" +
+      '<div class="stactions"><span class="stmsg' + (memLast ? (memLast.ok ? " ok" : " late") : "") + '" id="m-msg">' + esc(memLast ? memLast.msg : "") + "</span>" +
+      '<button class="btn primary" id="m-apply"' + (sel === "none" && curMode === "none" ? " disabled" : "") + ">Aplicar</button></div>",
+      '<span class="muted small">a chave mora no config/.env e nunca volta à tela</span>');
+    memLast = null;
+    wire();
+  };
+  const q = s => box.querySelector(s);
+  const val = id => { const el = q("#" + id); return el ? String(el.value || "").trim() : null; };
+  const readDrafts = () => {   // o que está na tela entra no rascunho antes de redesenhar ou aplicar
+    memSlotsFor(sel, recallOn()).forEach(slot => {
+      const d = draft[slot];
+      const k = val("m-key-" + slot); if (k !== null) d.key = k;
+      const md = val("m-model-" + slot); if (md !== null) d.model = md;
+      const u = val("m-url-" + slot); if (u !== null) d.base_url = u;
+      if (slot === "reranker") { const c = val("m-cands-reranker"); if (c !== null) d.candidates = c; }
+      if (slot === "embeddings") { const dm = val("m-dims-embeddings"); if (dm !== null) d.dimensions = dm; }
+      if (slot === "llm") opLabels.forEach(([op]) => { const o = val("m-op-" + op); if (o !== null) d.ops[op] = o; });
+      if (slot === "decision") {
+        const r = val("m-recall"); if (r !== null) d.recall = r;
+        const rc = val("m-rcands"); if (rc !== null) d.rcands = rc;
+        const on = q("#m-urlon-decision"); if (on) d.url_on = on.checked;
+      }
+    });
+  };
+  const wire = () => {
+    // chave digitada sobrevive ao redesenho (trocar outro slot, o modo…): volta como propriedade, nunca como atributo
+    ["llm", "embeddings", "reranker", "decision"].forEach(slot => { const k = q("#m-key-" + slot); if (k && draft[slot].key) k.value = draft[slot].key; });
+    box.querySelectorAll("[data-m]").forEach(b => b.onclick = () => {
+      readDrafts(); sel = b.dataset.m;
+      if (!touched.embeddings && curMode === "none") draft.embeddings.provider = recOf("embeddings", sel === "full" ? "full" : "embed");
+      draw();
+    });
+    box.querySelectorAll("[data-mslot]").forEach(s => s.onchange = () => {
+      readDrafts();
+      const slot = s.dataset.mslot;
+      touched[slot] = true;
+      // voltar ao provedor gravado traz os campos gravados; outro provedor começa nos recomendados dele
+      draft[slot] = s.value === base[slot].provider ? Object.assign(memDraft(slot, cur(slot), reg(slot, s.value)), {key: ""})
+        : Object.assign(memDraft(slot, {}, null), {provider: s.value});
+      draw();
+    });
+    const rc = q("#m-recall"); if (rc) rc.onchange = () => { readDrafts(); draw(); };
+    ["#m-model-embeddings", "#m-dims-embeddings", "#m-url-embeddings"].forEach(sl => { const el = q(sl);
+      if (el) el.oninput = () => { readDrafts(); const n = q("#m-rebuild"); if (n) n.hidden = !embChanged(); }; });
+    const uo = q("#m-urlon-decision"); if (uo) uo.onchange = () => { readDrafts(); };
+    const authBtn = q("#m-auth");
+    if (authBtn) authBtn.onclick = e => stBusy(e.currentTarget, "autenticando…", async () => {
+      readDrafts();
+      const log = q("#m-log");
+      try {
+        const r = await obAct("memory_auth", {provider: draft.llm.provider});
+        if (r.job) { log.hidden = false;
+          const j = await obJob(r.job, jj => { log.textContent = (jj.log || []).join("\n"); log.scrollTop = 1e9; });
+          if (j.status === "error") return stMsg(q("#m-msg"), "late", (j.result && j.result.error) || "não consegui autenticar");
+          const ok = !(j.result && j.result.ok === false);
+          memLast = {ok: ok, log: log.textContent, msg: ok ? "✓ autenticado" : "autenticação não completou — o log acima diz o que faltou"};
         }
-        if (q("#s-key-wrap")) q("#s-key-wrap").hidden = !!subscr;
-        if (q("#s-auth-wrap")) q("#s-auth-wrap").hidden = !subscr;
-        const same = openai && q("#s-emb").value === "openai";
-        const embLocal = q("#s-emb").value === "local";
-        if (q("#s-ekey-wrap")) q("#s-ekey-wrap").hidden = same || embLocal;
-        if (q("#s-emb-local")) q("#s-emb-local").hidden = !embLocal;
-        if (q("#s-lms")) q("#s-lms").hidden = !embLocal;
-        if (q("#s-samekey")) q("#s-samekey").hidden = !same;
-        const rer = q("#s-rer") ? q("#s-rer").value : "off";
-        const rsame = rer === "fireworks" && q("#s-emb").value === "fireworks";
-        if (q("#s-rkey-wrap")) q("#s-rkey-wrap").hidden = rer === "off" || rsame;
-        if (q("#s-rsame")) q("#s-rsame").hidden = !rsame;
-        if (q("#s-dkey-wrap")) q("#s-dkey-wrap").hidden = !q("#s-dec") || q("#s-dec").value !== "hindsight";
+        await obState(); Object.assign(m, SS.memory); draw();   // rascunho fica: só o estado do login muda
+      } catch (err) { stMsg(q("#m-msg"), "late", err.message); }
+    });
+    q("#m-apply").onclick = e => stBusy(e.currentTarget, "aplicando…", async () => {
+      readDrafts();
+      const say = t => stMsg(q("#m-msg"), "late", t);
+      const slots = memSlotsFor(sel, recallOn());
+      for (const slot of slots) {      // o que o servidor também recusa, dito antes de rodar o job
+        const d = draft[slot], p = reg(slot, d.provider) || {}, name = slotName(slot);
+        if (d.provider === "custom" && !d.model) return say(name + ": o provedor Outro precisa do modelo");
+        if (d.provider === "custom" && !d.base_url && slot !== "reranker") return say(name + ": o provedor Outro precisa da base URL");
+        if (slot === "reranker" && d.candidates && !(/^\d+$/.test(d.candidates) && +d.candidates >= 1 && +d.candidates <= 500))
+          return say(name + ": o teto de candidatos é um inteiro de 1 a 500");
+        if (slot === "embeddings" && d.dimensions && !(/^\d+$/.test(d.dimensions) && +d.dimensions >= 1 && +d.dimensions <= 16384))
+          return say(name + ": as dimensões são um inteiro de 1 a 16384");
+        if (slot === "decision" && d.provider === "hindsight" && d.recall === "on" && !(+d.rcands >= 1 && +d.rcands <= 500))
+          return say("Decisão: informe o teto de candidatos do recall (1 a 500)");
+        if (slot === "decision" && d.provider === "local" && d.url_on && !d.base_url) return say("Decisão: informe a URL do servidor — ou desmarque o avançado");
+        const sharedLLM = slot === "embeddings" && sel === "full" && draft.llm.provider === d.provider && draft.llm.key;
+        const sharedFW = slot === "reranker" && d.provider === "fireworks" &&
+          ((draft.embeddings.provider === "fireworks" && draft.embeddings.key) || (sel === "full" && draft.llm.provider === "fireworks" && draft.llm.key));
+        if (p.key_required && !p.subscription && !p.key_set && !d.key && !sharedLLM && !sharedFW)
+          return say("cole a API key de " + name + " (" + p.label + ")");
       }
-    };
-    if (q("#s-emb")) q("#s-emb").onchange = sync;
-    if (q("#s-prov")) q("#s-prov").onchange = sync;
-    if (q("#s-rer")) q("#s-rer").onchange = sync;
-    if (q("#s-dec")) q("#s-dec").onchange = sync;
-    sync();
-    q("#s-apply").onclick = e => stBusy(e.currentTarget, "aplicando…", async () => {
+      const llmP = reg("llm", draft.llm.provider) || {}, a = m.llm_auth || {};
+      if (sel === "full" && llmP.subscription && a.provider === draft.llm.provider && a.state === "pending")
+        return say("autentique a assinatura primeiro (botão Autenticar)");
       const body = {mode: sel};
-      if (sel === "embed") {
-        body.embeddings = q("#s-emb").value; body.key = q("#s-ekey") ? q("#s-ekey").value : "";
-        if (body.embeddings !== "local" && !body.key && !m.emb_key) return stMsg(q("#s-m"), "late", "cole a API key do embeddings");
-      } else if (sel === "full") {
-        body.provider = q("#s-prov").value; body.model = q("#s-model") ? q("#s-model").value.trim() : "";
-        body.embeddings = q("#s-emb").value; body.key = q("#s-key").value;
-        body.emb_key = q("#s-ekey") ? q("#s-ekey").value : "";
-        body.reranker = q("#s-rer") ? q("#s-rer").value : "off";
-        body.reranker_key = q("#s-rkey") ? q("#s-rkey").value : "";
-        body.decision = q("#s-dec")
-          ? {provider: q("#s-dec").value, key: q("#s-dkey") ? q("#s-dkey").value : ""}
-          : {provider: "off"};
-        body.consent = q("#s-consent").checked;
-        if (!body.consent) return stMsg(q("#s-m"), "late", "marque o aceite de envio à API");
-        if (body.decision.provider === "hindsight" && !body.decision.key && !m.dec_key)
-          return stMsg(q("#s-m"), "late", "cole a chave hsk_ da decisão — ou deixe Desligado (padrão)");
-        const subscr = ["claude-code", "xai-oauth"].includes(body.provider);
-        if (!subscr && !body.key && !m.llm_key) return stMsg(q("#s-m"), "late", "cole a API key do LLM");
-        if (subscr && (m.llm_auth || {}).state === "pending" && (m.llm_auth || {}).provider === body.provider)
-          return stMsg(q("#s-m"), "late", "autentique a assinatura primeiro (botão Autenticar ao lado)");
-        const sameAcct = body.provider === "openai" && body.embeddings === "openai";
-        if (body.embeddings !== "local" && !sameAcct && !body.emb_key && !m.emb_key) return stMsg(q("#s-m"), "late", "cole a API key do embeddings (" + (body.embeddings === "fireworks" ? "Fireworks" : "OpenAI") + ")");
-        const rsame = body.reranker === "fireworks" && body.embeddings === "fireworks";
-        if (rsame && !body.emb_key && !m.emb_key && !body.reranker_key)
-          return stMsg(q("#s-m"), "late", "cole a API key do Fireworks (embeddings e reranker usam a mesma conta)");
-        if (body.reranker !== "off" && !rsame && !body.reranker_key && !m.rer_key)
-          return stMsg(q("#s-m"), "late", "cole a API key do reranker (" + (body.reranker === "fireworks" ? "Fireworks" : "Cohere") + ")");
+      slots.forEach(slot => { body[slot] = memSlotBody(slot, draft[slot], base[slot]); });
+      if (sel === "full") {
+        body.consent = !!(q("#m-consent") && q("#m-consent").checked);
+        if (!body.consent) return say("marque o aceite de envio à API");
       }
+      const log = q("#m-log");
       try {
         const r = await obAct("memory", body);
-        if (q("#s-key")) q("#s-key").value = "";
-        if (q("#s-ekey")) q("#s-ekey").value = "";
-        if (q("#s-rkey")) q("#s-rkey").value = "";
-        if (r.job) { const log = q("#s-log"); log.hidden = false;
+        box.querySelectorAll("input[type=password]").forEach(i => { i.value = ""; });
+        slots.forEach(slot => { draft[slot].key = ""; });
+        if (r.job) { log.hidden = false;
           const j = await obJob(r.job, jj => { log.textContent = (jj.log || []).join("\n"); log.scrollTop = 1e9; });
-          if (j.status === "error") return stMsg(q("#s-m"), "late", (j.result && j.result.error) || "não consegui mudar a memória"); }
-        await obState(); toast("memória: modo " + (MEM_LABEL[SS.memory.mode] || SS.memory.mode)); SETUP.memoria(box);
-      } catch (err) { stMsg(q("#s-m"), "late", err.message); }
-    });
-    const authBtn = q("#s-auth");
-    if (authBtn) authBtn.onclick = e => stBusy(e.currentTarget, "autenticando…", async () => {
-      try {
-        const r = await obAct("memory_auth", {provider: q("#s-prov").value});
-        if (r.job) { const log = q("#s-log"); log.hidden = false;
-          const j = await obJob(r.job, jj => { log.textContent = (jj.log || []).join("\n"); log.scrollTop = 1e9; });
-          if (j.status === "error") return stMsg(q("#s-m"), "late", (j.result && j.result.error) || "não consegui autenticar");
-          stMsg(q("#s-m"), (j.result && j.result.ok === false) ? "late" : "ok",
-                (j.result && j.result.ok === false) ? "autenticação não completou — o log acima diz o que faltou" : "✓ autenticado");
-        }
-        await obState(); SETUP.memoria(box);
-      } catch (err) { stMsg(q("#s-m"), "late", err.message); }
+          if (j.status === "error") return stMsg(q("#m-msg"), "late", (j.result && j.result.error) || "não consegui mudar a memória"); }
+        await obState();
+        const fm = SS.memory.mode === "lite" ? "embed" : SS.memory.mode;
+        memLast = {ok: true, log: log.textContent, msg: "✓ aplicado — memória " + (MEM_LABEL[fm] || fm)};
+        toast("memória: modo " + (MEM_LABEL[fm] || fm));
+        await hydrateShell();          // o resto do painel (Saúde, Visão geral) lê o modelo novo; a tela redesenha
+      } catch (err) { stMsg(q("#m-msg"), "late", err.message); }
     });
   };
   draw();
@@ -2529,23 +2707,10 @@ SETUP.integracoes = box => {
   });
 };
 
-// ── face Configurações: troca de provedor da memória (mesma linha do CLI; sem campos condicionais:
-//    um select por slot, "manter" nos que não mudam — o preview monta só a linha do slot escolhido) ──
-function wireCfgMemoria(){
-  const b = document.querySelector("[data-provform]");
-  if (b) b.onclick = () => provForm();
-}
-
-function provForm(){
-  const cur = ((window.BRAIN.M.providers || {}).embeddings || {}).provider || "local";
-  openForm("memory.provider", {provider: cur});
-}
-
 window.afterRoute = function(view){
   if (location.hash.startsWith("#focus")) wireFocus();
   if (location.hash.startsWith("#pf/opps")) wireOppKanban();
   if (location.hash.startsWith("#ask")) wireAskPage();
-  if (location.hash.startsWith("#cfg/memoria")) wireCfgMemoria();
   if (document.getElementById("setup")) wireSetup(document.getElementById("setup").dataset.step);
   if (location.hash.startsWith("#cfg/saude")) {
     const head = document.querySelector("#view .pagehead");
@@ -3373,8 +3538,12 @@ function ctxKeys(k){
     if ((k === "L" || k === "o") && !pc) { needSel(); return true; }
     if (k === "d" && pc) { openForm("process.retire", {id: pc.id, title: pc.title}); return true; }
     return false; }
-  if (h.startsWith("#cfg/memoria")) {
-    if (k === "s") { const b = document.querySelector("[data-provform]"); if (b) b.click(); else provForm(); return true; }
+  if (h.startsWith("#cfg/memoria")) {   // as teclas da TUI (Configurações › Provedores): m modo · s provedor
+    if (k === "m" || k === "s") {
+      const el = document.querySelector(k === "m" ? "#setup .stopt.sel" : "#setup [data-mslot]");
+      if (el) { el.focus(); el.scrollIntoView({block: "center"}); }
+      else toast(LIVE ? "a tela ainda está carregando" : "retrato: só leitura — abra o Brain pelo app para mudar a memória");
+      return true; }
     return false; }
   if (h.startsWith("#cfg/saude")) {
     if (k === "o") { runCommand("brain doctor --online"); return true; }   // re-check ao vivo; a régua da página é do render
@@ -3571,7 +3740,7 @@ function keyLegend(){
   else if (h.startsWith("#pf/procs")) { add("n", "novo"); add("e", "editar", !id.startsWith("PROC-"));
     add("a", "nova oportunidade daqui", !id.startsWith("PROC-")); add("d", "aposentar", !id.startsWith("PROC-")); add("L", "ligar doc", !id.startsWith("PROC-")); add("o", "abrir playbook", !id.startsWith("PROC-")); }
   else if (h.startsWith("#pf/docs")) { add("L", "ligar"); add("d", "desligar", !id.startsWith("doc:")); add("enter", "abrir", !id.startsWith("doc:")); }
-  else if (h.startsWith("#cfg/memoria")) { add("s", "provedor"); }
+  else if (h.startsWith("#cfg/memoria")) { add("m", "modo"); add("s", "provedor"); }
   else if (h.startsWith("#cfg/saude")) { const hc = id.startsWith("health:") ? (M.health || [])[+id.slice(7)] : null;
     add("f", "corrigir", !(hc && hc.fix)); add("o", "testar online"); }
   else if (h.startsWith("#pf/areas")) { add("n", "nova"); add("e", "editar", !sel); }
@@ -5563,6 +5732,7 @@ function normalizeBrain(m){
   m.source_kinds = m.source_kinds || []; if (!Array.isArray(m.source_kinds)) m.source_kinds = [];
   m.doc_kinds = m.doc_kinds || []; if (!Array.isArray(m.doc_kinds)) m.doc_kinds = [];   // Fontes e Documentos (ausentes em instância antiga)
   m.providers = m.providers || {};   // face Configurações (ausente em instância antiga)
+  m.memory_mode = m.memory_mode || "";   // modo da memória (none · embed · full); vazio = payload antigo
   m.actions = m.actions || []; if (!Array.isArray(m.actions)) m.actions = [];
   m.publishes = m.publishes || []; if (!Array.isArray(m.publishes)) m.publishes = [];
   m.focus = m.focus || null;
@@ -6594,20 +6764,32 @@ V["cfg/rotina"] = setupView("rotina", "Rotina", "Fuso e expediente: o Brain calc
 V["cfg/agente"] = setupView("agente", "Seu agente", "O agente de IA que lê suas fontes e ajuda nas rotinas. Conectar cria o canal de leitura (MCP somente-leitura).");
 V["cfg/conectores"] = setupView("conectores", "Conectores", "O que o Brain pode ler, sempre só leitura. Nada é enviado sem você aprovar o texto exato.");
 V["cfg/integracoes"] = setupView("integracoes", "Integrações", "Opcionais. As chaves ficam só no seu computador e nunca aparecem de novo na tela.");
+// Memória: modo e provedores numa tela só. O resumo abaixo (do view model) é o retrato — só leitura; com a ponte no ar,
+// o extra.js troca o miolo de #setup pelo editor (os mesmos slots, com todos os campos), aplicado pela rota do passo Memória
 V["cfg/memoria"] = () => {
+  const MODE = {none: "nenhuma", embed: "embed", full: "full"}, mode = M.memory_mode || "";
   const rows = [["llm", "LLM"], ["embeddings", "Embeddings"], ["reranker", "Reranker"], ["decision", "Decisão"]].map(([k, icon]) => {
     const p = M.providers[k] || {};
     const egress = p.cloud ? '<span class="late">☁ egress</span>' : (p.local ? '<span class="dim">local</span>' : "");
-    const key = p.key_env ? (p.key_present ? '<span class="ok">chave ok</span>' : '<span class="late">sem chave</span>') : "";
+    const key = p.family === "subscription" ? '<span class="dim">assinatura</span>'
+      : p.managed ? (p.key_present ? '<span class="dim">gerenciado</span>' : '<span class="late">ainda não instalado</span>')
+      : p.key_env ? (p.key_present ? '<span class="ok">chave ok</span>' : '<span class="late">sem chave</span>') : "";
     const rec = k === "decision" && p.recall ? ' <span class="late">· recall (top-' + esc(String(p.candidates || "?")) + ")</span>" : "";
     const inert = k === "reranker" && p.inert ? ' <span class="dim">· inerte (decisor no recall)</span>' : "";
-    return "<tr><td><b>" + icon + "</b></td><td>" + esc(p.label || "—") + rec + inert + "</td><td>" + esc(p.model || "—") + "</td><td>" + egress + " " + key + "</td></tr>";
+    const uniq = Array.from(new Set(Object.values(p.ops || {})));   // a mesma em toda operação: um nome só
+    const model = (k === "llm" && uniq.length === 1 ? uniq[0] : String(p.model || "—").replace(/,/g, " · ")) +
+      (k === "embeddings" && p.dimensions ? " · " + p.dimensions + " dim" : "") +
+      (k === "reranker" && p.candidates ? " · top-" + p.candidates : "");
+    return "<tr><td><b>" + icon + "</b></td><td>" + esc(p.label || "—") + rec + inert + "</td><td>" + esc(model) + "</td><td>" + egress + " " + key + "</td></tr>";
   }).join("");
-  return '<div class="pagehead"><div><h1>Memória</h1><p class="sub">O modo e os provedores (LLM · embeddings · reranker · decisão) — configuração viva: mude quando quiser.</p></div></div>' +
-    '<div id="setup" data-step="memoria"></div>' +
-    panel("Provedores", '<div class="twrap"><table><tr><th>Slot</th><th>Provedor</th><th>Modelo</th><th></th></tr>' + rows + "</table></div>" +
-      '<p class="note-s" style="margin:10px 2px">A chave mora no config/.env e nunca aparece aqui. Trocou embeddings? O comando rebuild da memória re-deriva os vetores do vault. Depois de trocar, recrie o container (compose com o env-file da config).</p>' +
-      '<button class="btn primary" data-provform>Trocar provedor</button>');
+  const live = !!(window.BRAIN_AUTH && window.BRAIN_AUTH.isLive && window.BRAIN_AUTH.isLive());
+  return '<div class="pagehead"><div><h1>Memória</h1><p class="sub">O modo e os provedores (LLM · embeddings · reranker · decisão) numa tela só — configuração viva: mude quando quiser.</p></div></div>' +
+    '<div id="setup" data-step="memoria"><section class="panel stsec memro"><div class="sthead"><h2>Modo e provedores</h2>' +
+      (MODE[mode] ? '<span class="chip h-info">modo ' + MODE[mode] + "</span>" : "") + "</div>" +
+      '<div class="twrap"><table><tr><th>Slot</th><th>Provedor</th><th>Modelo</th><th></th></tr>' + rows + "</table></div>" +
+      '<p class="note-s" style="margin:10px 2px">' + (live ? "carregando o editor…"
+        : "Painel aberto como arquivo (retrato): só leitura. Para mudar o modo ou um provedor, abra o <b>Brain</b> pelo app — a ponte aplica, sobe ou recria o servidor de memória e narra cada passo.") +
+      "</p></section></div>";
 };
 function filesBlock(files) {
   if (!files || !files.length) return "";
