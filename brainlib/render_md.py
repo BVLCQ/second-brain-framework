@@ -16,6 +16,34 @@ from pathlib import Path
 from . import planning, util
 
 LEDGER = "PROCESSED/_ledger/events.jsonl"
+
+
+def _vault_href(frm: str, rel: str) -> str:
+    """Href de uma nota em FRESH/ para um caminho na raiz do vault.
+
+    O Markdown resolve contra a nota. `RAW/inbox/x.md` a partir de
+    `records/actions/` apontaria para uma pasta que não existe.
+    """
+    note_dir = os.path.dirname(frm) or "."
+    if "://" in rel:
+        return rel
+    href = os.path.normpath(os.path.join(os.path.relpath(".", note_dir), "..", rel))
+    return href.replace(" ", "%20")
+
+
+def _file_links(frm: str, files: list | None) -> list[str]:
+    """Caminhos do vault como link Markdown, relativos à nota. Fora do vault, não vira link."""
+    lines = []
+    for f in files or []:
+        rel = str(f.get("rel") or "")
+        if not rel or ".." in Path(rel).parts:
+            continue
+        name = re.sub(r"([\\\[\]|])", r"\\\1", _ln(str(f.get("name") or Path(rel).name)))
+        kind = re.sub(r"([\\\[\]|])", r"\\\1", _ln(str(f.get("kind") or "arquivo")))
+        lines.append(f"- {kind} · [{name}]({_vault_href(frm, rel)})")
+    if not lines:
+        return []
+    return ["", "## Arquivos linkados", "", *lines]
 PLANNING = "PLANNING/goals.md"
 HEALTH_ICON = {"em-risco": "⚠", "travado": "⚠", "atencao": "·", "em-dia": "✓", "concluido": "✓",
                "congelado": "·", "depois": "·", "fechado": "·"}
@@ -610,6 +638,7 @@ class Pages:
                 body.append("destrava: " + ", ".join(a["unblocks"]))
             if a["outcome"]:
                 body.append(f"Resultado: {a['outcome']}")
+            body += _file_links(f, a.get("files"))
             body += ["", "## Histórico", ""]
             body += [f"- {h['date']} · {h['type']} · {h['note']} ({h['by']})" for h in a["history"]]
             self.put(f, _frontmatter(fm) + "\n".join(body))
@@ -627,7 +656,16 @@ class Pages:
                 body.append(f"**Contexto:** {d['context']}")
             if d["rationale"]:
                 body.append(f"**Por quê:** {d['rationale']}")
-            body.append(f"**Fonte:** {d['source_label']} (`{d['source']}`) [{d['prov']}]")
+            src = d.get("source") or ""
+            label = re.sub(r"([\\\[\]|])", r"\\\1", _ln(str(d["source_label"])))
+            if "://" in src:
+                fonte = f"[{label}]({src})"
+            elif "/" in src and ".." not in Path(src).parts:
+                fonte = f"[{label}]({_vault_href(f, src)})"
+            else:
+                fonte = d["source_label"]
+            body.append(f"**Fonte:** {fonte} [{d['prov']}]")
+            body += _file_links(f, d.get("files"))
             if d["supersedes"]:
                 body.append(f"Substitui {self.dec(f, d['supersedes'])}")
             if d["superseded_by"]:

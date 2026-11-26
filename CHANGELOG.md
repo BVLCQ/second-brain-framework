@@ -4,6 +4,18 @@
 - **Fonte avulsa sai da lista.** `brain watch remove KEY` agora também esquece o registro de pulls (evento `connector.forgotten`), e o `d` do painel e da TUI funciona em fonte avulsa. Tirar uma fonte do `watch.toml` não deixa mais um fantasma em "avulsas". Snapshots e eventos antigos ficam.
 - **O erro some quando a fonte volta.** Um pull saudável limpa o texto do último erro, e uma checagem "inalterado" numa fonte com falha em aberto grava o pull que limpa o chip e o selo do grupo. Fonte saudável continua em silêncio.
 
+## 2.55.0 — arquivos do vault viram link na ficha e no FRESH
+
+- **A ficha mostra os arquivos ligados.** Ação, decisão, projeto, pessoa, oportunidade, processo, pergunta, foco, publicação e goal trazem a mesma lista da TUI: tipo, nome e para onde abre. O clique passa pelo servidor local, só dentro do vault. Fora do vault, ou com `..`, é recusado.
+- **Sem editor, o leitor embutido.** Markdown com títulos, listas e tabelas. Um `<script>` no texto aparece escapado. Na própria ficha dá para trocar entre editor e leitor, e abrir todos de uma vez.
+- **A nota em FRESH também liga o arquivo.** A ficha da ação e da decisão lista os arquivos como link, em vez de caminho solto.
+
+## 2.54.0 — a barra lateral ganha seções, e Fontes sai do dia
+
+- **Rótulos, nada some.** Execução separa Agora, Atenção e Registro. Portfólio separa Mapa, Trabalho e Cadastro. Configurações separa Conta, Conexões, Instância e Meta. O rótulo não é link.
+- **Sugestões foi para Configurações.** É sobre o cérebro, não sobre o dia. A paleta continua achando a página.
+- **Fontes foi para o lado de Conectores.** Na Execução fica só o badge, e só quando há falha de pull. O clique abre a página, que mora em Configurações.
+
 ## 2.53.0 — o diálogo de atualização lista o assunto de cada commit
 
 - **Uma linha por commit, no máximo 140 caracteres.** O assunto aparece inteiro se cabe. Se passa, corta no último espaço e põe reticências. A conta é de caracteres, não de bytes. O hash curto fica ao lado e não entra na conta.

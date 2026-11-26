@@ -818,6 +818,12 @@ def cmd_open(args, b: Brain) -> None:
     render.open_dashboard(b, args.panel)
 
 
+def cmd_files(args, b: Brain) -> None:
+    from . import opener
+    changed = opener.set_prefs(b.inst, args.mode, args.ide)
+    print("✓ abertura gravada: " + ", ".join(changed) if changed else "abertura já estava assim")
+
+
 def cmd_sync(args, b: Brain) -> None:
     from . import harvest
     evs = harvest.run(b)
@@ -1371,6 +1377,13 @@ def build_parser() -> argparse.ArgumentParser:
                    help="abre no navegador o painel da face Execução (padrão) ou o mapa de oportunidades (portfolio)")
     p.add_argument("--json", action="store_true")
     p.set_defaults(fn=cmd_render)
+
+    p = sub.add_parser("files", help="como o painel abre um arquivo do vault")
+    fs = p.add_subparsers(dest="fcmd", required=True)
+    x = fs.add_parser("set", help="grava [open]: mode auto|ide|brain e o editor padrão")
+    x.add_argument("--mode", required=True, choices=["auto", "ide", "brain"])
+    x.add_argument("--ide", default=None, help="aplicativo padrão (vazio mantém o atual se omitido)")
+    x.set_defaults(fn=cmd_files)
 
     p = sub.add_parser("sync", help="só colhe edições do dono (checkbox/status/goals.md)")
     p.add_argument("--json", action="store_true")

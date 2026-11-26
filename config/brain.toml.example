@@ -136,8 +136,14 @@ model = "claude-haiku-5-5"     # vazio = padrão do claude; alias ("haiku") o cl
 effort = ""                    # low | medium | high | xhigh | max
 
 [tui.open]
-# Aplicativo que abre o arquivo clicado no detalhe ("Arquivos linkados", notas, documentos): extensão sem ponto = nome do app.
-# Vazio = programa padrão do sistema (macOS: open -a <app>; Linux: o comando).
+# Sinônimo antigo de [open]. Extensão sem ponto = nome do app. Vazio = padrão do sistema.
+# md = "Cursor"
+
+[open]
+# Como o painel abre um arquivo do vault. mode: auto | ide | brain. ide = aplicativo padrão.
+# O mapa por extensão fica aqui ou em [tui.open] (o de [open] vence).
+mode = "auto"
+ide = ""
 # md = "Cursor"
 # mp4 = "VLC"
 

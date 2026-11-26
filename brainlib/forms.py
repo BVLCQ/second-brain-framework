@@ -535,6 +535,13 @@ def _forms() -> list[Form]:
              sub="O /update e o noturno deixam de puxá-la, e o registro de pulls sai da lista (inclusive o aviso de erro). "
                  "Fonte avulsa, que não está no watch.toml, só sai da lista. Snapshots já gravados e o ledger ficam."),
 
+        Form("open.set", "Como abrir arquivos", ("files", "set"), (
+            F("mode", "modo", choices=(("auto", "automático — editor se houver, senão aqui"),
+                                       ("ide", "sempre no editor"),
+                                       ("brain", "sempre aqui")), value="auto", arg="--mode"),
+            F("ide", "editor", ph="Cursor · VS Code · Zed · vazio mantém", arg="--ide", skip=("",))),
+             sub="Vale para o painel. O mapa por extensão continua em [open] ou [tui.open]."),
+
         # ── configurações ────────────────────────────────────────────────────
         Form("memory.mode", "Memória: modo e provedores", ("memory", "setup", "--mode", "{mode}"), (
             F("mode", "modo", choices=(("none", "nenhuma — busca por palavra"),

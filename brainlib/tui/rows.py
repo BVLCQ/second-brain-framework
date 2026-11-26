@@ -317,9 +317,15 @@ class Doc:
 
 
 def file_link(rel: str, text: str, style: str = "") -> Text:
-    """Texto que abre `rel` (relativo ao vault) no aplicativo da máquina ao clicar (app.open_file, mapa em [tui.open])."""
+    """Texto que abre `rel` no aplicativo da máquina, ou no leitor se o modo for brain."""
     st = Style(meta={"@click": f"app.open_file({rel!r})"})
     return Text(text, style=(Style.parse(style) + st) if style else st)
+
+
+def file_read(rel: str) -> Text:
+    """Abre o mesmo arquivo no leitor da TUI, sem sair para o editor."""
+    st = Style(meta={"@click": f"app.read_file({rel!r})"})
+    return Text("ver", style=Style.parse("dim") + st)
 
 
 def files_section(doc: Doc, store, node: str = "", sources: tuple = (), docs: list | None = None) -> None:
@@ -330,7 +336,8 @@ def files_section(doc: Doc, store, node: str = "", sources: tuple = (), docs: li
         doc.p(("Nenhum arquivo ligado.", DIM))
         return
     for f in files:
-        doc.p((f"[{f['kind']}] ", DIM), file_link(f["rel"], f["name"], "underline"), (f"  → {f['app'] or 'padrão do sistema'}", DIM))
+        doc.p((f"[{f['kind']}] ", DIM), file_link(f["rel"], f["name"], "underline"),
+              ("  ", DIM), file_read(f["rel"]), (f"  → {f['app'] or 'padrão do sistema'}", DIM))
 
 
 def prov(p: str | None) -> Text:
@@ -673,7 +680,7 @@ def d_ask(store, it) -> Doc:
     doc.blank().kv([
         ("contexto", _ctx(store, q.context) if q.context else Text("—", DIM)),
         ("rodada", Text(q.run or "—")),
-        ("fonte", Text(f"{q.source or '—'} ") + prov(q.prov)),
+        ("fonte", (file_link(q.source, q.source) if q.source and "/" in q.source else Text(f"{q.source or '—'} ")) + prov(q.prov)),
         ("perguntada", Text(util.fmt_date(q.asked))),
         ("resposta", Text.assemble((q.answer, "bold"), (" (texto livre)" if q.free and q.options else "", DIM))) if q.answer else None,
         ("aplicada", Text(q.how)) if q.how else None,
@@ -685,13 +692,14 @@ def d_ask(store, it) -> Doc:
         doc.sec("Aguardando o agente").p("A resposta está na fila de reserva: o passo 0 do próximo /dump ou /update a aplica. ", ("R", "bold cyan"),
                                           " retoma o agente agora.")
     doc.sec("Equivalente na CLI").cmd(f'brain ask answer {q.id} "…" --by owner')
+    files_section(doc, store, q.id, (q.source, *q.context))
     return doc
 
 
 def _ctx(store, refs: list[str]) -> Text:
     t = Text()
     for i, r in enumerate(refs):
-        t.append_text(titled(store, r) if r.upper().startswith(("TASK-", "PROJ-", "GOAL-", "DEC-", "PROP-", "OPP-", "PROC-", "MSG-")) else Text(r))
+        t.append_text(titled(store, r) if r.upper().startswith(("TASK-", "PROJ-", "GOAL-", "DEC-", "PROP-", "OPP-", "PROC-", "MSG-")) else (file_link(r, r) if "/" in r else Text(r)))
         if i < len(refs) - 1:
             t.append(", ")
     return t
@@ -751,6 +759,7 @@ def d_focus(store, it) -> Doc:
     if not nd:
         doc.p(("Nenhuma.", DIM))
     doc.blank().p(("Para mudar um horário, altere o prazo ou o esforço da ação e planeje de novo.", DIM))
+    files_section(doc, store, f["id"], (f.get("plan_file") or "",))
     return doc
 
 
@@ -765,12 +774,13 @@ def d_pub(store, it) -> Doc:
     if s["status"] == "cancelada":
         flow.append("  cancelada", FAINT)
     doc = Doc().h(f"{s['id']} · publicação").blank()
-    doc.kv([("report", Text(s["report"])), ("destino", Text.assemble(s["destination"], (" ✓ em [publish].destinations" if s["destination"] in store.destinations() else " ✗ fora de [publish].destinations", GRN if s["destination"] in store.destinations() else RED))),
+    doc.kv([("report", file_link(s["report"], s["report"]) if s.get("report") and "/" in s["report"] else Text(s["report"])), ("destino", Text.assemble(s["destination"], (" ✓ em [publish].destinations" if s["destination"] in store.destinations() else " ✗ fora de [publish].destinations", GRN if s["destination"] in store.destinations() else RED))),
             ("estado", Text(s["status"], AMB)), ("link", Text(s["link"], DIM)) if s["link"] else None])
     doc.lines.append(flow)
     doc.blank().p(("Se o arquivo mudar depois da aprovação, o pedido precisa ser refeito (conteúdo travado por hash).", DIM))
     if s["status"] == "aprovada":
         doc.blank().p(("⚡ O agente posta no destino e registra o link com P.", VIO))
+    files_section(doc, store, "", (s.get("report") or "",))
     return doc
 
 

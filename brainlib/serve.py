@@ -60,6 +60,7 @@ ALLOWED: dict[str, set[str] | None] = {
     "note": {"add"},
     "proposal": {"accept", "reject"},
     "feedback": {"add", "push", "sync", "withdraw", "retract"},  # porta 7: o dono registra/publica/retira/retrata/confere pelo painel
+    "files": {"set"},                               # como o painel abre arquivo do vault
     "doctor": None,                                 # cfg/saude 'testar online': leitura, sem escrita
 }
 DENY_HINT = "fora da allowlist da ponte — rode no terminal se for o caso"
@@ -698,6 +699,8 @@ class _Handler(BaseHTTPRequestHandler):
                 with self.state.lock:
                     m = render.view_model(self._brain())
                 self._json(200, {"ok": True, "model": m})
+            elif path == "/api/file":
+                self._file_get()
             elif path == "/api/portfolio":
                 from . import render, render_portfolio
                 with self.state.lock:
@@ -731,6 +734,44 @@ class _Handler(BaseHTTPRequestHandler):
             return None
         return req
 
+    def _vault_file(self, rel: str):
+        """Arquivo dentro do vault, ou None (já respondeu 403)."""
+        from . import linked
+        f = linked.vault_file(self.state.inst, rel or "")
+        if f is None:
+            self._json(403, {"ok": False, "error": "arquivo fora do vault"})
+        return f
+
+    def _file_get(self) -> None:
+        from urllib.parse import parse_qs, urlparse
+        rel = (parse_qs(urlparse(self.path).query).get("rel") or [""])[0]
+        f = self._vault_file(rel)
+        if f is None:
+            return
+        if f.stat().st_size > 1_000_000:
+            self._json(413, {"ok": False, "error": "arquivo grande demais para o leitor"})
+            return
+        try:
+            text = f.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            self._json(200, {"ok": True, "rel": self.state.inst.rel(f), "name": f.name,
+                             "binary": True, "text": ""})
+            return
+        self._json(200, {"ok": True, "rel": self.state.inst.rel(f), "name": f.name, "text": text})
+
+    def _open_post(self) -> None:
+        from . import opener
+        req = self._read_json_body()
+        if req is None:
+            return
+        rel = str(req.get("rel") or "")
+        try:
+            app = opener.open_file(self.state.inst, rel)
+        except util.BrainError as e:
+            self._json(403 if getattr(e, "code", 4) != 3 else 404, {"ok": False, "error": str(e)})
+            return
+        self._json(200, {"ok": True, "app": app})
+
     def do_POST(self):                                  # noqa: N802
         try:
             if not self._guard():
@@ -750,6 +791,9 @@ class _Handler(BaseHTTPRequestHandler):
                 return
             if path == "/api/inbox":
                 self._inbox_post()
+                return
+            if path == "/api/open":
+                self._open_post()
                 return
             if path != "/api/cmd":
                 self._deny(404, "rota desconhecida")
