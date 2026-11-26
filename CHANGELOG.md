@@ -1,3 +1,8 @@
+## 2.51.0 — o diálogo de atualização lista o assunto de cada commit
+
+- **Uma linha por commit, no máximo 140 caracteres.** O assunto aparece inteiro se cabe. Se passa, corta no último espaço e põe reticências. A conta é de caracteres, não de bytes. O hash curto fica ao lado e não entra na conta.
+- **O changelog deixa de ser a leitura padrão.** Os parágrafos longos continuam no CHANGELOG.md e atrás de "ver changelog". A checagem não descarta assunto depois do vigésimo. A mesma lista sai no `brain update --check`.
+
 ## 2.50.0 — o texto da sugestão aparece formatado, e o rascunho do agente espera leitura
 
 - **A aba Sugestões mostra o texto que sobe, formatado.** Título com a tag, molde e rodapé entram no leitor de Markdown. Um `<script>` no texto aparece escapado. O hash do texto fica ao lado do link da issue.

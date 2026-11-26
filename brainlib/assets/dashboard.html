@@ -936,6 +936,7 @@ body.obmode #faces, body.obmode #tabs, body.obmode #openpal { display: none; }
       <span class="spacer"></span>
       <span class="news-fb" id="newsfb" aria-live="polite"></span>
       <button type="button" class="btn primary" id="newsact" data-brain-update="1" hidden><span class="only-live">Atualizar agora</span><span class="only-portrait">Copiar comando</span></button>
+      <button type="button" class="btn tiny" id="newschangelog" hidden>ver changelog</button>
       <button class="btn ghost" id="newsclose">fechar</button>
     </div>
   </div>
@@ -7068,9 +7069,23 @@ function syncVerBadge(){
     const commitsTxt = u.behind + (u.behind === 1 ? " commit atrás" : " commits atrás");
     const verTxt = "v" + (u.version || "?");
     const transTxt = verTxt + " → v" + (u.remote_version || "?");
-    const news = (u.news && u.news.length) ? u.news : semNovidade(u);
-    document.getElementById("newslist").innerHTML =
-      news.map(n => '<div class="ni">' + esc(n) + "</div>").join("");
+    const lines = (u.lines && u.lines.length) ? u.lines : [];
+    const log = (u.news && u.news.length) ? u.news : [];
+    let showLog = false;
+    const paint = () => {
+      const list = showLog ? log : lines;
+      const body = list.length ? list : semNovidade(u);
+      document.getElementById("newslist").innerHTML =
+        body.map(n => '<div class="ni">' + esc(n) + "</div>").join("");
+      const toggle = document.getElementById("newschangelog");
+      if (toggle) {
+        toggle.hidden = !log.length;
+        toggle.textContent = showLog ? "ver commits" : "ver changelog";
+      }
+    };
+    paint();
+    const toggle = document.getElementById("newschangelog");
+    if (toggle) toggle.onclick = () => { showLog = !showLog; paint(); };
     document.getElementById("newstitle").textContent = behind ? "Atualização disponível" : "Novidades da versão";
     if (meta) {
       meta.textContent = behind
