@@ -354,7 +354,12 @@ document.addEventListener("click", async (ev) => {
     if (readBtn || (openBtn && window.BRAIN && window.BRAIN.M && window.BRAIN.M.open && window.BRAIN.M.open.reader)) {
       const j = await api("/api/file?rel=" + encodeURIComponent(rel));
       if (!j.ok) { agentToast("arquivo", rel, j.error || "recusado"); return; }
-      if (j.binary) { agentToast("arquivo", rel, "não é texto — use Abrir"); return; }
+      if (j.binary) {
+        const opened = await api("/api/open", {method: "POST", headers: {"Content-Type": "application/json"},
+                                              body: JSON.stringify({rel: rel})});
+        agentToast("arquivo", rel, opened.ok ? "não é texto — abri no aplicativo" : (opened.error || "não é texto e não abriu"));
+        return;
+      }
       showReader(j.name || rel, j.text || "");
       return;
     }

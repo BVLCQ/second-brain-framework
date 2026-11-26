@@ -4,6 +4,11 @@
 - **Sem editor, o leitor embutido.** Markdown com títulos, listas e tabelas. Um `<script>` no texto aparece escapado. Na própria ficha dá para trocar entre editor e leitor, e abrir todos de uma vez.
 - **A nota em FRESH também liga o arquivo.** A ficha da ação e da decisão lista os arquivos como link, em vez de caminho solto.
 
+## 2.50.0 — o texto da sugestão aparece formatado, e o rascunho do agente espera leitura
+
+- **A aba Sugestões mostra o texto que sobe, formatado.** Título com a tag, molde e rodapé entram no leitor de Markdown. Um `<script>` no texto aparece escapado. O hash do texto fica ao lado do link da issue.
+- **Rascunho do agente espera leitura.** Enquanto o dono não publica, a aba e a TUI marcam "aguardando leitura". O `brain doctor` avisa o mesmo.
+
 ## 2.49.0 — o sync avisa se o texto no GitHub divergiu
 
 - **O sync avisa se o GitHub divergiu.** `feedback sync` compara o corpo da issue com o texto que o Brain enviou. Se alguém editou lá fora, o evento marca a divergência. A aba Sugestões e a lista da TUI mostram o aviso. Sem corpo na resposta, não acusa.
