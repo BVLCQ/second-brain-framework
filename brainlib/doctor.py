@@ -72,6 +72,25 @@ def _machine_checks(cfg: dict, which=shutil.which, exists=None) -> list[dict]:
     return out
 
 
+def open_check(cfg: dict, which=shutil.which) -> dict:
+    """Como os arquivos do vault abrem. ok/warn — nunca error (a saída gateia o modal da TUI)."""
+    raw = cfg.get("open") if isinstance(cfg, dict) else None
+    section = raw if isinstance(raw, dict) else {}
+    mode = str(section.get("mode") or "auto")
+    ide = str(section.get("ide") or "")
+    found = [n for n in ("cursor", "code", "zed") if which(n)]
+    if mode not in ("auto", "ide", "brain"):
+        return _c("warn", "abertura", f"mode {mode!r} não é auto, ide ou brain — vale o automático")
+    if mode == "brain":
+        return _c("ok", "abertura", "modo brain — o arquivo abre no próprio painel")
+    name = ide or (found[0] if found else "")
+    if mode == "ide" and not name:
+        return _c("warn", "abertura", "modo ide sem editor — preencha [open].ide ou use mode = \"brain\"")
+    dest = name or "padrão do sistema"
+    extra = f" (detectado: {', '.join(found)})" if found and not ide else ""
+    return _c("ok", "abertura", f"modo {mode} · {dest}{extra}")
+
+
 def _lms_machine_check(cfg: dict, out: list) -> None:
     """Embeddings locais (embed ou full): o LM Studio precisa existir e responder. Warn, nunca
     error (a saída gateia o modal da TUI) — e a dica acompanha o estado real: instalado com
@@ -197,6 +216,7 @@ def checks(brain, online: bool = False, probe_agent: bool = False, docker_probe=
     if not (inst.config_dir / "brain.toml").exists():
         out.append(_c("warn", "config", "config/brain.toml ausente — rode `./brain setup`"))
     out.extend(_machine_checks(cfg))
+    out.append(open_check(cfg))
     for zone in ("PROFILE", "PLANNING", "RAW/inbox", "PROCESSED", "FRESH"):
         if not (inst.vault / zone).exists():
             out.append(_c("error", "vault", f"zona ausente: vault/{zone} — rode `./brain init`"))

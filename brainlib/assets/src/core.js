@@ -33,6 +33,7 @@ function normalizeBrain(m){
   m.portfolio.gaps = Object.assign({total: 0, areas_without_process: [], processes: [], no_ice: [], ice_suggested: [], stale: []}, m.portfolio.gaps || {});
   m.portfolio.ice_rubric = Object.assign({success_measures: [], principles: [], axes: {}}, m.portfolio.ice_rubric || {});
   m.update = m.update || {}; m.update = Object.assign({version:"?", news:[], cli_cmd:"", checked_at:"", behind:0, ahead:0, remote_version:""}, m.update);
+  m.open = Object.assign({mode: "auto", ide: "", reader: false}, m.open || {});
   m.freshness = m.freshness || {};
   m.freshness = Object.assign({
     last_dump_at: null, last_dump_age_h: null,
@@ -86,7 +87,7 @@ function normalizeBrain(m){
   // publicações (porta 3) vêm dos shares reais do ledger (Share: solicitada|aprovada|publicada|cancelada)
   if (!m.publishes.length && m.shares.length)
     m.publishes = m.shares.map(x => ({id: x.id, title: String(x.report || "").split("/").pop() || x.id,
-      to: x.destination || "—", status: x.status, date: x.date, link: x.link || null}));
+      to: x.destination || "—", status: x.status, date: x.date, link: x.link || null, report: x.report || "", files: x.files || []}));
   return m;
 }
 const M = normalizeBrain(RAW_DATA);
@@ -648,6 +649,7 @@ V.home = () => {
     (g.declared ? " · declarado " + g.declared.pct + "% em " + fmtD(g.declared.date) : "") + "</div></div></div>" +
     g.projects.map(pid => { const p = P[pid]; return '<div class="proj"><div class="t">' + pL(pid, true) + "<small>" + esc(p.health.reason) +
       (p.next_due ? " · próximo: " + p.next_due.id + " " + fmtD(p.next_due.date) : "") + "</small></div>" + bar(p.progress.pct) + chip(p.health.level, p.health.label) + "</div>"; }).join("") +
+    filesBlock(g.files) +
     "</section>").join("") + "</div>";
   h += '<div class="grid g2" style="margin-top:14px">';
   const days = {};
@@ -848,6 +850,7 @@ V.project = (q, id) => {
     (p.actions.watching.length ? "<h2>Observando · " + p.actions.watching.length + "</h2>" + actionTable(p.actions.watching, ["owner"]) : "") +
     (p.actions.closed.length ? "<h2>Fechadas recentemente</h2><ul class=\"feed\">" + p.actions.closed.map(aid => { const a = A[aid]; return '<li><span class="muted">' + fmtD(a.closed) + "</span> · " + aL(aid) + " " + esc(a.title) + ' <span class="muted">(' + esc(a.owner_name) + ") — " + esc(a.how) + "</span></li>"; }).join("") + "</ul>" : ""));
   h += panel("Linha do tempo", timelineList(p.timeline, 80)) + "</div>";
+  h += filesBlock(p.files);
   return h;
 };
 V.decisions = (q) => {
@@ -878,7 +881,7 @@ V.wins = () => {
     '<div class="kpi"><span>ações suas fechadas (30d)</span><b>' + w.closed_30d + "</b></div></div>";
   h += panel("", '<div class="legend"><span><i style="background:var(--chart-a)"></i>entregas e entregáveis</span><span><i style="background:var(--chart-b)"></i>ações fechadas</span></div>' + svg);
   w.weeks.forEach(k => {
-    const items = [...k.deliveries.map(id => { const e = DL[id]; return "<li>✓ <b>" + esc(e.title) + '</b> <span class="muted">' + fmtD(e.date) + "</span> — " + esc(e.result) + (e.impact ? " · impacto: " + esc(e.impact) : "") + (e.project ? " · " + pL(e.project) : "") + ' <span class="muted">[' + esc(e.prov) + "]</span></li>"; }),
+    const items = [...k.deliveries.map(id => { const e = DL[id]; return "<li>✓ <b>" + esc(e.title) + '</b> <span class="muted">' + fmtD(e.date) + "</span> — " + esc(e.result) + (e.impact ? " · impacto: " + esc(e.impact) : "") + (e.project ? " · " + pL(e.project) : "") + ' <span class="muted">[' + esc(e.prov) + "]</span>" + ((e.files || []).map(f => ' <button type="button" class="btn tiny" data-read="' + esc(f.rel) + '">' + esc(f.name) + "</button>").join("")) + "</li>"; }),
       ...k.deliverables.map(id => { const x = DD[id]; return "<li>✓ entregável <b>" + id + "</b> " + esc(x.title) + ' <span class="muted">' + fmtD(x.date) + "</span> · " + pL(x.project) + "</li>"; })];
     h += '<h2 class="sec">' + esc(k.label) + ' <span class="muted">· ' + (k.deliveries.length + k.deliverables.length) + " entregas · " + k.closed.length + " ações fechadas · " + k.decisions.length + " decisões</span></h2>" +
       panel("", (items.length ? '<ul class="feed">' + items.join("") + "</ul>" : "") + (k.closed.length ? '<p class="muted small">Ações fechadas: ' + k.closed.map(id => aL(id) + " " + esc(A[id].title)).join(" · ") + "</p>" : "") +
@@ -901,7 +904,8 @@ V.person = (q, id) => {
   h += "<p><b>Última interação:</b> " + (p.last_interaction ? fmtDL(p.last_interaction.date) + " — " + esc(p.last_interaction.title) : "não consta") + "</p>";
   h += '<div class="grid g2">' + panel("O que me deve", actionTable(p.owes_me || [], ["age", "project"]) + "<h2>O que eu devo</h2>" + actionTable(p.i_owe || [], ["project"]));
   h += panel("Decisões que tomou", ((p.decisions || []).length ? '<ul class="feed">' + (p.decisions || []).map(d => '<li><span class="muted">' + fmtD(D[d] ? D[d].date : "") + "</span> · " + dL(d) + " " + esc(D[d] ? D[d].title : d) + "</li>").join("") + "</ul>" : empty("nenhuma registrada")) +
-    "<h2>Projetos</h2>" + ((p.projects || []).map(x => pL(x, true)).join(" · ") || empty("—")) + '<h2>Menções recentes</h2><ul class="feed">' + (p.artifacts || []).filter(a => ART[a]).map(a => '<li><span class="muted">' + fmtD(ART[a].date) + "</span> · " + esc(ART[a].title) + "</li>").join("") + "</ul>") + "</div>";
+    "<h2>Projetos</h2>" + ((p.projects || []).map(x => pL(x, true)).join(" · ") || empty("—")) +    '<h2>Menções recentes</h2><ul class="feed">' + (p.artifacts || []).filter(a => ART[a]).map(a => '<li><span class="muted">' + fmtD(ART[a].date) + "</span> · " + esc(ART[a].title) + (ART[a].raw ? " · " + pathLink(ART[a].raw) : "") + "</li>").join("") + "</ul>") + "</div>";
+  h += filesBlock(p.files);
   return h;
 };
 V.timeline = () => {
@@ -971,6 +975,7 @@ V.focus = () => {
   if (f.at_risk.length) h += panel("⚠ Não cabe antes do prazo", '<ul class="feed">' + f.at_risk.map(r => "<li>" + aL(r.action) + " " + esc((A[r.action] || {}).title || "") + " · prazo " + fmtDW(r.due) + " · faltam <b>" + dur(r.shortfall_min) + "</b> de " + dur(r.needed_min) + "</li>").join("") + "</ul>", ' data-priority');
   if (f.missing_effort.length) h += panel("Sem estimativa de esforço (usei o padrão)", f.missing_effort.map(aL).join(", "));
   if (f.consumed.length) h += panel("Esforço consumido e ainda aberta — reestimar?", f.consumed.map(aL).join(", "));
+  h += filesBlock(f.files);
   return h;
 };
 V.outbox = (q) => {
@@ -1055,6 +1060,18 @@ V["cfg/memoria"] = () => {
       '<p class="note-s" style="margin:10px 2px">A chave mora no config/.env e nunca aparece aqui. Trocou embeddings? O comando rebuild da memória re-deriva os vetores do vault. Depois de trocar, recrie o container (compose com o env-file da config).</p>' +
       '<button class="btn primary" data-provform>Trocar provedor</button>');
 };
+function filesBlock(files) {
+  if (!files || !files.length) return "";
+  const reader = !!(window.BRAIN && window.BRAIN.M && window.BRAIN.M.open && window.BRAIN.M.open.reader);
+  const rows = files.map(f =>
+    '<li><button type="button" class="btn tiny" data-open="' + esc(f.rel) + '">Abrir</button> ' +
+    '<button type="button" class="btn tiny" data-read="' + esc(f.rel) + '">Ver</button> ' +
+    esc(f.kind) + " · " + esc(f.name) +
+    ' <span class="muted">→ ' + esc(f.app || "padrão do sistema") + "</span></li>").join("");
+  return panel("Arquivos linkados", '<p class="muted small"><button type="button" class="btn tiny" data-openform="open.set">Como abrir</button> ' +
+    '<button type="button" class="btn tiny" data-opentoggle>' + (reader ? "Abrir no editor" : "Ver no Brain") + '</button> ' +
+    '<button type="button" class="btn tiny" data-openall>abrir tudo</button></p><ul class="feed">' + rows + "</ul>");
+}
 V.action = (q, id) => {
   const a = A[id]; if (!a) return empty("Ação não encontrada");
   return '<p class="crumb muted"><a href="#todo">← TODO</a></p><div class="pagehead"><div><h1>' + a.id + " · " + esc(a.title) + '</h1>' +
@@ -1064,7 +1081,7 @@ V.action = (q, id) => {
     (a.open ? '<button class="btn primary" data-act="close" data-id="' + esc(a.id) + '">c fechar</button>' : '<button class="btn" data-act="reopen" data-id="' + esc(a.id) + '">o reabrir</button>') +
     '<button class="btn" data-act="merge" data-id="' + esc(a.id) + '">m mesclar duplicada</button></div></div>' +
     panel("", (a.blocked_by.length ? "<p>⛔ bloqueada por " + a.blocked_by.map(aL).join(", ") + "</p>" : "") + (a.unblocks.length ? "<p>destrava: " + a.unblocks.map(u => A[u] ? aL(u) : esc(u)).join(", ") + "</p>" : "") +
-    (a.people.length ? "<p>envolvidos: " + a.people.map(peL).join(", ") + "</p>" : "") + '<p class="muted small">origem: ' + esc(a.source_label) + " [" + esc(a.prov) + "]</p>" + (a.outcome ? "<p><b>Resultado:</b> " + esc(a.outcome) + "</p>" : "") +
+    (a.people.length ? "<p>envolvidos: " + a.people.map(peL).join(", ") + "</p>" : "") + '<p class="muted small">origem: ' + esc(a.source_label) + " [" + esc(a.prov) + "]</p>" + filesBlock(a.files) + (a.outcome ? "<p><b>Resultado:</b> " + esc(a.outcome) + "</p>" : "") +
     "<h2>Histórico</h2>" + '<ul class="feed">' + a.history.map(x => '<li><span class="muted">' + fmtD(x.date) + "</span> · " + esc(x.type) + " · " + esc(x.note) + ' <span class="muted">(' + esc(x.by) + ")</span></li>").join("") + "</ul>");
 };
 V.decision = (q, id) => {
@@ -1072,7 +1089,7 @@ V.decision = (q, id) => {
   return '<p class="crumb muted"><a href="#decisions">← decisões</a></p><div class="pagehead"><div><h1>' + d.id + " · " + esc(d.title) + "</h1></div></div>" +
     panel("", "<p>Decidido por " + d.decided_by.map(peL).join(", ") + " em <b>" + fmtDL(d.date) + "</b>" + (d.project ? " · " + pL(d.project, true) : "") + "</p>" +
     (d.context ? "<p><b>Contexto:</b> " + esc(d.context) + "</p>" : "") + (d.rationale ? "<p><b>Por quê:</b> " + esc(d.rationale) + "</p>" : "") +
-    '<p class="muted small">Fonte: ' + esc(d.source_label) + " (" + esc(d.source) + ") [" + esc(d.prov) + "]</p>" + (d.supersedes ? "<p>Substitui " + dL(d.supersedes) + "</p>" : "") + (d.superseded_by ? '<p class="late">Substituída por ' + dL(d.superseded_by) + "</p>" : ""));
+    '<p class="muted small">Fonte: ' + esc(d.source_label) + " (" + pathLink(d.source) + ") [" + esc(d.prov) + "]</p>" + filesBlock(d.files) + (d.supersedes ? "<p>Substitui " + dL(d.supersedes) + "</p>" : "") + (d.superseded_by ? '<p class="late">Substituída por ' + dL(d.superseded_by) + "</p>" : ""));
 };
 V.search = (q) => {
   const terms = (q.get("q") || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").split(/\s+/).filter(t => t.length > 1);
@@ -1099,11 +1116,19 @@ const iceTip = o => { const ax = (PF.ice_rubric || {}).axes;
 const iceTxt = o => o.score == null ? '<span class="muted">sem ICE</span>' : '<span class="' + (o.ice_suggested ? "sug" : "") + '" title="' + iceTip(o) + '">' +
   o.impact + "×" + o.confidence + "×" + o.ease + " = <b>" + o.score + "</b>" + (o.ice_suggested ? " · sugerido" : "") + "</span>";
 const areaName = a => AREA[a] ? AREA[a].name : a;
+function pathLink(ref) {
+  if (!ref) return "";
+  const u = docUrl(ref);
+  if (u) return '<a href="' + u + '" target="_blank" rel="noopener">' + esc(ref) + "</a>";
+  if (ref.indexOf("/") >= 0 && !/^[A-Za-z][A-Za-z0-9+.-]*:/.test(ref))
+    return '<button type="button" class="btn tiny" data-read="' + esc(ref) + '">' + esc(ref) + "</button>";
+  return esc(ref);
+}
 function oppRow(o, i){
   return "<tr><td>" + (i != null ? i + "</td><td>" : "") + "<b>" + esc(o.id) + "</b></td><td><details><summary>" + esc(o.title) + "</summary>" +
     "<p><b>Problema:</b> " + esc(o.problem || "não consta") + "</p><p><b>Sugestão:</b> " + esc(o.suggestion || "não consta") + "</p>" +
-    (o.evidence_count ? '<p class="muted small">' + o.evidence_count + " evidência(s): " + o.evidence.map(esc).join(", ") + "</p>" : "") +
-    (o.docs.length ? "<p>" + o.docs.map(d => chip("info", d.kind) + " " + esc(d.title || d.ref)).join(" · ") + "</p>" : "") +
+    (o.evidence_count ? '<p class="muted small">' + o.evidence_count + " evidência(s): " + o.evidence.map(pathLink).join(", ") + "</p>" : "") +
+    (o.docs.length ? "<p>" + o.docs.map(d => chip("info", d.kind) + " " + docName(d)).join(" · ") + "</p>" : "") +
     (o.status_history.length ? '<p class="muted small">' + o.status_history.map(h => fmtD(h.date) + " " + esc(h.from) + "→" + esc(h.to) + (h.reason ? " (" + esc(h.reason) + ")" : "")).join(" · ") + "</p>" : "") +
     "</details></td><td>" + esc(areaName(o.area)) + "</td><td>" + iceTxt(o) + "</td><td>" + chip("info", o.status) + "</td><td>" + esc(o.quadrant || "—") +
     "</td><td>" + (o.deliverable ? "<b>" + esc(o.deliverable) + "</b> · " + pL(o.project, true)
@@ -1244,6 +1269,14 @@ V.sources = () => {
   return '<div class="pagehead"><div><h1>Fontes</h1><p class="sub">O universo observável: fonte que não está no watch.toml não é puxada pelo /update nem pelo noturno.</p></div></div>' +
     panel("", tableHtml);
 };
+function docName(d) {
+  const label = esc(d.title || d.ref || "");
+  const u = docUrl(d.ref);
+  if (u) return '<a href="' + u + '" target="_blank" rel="noopener">' + label + "</a>";
+  if (d.ref && !/^[A-Za-z][A-Za-z0-9+.-]*:/.test(d.ref))
+    return '<button type="button" class="btn tiny" data-read="' + esc(d.ref) + '">' + label + "</button>";
+  return label;
+}
 V["pf/docs"] = () => {
   const rows = [];
   PF.processes.forEach(p => p.docs.forEach((d, n) => rows.push({t: p.id, title: p.title, d, n})));
@@ -1251,7 +1284,7 @@ V["pf/docs"] = () => {
   return '<div class="pagehead"><div><h1>Documentos</h1><p class="sub">Playbooks, one-pagers e planilhas ligados a processos e oportunidades.</p></div></div>' +
     panel("", rows.length ? '<div class="twrap"><table><tr><th>Ligado a</th><th>Tipo</th><th>Documento</th><th>Vigiado</th></tr>' +
       rows.map(r => '<tr data-sel="doc:' + esc(r.t) + ":" + r.n + '" data-url="' + esc(docUrl(r.d.ref)) + '"><td>' + idc(r.t) + " " + esc(r.title) + "</td><td>" + chip("info", r.d.kind) + "</td><td>" +
-        esc(r.d.title || r.d.ref) + "</td><td>" + (r.d.watch ? "sim" : "—") + "</td></tr>").join("") + "</table></div>"
+        docName(r.d) + "</td><td>" + (r.d.watch ? "sim" : "—") + "</td></tr>").join("") + "</table></div>"
       : empty("Nenhum documento ligado — L liga a um processo ou oportunidade."));
 };
 function safeUrl(u, allowMailto){
@@ -1375,11 +1408,21 @@ V["pf/procs"] = (q) => {
     const rows = PF.processes.filter(p => p.area === a.id);
     return rows.length ? panel(esc(a.name) + ' <span class="muted">· ' + rows.length + " · " + hrs(rows.filter(p => p.status === "ativo").reduce((t, p) => t + (p.hours_month || 0), 0)) + "</span>",
       '<div class="twrap"><table><tr><th>ID</th><th>Processo</th><th>Responsável</th><th>Recorrência</th><th>Horas/mês</th><th>Oport.</th><th>Lacunas</th></tr>' +
-      rows.map(p => "<tr><td>" + idc(p.id) + "</td><td>" + esc(p.title) + (p.status !== "ativo" ? " " + chip("s-descartada", "aposentado") : "") + "</td><td>" + (p.owner ? peL(p.owner) : "—") +
+      rows.map(p => "<tr><td><a href=\"#pf/proc/" + enc(p.id) + "\">" + idc(p.id) + "</a></td><td>" + esc(p.title) + (p.status !== "ativo" ? " " + chip("s-descartada", "aposentado") : "") + "</td><td>" + (p.owner ? peL(p.owner) : "—") +
         "</td><td>" + esc(p.recurrence || "—") + '</td><td class="num">' + hrs(p.hours_month) + '</td><td class="num">' + p.opportunities.length + "</td><td>" +
         (p.gaps.length ? '<span class="late">⚠ ' + p.gaps.map(esc).join("; ") + "</span>" : '<span class="ok">✓</span>') + "</td></tr>").join("") + "</table></div>",
       ' style="margin-top:14px"') : "";
   }).join("") || empty("nenhum processo");
+};
+V["pf/proc"] = (q, id) => {
+  const p = PROC[id]; if (!p) return empty("Processo não encontrado");
+  let h = '<p class="crumb muted"><a href="#pf/procs">← processos</a></p><div class="pagehead"><div><h1>' + esc(p.id) + " · " + esc(p.title) + "</h1>" +
+    '<div class="sub">' + chip("", p.status || "") + "<span>" + esc(areaName(p.area)) + "</span>" +
+    (p.owner ? "<span>responsável: " + peL(p.owner) + "</span>" : "") +
+    "<span>" + hrs(p.hours_month) + "</span></div></div></div>";
+  h += filesBlock(p.files);
+  if (p.docs && p.docs.length) h += panel("Documentos", '<ul class="feed">' + p.docs.map(d => "<li>" + chip("info", d.kind) + " " + docName(d) + "</li>").join("") + "</ul>", ' style="margin-top:14px"');
+  return h;
 };
 V["pf/areas"] = () => '<div class="pagehead"><div><h1>Áreas</h1></div></div>' + panel("", '<div class="twrap"><table><tr><th>Área</th><th>Também chamada</th><th>Processos</th><th>Horas/mês</th><th>Oportunidades</th><th>Priorizadas</th></tr>' +
   PF.areas.map(a => { const procs = PF.processes.filter(p => p.area === a.id && p.status === "ativo"), opps = PF.opportunities.filter(o => o.area === a.id);
@@ -1399,7 +1442,7 @@ V["pf/area"] = (q, id) => {
     "<span>" + opps.length + " " + (opps.length === 1 ? "oportunidade" : "oportunidades") + "</span>" + (a.note ? "<span>" + esc(a.note) + "</span>" : "") + "</div></div></div>";
   h += '<div class="grid g2">' +
     panel("Processos · " + procs.length, '<div class="twrap"><table><tr><th>ID</th><th>Processo</th><th>Responsável</th><th>Recorrência</th><th>Horas/mês</th><th>Lacunas</th></tr>' +
-      (procs.length ? procs.map(x => "<tr><td>" + idc(x.id) + "</td><td>" + esc(x.title) + (x.status !== "ativo" ? " " + chip("s-descartada", "aposentado") : "") + "</td><td>" +
+      (procs.length ? procs.map(x => "<tr><td><a href=\"#pf/proc/" + enc(x.id) + "\">" + idc(x.id) + "</a></td><td>" + esc(x.title) + (x.status !== "ativo" ? " " + chip("s-descartada", "aposentado") : "") + "</td><td>" +
         (x.owner ? peL(x.owner) : "—") + "</td><td>" + esc(x.recurrence || "—") + '</td><td class="num">' + hrs(x.hours_month) + "</td><td>" +
         (x.gaps.length ? '<span class="late">⚠ ' + x.gaps.map(esc).join("; ") + "</span>" : '<span class="ok">✓</span>') + "</td></tr>").join("")
       : "<tr><td colspan=6>" + empty("—") + "</td></tr>") + '</table></div><p class="more"><a href="#pf/procs?area=' + enc(a.id) + '">lista de processos filtrada →</a></p>') +
@@ -1428,6 +1471,7 @@ V["pf/opp"] = (q, id) => {
     '<li><b>Registrada:</b> ' + fmtD(o.added) + " · por " + esc(o.by === "owner" ? "dono" : "agente") + " [" + esc(o.prov) + "]</li></ul>");
   h += panel("Problema → Sugestão", '<div class="msg">' + esc(o.problem || "não consta") + '</div><div class="msg">' + esc(o.suggestion || "não consta") + "</div>") + "</div>";
   if (o.docs.length) h += panel("Documentos", '<ul class="feed">' + o.docs.map(d => "<li>" + chip("info", d.kind) + " " + esc(d.title || d.ref) + "</li>").join("") + "</ul>", ' style="margin-top:14px"');
+  h += filesBlock(o.files);
   h += panel("Histórico de status", o.status_history.length ? '<ul class="feed">' + o.status_history.map(x => "<li><span class=\"muted\">" + fmtD(x.date) + "</span> · " + stChip(x.from) + " → " + stChip(x.to) +
     (x.reason ? ' <span class="muted">(' + esc(x.reason) + ")</span>" : "") + "</li>").join("") + "</ul>" : empty("criada em " + fmtD(o.added) + " como " + o.status), ' style="margin-top:14px"');
   return h;
@@ -1448,13 +1492,14 @@ V.ask = (q) => {
     (q.options && q.options.length ? '<div class="ask-opts">' + q.options.map(o => '<button class="btn" data-opt="' + esc(o) + '">' + esc(o) + "</button>").join("") + "</div>" : "") +
     '<div class="ask-free"><input class="rin" data-free placeholder="ou responda com texto livre…"><button class="btn" data-send>responder</button>' +
     '<button class="btn ghost" data-drop title="brain ask drop --reason">descartar</button></div>' +
-    (q.context ? '<p class="muted small">contexto: ' + esc(q.context) + "</p>" : "") +
+    (q.context ? '<p class="muted small">contexto: ' + (Array.isArray(q.context) ? q.context.map(pathLink).join(", ") : pathLink(String(q.context))) + "</p>" : "") +
+    filesBlock(q.files) +
     "</div>").join("") : empty("nenhuma pergunta aberta"));
   h += panel("Propostas abertas · " + M.proposals.length, M.proposals.length ? M.proposals.map(pr =>
     '<div class="card" style="margin:0 0 10px"><header><span class="ids">' + idc(pr.id) + "</span>" + chip("atencao", pr.kind) + "</header>" +
     '<h3 class="card-title">' + esc(pr.summary) + "</h3>" +
     '<p class="muted small">' + (pr.target ? "alvo " + esc(pr.target) + " · " : "") + (pr.into ? "em " + esc(pr.into) + " · " : "") +
-    "evidência: " + esc(pr.evidence || "—") + "</p>" +
+    "evidência: " + (pr.evidence ? pathLink(pr.evidence) : "—") + "</p>" +
     '<div class="ask-opts"><button class="btn primary" data-acc>aceitar (gate)</button><button class="btn" data-rej>rejeitar</button></div></div>').join("")
     : empty("nenhuma proposta aberta"), ' style="margin-top:14px"');
   const pubs = (M.publishes || []).filter(x => all || x.status !== "publicada");
@@ -1465,7 +1510,8 @@ V.ask = (q) => {
         chip(x.status === "solicitada" ? "atencao" : x.status === "publicada" ? "em-dia" : "info", x.status) +
         ' <span class="muted small">→ ' + esc(x.to) + "</span></header>" +
         '<h3 class="card-title">' + esc(x.title) + "</h3>" +
-        (x.link ? '<p class="muted small">' + esc(x.link) + "</p>" : "") +
+        (x.link ? '<p class="muted small">' + (pubUrl ? '<a href="' + esc(pubUrl) + '" target="_blank" rel="noopener">' + esc(x.link) + "</a>" : esc(x.link)) + "</p>" : "") +
+        filesBlock(x.files) +
         '<div class="ask-opts">' +
         (x.status === "solicitada" ? '<button class="btn primary" data-pub="approve:' + esc(x.id) + '">aprovar (gate)</button><button class="btn" data-pub="cancel:' + esc(x.id) + '">cancelar</button>' : "") +
         (x.status === "aprovada" ? '<button class="btn primary" data-pub="done:' + esc(x.id) + '">publicar (agente)</button><button class="btn" data-pub="cancel:' + esc(x.id) + '">cancelar</button>' : "") +
@@ -1492,7 +1538,7 @@ const TABS_CFG = [["cfg/inicio", "Visão geral"], ["cfg/perfil", "Perfil"], ["cf
 const FACES = [["execucao", "Execução", TABS_EXEC], ["portfolio", "Portfólio", TABS_PF], ["configuracoes", "Configurações", TABS_CFG]];
 if (window.PF_ONLY) { FACES.length = 0; FACES.push(["portfolio", "Portfólio", TABS_PF]); }
 const faceOf = v => (v.indexOf("pf/") === 0 || v === "people" || v === "person") ? "portfolio" : (v.indexOf("cfg/") === 0 ? "configuracoes" : "execucao");
-const PARENT = {project: "projects", person: "people", action: "todo", decision: "decisions", "pf/opp": "pf/opps", "pf/area": "pf/areas"};
+const PARENT = {project: "projects", person: "people", action: "todo", decision: "decisions", "pf/opp": "pf/opps", "pf/proc": "pf/procs", "pf/area": "pf/areas"};
 function go(view, params){ const q = new URLSearchParams(Object.entries(params || {}).filter(([, v]) => v)).toString(); location.hash = view + (q ? "?" + q : ""); }
 function route(){
   if (IS_SHELL && !HYDRATED) {

@@ -13,7 +13,7 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
-from .. import config, doctor, dupes, ids, model, notes as notes_mod, opener, rawsort, schema, util, watch
+from .. import config, doctor, dupes, ids, model, notes as notes_mod, schema, util, watch
 from ..core import Brain
 
 # Abas do painel Plano (Execução): 0 = árvore inteira; 1-4 = só goals/projetos naquele status.
@@ -422,47 +422,24 @@ class Store:
         return self.person_name(pid).split(" ")[0]
 
     def _vault_file(self, ref: str) -> Path | None:
-        """Arquivo real de um caminho do ledger (RAW/… acha a pasta do tipo); None se não for arquivo do vault."""
-        ref = (ref or "").split("#")[0].strip()
-        p = Path(ref)
-        if not ref or ref == "chat" or p.is_absolute() or ".." in p.parts:
-            return None
-        f = rawsort.resolve(self.inst, ref) if p.parts[0] == "RAW" else self.inst.vault / p
-        return f if f and f.is_file() and f.resolve().is_relative_to(self.inst.vault.resolve()) else None
+        from .. import linked
+        return linked.vault_file(self.inst, ref)
 
     def linked_files(self, node: str = "", sources: tuple = (), docs: list | None = None) -> list[dict]:
-        """Arquivos do vault ligados a um item, sem repetir: notas do vínculo, artefatos do projeto, fontes (artefato + RAW) e documentos.
+        """Arquivos do vault ligados a um item, sem repetir: notas do vínculo, artefatos do projeto, fontes e documentos."""
+        from .. import linked
 
-        Cada um: {kind, name, rel (relativo ao vault), app (aplicativo que abre; vazio = padrão do sistema)}."""
-        out: dict[str, dict] = {}
+        def projects_of(n: str) -> set[str]:
+            if n in self.by_goal:
+                return set(self.by_goal[n]["projects"])
+            if n in self.by_deliv:
+                return {self.by_deliv[n][0]["id"]}
+            if n in self.by_project:
+                return {n}
+            return set()
 
-        def add(kind: str, name: str, ref: str) -> None:
-            f = self._vault_file(ref)
-            if f is None:
-                return
-            rel = self.inst.rel(f)
-            if rel not in out:
-                out[rel] = {"kind": kind, "name": name or f.name, "rel": rel, "app": opener.app_for(self.inst.cfg, f)}
-
-        for n in self.notes_of(node) if node else []:
-            add("nota", f"{n.created} {n.title}", n.path)
-        pids = set(self.by_goal[node]["projects"]) if node in self.by_goal else \
-            {self.by_deliv[node][0]["id"]} if node in self.by_deliv else {node} if node in self.by_project else set()
-        for a in self.m["artifacts"]:
-            if pids & set(a["projects"]):
-                add("artefato", a["title"], a["id"])
-                add("RAW", Path(a["raw"]).name if a["raw"] else "", a["raw"])
-        for src in sources:
-            key = (src or "").split("#")[0]
-            art = self.by_artifact.get(key)
-            if art:
-                add("artefato", art["title"], art["id"])
-                add("RAW", Path(art["raw"]).name if art["raw"] else "", art["raw"])
-            else:
-                add("RAW" if key.startswith("RAW/") else "documento", "", key)
-        for d in docs or []:
-            add("documento", d.get("title") or "", d["ref"])
-        return list(out.values())
+        return linked.collect(self.inst, self.notes_by_link, self.m["artifacts"],
+                              node=node, sources=sources, docs=docs, projects_of=projects_of)
 
     def title_of(self, ref: str) -> str:
         """Título da entidade citada (ação, goal, projeto, entregável, decisão, oportunidade, processo); vazio se não for ID conhecido."""

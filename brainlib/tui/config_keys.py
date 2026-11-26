@@ -30,6 +30,7 @@ class ConfigKeys:
             if w(it and it.extra.get("fix")):
                 add("f", "corrigir", self.fix_doc)
             add("o", "testar online", lambda: self.run_sys("sys:doctor"))
+            add("a", "como abrir arquivos", self.f_open_set)
             add("enter", "ampliar", self.toggle_zoom)
 
     # ── formulários ─────────────────────────────────────────────────────────
@@ -56,6 +57,12 @@ class ConfigKeys:
             "provider": cur.get("embeddings", {}).get("provider", "local"),
             "recall": "on" if dec.get("recall") else "off",
         }, render=False, show="Provedores")
+
+    def f_open_set(self) -> None:
+        """Como o painel abre um arquivo do vault — o mesmo formulário do painel."""
+        cfg = (self.store.brain.inst.cfg.get("open") or {}) if self.store else {}
+        self.open_form("open.set", {"mode": cfg.get("mode") or "auto", "ide": cfg.get("ide") or ""},
+                       render=False, show="Saúde")
 
     def f_wizard_memoria(self) -> None:
         """Abre o passo Memória do wizard num terminal suspenso (interativo)."""

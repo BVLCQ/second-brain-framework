@@ -765,13 +765,37 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
         self.jump(node)
 
     def action_open_file(self, rel: str) -> None:
-        """Clique num arquivo linkado: abre no aplicativo da máquina ([tui.open]); só lê, nunca escreve."""
+        """Clique num arquivo linkado. No modo brain (ou auto sem editor) abre o leitor. Senão, o aplicativo."""
+        if opener.prefer_reader(self.inst.cfg):
+            self.action_read_file(rel)
+            return
         try:
             app = opener.open_file(self.inst, rel)
         except util.BrainError as e:
             self.log_line(str(e), "yellow")
             return
         self.log_line(f"abrindo {Path(rel).name} → {app}", "dim")
+
+    def action_read_file(self, rel: str) -> None:
+        """Leitor só de leitura. O texto entra como texto, nunca como marca."""
+        from rich.text import Text
+        from .modals import TextModal
+        try:
+            raw = opener.read_text(self.inst, rel)
+        except util.BrainError as e:
+            self.log_line(str(e), "yellow")
+            return
+        body = Text()
+        for i, line in enumerate(raw.splitlines()):
+            if i:
+                body.append("\n")
+            if line.startswith("#"):
+                body.append(line.lstrip("# ").strip(), "bold")
+            elif line.startswith(("- ", "* ")):
+                body.append("• " + line[2:])
+            else:
+                body.append(line)
+        self.push_screen(TextModal(Path(rel).name, body))
 
     # ── teclado ────────────────────────────────────────────────────────────
     def on_key(self, event: events.Key) -> None:

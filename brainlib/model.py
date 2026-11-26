@@ -24,6 +24,15 @@ def _iso(d: date | None) -> str | None:
     return d.isoformat() if d else None
 
 
+def _open_payload(cfg: dict) -> dict:
+    from . import opener
+    raw = cfg.get("open") if isinstance(cfg.get("open"), dict) else None
+    section = raw if isinstance(raw, dict) else {}
+    return {"mode": section.get("mode") or "auto",
+            "ide": section.get("ide") or "",
+            "reader": opener.prefer_reader(cfg)}
+
+
 class ModelBuilder:
     def __init__(self, brain):
         self.b = brain
@@ -43,6 +52,65 @@ class ModelBuilder:
         if art:
             return f"{art.title} ({util.fmt_date(art.date)})"
         return Path(source.split("#")[0]).name
+
+    def files_for(self, node: str = "", sources: tuple = (), docs: list | None = None) -> list[dict]:
+        """Arquivos do vault ligados ao item. A mesma função que a TUI usa."""
+        from . import linked, notes as notes_mod
+        if not hasattr(self, "_notes_by_link"):
+            idx: dict = {}
+            for n in notes_mod.scan(self.b.inst):
+                idx.setdefault(n.link, []).append(n)
+            self._notes_by_link = idx
+            self._file_arts = [
+                {"id": a.id, "title": a.title, "raw": a.raw, "projects": list(a.projects)}
+                for a in self.st.artifacts.values()]
+
+        def projects_of(n: str) -> set[str]:
+            if n in self.plan.goals:
+                return {p.id for p in self.plan.projects.values() if p.goal_id == n}
+            if n in self.plan.deliverables:
+                return {self.plan.deliverables[n].project_id}
+            if n in self.plan.projects:
+                return {n}
+            return set()
+
+        return linked.collect(self.b.inst, self._notes_by_link, self._file_arts,
+                              node=node, sources=sources, docs=docs, projects_of=projects_of)
+
+    def _attach_files(self, m: dict) -> None:
+        """Põe `files` em cada ficha. Painel e TUI leem a mesma lista."""
+        for a in m.get("actions") or []:
+            a["files"] = self.files_for(a["id"], sources=(a.get("source") or "",))
+        for d in m.get("decisions") or []:
+            d["files"] = self.files_for(d["id"], sources=(d.get("source") or "",))
+        for e in m.get("deliveries") or []:
+            src = (e.get("source") or "", e.get("evidence") or "")
+            e["files"] = self.files_for(e["id"], sources=src)
+        for art in m.get("artifacts") or []:
+            art["files"] = self.files_for("", sources=(art.get("id") or "", art.get("raw") or ""))
+        for p in m.get("projects") or []:
+            p["files"] = self.files_for(p["id"])
+            for d in p.get("deliverables") or []:
+                d["files"] = self.files_for(d["id"])
+        for g in m.get("goals") or []:
+            g["files"] = self.files_for(g["id"])
+        for person in m.get("people") or []:
+            person["files"] = self.files_for(person["id"])
+        pf = m.get("portfolio") or {}
+        for o in pf.get("opportunities") or []:
+            o["files"] = self.files_for(o["id"], docs=o.get("docs"))
+        for proc in pf.get("processes") or []:
+            proc["files"] = self.files_for(proc["id"], docs=proc.get("docs"))
+        for q in m.get("questions") or []:
+            ctx = q.get("context") or []
+            if isinstance(ctx, str):
+                ctx = [ctx]
+            q["files"] = self.files_for(q["id"], sources=(q.get("source") or "", *ctx))
+        for s in m.get("shares") or []:
+            s["files"] = self.files_for("", sources=(s.get("report") or "",))
+        foc = m.get("focus")
+        if isinstance(foc, dict):
+            foc["files"] = self.files_for(foc.get("id") or "", sources=(foc.get("plan_file") or "",))
 
     def ref_project(self, ref: str | None) -> str | None:
         if not ref:
@@ -283,7 +351,7 @@ class ModelBuilder:
         horizon7 = today + timedelta(days=7)
         agenda = self._agenda(mine_open, projects, horizon7)
         focus = self._focus()
-        return {
+        out = {
             "generated_at": util.iso_now(), "today": today.isoformat(),
             "owner": {"id": self.owner, "name": self.cfg["owner"]["name"]},
             "goals": goals, "projects": projects, "actions": actions, "decisions": decisions,
@@ -315,7 +383,8 @@ class ModelBuilder:
             "portfolio": portfolio.build(st, plan, today),
             "providers": _provider_stack(self.b),
             "questions": [{"id": q.id, "text": q.text, "kind": q.kind, "status": q.status, "options": q.options,
-                           "context": q.context, "run": q.run, "answer": q.answer, "asked": _iso(q.asked)}
+                           "context": q.context, "run": q.run, "answer": q.answer, "asked": _iso(q.asked),
+                           "source": q.source}
                           for q in sorted(st.questions.values(), key=lambda q: q.id) if q.status in ("aberta", "respondida")],
             "counts": {
                 "mine_open": len(mine_open),
@@ -336,7 +405,10 @@ class ModelBuilder:
             },
             "by_id": {"actions": list(by_id)},
             "agent_ok": _agent_ok(self.cfg),
+            "open": _open_payload(self.cfg),
         }
+        self._attach_files(out)
+        return out
 
     def _timeline_for(self, pid, p_actions, p_decisions, deliveries, deliv_done, p_artifacts) -> list[dict]:
         items = []
