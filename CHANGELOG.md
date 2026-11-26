@@ -1,3 +1,9 @@
+## 2.55.0 — arquivos do vault viram link na ficha e no FRESH
+
+- **A ficha mostra os arquivos ligados.** Ação, decisão, projeto, pessoa, oportunidade, processo, pergunta, foco, publicação e goal trazem a mesma lista da TUI: tipo, nome e para onde abre. O clique passa pelo servidor local, só dentro do vault. Fora do vault, ou com `..`, é recusado.
+- **Sem editor, o leitor embutido.** Markdown com títulos, listas e tabelas. Um `<script>` no texto aparece escapado. Na própria ficha dá para trocar entre editor e leitor, e abrir todos de uma vez.
+- **A nota em FRESH também liga o arquivo.** A ficha da ação e da decisão lista os arquivos como link, em vez de caminho solto.
+
 ## 2.54.0 — a barra lateral ganha seções, e Fontes sai do dia
 
 - **Rótulos, nada some.** Execução separa Agora, Atenção e Registro. Portfólio separa Mapa, Trabalho e Cadastro. Configurações separa Conta, Conexões, Instância e Meta. O rótulo não é link.

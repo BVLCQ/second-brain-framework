@@ -11,6 +11,7 @@ import threading
 import unittest
 from unittest import mock
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -89,6 +90,25 @@ class ServeTests(unittest.TestCase):
     def test_token_errado_401(self):
         code, _ = self._req("/api/data", token="errado")
         self.assertEqual(code, 401)
+
+    def test_arquivo_fora_do_vault_e_recusado(self):
+        code, body = self._req("/api/file?rel=../segredo.md", token=self.token)
+        self.assertEqual(code, 403)
+        self.assertIn("fora do vault", body)
+        code, body = self._req("/api/open", token=self.token, method="POST", body={"rel": "../segredo.md"})
+        self.assertEqual(code, 403)
+        self.assertIn("fora do vault", body)
+
+    def test_leitor_devolve_o_texto_do_vault(self):
+        rel = "RAW/inbox/receita-demo.md"
+        path = self.inst.vault / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("# Fornada\n\n<script>alert(1)</script>\n", encoding="utf-8")
+        code, body = self._req("/api/file?rel=" + urllib.parse.quote(rel), token=self.token)
+        self.assertEqual(code, 200)
+        data = json.loads(body)
+        self.assertTrue(data["ok"])
+        self.assertIn("<script>alert(1)</script>", data["text"])
 
     def test_host_de_rebinding_403(self):
         code, body = self._req("/api/data", token=self.token, host="atacante.invalid")

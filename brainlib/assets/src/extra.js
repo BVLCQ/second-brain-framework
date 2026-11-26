@@ -258,6 +258,118 @@ async function api(path, opts){
   if (r.status === 401) { handle401(); throw new Error("401"); }
   return r.json();
 }
+function renderSafeMd(text) {
+  const lines = String(text || "").replace(/\r\n/g, "\n").split("\n");
+  let out = "", i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (line.startsWith("```")) {
+      const buf = [];
+      i++;
+      while (i < lines.length && !lines[i].startsWith("```")) { buf.push(esc(lines[i])); i++; }
+      out += "<pre><code>" + buf.join("\n") + "</code></pre>";
+      i++;
+      continue;
+    }
+    if (/^#{1,6} /.test(line)) { out += "<h3>" + esc(line.replace(/^#+ /, "")) + "</h3>"; }
+    else if (/^\s*[-*] /.test(line)) {
+      out += "<ul>";
+      while (i < lines.length && /^\s*[-*] /.test(lines[i])) {
+        out += "<li>" + esc(lines[i].replace(/^\s*[-*] /, "")) + "</li>";
+        i++;
+      }
+      out += "</ul>";
+      continue;
+    } else if (line.includes("|") && i + 1 < lines.length && /^\s*\|[\s\-:|]+\|/.test(lines[i + 1])) {
+      const head = line.replace(/^\|/, "").replace(/\|$/, "").split("|");
+      i += 2;
+      out += "<table><tr>" + head.map(c => "<th>" + esc(c.trim()) + "</th>").join("") + "</tr>";
+      while (i < lines.length && lines[i].includes("|")) {
+        out += "<tr>" + lines[i].replace(/^\|/, "").replace(/\|$/, "").split("|").map(c => "<td>" + esc(c.trim()) + "</td>").join("") + "</tr>";
+        i++;
+      }
+      out += "</table>";
+      continue;
+    } else if (line.trim()) out += "<p>" + esc(line) + "</p>";
+    i++;
+  }
+  return out;
+}
+function showReader(name, text) {
+  let back = document.getElementById("readback");
+  if (!back) {
+    back = document.createElement("div");
+    back.id = "readback";
+    back.className = "pal-back";
+    back.innerHTML = '<div class="palette" role="dialog" aria-label="Leitor"><div class="pal-head"><b id="readtitle"></b><button type="button" class="btn tiny" id="readclose">fechar</button></div><div id="readbody" class="pal-list"></div></div>';
+    document.body.appendChild(back);
+    back.querySelector("#readclose").onclick = () => back.classList.remove("open");
+  }
+  document.getElementById("readtitle").textContent = name;
+  // renderSafeMd escapa cada trecho antes de montar a marca; o arquivo é entrada não confiável
+  document.getElementById("readbody").innerHTML = renderSafeMd(text);
+  back.classList.add("open");
+}
+document.addEventListener("click", async (ev) => {
+  const formBtn = ev.target.closest && ev.target.closest("[data-openform]");
+  if (formBtn) {
+    ev.preventDefault();
+    openForm("open.set", window.BRAIN && window.BRAIN.M && window.BRAIN.M.open || {});
+    return;
+  }
+  const tog = ev.target.closest && ev.target.closest("[data-opentoggle]");
+  if (tog) {
+    ev.preventDefault();
+    const M = window.BRAIN && window.BRAIN.M;
+    if (!M) return;
+    M.open = Object.assign({mode: "auto", ide: "", reader: false}, M.open || {});
+    const next = M.open.reader ? "ide" : "brain";
+    M.open.mode = next;
+    M.open.reader = next === "brain";
+    runCommand("brain files set --mode " + next);
+    if (window.BRAIN.route) window.BRAIN.route();
+    return;
+  }
+  const allBtn = ev.target.closest && ev.target.closest("[data-openall]");
+  if (allBtn) {
+    ev.preventDefault();
+    const box = allBtn.closest("section") || allBtn.parentElement;
+    const rels = [...box.querySelectorAll("[data-open]")].map(b => b.getAttribute("data-open")).filter(Boolean);
+    if (!LIVE) { agentToast("arquivo", rels.join(", "), "ponte serve desligada"); return; }
+    for (const rel of rels) {
+      try {
+        const j = await api("/api/open", {method: "POST", headers: {"Content-Type": "application/json"},
+                                          body: JSON.stringify({rel: rel})});
+        if (!j.ok) agentToast("arquivo", rel, j.error || "recusado");
+      } catch (e) { agentToast("arquivo", rel, "ponte fora do ar"); }
+    }
+    return;
+  }
+  const openBtn = ev.target.closest && ev.target.closest("[data-open]");
+  const readBtn = ev.target.closest && ev.target.closest("[data-read]");
+  const btn = readBtn || openBtn;
+  if (!btn) return;
+  ev.preventDefault();
+  const rel = btn.getAttribute(readBtn ? "data-read" : "data-open");
+  if (!LIVE) { agentToast("arquivo", rel, "ponte serve desligada"); return; }
+  try {
+    if (readBtn || (openBtn && window.BRAIN && window.BRAIN.M && window.BRAIN.M.open && window.BRAIN.M.open.reader)) {
+      const j = await api("/api/file?rel=" + encodeURIComponent(rel));
+      if (!j.ok) { agentToast("arquivo", rel, j.error || "recusado"); return; }
+      if (j.binary) {
+        const opened = await api("/api/open", {method: "POST", headers: {"Content-Type": "application/json"},
+                                              body: JSON.stringify({rel: rel})});
+        agentToast("arquivo", rel, opened.ok ? "não é texto — abri no aplicativo" : (opened.error || "não é texto e não abriu"));
+        return;
+      }
+      showReader(j.name || rel, j.text || "");
+      return;
+    }
+    const j = await api("/api/open", {method: "POST", headers: {"Content-Type": "application/json"},
+                                      body: JSON.stringify({rel: rel})});
+    if (!j.ok) agentToast("arquivo", rel, j.error || "recusado");
+  } catch (e) { agentToast("arquivo", rel, "ponte fora do ar"); }
+});
 async function serveRun(cmd, onResp){
   conOpen();
   conLine('<span class="dim">$</span> ' + esc(cmd));

@@ -83,7 +83,8 @@ DEFAULTS: dict = {
                "allow": []},              # ferramentas MCP de LEITURA do agente headless (noturno e TUI)
     "tui": {"agent_allow": [],             # ferramentas extras do agente nas ações ⚡ do TUI (ex.: MCP de escrita)
             "model": "claude-haiku-5-5", "effort": "",   # modelo e esforço do claude nas ações ⚡ ("" = padrão do claude)
-            "open": {}},                  # extensão → aplicativo que abre o arquivo clicado no detalhe ({} = padrão do sistema)
+            "open": {}},                  # sinônimo antigo de [open]; extensão → aplicativo
+    "open": {"mode": "auto", "ide": ""},  # auto = IDE se houver, senão leitor; ide = aplicativo padrão
     "backup": {"enabled": False, "max_file_mb": 50, "keep": 8, "weekday": 7},
     "views": {"wins_weeks": 8, "timeline_back_days": 90, "timeline_ahead_days": 45,
               "stale_project_days": 14, "aging_warn_days": 7},
