@@ -156,6 +156,8 @@ def row(store, it, width: int) -> Text:
         tag = "sugestão" if d.kind == "sugestao" else "bug"
         if d.status in ("criado", "retratado") and d.number:
             right = T((f"#{d.number}", CYN))
+            if d.issue_diverged:
+                right.append(" divergiu", AMB)
             if d.status == "retratado":
                 right.append(" retratada", AMB)
             elif d.issue_state:

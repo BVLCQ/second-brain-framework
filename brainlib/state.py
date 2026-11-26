@@ -325,6 +325,7 @@ class Feedback:
     url: str = ""
     issue_state: str = ""          # '' nunca sincronizado | open | closed (última leitura do GitHub)
     issue_reason: str = ""         # completed | not_planned | '' (por que fechou)
+    issue_diverged: bool = False   # o corpo no GitHub não é o texto que o Brain enviou
     error: str = ""                # última tentativa de push/retract que não subiu
     source: str = ""
     prov: str = ""
@@ -664,6 +665,7 @@ def apply(st: State, ev: dict) -> None:
             f.pushed_by, f.error = ev.get("by", ""), ""
         elif t == "feedback.synced":
             f.issue_state, f.issue_reason, f.synced = data["state"], data.get("reason", ""), when
+            f.issue_diverged = bool(data.get("diverged", False))
         elif t == "feedback.failed":
             f.error = data["error"]
             if data.get("op") != "retract":
