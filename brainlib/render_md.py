@@ -18,15 +18,27 @@ from . import planning, util
 LEDGER = "PROCESSED/_ledger/events.jsonl"
 
 
-def _file_links(files: list | None) -> list[str]:
-    """Caminhos do vault como link Markdown. Fora do vault, não vira link."""
+def _vault_href(frm: str, rel: str) -> str:
+    """Href de uma nota em FRESH/ para um caminho na raiz do vault.
+
+    O Markdown resolve contra a nota. `RAW/inbox/x.md` a partir de
+    `records/actions/` apontaria para uma pasta que não existe.
+    """
+    note_dir = os.path.dirname(frm) or "."
+    href = os.path.normpath(os.path.join(os.path.relpath(".", note_dir), "..", rel))
+    return href.replace(" ", "%20")
+
+
+def _file_links(frm: str, files: list | None) -> list[str]:
+    """Caminhos do vault como link Markdown, relativos à nota. Fora do vault, não vira link."""
     lines = []
     for f in files or []:
         rel = str(f.get("rel") or "")
         if not rel or ".." in Path(rel).parts:
             continue
-        name = str(f.get("name") or Path(rel).name)
-        lines.append(f"- {f.get('kind', 'arquivo')} · [{name}]({rel})")
+        name = re.sub(r"([\\\[\]|])", r"\\\1", _ln(str(f.get("name") or Path(rel).name)))
+        kind = re.sub(r"([\\\[\]|])", r"\\\1", _ln(str(f.get("kind") or "arquivo")))
+        lines.append(f"- {kind} · [{name}]({_vault_href(frm, rel)})")
     if not lines:
         return []
     return ["", "## Arquivos linkados", "", *lines]
@@ -624,7 +636,7 @@ class Pages:
                 body.append("destrava: " + ", ".join(a["unblocks"]))
             if a["outcome"]:
                 body.append(f"Resultado: {a['outcome']}")
-            body += _file_links(a.get("files"))
+            body += _file_links(f, a.get("files"))
             body += ["", "## Histórico", ""]
             body += [f"- {h['date']} · {h['type']} · {h['note']} ({h['by']})" for h in a["history"]]
             self.put(f, _frontmatter(fm) + "\n".join(body))
@@ -644,11 +656,12 @@ class Pages:
                 body.append(f"**Por quê:** {d['rationale']}")
             src = d.get("source") or ""
             if "/" in src and ".." not in Path(src).parts:
-                fonte = f"[{d['source_label']}]({src})"
+                label = re.sub(r"([\\\[\]|])", r"\\\1", _ln(str(d["source_label"])))
+                fonte = f"[{label}]({_vault_href(f, src)})"
             else:
                 fonte = d["source_label"]
             body.append(f"**Fonte:** {fonte} [{d['prov']}]")
-            body += _file_links(d.get("files"))
+            body += _file_links(f, d.get("files"))
             if d["supersedes"]:
                 body.append(f"Substitui {self.dec(f, d['supersedes'])}")
             if d["superseded_by"]:

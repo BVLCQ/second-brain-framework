@@ -767,8 +767,15 @@ class BrainApp(ConfigKeys, AskKeys, FeedbackKeys, PortfolioKeys, App):
     def action_open_file(self, rel: str) -> None:
         """Clique num arquivo linkado. No modo brain (ou auto sem editor) abre o leitor. Senão, o aplicativo."""
         if opener.prefer_reader(self.inst.cfg):
-            self.action_read_file(rel)
-            return
+            try:
+                opener.read_text(self.inst, rel)
+            except util.BrainError as e:
+                if "não é texto" not in str(e):
+                    self.log_line(str(e), "yellow")
+                    return
+            else:
+                self.action_read_file(rel)
+                return
         try:
             app = opener.open_file(self.inst, rel)
         except util.BrainError as e:

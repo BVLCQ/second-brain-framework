@@ -83,11 +83,10 @@ def open_check(cfg: dict, which=shutil.which) -> dict:
         return _c("warn", "abertura", f"mode {mode!r} não é auto, ide ou brain — vale o automático")
     if mode == "brain":
         return _c("ok", "abertura", "modo brain — o arquivo abre no próprio painel")
-    name = ide or (found[0] if found else "")
-    if mode == "ide" and not name:
+    if mode == "ide" and not ide:
         return _c("warn", "abertura", "modo ide sem editor — preencha [open].ide ou use mode = \"brain\"")
-    dest = name or "padrão do sistema"
-    extra = f" (detectado: {', '.join(found)})" if found and not ide else ""
+    dest = ide or "padrão do sistema"
+    extra = f" — {', '.join(found)} no PATH, mas não escolhido" if found and not ide else ""
     return _c("ok", "abertura", f"modo {mode} · {dest}{extra}")
 
 

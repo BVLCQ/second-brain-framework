@@ -67,7 +67,8 @@ class LinkedFileTests(unittest.TestCase):
             pages = Pages(b.inst, m)
             pages.records()
             note = next(t for p, t in pages.files.items() if p.name.startswith("TASK-"))
-            self.assertIn(f"]({rel})", note)
+            self.assertIn("](../../../RAW/inbox/reuniao-demo.md)", note)
+            self.assertNotIn(f"]({rel})", note)
             self.assertIn("## Arquivos linkados", note)
 
     def test_pergunta_com_fonte_em_arquivo_entra_na_lista(self):
@@ -110,3 +111,13 @@ class LinkedFileTests(unittest.TestCase):
         self.assertIn('rel="noopener"', outbox)
         for bad in ("esc(a.source)", "esc(d.source)", "esc(m.link)"):
             self.assertNotIn(bad, src, bad)
+
+    def test_doctor_nao_chama_o_detectado_de_editor(self):
+        from brainlib.doctor import open_check
+        got = open_check({"open": {"mode": "auto"}}, which=lambda n: "/usr/bin/cursor" if n == "cursor" else None)
+        self.assertEqual(got["level"], "ok")
+        self.assertIn("padrão do sistema", got["detail"])
+        self.assertNotIn("modo auto · cursor", got["detail"])
+        warned = open_check({"open": {"mode": "ide"}}, which=lambda n: "/usr/bin/cursor")
+        self.assertEqual(warned["level"], "warn")
+        self.assertIn("sem editor", warned["detail"])
