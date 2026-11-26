@@ -233,16 +233,21 @@ def open_dashboard(brain, panel: str = "execucao", spawn: bool = True) -> None:
     # painel VIVO sempre que possível: executa comandos e o reload é sempre fresco
     try:
         from .serve import live_panel_url, stop_stale
-        if spawn and stop_stale(brain.inst):              # ponte de uma versão anterior (sem as rotas novas): troca
+        restarted = bool(spawn and stop_stale(brain.inst))
+        if restarted:
             print("↻ a ponte do painel era de uma versão anterior — reiniciando")
-        live = live_panel_url(brain.inst)
-        if not live and spawn:
-            live = ensure_bridge(brain)
+        already = None if restarted else live_panel_url(brain.inst)
+        live = already or (ensure_bridge(brain) if spawn else None)
+        focus_only, keep_route = bool(already), not already
     except Exception:                                      # noqa: BLE001
-        live = None
+        live, focus_only, keep_route = None, False, False
     if live:
         print(f"✓ ponte CLI no ar — abrindo o painel vivo ({live.split('#')[0]})")
-        util.open_url(live)
+        import sys
+        focused = sys.platform == "darwin" and util.focus_open_tab(
+            live, focus_only=focus_only, keep_route=keep_route and not focus_only)
+        if not focused:
+            util.open_url(live)
         return
     path = brain.inst.fresh / "dashboard" / PANELS[panel]
     # via util.open_url (→ webbrowser.open): um só ponto de abertura, que os testes conseguem interceptar

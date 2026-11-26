@@ -1,7 +1,12 @@
-## 2.51.0 — o diálogo de atualização lista o assunto de cada commit
+## 2.52.0 — o diálogo de atualização lista o assunto de cada commit
 
 - **Uma linha por commit, no máximo 140 caracteres.** O assunto aparece inteiro se cabe. Se passa, corta no último espaço e põe reticências. A conta é de caracteres, não de bytes. O hash curto fica ao lado e não entra na conta.
 - **O changelog deixa de ser a leitura padrão.** Os parágrafos longos continuam no CHANGELOG.md e atrás de "ver changelog". A checagem não descarta assunto depois do vigésimo. A mesma lista sai no `brain update --check`.
+
+## 2.51.0 — o ícone do Dock não troca a página
+
+- **O clique no ícone traz a aba, não recarrega.** Se a ponte já está no ar, o Dock só ativa a aba do Brain. A página em que o dono estava continua. Sem nonce, sem URL nova.
+- **Ponte que subiu de novo entrega o token sem apagar a rota.** O fragmento que sobra depois do token é a página, não vazio. Sem aba, ou sem rota, abre no Início.
 
 ## 2.50.0 — o texto da sugestão aparece formatado, e o rascunho do agente espera leitura
 
