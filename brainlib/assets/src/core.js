@@ -1692,16 +1692,16 @@ function syncVerBadge(){
     const verTxt = "v" + (u.version || "?");
     const transTxt = verTxt + " → v" + (u.remote_version || "?");
     const lines = (u.lines && u.lines.length) ? u.lines : [];
-    const log = (u.news && u.news.length) ? u.news : [];
+    const changelog = (u.news && u.news.length) ? u.news : [];
     let showLog = false;
     const paint = () => {
-      const list = showLog ? log : lines;
+      const list = showLog ? changelog : lines;
       const body = list.length ? list : semNovidade(u);
       document.getElementById("newslist").innerHTML =
         body.map(n => '<div class="ni">' + esc(n) + "</div>").join("");
       const toggle = document.getElementById("newschangelog");
       if (toggle) {
-        toggle.hidden = !log.length;
+        toggle.hidden = !changelog.length;
         toggle.textContent = showLog ? "ver commits" : "ver changelog";
       }
     };
