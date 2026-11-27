@@ -1093,7 +1093,7 @@ const setupView = (step, title, lead) => () => '<div class="pagehead"><div>' + (
 V["cfg/inicio"] = setupView("inicio", "Seu Brain", "Volte a qualquer passo quando quiser. Passo pulado fica como \"depois\" e não vira pendência.");
 V["cfg/perfil"] = setupView("perfil", "Perfil", "Quem você é e o contexto que o Brain usa para entender o que importa para você.");
 V["cfg/rotina"] = setupView("rotina", "Rotina", "Fuso e expediente: o Brain calcula prazos e blocos de foco a partir daqui.");
-V["cfg/agente"] = setupView("agente", "Seu agente", "O agente de IA que lê suas fontes e ajuda nas rotinas. Conectar cria o canal de leitura (MCP somente-leitura).");
+V["cfg/agente"] = setupView("agente", "Agentes/Harness", "O agente de IA que lê suas fontes e ajuda nas rotinas. Conectar cria o canal de leitura (MCP somente-leitura).");
 V["cfg/conectores"] = setupView("conectores", "Conectores", "O que o Brain pode ler, sempre só leitura. Nada é enviado sem você aprovar o texto exato.");
 V["cfg/integracoes"] = setupView("integracoes", "Integrações", "Opcionais. As chaves ficam só no seu computador e nunca aparecem de novo na tela.");
 V["cfg/memoria"] = () => {
@@ -1602,26 +1602,27 @@ V.ask = (q) => {
 
 // ── router + faces (mesma lógica da TUI: Execução | Portfólio, cada face lembra onde estava) ──
 const sourceFails = () => (M.sources || []).filter(s => s.failures).length || 0;
-const TABS_EXEC = [["sources", "Fontes", sourceFails, "badge"],
-  ["", "Agora"], ["home", "Início"], ["todo", "TODO", () => M.counts.mine_overdue],
-  ["focus", "Foco", () => M.focus && M.focus.status === "proposto" ? 1 : 0],
-  ["", "Atenção"], ["ask", "Perguntas", () => ((M.questions || []).filter(q => q.status === "aberta").length + M.proposals.length) || 0],
-  ["outbox", "Mensagens", () => M.counts.outbox_pending],
-  ["", "Registro"], ["projects", "Projetos"], ["decisions", "Decisões"], ["wins", "Conquistas"],
-  ["timeline", "Linha do tempo"]];
-  // Fontes e Sugestões saíram da lista (D + D2). O badge de falha fica no item "badge", sem a página.
-const TABS_PF = [["", "Mapa"], ["pf/visao", "Visão geral"], ["pf/matrix", "Matriz"],
+const TABS_EXEC = [["home", "Início"],
+  ["", "Agora"], ["todo", "Tarefas", () => M.counts.mine_overdue],
+  ["ask", "Perguntas", () => ((M.questions || []).filter(q => q.status === "aberta").length + M.proposals.length) || 0],
+  ["", "Registro"], ["projects", "Projetos"], ["decisions", "Decisões"], ["timeline", "Linha do tempo"],
+  ["", "Tools"], ["focus", "Foco", () => M.focus && M.focus.status === "proposto" ? 1 : 0],
+  ["outbox", "Mensagens", () => M.counts.outbox_pending]];
+  // Fontes e Sugestões saíram da lista (D + D2). A primeira linha de cada face é sempre a sua página-índice
+  // (Início / Visão geral), sem rótulo acima: é onde a face cai ao trocar (route: primeira página de verdade).
+  // Conquistas (#wins) continua roteável e na paleta ⌘K; só não ocupa linha na barra.
+const TABS_PF = [["pf/visao", "Visão geral"], ["", "Mapa"], ["pf/matrix", "Matriz"],
   ["", "Trabalho"], ["pf/opps", "Oportunidades", () => PF.opportunities.filter(o => o.status !== "descartada").length],
   ["pf/procs", "Processos", () => PF.processes.filter(p => p.status === "ativo").length],
   ["", "Cadastro"], ["pf/areas", "Áreas", () => PF.areas.length],
   ["pf/docs", "Documentos", () => PF.processes.concat(PF.opportunities).reduce((n, x) => n + x.docs.length, 0)],
   ["people", "Pessoas"]];
-const TABS_CFG = [["", "Conta"], ["cfg/perfil", "Perfil"], ["cfg/rotina", "Rotina"], ["cfg/agente", "Seu agente"],
-  ["", "Conexões"], ["cfg/conectores", "Conectores"], ["sources", "Fontes", sourceFails],
-  ["cfg/memoria", "Memória"], ["cfg/integracoes", "Integrações"],
-  ["", "Instância"], ["cfg/inicio", "Visão geral"],
+const TABS_CFG = [["cfg/inicio", "Visão geral"],
   ["cfg/saude", "Saúde", () => (M.health || []).filter(c => c.level !== "ok").length],
-  ["", "Meta"], ["feedback", "Sugestões", () => (M.feedback || []).filter(f => f.status !== "criado" && f.status !== "retirado" && f.status !== "retratado").length || 0]];
+  ["", "Conta"], ["cfg/perfil", "Perfil"], ["cfg/rotina", "Rotina"], ["cfg/agente", "Agentes/Harness"],
+  ["", "Conexões"], ["cfg/memoria", "Memória"], ["cfg/conectores", "Conectores"], ["sources", "Fontes", sourceFails],
+  ["cfg/integracoes", "Integrações"],
+  ["", "Melhore o App"], ["feedback", "Sugestões", () => (M.feedback || []).filter(f => f.status !== "criado" && f.status !== "retirado" && f.status !== "retratado").length || 0]];
 const FACES = [["execucao", "Execução", TABS_EXEC], ["portfolio", "Portfólio", TABS_PF], ["configuracoes", "Configurações", TABS_CFG]];
 if (window.PF_ONLY) { FACES.length = 0; FACES.push(["portfolio", "Portfólio", TABS_PF]); }
 const faceOf = v => (v.indexOf("pf/") === 0 || v === "people" || v === "person") ? "portfolio"

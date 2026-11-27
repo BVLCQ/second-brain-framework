@@ -1,3 +1,10 @@
+## 2.58.0 — o menu do painel abre no índice e ganha a ordem nova
+
+- **Início e Visão geral sempre abrem a barra.** Execução começa em Início, Portfólio em Visão geral e Configurações em Visão geral, sem rótulo acima. Trocar de face cai sempre nessa página.
+- **Execução em três blocos.** Agora (Tarefas, Perguntas), Registro (Projetos, Decisões, Linha do tempo) e Tools (Foco, Mensagens). O TODO se chama Tarefas. Fontes saiu daqui, junto com o badge de falha, e Conquistas deixou a barra: a página segue no ⌘K e no endereço `#wins`.
+- **Configurações reorganizada.** Visão geral e Saúde no topo; Conta (Perfil, Rotina, Agentes/Harness), Conexões (Memória, Conectores, Fontes, Integrações) e Melhore o App (Sugestões). "Seu agente" virou Agentes/Harness no menu, na paleta e no título da página.
+- **Rótulos de categoria em preto e branco.** Pretos no tema claro, brancos no escuro.
+
 ## 2.57.0 — todo arquivo que o painel cita agora tem link
 
 - **Linha do tempo, "última interação" e busca ligam o artefato.** A linha do tempo escondia a reunião ou o documento de onde cada item nasceu; a ficha da pessoa e os resultados da busca mostravam o caminho como texto solto. Agora cada um tem o botão Ver, que abre o leitor embutido.
