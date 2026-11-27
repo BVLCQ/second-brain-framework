@@ -1,3 +1,11 @@
+## 2.63.1 — a atualização do servidor de memória guarda o banco antes e sabe voltar
+
+> Resumo: Antes de trocar a versão do servidor de memória, o Brain agora guarda uma cópia do banco, e se a versão nova falhar ele devolve o banco e a versão de antes.
+
+- **Cópia do banco antes da versão nova.** O servidor migra o banco ao subir e essa migração não tem volta: voltar só a imagem deixava a versão antiga sobre um banco já migrado. Agora o `brain update` baixa a imagem nova primeiro (falhou, nada muda), para o servidor, copia o banco para `<volume>-pre-upgrade` (falhou a cópia, religa o de antes) e só então sobe. Se a versão nova não subir, restaura a cópia e volta à anterior. A cópia cobre todos os bancos do servidor, inclusive os de outros agentes, e fica guardada até a próxima atualização.
+- **`compose.yaml` válido no Compose v5.** O volume do login das assinaturas era montado sem ser declarado, e o Compose v5 recusa o arquivo inteiro — Aplicar na tela de Memória, troca de provedor e a atualização do servidor falhavam ao recriar. Um teste confere que todo volume montado está declarado.
+- **Ensaio real.** Docker de verdade, contêiner de ensaio sobre a cópia de um servidor com três bancos e o `config/.env` real: subida 1.2.0 → 1.3.0 e falha forçada com restauração, documentos e memórias iguais nos dois casos.
+
 ## 2.63.0 — Goals e projetos em colunas, e cada arquivo uma vez só
 
 > Resumo: Goals, projetos e entregáveis agora ficam numa página só, em colunas como as do Finder, e cada arquivo aparece uma vez, no nível certo, com um chip para abrir no aplicativo.

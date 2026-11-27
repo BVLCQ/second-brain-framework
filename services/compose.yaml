@@ -72,3 +72,4 @@ services:
 
 volumes:
   hindsight-data:
+  hindsight-auth:      # login das assinaturas; sem declarar, o Compose v5 recusa o arquivo inteiro
