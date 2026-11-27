@@ -312,9 +312,11 @@ class ProviderRegistryTests(unittest.TestCase):
         self.assertEqual(v["slots"]["llm"]["key"], "zk-1")
         self.assertTrue(v["slots"]["llm"]["base_url"].startswith("https://api.z.ai/"))
         # embeddings e reranker saem resolvidos — provedor, chave, modelo e endpoint (padrão do registro quando o
-        # payload não diz): o painel manda modelo/endpoint para um slot `custom` e eles têm de chegar ao slot
+        # payload não diz): o painel manda modelo/endpoint para um slot `custom` e eles têm de chegar ao slot.
+        # O teto do reranker (e a dimensão dos embeddings) também: 0 = o payload não disse
         self.assertEqual(v["slots"]["reranker"], {"provider": "zeroentropy", "key": "ze-1",
-                                                 "model": "zerank-2", "base_url": ""})
+                                                 "model": "zerank-2", "base_url": "", "candidates": 0})
+        self.assertEqual(v["slots"]["embeddings"]["dimensions"], 0)
 
     def test_zai_without_model_fills_server_default(self):
         v = setup.validate_memory_setup({

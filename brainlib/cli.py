@@ -1629,8 +1629,11 @@ def build_parser() -> argparse.ArgumentParser:
     pv.add_argument("--model", help="modelo (opcional em assinatura/anthropic; exigido em llm custom/openai/zai/gemini)")
     pv.add_argument("--models", help="llm por operação: retain=…,consolidation=…,mental_models=…,reflect=…,default=…")
     pv.add_argument("--base-url", help="endpoint (custom / openai-wire / decision local)")
-    pv.add_argument("--dimensions", type=int, default=0, help="embeddings: dimensão de saída (ex.: 1536 MRL)")
-    pv.add_argument("--candidates", type=int, default=0, help="reranker ou decision --recall on: top-N candidatos")
+    pv.add_argument("--dimensions", type=int, default=0,
+                    help="embeddings: dimensão de saída (ex.: 1536 MRL); omitida = a do provedor ou do modelo")
+    pv.add_argument("--candidates", type=int, default=0,
+                    help="reranker: teto de candidatos (omitido = o do provedor ou do servidor) · "
+                         "decision --recall on: top-N candidatos (obrigatório)")
     pv.add_argument("--recall", choices=["on", "off"],
                     help="decision (só full + hindsight): usar o decisor também no recall (on exige --candidates N)")
     pv.add_argument("--key", help="chave da API — vai ao config/.env (0600), nunca volta em output")

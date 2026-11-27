@@ -1,4 +1,4 @@
-## 2.59.0 — o aviso de atualização ganha um resumo para quem não é técnico
+## 2.60.0 — o aviso de atualização ganha um resumo para quem não é técnico
 
 > Resumo: O aviso de atualização agora conta o que muda em uma frase por versão, sem códigos nem jargão técnico.
 
@@ -6,6 +6,15 @@
 - **"ver changelog" mostra o detalhe.** O botão alterna entre o Resumo e a lista completa da versão. Só aparece quando há o que ver (o `hidden` perdia para o estilo do botão pequeno e o botão ficava morto).
 - **Cada versão do CHANGELOG ganha uma linha `> Resumo: …`** logo abaixo do título. Sem ela, o resumo cai no título da seção. Um teste exige a linha na versão mais recente.
 - **As novidades chegam sem asteriscos soltos.** O parser tirava só o asterisco duplo de abertura do negrito e deixava o de fechamento, no painel e no `brain update --check`. Crase e negrito saem do texto.
+
+## 2.59.0 — Memória: modo e provedores numa tela só
+
+> Resumo: A configuração de Memória agora cabe numa tela só, com o modo e os provedores juntos.
+
+- **Uma tela, todos os campos.** Configurações › Memória junta o modo (nenhuma · embed · full) e os provedores. Cada slot (LLM · embeddings · reranker · decisão) traz provedor, chave, modelo, modelo por operação do LLM, base URL, dimensões, teto de candidatos e decisor no recall — tudo o que `memory providers set` aceita —, pré-preenchido com o que está gravado. O cabeçalho de cada slot mostra o que vale hoje, no lugar da tabela antiga. No embed, o reranker aparece também.
+- **Aplicar usa a rota do passo Memória.** Só o slot que mudou é regravado, com exatamente o que a tela mostra: campo apagado volta ao recomendado. O servidor sobe ou é recriado e o job narra. O formulário de provedor (`memory providers set`) continua na TUI e no terminal; a ponte do painel deixou de aceitar essa linha.
+- **Trocar de provedor não deixa resto no `.env`.** O modelo de cada operação do LLM, a dimensão dos embeddings e o teto do reranker do provedor anterior ficavam: Fireworks → local seguia pedindo 1536 dimensões ao bge-m3 (que tem 1024), e Fireworks → Cohere seguia com o teto 50. Agora o que a troca não diz volta ao padrão do provedor novo, ou do servidor. Mudar a dimensão pede o `memory rebuild`, como trocar o modelo.
+- **Decisor local sem URL é instalado.** Escolher Local na Decisão sem informar a URL instala e liga o servidor. A URL de fábrica como padrão pulava a instalação e deixava o slot sem chave; o aviso do `doctor` agora diz o caminho.
 
 ## 2.58.0 — o menu do painel abre no índice e ganha a ordem nova
 

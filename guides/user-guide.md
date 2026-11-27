@@ -731,8 +731,8 @@ O painel tem três **faces** (como o TUI): **Execução**, **Portfólio** e **Co
 `Tab`/`Shift+Tab` troca, e cada face lembra onde você estava. A barra
 lateral traz as páginas (com badges), a busca e a barra inferior mostra
 as teclas do contexto — clicáveis, com os gates em destaque. A face
-**Configurações** mostra provedores da memória e saúde — e o
-formulário de trocar provedor roda a mesma linha da TUI e do CLI.
+**Configurações** mostra a memória (modo e provedores numa tela só) e a saúde — a tela Memória
+aplica pela mesma rota do passo Memória, que sobe ou recria o servidor.
 
 **As mesmas teclas no TUI e no painel.** `n` novo · `e` editar · `d` descartar, remover, cancelar, aposentar,
 desligar ou rejeitar (sempre `d`, em toda tela) · `s` status · `A` aprovar (gate) · `T` alterna só abertas ↔ todas ·
@@ -781,8 +781,10 @@ por uma versão.
 - **Fontes** (em Configurações › Conexões) — o `watch.toml` e o último pull de cada fonte: `n` adiciona, `e` edita, `d` remove, `w` inclui um pull
   avulso; `c`/`u` executam `/connect`/`/update` pelo `[runner]` quando a ponte está no ar (transmitindo a saída no console lateral; no retrato ou sem runner, dizem o comando do chat). `N` abre a nota rápida em qualquer página.
 
-**Configurações** — páginas: **Memória** (provedores; `s` troca
-provedor) e **Saúde**
+**Configurações** — páginas: **Memória** (modo e provedores numa tela só: cada slot com provedor,
+chave, modelo, modelo por operação do LLM, base URL, dimensões, teto de candidatos e decisor no recall,
+pré-preenchidos com o que está gravado; `m` leva ao modo, `s` ao provedor; Aplicar regrava só o slot que
+mudou e narra) e **Saúde**
 (badge: avisos) — o `doctor` visual + `f` corrige o aviso selecionado (leva à página, ou roda/diz o comando do agente) + `o` testa online de novo; desde a face
 Configurações a Saúde mora só aqui, como na TUI (a paleta também leva só
 aqui — o link antigo `#health` redireciona).
