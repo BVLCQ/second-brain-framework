@@ -9,6 +9,7 @@ config/watch.toml
 config/.state.json
 config/*.state.json.lock
 config/.memory-state.json
+config/mcporter.json
 
 # ═══ Inovação local: scripts nascidos na instância (graduam p/ upstream) ═══
 scripts/local/
