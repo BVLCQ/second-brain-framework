@@ -746,7 +746,7 @@ por uma versão.
   decisões recentes. `n` escreve uma nota rápida; `u`/`d`/`b`/`c` rodam ações
   do agente ao vivo quando a ponte está no ar e o `[runner]` configurado
   (com saída no console lateral).
-- **TODO** (badge: atrasadas) — kanban (a fazer · fazendo · bloqueada ·
+- **Tarefas** (antes TODO; badge: atrasadas) — kanban (a fazer · fazendo · bloqueada ·
   feita) com **arrastar-e-soltar**: soltar roda o comando (marcar fazendo,
   fechar, reabrir); bloqueadas recusam citando o `blocked_by`. Abaixo, a
   lista de aguardando-de-outros. Teclas: `n` nova, `e` editar, `c` fechar,
@@ -778,7 +778,7 @@ por uma versão.
   `A` aprova (gate) e `d` cancela a publicação selecionada; `a` responde pergunta / aceita proposta e `d`
   descarta pergunta / rejeita proposta; `T` mostra também as respondidas.
 - **Sugestões** (badge: pendentes) — a fila do que vira issue no GitHub; `p` publica, `s` sincroniza, `T` mostra também as criadas.
-- **Fontes** — o `watch.toml` e o último pull de cada fonte: `n` adiciona, `e` edita, `d` remove, `w` inclui um pull
+- **Fontes** (em Configurações › Conexões) — o `watch.toml` e o último pull de cada fonte: `n` adiciona, `e` edita, `d` remove, `w` inclui um pull
   avulso; `c`/`u` executam `/connect`/`/update` pelo `[runner]` quando a ponte está no ar (transmitindo a saída no console lateral; no retrato ou sem runner, dizem o comando do chat). `N` abre a nota rápida em qualquer página.
 
 **Configurações** — páginas: **Memória** (modo e provedores numa tela só: cada slot com provedor,

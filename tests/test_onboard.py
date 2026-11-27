@@ -171,7 +171,7 @@ class StepTests(unittest.TestCase):
         tabs = html.split("const TABS_CFG = [", 1)[1].split("];", 1)[0]
         for step in ("cfg/perfil", "cfg/rotina", "cfg/conectores", "cfg/memoria", "cfg/integracoes", "cfg/inicio", "cfg/saude"):
             self.assertIn(f'"{step}"', tabs)
-        self.assertLess(tabs.index('"cfg/perfil"'), tabs.index('"cfg/inicio"'))
+        self.assertLess(tabs.index('"cfg/inicio"'), tabs.index('"cfg/perfil"'))   # a Visão geral abre a face
         self.assertIn('t[3] !== "badge"', html)
         self.assertIn('"cfg/" + (seg[1] || "inicio")', html)               # #cfg sem passo cai na Visão geral
         for step in ("inicio", "perfil", "rotina", "conectores", "integracoes"):
