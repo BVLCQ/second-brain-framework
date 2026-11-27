@@ -1,3 +1,15 @@
+## 2.63.0 — Goals e projetos em colunas, e cada arquivo uma vez só
+
+> Resumo: Goals, projetos e entregáveis agora ficam numa página só, em colunas como as do Finder, e cada arquivo aparece uma vez, no nível certo, com um chip para abrir no aplicativo.
+
+- **Goals e projetos, em colunas.** A página Projetos e a ficha de projeto viram uma só: Goals › Projetos › Entregáveis › detalhe. `←` `→` trocam de coluna, `↑` `↓` andam dentro dela, e o detalhe mostra o item da coluna com foco. Os endereços antigos (`#projects`, `#project/…`) caem nas colunas. O selo na barra lateral conta os entregáveis atrasados.
+- **Todos os comandos da árvore da TUI, com botão.** `n` cria o filho do item (goal → projeto, com gate · projeto → entregável · entregável → ação já ligada), `G` novo goal, `e` edita (goal e projeto com gate; agora também o entregável), `space`/`s` marcam o entregável, `P` declara % de goal **ou projeto**, `S` exporta, `N` deixa uma nota ligada ao item. Cada tecla tem botão na barra do detalhe e no `+` de cada coluna; a barra de teclas diz o que o `n` vai criar.
+- **Cada arquivo uma vez, no nível certo.** O entregável deixou de repetir a lista inteira do projeto: mostra só o que o `/dump` ligou a ele. O projeto mostra os gerais ("Do projeto", reuniões e conversas); o goal, a soma. O resumo do Brain e o original são uma linha só.
+- **Nome abre aqui, chip abre no app.** Em toda ficha, o nome do arquivo abre a pré-visualização no Brain (abas Original · Resumo); o chip com a extensão (`PDF`, `XLSX`, `MD`…) abre no aplicativo do sistema. Sai o nome do aplicativo da lista e saem "Como abrir", "Ver no Brain" e "abrir tudo" de cada ficha — como abrir é preferência da máquina e mora na paleta (⌘K › Como abrir arquivos). Lista longa ganha grupos por tipo, filtro e "mostrar mais".
+- **Pré-visualização dentro das colunas.** Na coluna de arquivos, `enter` abre o arquivo no lugar do detalhe; Voltar fecha e devolve o foco ao mesmo arquivo; `‹ ›` troca de arquivo; `⤢` abre a janela grande.
+- **Início mais enxuto.** Um bloco por goal (progresso, saúde, horizonte e a próxima entrega — ou a atrasada, uma vez só). Uma entrega que é o próprio entregável feito aparece uma vez nas conquistas.
+- **`brain artifact --deliverable PROJ-#.#`.** O artefato pode apontar o entregável que sustenta; o projeto entra sozinho e o CLI recusa entregável que não existe. Evento antigo, sem o campo, continua no nível do projeto. O `/dump` passa a preencher quando o arquivo é ou sustenta um entregável. A TUI usa a mesma lista, então o entregável dela também para de repetir o projeto.
+
 ## 2.62.0 — Memória: decisor na nuvem, esforço por modelo e o padrão que acompanha o modelo mais novo
 
 > Resumo: A Decisão ganha três opções na nuvem, cada modelo do LLM tem o seu nível de esforço, o modelo recomendado passa sozinho para a versão nova quando ela sai, e o `brain update` atualiza também o servidor de memória.

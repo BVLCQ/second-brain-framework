@@ -1,9 +1,12 @@
 """Arquivos do vault ligados a um item. A TUI e o painel chamam a mesma função."""
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from . import opener
+
+_DELIV = re.compile(r"^PROJ-\d+\.\d+$")
 
 
 def vault_file(inst, ref: str) -> Path | None:
@@ -29,34 +32,54 @@ def collect(inst, notes_by_link: dict, artifacts: list[dict], *,
             projects_of=None) -> list[dict]:
     """Arquivos ligados a um item, sem repetir.
 
-    Cada um: {kind, name, rel, app}. `notes_by_link` mapeia id → notas. `artifacts` tem
-    id, title, raw e projects. `projects_of(node)` devolve os projetos do nó, se houver.
+    Cada um: {kind, name, rel, ext, app}. O artefato traz também `raw` (o bruto dele, quando existe no
+    vault), `deliverable`, `projects` e `date`; a linha do bruto traz `of` (o artefato). Quem mostra pode
+    juntar os dois num documento só (Resumo · Original); quem lista linha a linha continua tendo o bruto.
+    `notes_by_link` mapeia id → notas. `artifacts` tem id, title, raw, projects e deliverable.
+    `projects_of(node)` devolve os projetos do nó, se houver.
+
+    Entregável (`PROJ-#.#`) leva só os artefatos ligados a ele — não herda a lista inteira do projeto.
     """
     out: dict[str, dict] = {}
     by_id = {a["id"]: a for a in artifacts}
 
-    def add(kind: str, name: str, ref: str) -> None:
+    def add(kind: str, name: str, ref: str, **extra) -> str:
         f = vault_file(inst, ref)
         if f is None:
-            return
+            return ""
         rel = inst.rel(f)
         if rel not in out:
             out[rel] = {"kind": kind, "name": name or f.name, "rel": rel,
-                        "app": opener.app_for(inst.cfg, f)}
+                        "ext": f.suffix.lstrip(".").lower(), "app": opener.app_for(inst.cfg, f)}
+        for k, v in extra.items():                    # o bruto citado antes como fonte ganha o vínculo depois
+            if v and k not in out[rel]:
+                out[rel][k] = v
+        return rel
+
+    def add_art(art: dict) -> None:
+        raw_f = vault_file(inst, art.get("raw") or "")
+        rel = add("artefato", art.get("title") or "", art["id"],
+                  raw=inst.rel(raw_f) if raw_f is not None else "",
+                  deliverable=art.get("deliverable") or "", projects=list(art.get("projects") or []),
+                  date=art.get("date") or "")
+        add("RAW", Path(art["raw"]).name if art.get("raw") else "", art.get("raw") or "", of=rel)
 
     for n in (notes_by_link.get(node, []) if node else []):
         add("nota", f"{n.created} {n.title}", n.path)
-    pids = set(projects_of(node)) if projects_of and node else set()
-    for a in artifacts:
-        if pids & set(a.get("projects") or []):
-            add("artefato", a.get("title") or "", a["id"])
-            add("RAW", Path(a["raw"]).name if a.get("raw") else "", a.get("raw") or "")
+    if node and _DELIV.match(node):
+        for a in artifacts:
+            if (a.get("deliverable") or "") == node:
+                add_art(a)
+    else:
+        pids = set(projects_of(node)) if projects_of and node else set()
+        for a in artifacts:
+            if pids & set(a.get("projects") or []):
+                add_art(a)
     for src in sources:
         key = (src or "").split("#")[0]
         art = by_id.get(key)
         if art:
-            add("artefato", art.get("title") or "", art["id"])
-            add("RAW", Path(art["raw"]).name if art.get("raw") else "", art.get("raw") or "")
+            add_art(art)
         else:
             add("RAW" if key.startswith("RAW/") else "documento", "", key)
     for d in docs or []:

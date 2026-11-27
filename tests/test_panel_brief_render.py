@@ -344,9 +344,9 @@ class PanelBriefRenderTests(unittest.TestCase):
                       '<span class="bd-tag-t">proposta · descartar ação</span><span class="chip bd-tag-s h-atencao">aguarda decisão</span></a>', h)
         self.assertIn('<a class="bd-tag bd-tag-m is-ask" href="#ask" title="Qual é o e-mail da Marina?"><code class="idchip">ASK-0001</code>'
                       '<span class="bd-tag-t">pergunta</span><span class="chip bd-tag-s h-info">aberta</span></a>', h)
-        self.assertIn('href="#projects?focus=GOAL-1"', h)
+        self.assertIn('href="#cols/GOAL-1"', h)
         self.assertIn('<span class="bd-tag-t">Padaria previsível</span>', h)
-        self.assertRegex(h, r'href="#project/PROJ-1"[^>]*><code class="idchip">PROJ-1\.1</code><span class="bd-tag-t">Ajustar escala</span><span class="chip bd-tag-s">[a-z]{3} 15/11</span>')
+        self.assertRegex(h, r'href="#cols/GOAL-1/PROJ-1/PROJ-1\.1"[^>]*><code class="idchip">PROJ-1\.1</code><span class="bd-tag-t">Ajustar escala</span><span class="chip bd-tag-s">[a-z]{3} 15/11</span>')
         self.assertIn('href="#wins"', h)
         self.assertIn('<code class="idchip">MSG-0009</code>', h)                     # o painel não conhece: chip comum, sem link
         self.assertNotIn('href="#outbox"', h)

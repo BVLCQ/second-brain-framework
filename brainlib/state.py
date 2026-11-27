@@ -113,6 +113,7 @@ class Artifact:
     summary: str = ""
     prov: str = ""
     link: str = ""                   # PROC-####/OPP-#### a que o artefato pertence (ex.: leitura de um playbook)
+    deliverable: str = ""            # PROJ-#.# que o artefato sustenta (opcional; sem ele, fica no nível do projeto)
 
 
 @dataclass
@@ -548,7 +549,8 @@ def apply(st: State, ev: dict) -> None:
     elif t == "artifact.added":
         st.artifacts[eid] = Artifact(eid, data["kind"], data["title"], when, data.get("raw", ""),
                                      list(data.get("people", [])), list(data.get("projects", [])),
-                                     data.get("summary", ""), ev.get("prov", ""), data.get("link", ""))
+                                     data.get("summary", ""), ev.get("prov", ""), data.get("link", ""),
+                                     ids.normalize(data.get("deliverable") or ""))
         if data.get("raw"):
             st.raw_index[data["raw"]] = eid
         tgt = st.processes.get(data.get("link", "")) or st.opportunities.get(data.get("link", ""))

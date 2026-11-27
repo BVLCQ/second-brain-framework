@@ -81,8 +81,14 @@ Para cada item da inbox (ignore `.keep.md`):
 ```
 ./brain artifact PROCESSED/<ano>/<mês>/<slug>.md --kind reuniao|documento|nota|conector \
   --title "…" --raw RAW/<ano>/<mês>/<tipo>/<arquivo> --people a,b --projects PROJ-1 --summary "…" \
-  --prov observado --source RAW/<ano>/<mês>/<tipo>/<arquivo>
+  [--deliverable PROJ-1.2] --prov observado --source RAW/<ano>/<mês>/<tipo>/<arquivo>
 ```
+
+   `--deliverable PROJ-#.#` quando o arquivo **é** ou **sustenta** um entregável (o projeto executivo do
+   entregável "Projeto aprovado", a planilha de testes de "Receitas testadas"): o projeto entra sozinho.
+   Reunião, conversa e nota que tratam do projeto em geral ficam **sem** o campo — moram no nível do projeto
+   ("Do projeto", no painel). Em dúvida entre dois entregáveis, deixe sem: um arquivo no projeto é achável;
+   no entregável errado, engana. O painel mostra no entregável só o que tem o campo.
 
 4. Extrações em lote (preferível quando houver várias). Escreva o lote com a ferramenta **Write** num arquivo
    (`vault/RAW/inbox/.tmp/lote.json` ou o scratch do agente) e rode `./brain add --file <caminho>` — heredoc (`<<'JSON'`) e pipe

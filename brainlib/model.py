@@ -62,7 +62,8 @@ class ModelBuilder:
                 idx.setdefault(n.link, []).append(n)
             self._notes_by_link = idx
             self._file_arts = [
-                {"id": a.id, "title": a.title, "raw": a.raw, "projects": list(a.projects)}
+                {"id": a.id, "title": a.title, "raw": a.raw, "projects": list(a.projects),
+                 "deliverable": a.deliverable, "date": _iso(a.date)}
                 for a in self.st.artifacts.values()]
 
         def projects_of(n: str) -> set[str]:
@@ -178,7 +179,8 @@ class ModelBuilder:
 
     def artifact(self, a) -> dict:
         return {"id": a.id, "kind": a.kind, "title": a.title, "date": _iso(a.date), "raw": a.raw,
-                "people": a.people, "projects": a.projects, "summary": a.summary, "prov": a.prov}
+                "people": a.people, "projects": a.projects, "summary": a.summary, "prov": a.prov,
+                "deliverable": a.deliverable}
 
     # ── agregados ──────────────────────────────────────────────────────────
     def deliverable_done_events(self) -> list[dict]:

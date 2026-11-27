@@ -1044,6 +1044,7 @@ class DashboardAssetTests(unittest.TestCase):
         "query actions", "query decisions", "query person", "query entity", "query sql",   # ferramenta do agente/MCP (brain_query)
         "index rebuild", "index update", "index status",          # ciclo de vida: terminal (doctor avisa)
         "route",                                               # ferramenta do agente/hook (Fase 4.5)
+        "plan log",            # E (mudar a árvore à mão): editor + diff com gate só na TUI; o painel cria e edita pelos formulários
         "memory dossier",                                      # agente//ask — montado na leitura (Fase 5)
         "memory models list", "memory models show", "memory models sync", "memory models refresh",   # Fase 8: full-only, CLI do dono/agente
         "memory eval",                                         # Fase 0: harness do conjunto-ouro

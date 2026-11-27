@@ -330,14 +330,6 @@ const projectsHtml = mac.BRAIN.V.projects(new URLSearchParams("focus=" + payload
 mac.flushTimers();
 const peopleFullHtml = mac.BRAIN.V.people();
 
-// Clique em a[data-proj-jump] já estando em #projects
-mac.win.location.hash = "#projects";
-const jumpLink = { dataset: { projJump: payload.goals[0].projects[0] } };
-let jumpPrevented = false;
-(mac.docListeners.get("click") || []).forEach(({fn}) => fn({
-  target: { closest: sel => sel === "a[data-proj-jump]" ? jumpLink : null },
-  preventDefault() { jumpPrevented = true; },
-}));
 
 // Dispara verbadge click para testar fmtDL(u.checked_at)
 mac.verbadge._ev.click.forEach(fn => fn());
@@ -431,9 +423,7 @@ console.log(JSON.stringify({
   prevented, stopped, openAfterFirst, openAfterSecond, openAfterAlt,
   homeHtml, focusHtml, projectsHtml,
   scrolled: mac.scrolled,
-  jumpPrevented,
   todoCountAfterFilter,
-  projCardJustMoved: mac.projCardEl.classList.contains("just-moved"),
   newsshow: mac.newsshow.textContent,
   peopleFullHtml, peoplePfHtml, decisionsPfHtml, personPfHtml,
   sweep,
@@ -471,9 +461,11 @@ console.log(JSON.stringify({
         self.assertFalse(res["openAfterSecond"])
         self.assertFalse(res["openAfterAlt"])
 
-        # #46: datas dd/mm/aaaa
-        self.assertIn("horizonte 31/12/2026", res["homeHtml"])
-        self.assertNotIn("horizonte 2026-12-31", res["homeHtml"])
+        # #46: datas dd/mm/aaaa (o bloco do goal no Início mostra o horizonte curto; a coluna, o longo)
+        self.assertIn("até 31/12", res["homeHtml"])
+        self.assertNotIn("2026-12-31", res["homeHtml"])
+        self.assertIn("até 31/12/2026", res["projectsHtml"])
+        self.assertNotIn("2026-12-31", res["projectsHtml"])
         self.assertIn("verificado 19/10/2026", res["newsshow"])
         self.assertNotIn("verificado 2026-10-19", res["newsshow"])
 
@@ -490,20 +482,19 @@ console.log(JSON.stringify({
         self.assertLess(foc.find("08:00–08:30"), foc.find("13:00–14:00"))
         self.assertLess(foc.find("09:00–10:00"), foc.find("15:00–16:30"))
 
-        # #54: mini-chip âncora no goal e jump em #projects
-        self.assertIn('class="chip h-reason"', home)
-        self.assertIn('href="#projects?focus=' + m["goals"][0]["projects"][0] + '"', home)
-        self.assertIn("↳ " + m["goals"][0]["projects"][0] + " · entregável vencido", home)
+        # #54 (refeito nas colunas): o motivo do risco aparece UMA vez, no entregável que causa, com link para ele
+        late = [d for pid in m["goals"][0]["projects"] for p in m["projects"] if p["id"] == pid
+                for d in p["deliverables"] if d["status"] not in ("feito", "cancelado") and d.get("overdue_days")]
+        self.assertTrue(late, "o fixture precisa de um entregável vencido no primeiro goal")
+        self.assertIn('href="#cols/' + m["goals"][0]["id"] + '"', home)
+        self.assertIn('<span class="late">⚠ ' + late[0]["id"] + " venceu há", home)
+        self.assertNotIn("h-reason", home)
         if len(m["goals"]) > 1:
             self.assertNotIn("tudo ok", home)
-        self.assertIn('id="proj-' + m["goals"][0]["projects"][0] + '"', res["projectsHtml"])
-        self.assertIn('class="chip h-reason"', res["projectsHtml"])
-        self.assertEqual(len(res["scrolled"]), 2)
-        self.assertEqual(res["scrolled"][0]["id"], "proj-" + m["goals"][0]["projects"][0])
-        self.assertEqual(res["scrolled"][1]["id"], "proj-" + m["goals"][0]["projects"][0])
-        self.assertTrue(res["jumpPrevented"])
+        self.assertIn('class="cols"', res["projectsHtml"])                       # #projects caiu nas colunas
+        self.assertIn('class="late-alert" href="#cols/', res["projectsHtml"])
+        self.assertEqual(res["projectsHtml"].count('class="late-alert"'), 1)
         self.assertEqual(res["todoCountAfterFilter"], "3")
-        self.assertTrue(res["projCardJustMoved"])
 
         # #52: Pessoas com 0 no completo e "—" no standalone portfolio
         self.assertIn('<td class="num">0</td>', res["peopleFullHtml"])

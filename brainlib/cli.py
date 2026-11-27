@@ -400,11 +400,17 @@ def cmd_delivery(args, b: Brain) -> None:
 
 
 def cmd_artifact(args, b: Brain) -> None:
+    projects = [ids.normalize(p) for p in util.split_csv(args.projects)]
+    deliverable = ids.normalize(args.deliverable) if args.deliverable else None
+    if deliverable and deliverable in b.plan.deliverables:     # o projeto do entregável vem junto (sem pedir de novo)
+        pid = b.plan.deliverables[deliverable].project_id
+        if pid not in projects:
+            projects.append(pid)
     ev = b.record_one(_common({"type": "artifact.added", "id": args.path, "data": {
         "kind": args.kind, "title": args.title, "raw": args.raw, "summary": args.summary,
-        "people": _resolve_people(b, args.people or []), "projects": util.split_csv(args.projects),
-        "link": args.link}}, args))
-    _out(args, ev, f"✓ artefato {ev['id']} ({args.kind})")
+        "people": _resolve_people(b, args.people or []), "projects": projects,
+        "link": args.link, "deliverable": deliverable}}, args))
+    _out(args, ev, f"✓ artefato {ev['id']} ({args.kind})" + (f" · {deliverable}" if deliverable else ""))
 
 
 def cmd_proposal(args, b: Brain) -> None:
@@ -1213,6 +1219,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--projects")
     p.add_argument("--summary")
     p.add_argument("--link", help="PROC-####/OPP-#### a que o artefato pertence (ex.: leitura de playbook)")
+    p.add_argument("--deliverable", help="PROJ-#.# que o artefato sustenta; o projeto dele entra em --projects sozinho")
     _fact_opts(p)
     p.set_defaults(fn=cmd_artifact)
 
