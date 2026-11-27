@@ -378,15 +378,41 @@ class ServerFollowsTheUpdate(unittest.TestCase):
         import os
         os.environ.pop("BRAIN_SERVICES_NO_KICK", None)          # a suíte local costuma rodar com ele ligado
 
-    def _run(self, image: str | None, compose_code: int = 0):
+    VOL = "segundo-cerebro_hindsight-data"
+
+    def _run(self, image: str | None, compose_code: int = 0, fail: tuple = ()):
+        """Docker de mentira. `fail`: passos que devolvem erro — "pull", "backup" (cópia vol → bak), "restore"."""
         calls = []
 
         def run(argv, timeout=60):
             calls.append(list(argv))
             if "inspect" in argv:
-                return (0, image + "\n") if image else (1, "Error: No such object: hindsight")
-            return compose_code, "ok"
+                if not image:
+                    return 1, "Error: No such object: hindsight"
+                return (0, self.VOL + "\n") if any(".pg0" in a for a in argv) else (0, image + "\n")
+            if "pull" in argv:
+                return (1, "net down") if "pull" in fail else (0, "pulled")
+            if "run" in argv and "--rm" in argv:
+                restore = any(a.endswith("-pre-upgrade:/from:ro") for a in argv)
+                step = "restore" if restore else "backup"
+                return (1, "cp: no space") if step in fail else (0, "")
+            if "compose" in argv and argv[0] != "env":
+                return compose_code, "ok"
+            return 0, "ok"
         return run, calls
+
+    @staticmethod
+    def _step(c: list) -> str:
+        if c[0] == "env":
+            return "compose-old"
+        for k in ("inspect", "pull", "stop", "start", "compose"):
+            if k in c:
+                return k
+        if "volume" in c:
+            return "volume-" + c[c.index("volume") + 1]
+        if "run" in c:
+            return "restore" if any(a.endswith("-pre-upgrade:/from:ro") for a in c) else "backup"
+        return c[0]
 
     def _inst(self, td, **mem):
         b = _brain(Path(td))
@@ -406,11 +432,44 @@ class ServerFollowsTheUpdate(unittest.TestCase):
             res = services.sync_server(inst, run=run, probes={"hindsight": lambda: True, "lmstudio": lambda: True},
                                        sleep=lambda s: None)
             self.assertEqual(res["state"], "ready")
-            compose = [c for c in calls if "compose" in c]
-            self.assertEqual(len(compose), 1)
-            self.assertEqual(compose[0][-2:], ["up", "-d"])
-            self.assertFalse(any(c[0] == "env" for c in calls))
+            self.assertIn(f"{self.VOL}-pre-upgrade", res["detail"])
+            steps = [self._step(c) for c in calls if self._step(c) != "inspect"]
+            # baixa antes de parar; copia o banco antes de subir a imagem nova; nada de volta
+            self.assertEqual(steps, ["pull", "stop", "volume-rm", "volume-create", "backup", "compose"])
+            backup = next(c for c in calls if self._step(c) == "backup")
+            self.assertIn("--user", backup)                                      # sem root a cópia sai vazia
+            self.assertIn(f"{self.VOL}:/from:ro", backup)
+            self.assertIn(f"{self.VOL}-pre-upgrade:/to", backup)
+            self.assertEqual(backup[backup.index("--entrypoint") + 2], OLD_IMAGE)
             self.assertFalse((Path(inst.logs) / "server-sync.lock").exists())
+
+    def test_failed_download_or_backup_changes_nothing(self):
+        from brainlib import services
+        probes = {"hindsight": lambda: True, "lmstudio": lambda: True}
+        with tempfile.TemporaryDirectory() as td:
+            inst = self._inst(td)
+            run, calls = self._run(OLD_IMAGE, fail=("pull",))
+            res = services.sync_server(inst, run=run, probes=probes, sleep=lambda s: None)
+            self.assertEqual(res["state"], "failed")
+            self.assertIn("nada foi mudado", res["detail"])
+            self.assertEqual([self._step(c) for c in calls if self._step(c) != "inspect"], ["pull"])   # nem parou
+            run, calls = self._run(OLD_IMAGE, fail=("backup",))
+            res = services.sync_server(inst, run=run, probes=probes, sleep=lambda s: None)
+            self.assertIn("nada foi mudado", res["detail"])
+            steps = [self._step(c) for c in calls if self._step(c) != "inspect"]
+            self.assertEqual(steps[-2:], ["backup", "start"])                     # religa o de antes
+            self.assertNotIn("compose", steps)
+
+    def test_no_data_volume_no_upgrade(self):
+        from brainlib import services
+        with tempfile.TemporaryDirectory() as td:
+            inst = self._inst(td)
+            run, calls = self._run(OLD_IMAGE)
+            self.VOL = ""
+            res = services.sync_server(inst, run=run, probes={"hindsight": lambda: True, "lmstudio": lambda: True},
+                                       sleep=lambda s: None)
+            self.assertIn("volume de dados", res["detail"])
+            self.assertFalse(any(self._step(c) in ("pull", "stop", "compose") for c in calls))
 
     def test_nothing_to_do_when_image_and_env_are_current(self):
         from brainlib import services
@@ -459,9 +518,26 @@ class ServerFollowsTheUpdate(unittest.TestCase):
             res = services.sync_server(inst, run=run, probes={"hindsight": lambda: True, "lmstudio": lambda: True},
                                        sleep=lambda s: None, verify_llm=fail)
             self.assertEqual(res["state"], "failed")
-            self.assertIn("voltou à anterior", res["detail"])
+            self.assertIn("restaurou o banco de antes", res["detail"])
+            steps = [self._step(c) for c in calls if self._step(c) != "inspect"]
+            # a imagem nova já migrou o banco: a volta restaura a cópia ANTES de subir a imagem de antes
+            self.assertEqual(steps[-4:], ["compose", "stop", "restore", "compose-old"])
+            restore = next(c for c in calls if self._step(c) == "restore")
+            self.assertIn(f"{self.VOL}:/to", restore)
+            self.assertIn("find /to -mindepth 1 -delete", restore[-1])
             back = [c for c in calls if c[0] == "env"]
             self.assertEqual(back[0][1], f"BRAIN_HINDSIGHT_IMAGE={OLD_IMAGE}")
+
+    def test_failed_restore_stops_and_points_to_the_backup(self):
+        from brainlib import services
+        with tempfile.TemporaryDirectory() as td:
+            inst = self._inst(td)
+            run, calls = self._run(OLD_IMAGE, compose_code=1, fail=("restore",))
+            res = services.sync_server(inst, run=run, probes={"hindsight": lambda: True, "lmstudio": lambda: True},
+                                       sleep=lambda s: None)
+            self.assertIn(f"{self.VOL}-pre-upgrade", res["detail"])
+            self.assertIn("Não rode `memory rebuild`", res["detail"])
+            self.assertFalse(any(c[0] == "env" for c in calls))      # não sobe a versão de antes num banco pela metade
 
     def test_a_sync_already_running_is_not_doubled(self):
         from brainlib import services
@@ -484,6 +560,20 @@ class ServerFollowsTheUpdate(unittest.TestCase):
                 row = services.ensure(inst, reason="watchdog", run=run, probes=probes, sleep=lambda s: None)
             self.assertEqual(row["deps"]["hindsight"]["detail"][:30], "servidor de memória atualizado")
             self.assertEqual(sum("compose" in c for c in calls), 1)
+
+
+class ComposeFilesAreValid(unittest.TestCase):
+    """Volume nomeado montado num serviço precisa estar declarado no topo: o Compose v5 recusa o arquivo inteiro
+    ("refers to undefined volume") — e aí nenhum recreate do Brain sobe (Aplicar, troca de provedor, update)."""
+
+    def test_every_named_volume_is_declared(self):
+        import re
+        for name in ("compose.yaml", "compose.full.yaml"):
+            txt = (ROOT / "services" / name).read_text(encoding="utf-8")
+            used = set(re.findall(r"^\s+-\s+([A-Za-z][\w-]*):/", txt, re.M))
+            top = re.search(r"^volumes:\n((?:[ \t]+.*\n?|\n)*)", txt, re.M)
+            declared = set(re.findall(r"^  ([A-Za-z][\w-]*):", top.group(1), re.M)) if top else set()
+            self.assertEqual(used - declared, set(), name)
 
 
 if __name__ == "__main__":

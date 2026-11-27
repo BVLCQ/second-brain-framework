@@ -292,6 +292,22 @@ def running_image(run) -> str | None:
     return out if code == 0 and out else None
 
 
+def data_volume(run) -> str | None:
+    """O volume com o banco do contêiner `hindsight` (montado em /home/hindsight/.pg0); None = não achei."""
+    code, out = run([_docker_bin(), "inspect", "--format",
+                     '{{range .Mounts}}{{if eq .Destination "/home/hindsight/.pg0"}}{{.Name}}{{end}}{{end}}', "hindsight"])
+    out = (out or "").strip()
+    return out if code == 0 and out and "/" not in out else None
+
+
+def _copy_volume(run, image: str, src: str, dst: str, *, wipe_dst: bool) -> tuple[int, str]:
+    """Copia volume → volume com a própria imagem do Hindsight (tem `sh`), como root: sem root a cópia falha em
+    permissão e o servidor subiria num banco vazio."""
+    script = ("find /to -mindepth 1 -delete && " if wipe_dst else "") + "cp -a /from/. /to/"
+    return run([_docker_bin(), "run", "--rm", "--user", "0", "-v", f"{src}:/from:ro", "-v", f"{dst}:/to",
+                "--entrypoint", "sh", image, "-c", script], 900)
+
+
 def sync_server(inst, *, run=None, probes=None, sleep=time.sleep, waits: int = 24, pause: float = 5,
                 verify_llm=None) -> dict | None:
     """Depois de um `brain update`: o servidor de memória acompanha o código. Duas coisas, nesta ordem:
@@ -353,7 +369,33 @@ def _sync_server(inst, *, run, probes, sleep, waits: int, pause: float, verify_l
         return {"state": "failed", "detail": f"servidor de memória por atualizar — {blocked}"}
     argv = [_docker_bin(), *compose_argv(Path(inst.root), m)]
     upgrading = have != want
-    code, out = run(argv, 900) if upgrading else run(argv)     # a imagem nova baixa na primeira vez (~2 GB)
+    vol = bak = ""
+    if upgrading:
+        # As migrações do Hindsight rodam no boot e só andam para frente: voltar à imagem anterior sobre um banco já
+        # migrado não é volta. Por isso, antes da imagem nova: baixar (falha aqui não toca em nada), parar, copiar o
+        # banco para `<volume>-pre-upgrade` (fica guardado), e só então subir. A volta restaura a cópia.
+        vol = data_volume(run) or ""
+        if not vol:
+            return {"state": "failed", "detail": "servidor de memória por atualizar — não achei o volume de dados do "
+                                                 "contêiner hindsight; nada foi mudado"}
+        code, out = run([_docker_bin(), "pull", want], 900)
+        if code != 0:
+            _log(inst, f"sync: pull {want} falhou: {out[-200:]}")
+            return {"state": "failed", "detail": "servidor de memória por atualizar — a imagem nova não baixou "
+                                                 "(rede?); nada foi mudado, tento de novo na próxima conferência"}
+        bak = f"{vol}-pre-upgrade"
+        run([_docker_bin(), "stop", "hindsight"], 120)
+        run([_docker_bin(), "volume", "rm", "-f", bak])
+        code, out = run([_docker_bin(), "volume", "create", bak])
+        if code == 0:
+            code, out = _copy_volume(run, have, vol, bak, wipe_dst=False)
+        if code != 0:
+            run([_docker_bin(), "start", "hindsight"], 120)
+            _log(inst, f"sync: cópia de segurança falhou ({out[-200:]}) — servidor religado na versão de antes")
+            return {"state": "failed", "detail": "servidor de memória por atualizar — a cópia de segurança do banco "
+                                                 "falhou; o servidor voltou como estava, nada foi mudado"}
+        _log(inst, f"sync: cópia de segurança do banco em {bak}")
+    code, out = run(argv, 900) if upgrading else run(argv)
     _log(inst, f"sync: compose ({m}) {have} → {want} code={code} {out[-200:]}")
 
     def _healthy() -> tuple[bool, str]:
@@ -367,14 +409,23 @@ def _sync_server(inst, *, run, probes, sleep, waits: int, pause: float, verify_l
         return True, ""
     ok, why = (code == 0, out[-200:]) if code != 0 else _healthy()
     if ok:
-        return {"state": "ready", "detail": "servidor de memória atualizado" + (f" ({want.split('@')[-1][:19]})"
-                                                                                if upgrading else " (.env novo)")}
-    if upgrading:                                              # volta à imagem que funcionava
+        return {"state": "ready", "detail": "servidor de memória atualizado" + (
+            f" ({want.split('@')[-1][:19]}; cópia do banco de antes em {bak})" if upgrading else " (.env novo)")}
+    if upgrading:                                              # volta: banco de antes + imagem de antes
+        run([_docker_bin(), "stop", "hindsight"], 120)
+        rcode, rout = _copy_volume(run, have, bak, vol, wipe_dst=True)
+        if rcode != 0:
+            _log(inst, f"sync: imagem nova falhou ({why}) e a restauração também ({rout[-200:]}) — servidor parado")
+            return {"state": "failed", "detail": f"a imagem nova do Hindsight não subiu ({why}) e a restauração do "
+                                                 f"banco falhou — servidor parado; a cópia intacta está no volume {bak}. "
+                                                 f"Não rode `memory rebuild`; veja vault/logs/services.log"}
         run(["env", f"BRAIN_HINDSIGHT_IMAGE={have}", *argv])
         back = _wait(probes["hindsight"], sleep, waits, pause)
-        _log(inst, f"sync: imagem nova falhou ({why}) — voltei para {have} ({'ok' if back else 'sem health'})")
-        return {"state": "failed", "detail": f"a imagem nova do Hindsight não subiu ({why}) — o Brain voltou à "
-                                             f"anterior; detalhes em vault/logs/services.log e `docker logs hindsight`"}
+        _log(inst, f"sync: imagem nova falhou ({why}) — banco restaurado de {bak}, voltei para {have} "
+                   f"({'ok' if back else 'sem health'})")
+        return {"state": "failed", "detail": f"a imagem nova do Hindsight não subiu ({why}) — o Brain restaurou o "
+                                             f"banco de antes e voltou à versão anterior; detalhes em "
+                                             f"vault/logs/services.log e `docker logs hindsight`"}
     return {"state": "failed", "detail": f"servidor de memória recriado com o .env novo, mas {why}"}
 
 

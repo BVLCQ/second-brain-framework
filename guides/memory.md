@@ -80,14 +80,21 @@ nasce lá) ou sobreponha as portas: `HINDSIGHT_API_PORT=8891 HINDSIGHT_UI_PORT=9
 1. reescreve o slot LLM do `config/.env` no formato da versão (`providers.migrate_env`): modelo que o
    dono digitou continua fixo, o resto passa a seguir o mais novo da linha, e o esforço vai pelo caminho
    que o lane aplica — chave não muda;
-2. recria o contêiner com a imagem pinada se a que roda é outra (a primeira vez baixa a imagem);
+2. se a imagem pinada é outra: **baixa primeiro** (falha aqui não toca em nada), para o servidor, **copia o banco**
+   para o volume `<volume>-pre-upgrade` (como root; falhou a cópia, religa o de antes e para) e só então recria —
+   as migrações do servidor só andam para frente, então a cópia é o que torna a volta possível. O volume vale para
+   **todos os bancos do servidor** (`brain` e os de outros agentes, como `Agent`/`hermes`): a cópia cobre todos. Ela
+   fica guardada até a próxima atualização (`docker volume rm <volume>-pre-upgrade` libera o espaço);
 3. confere `health` e, no `full`, o LLM (`POST /banks/{id}/health/llm`, que o compose liga com
    `HINDSIGHT_API_ENABLE_BANK_LLM_HEALTH=true`);
-4. se a imagem nova não subir, **recria com a anterior** (`BRAIN_HINDSIGHT_IMAGE`, só nessa volta) e o
-   status/`vault/logs/services.log` dizem o que falhou. Um lock evita duas atualizações ao mesmo tempo.
+4. se a imagem nova não subir, **restaura o banco da cópia e recria com a imagem anterior** (`BRAIN_HINDSIGHT_IMAGE`,
+   só nessa volta); status e `vault/logs/services.log` dizem o que falhou. Se até a restauração falhar, o servidor
+   fica parado e a mensagem aponta o volume com a cópia intacta (não rode `memory rebuild`). Um lock evita duas
+   atualizações ao mesmo tempo.
 
-A migração 1.2.0 → 1.3.0 foi conferida numa cópia de um banco real de 369 documentos: o Alembic migra no
-boot (~9 s) e recall e contagem de documentos ficam iguais.
+Ensaiado de verdade (Docker real, contêiner de ensaio sobre a cópia de um servidor com três bancos): subida
+1.2.0 → 1.3.0 com cópia de segurança, e falha forçada no 1.3.0 com restauração — nos dois casos documentos e
+memórias de todos os bancos iguais aos do original, e o 1.2.0 volta a subir sobre o banco restaurado.
 
 À mão (servidor adotado, fora do compose do Brain), a receita de sempre — migrações de schema (Alembic)
 rodam no boot e são **forward-only**: apontou código antigo pra um banco já migrado, só restaurando backup.
