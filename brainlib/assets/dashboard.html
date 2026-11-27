@@ -2464,7 +2464,7 @@ SETUP.memoria = box => {
   const slotSub = slot => { const mm = slotLab(slot).match(/\(([^)]*)\)/); return mm ? mm[1].replace(/\s*\/\s*/g, " / ") : ""; };
   const short = p => (p && p.label ? String(p.label).split(" (")[0] : "—");
   const chip = (tone, t) => '<span class="chip' + (tone ? " " + tone : "") + '">' + t + "</span>";
-  let sel = curMode, planOpen = null;
+  let sel = curMode, planOpen = null, consent = false;   // o aceite do Full sobrevive ao redesenho (abrir uma linha não o apaga)
   // rascunho por slot: começa no gravado; provedor sem registro (instância nova) cai no recomendado do slot
   const base = {}, draft = {}, touched = {}, open = {};
   const recOf = (slot, mode) => {
@@ -2712,7 +2712,7 @@ SETUP.memoria = box => {
       '<div class="stopts memmodes">' + MEM_MODES.map(([k, t, dsc]) => '<button type="button" class="stopt' + (k === sel ? " sel" : "") + '" data-m="' + k + '"><b>' + t +
         (k === curMode ? ' <span class="chip h-info">atual</span>' : "") + "</b><span>" + dsc + "</span></button>").join("") + "</div>" +
       prereq() + stack + '<div id="m-plan">' + planHTML() + "</div>" +
-      (sel === "full" ? '<label class="chk memconsent"><input type="checkbox" id="m-consent"> Entendo que trechos do vault vão à API dos provedores, com as minhas chaves, e que isso tem custo por uso.</label>' : "") +
+      (sel === "full" ? '<label class="chk memconsent"><input type="checkbox" id="m-consent"' + (consent ? " checked" : "") + '> Entendo que trechos do vault vão à API dos provedores, com as minhas chaves, e que isso tem custo por uso.</label>' : "") +
       '<pre class="stlog" id="m-log"' + (memLast ? "" : " hidden") + ">" + esc(memLast ? memLast.log : "") + "</pre>" +
       '<div class="stactions"><span class="stmsg' + (memLast ? (memLast.ok ? " ok" : " late") : " muted") + '" id="m-msg">' + esc(memLast ? memLast.msg : chgText()) + "</span>" +
       '<button class="btn" type="button" id="m-discard"' + (dirty() ? "" : " hidden") + ">Descartar</button>" +
@@ -2724,6 +2724,7 @@ SETUP.memoria = box => {
   const q = s => box.querySelector(s);
   const val = id => { const el = q("#" + id); return el ? String(el.value || "").trim() : null; };
   const readDrafts = () => {   // o que está na tela entra no rascunho antes de redesenhar ou aplicar
+    const ck = q("#m-consent"); if (ck) consent = ck.checked;
     memSlotsFor(sel, recallOn()).forEach(slot => {
       const d = draft[slot];
       const k = val("m-key-" + slot); if (k !== null) d.key = k;
@@ -2756,7 +2757,8 @@ SETUP.memoria = box => {
     const slots = active();
     for (const slot of slots) {      // o que o servidor também recusa, dito antes de rodar o job
       const d = draft[slot], p = reg(slot, d.provider) || {}, name = slotName(slot);
-      const fail = t => { open[slot] = true; return t; };
+      // a linha do slot recusado abre (redesenho preserva rascunho, chaves e aceite) e a mensagem vem depois
+      const fail = t => { if (!open[slot]) { open[slot] = true; draw(); } return t; };
       if (d.provider === "custom" && !d.model) return say(fail(name + ": o provedor Outro precisa do modelo"));
       if (d.provider === "custom" && !d.base_url && slot !== "reranker") return say(fail(name + ": o provedor Outro precisa da base URL"));
       if (slot === "reranker" && d.candidates && !(/^\d+$/.test(d.candidates) && +d.candidates >= 1 && +d.candidates <= 500))
@@ -2773,7 +2775,7 @@ SETUP.memoria = box => {
     const body = {mode: sel};
     slots.forEach(slot => { body[slot] = memSlotBody(slot, draft[slot], base[slot]); });
     if (sel === "full") {
-      body.consent = !!(q("#m-consent") && q("#m-consent").checked);
+      body.consent = consent;
       if (!body.consent) return say("marque o aceite de envio à API");
     }
     const log = q("#m-log");
@@ -2832,10 +2834,10 @@ SETUP.memoria = box => {
         : Object.assign(memDraft("decision", {}, null), {provider: v});
       draw();
     });
-    box.querySelectorAll("input[id^='m-']").forEach(el => { if (el.type === "checkbox") { if (el.id !== "m-consent") el.onchange = refresh; } else el.oninput = refresh; });
+    box.querySelectorAll("input[id^='m-']").forEach(el => { if (el.type === "checkbox") el.onchange = refresh; else el.oninput = refresh; });
     wirePlan();
     q("#m-discard").onclick = () => {
-      MEM_SLOTS.forEach(resetDraft); sel = curMode; planOpen = null;
+      MEM_SLOTS.forEach(resetDraft); sel = curMode; planOpen = null; consent = false;
       Object.keys(touched).forEach(k => { delete touched[k]; }); Object.keys(open).forEach(k => { delete open[k]; });
       autoOpen(); draw();
     };
