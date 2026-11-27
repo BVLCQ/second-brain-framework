@@ -113,13 +113,21 @@ def view_model(brain) -> dict:
     c = _up.read_check_cache(brain.inst)
     m["update"] = {"version": _ver, "behind": c.get("behind"), "ahead": c.get("ahead"),
                    "remote_version": c.get("remote_version"), "checked_at": c.get("checked_at"),
-                   "news": c.get("news", []), "lines": _up.commit_lines(c.get("incoming") or []), "checked": bool(c),
+                   "news": c.get("news", []), "summary": c.get("summary", []),
+                   "current": _up.entry_for(_read_text(brain.inst.root / "CHANGELOG.md"), _ver), "checked": bool(c),
                    "stale": _up.check_is_stale(c), "error": bool(c.get("error")),
                    "cli_cmd": "./brain update"}
     return m
 
 
 _UNSET = object()
+
+
+def _read_text(path) -> str:
+    try:
+        return path.read_text(encoding="utf-8")
+    except OSError:
+        return ""
 
 
 def render_all(brain, do_harvest: bool = True, window=_UNSET) -> dict:

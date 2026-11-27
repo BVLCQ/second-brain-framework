@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -55,6 +56,37 @@ class ChangelogBoldTests(unittest.TestCase):
     def test_bullet_bold_markers_do_not_leak(self):
         text = "## 2.2.0 — x\n\n- **Título.** Corpo do item.\n* sem negrito\n"
         self.assertEqual(upstream.news_between(text, "2.1.0"), ["Título. Corpo do item.", "sem negrito"])
+
+
+class SummaryTests(unittest.TestCase):
+    TEXT = (
+        "## 2.3.0 — título técnico da versão\n\n> Resumo: Frase **simples** para `todo mundo`.\n\n- **A.** detalhe\n\n"
+        "## 2.2.0 — sem linha de resumo\n\n- b\n\n## 2.1.0 — x\n\n- c\n"
+    )
+
+    def test_uma_frase_por_versao_com_fallback_no_titulo(self):
+        self.assertEqual(
+            upstream.summary_between(self.TEXT, "2.1.0", "2.3.0"),
+            [{"v": "2.3.0", "text": "Frase simples para todo mundo."}, {"v": "2.2.0", "text": "Sem linha de resumo"}])
+
+    def test_resumo_nao_vira_bullet(self):
+        self.assertEqual(upstream.news_between(self.TEXT, "2.2.0"), ["A. detalhe"])
+
+    def test_entrada_da_versao_instalada(self):
+        self.assertEqual(upstream.entry_for(self.TEXT, "2.3.0"),
+                         {"summary": [{"v": "2.3.0", "text": "Frase simples para todo mundo."}], "news": ["A. detalhe"]})
+        self.assertEqual(upstream.entry_for(self.TEXT, "9.9.9"), {})
+
+    def test_sem_hash_nem_branch_no_resumo(self):
+        for row in upstream.summary_between(self.TEXT, "0.0.0"):
+            self.assertNotRegex(row["text"], r"[0-9a-f]{7}\b|origin/|Merge pull")
+
+    def test_changelog_do_repo_traz_resumo_na_versao_atual(self):
+        from pathlib import Path
+        text = (Path(upstream.__file__).resolve().parent.parent / "CHANGELOG.md").read_text(encoding="utf-8")
+        top = upstream.changelog_entries(text)[0]
+        self.assertTrue(top["resumo"], f"{top['v']} sem a linha `> Resumo: …` logo abaixo do título")
+        self.assertNotRegex(top["resumo"], r"(?i)commit|branch|\bPR\b|merge")
 
 
 def _git(cwd, *args, check=True):

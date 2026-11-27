@@ -1380,3 +1380,5 @@ ganha a linha `framework: em dia (v…)` / `atualização disponível`.
 - **Ritual de release (dono/agente):** toda remessa com mudança visível ao usuário bumpa
   `brainlib/__init__.py` (`__version__`) e ganha uma seção em `CHANGELOG.md`, em
   linguagem humana — é o que o usuário vê no painel ao atualizar.
+  Logo abaixo do título da seção vai uma linha `> Resumo: …` — uma frase para quem não é técnico,
+  sem hash, branch nem jargão. O diálogo de novidades abre nela; os bullets ficam atrás de "ver changelog".

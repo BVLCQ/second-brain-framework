@@ -7251,7 +7251,6 @@ function syncVerBadge(){
   if (!b) return;
   const back = document.getElementById("newsback");
   const behind = (u.behind || 0) > 0;
-  const commitsTxt = u.behind + (u.behind === 1 ? " commit atrás" : " commits atrás");
   const verTxt = "v" + (u.version || "?");
   const transTxt = verTxt + " → v" + (u.remote_version || "?");
   if (back) {
@@ -7262,10 +7261,10 @@ function syncVerBadge(){
     back.dataset.cliCmd = u.cli_cmd || "";
   }
   b.textContent = behind
-    ? transTxt + " · " + commitsTxt
+    ? transTxt
     : (u.checked ? verTxt + (u.stale ? " · sem verificar" : " · em dia") : verTxt);
   b.classList.toggle("behind", behind);
-  b.title = behind ? "atualização disponível (" + commitsTxt + ") — comando `update`"
+  b.title = behind ? "atualização disponível — comando `update`"
                    : "Segundo Cérebro " + verTxt + (u.checked ? (u.stale ? " — verificação desatualizada" + (u.checked_at ? " (" + fmtDL(u.checked_at) + ")" : "") : " — em dia") : "");
 }
 (function(){
@@ -7279,26 +7278,30 @@ function syncVerBadge(){
   const semNovidade = u => u.checked
     ? (u.stale
         ? ["Não conseguimos confirmar se há atualização: a última verificação está velha" + (u.error ? " ou falhou" : "") + ". Rode `update --check`."]
-        : ["Tudo em dia por aqui. A lista completa mora no CHANGELOG.md do repositório."])
+        : ["Tudo em dia por aqui."])
     : ["Ainda não verificamos se há atualizações — o noturno ou o comando `update --check` fazem isso."];
   const openNews = () => {
     const u = M.update || {};
     const behind = (u.behind || 0) > 0;
-    const commitsTxt = u.behind + (u.behind === 1 ? " commit atrás" : " commits atrás");
     const verTxt = "v" + (u.version || "?");
     const transTxt = verTxt + " → v" + (u.remote_version || "?");
-    const lines = (u.lines && u.lines.length) ? u.lines : [];
-    const changelog = (u.news && u.news.length) ? u.news : [];
+    // Resumo: uma frase por versão, sem hash nem branch. Changelog: o detalhe de cada mudança.
+    // Atualização à vista → o que vem na(s) versão(ões) nova(s); em dia → o que a versão instalada trouxe.
+    const cur = u.current || {};
+    const rows = behind ? (u.summary || []) : (cur.summary || []);
+    const summary = rows.length
+      ? rows.map(r => '<span class="nv">v' + esc(r.v) + "</span>" + esc(r.text))
+      : (behind ? [esc("Há novidades prontas para instalar.")] : semNovidade(u).map(esc));
+    const changelog = ((behind ? u.news : cur.news) || []).map(esc);
     let showLog = false;
     const paint = () => {
-      const list = showLog ? changelog : lines;
-      const body = list.length ? list : semNovidade(u);
+      const list = showLog ? changelog : summary;
       document.getElementById("newslist").innerHTML =
-        body.map(n => '<div class="ni">' + esc(n) + "</div>").join("");
+        list.map(n => '<div class="ni">' + n + "</div>").join("");
       const toggle = document.getElementById("newschangelog");
       if (toggle) {
         toggle.hidden = !changelog.length;
-        toggle.textContent = showLog ? "ver commits" : "ver changelog";
+        toggle.textContent = showLog ? "ver resumo" : "ver changelog";
       }
     };
     paint();
@@ -7307,7 +7310,7 @@ function syncVerBadge(){
     document.getElementById("newstitle").textContent = behind ? "Atualização disponível" : "Novidades da versão";
     if (meta) {
       meta.textContent = behind
-        ? transTxt + " · " + commitsTxt + (u.checked_at ? " · verificado " + fmtDL(u.checked_at) : "")
+        ? transTxt + (u.checked_at ? " · verificado " + fmtDL(u.checked_at) : "")
         : verTxt + (u.checked ? (u.stale ? " · sem verificar" : " · em dia") : "") + (u.checked_at ? " · verificado " + fmtDL(u.checked_at) : "");
     }
     document.getElementById("newshow").textContent = behind

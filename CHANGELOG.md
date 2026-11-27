@@ -1,9 +1,15 @@
-## 2.58.1 — o diálogo de novidades deixa de mostrar botão morto e `**` solto
+## 2.59.0 — o aviso de atualização ganha um resumo para quem não é técnico
 
-- **"ver changelog" só aparece quando há o que ver.** Em dia, o botão aparecia mesmo sem changelog (o `hidden` perdia para o estilo do botão pequeno) e o clique só trocava o rótulo. Agora some.
-- **As novidades chegam sem `**` solto.** O parser tirava o `**` de abertura do negrito e deixava o de fechamento, no painel e no `brain update --check`. Agora o marcador da lista sai e o negrito também.
+> Resumo: O aviso de atualização agora conta o que muda em uma frase por versão, sem códigos nem jargão técnico.
+
+- **O diálogo abre no Resumo.** Uma frase por versão que chega, escrita para quem não é técnico. No lugar de "2 commits atrás", o selo mostra só a versão (v2.57.0 → v2.58.0). Em dia, o diálogo mostra o que a versão instalada trouxe.
+- **"ver changelog" mostra o detalhe.** O botão alterna entre o Resumo e a lista completa da versão. Só aparece quando há o que ver (o `hidden` perdia para o estilo do botão pequeno e o botão ficava morto).
+- **Cada versão do CHANGELOG ganha uma linha `> Resumo: …`** logo abaixo do título. Sem ela, o resumo cai no título da seção. Um teste exige a linha na versão mais recente.
+- **As novidades chegam sem asteriscos soltos.** O parser tirava só o asterisco duplo de abertura do negrito e deixava o de fechamento, no painel e no `brain update --check`. Crase e negrito saem do texto.
 
 ## 2.58.0 — o menu do painel abre no índice e ganha a ordem nova
+
+> Resumo: O menu do painel foi reorganizado e agora abre sempre na primeira página de cada área.
 
 - **Início e Visão geral sempre abrem a barra.** Execução começa em Início, Portfólio em Visão geral e Configurações em Visão geral, sem rótulo acima. Trocar de face cai sempre nessa página.
 - **Execução em três blocos.** Agora (Tarefas, Perguntas), Registro (Projetos, Decisões, Linha do tempo) e Tools (Foco, Mensagens). O TODO se chama Tarefas. Fontes saiu daqui, junto com o badge de falha, e Conquistas deixou a barra: a página segue no ⌘K e no endereço `#wins`.
@@ -11,6 +17,8 @@
 - **Rótulos de categoria em preto e branco.** Pretos no tema claro, brancos no escuro.
 
 ## 2.57.0 — todo arquivo que o painel cita agora tem link
+
+> Resumo: Todo arquivo citado no painel agora tem um botão para abrir.
 
 - **Linha do tempo, "última interação" e busca ligam o artefato.** A linha do tempo escondia a reunião ou o documento de onde cada item nasceu; a ficha da pessoa e os resultados da busca mostravam o caminho como texto solto. Agora cada um tem o botão Ver, que abre o leitor embutido.
 - **Mensagens e fontes mostram os arquivos.** A mensagem lista os arquivos da ação ou do artefato que a motivou, e a referência no cabeçalho vira link. A fonte ganha "ver último pull", que abre o snapshot que o pull gravou. A entrega, nas conquistas e na busca, lista os arquivos dela.
