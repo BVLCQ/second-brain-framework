@@ -985,19 +985,23 @@ def _providers_step(brain, ui, slots: list[str], going_full: bool | None = None)
         # wizard interativo só pede quando falta; no roteiro (payload do formulário/CLI) a chave digitada
         # SUBSTITUI a gravada — "vazio = mantém a do .env" é o combinado dos formulários
         replace = getattr(ui, "replace_key", None) or (lambda _env: False)      # hook só da UI roteirizada
-        if key_env and not (env_keys.get(key_env) and not replace(key_env)):
+        has_key = bool(env_keys.get(key_env)) if slot != "decision" else prov.decision_key_ready(
+            p, env_keys, brain.inst.cfg["memory"])          # decisão: cada provedor de nuvem tem a sua chave
+        if key_env and not (has_key and not replace(key_env)):
             key = ui.secret(f"API key ({key_env})")
         rec = info.get("models") or (info.get("model") and {"default": info["model"]}) or {}
         models, model, base_url, recall, candidates = None, "", "", None, 0
-        # roteiro com modelo por operação (tela Memória): o que ele não diz segue o Modelo dito ou, sem ele, o recomendado
+        # roteiro com modelo por operação (tela Memória): o que ele não diz segue o Modelo dito ou, sem ele, o mais novo
+        # da linha do recomendado — só o DITO vai como modelo; o resto o set_slot resolve (e acompanha)
         pre_ops = {op: str(m).strip() for op, m in (pre.get("models") or {}).items() if str(m or "").strip()}
         if slot == "llm" and pre_ops:
-            models = {**({"default": str(pre["model"]).strip()} if str(pre.get("model") or "").strip() else rec),
+            models = {**({"default": str(pre["model"]).strip()} if str(pre.get("model") or "").strip() else {}),
                       **pre_ops}
-        elif slot == "llm" and rec and ui.confirm("Usar os modelos recomendados por operação (cenário B do plano)?", True):
-            models = dict(rec)
+        elif slot == "llm" and info.get("models") and ui.confirm(
+                "Usar os modelos recomendados por operação (cenário B do plano)?", True):
+            models = None                         # recomendados = sementes que seguem o mais novo da linha
         elif slot == "llm":
-            model = ui.ask("Modelo default (vazio = padrão do provedor)", info.get("model", ""))
+            model = ui.ask("Modelo default (vazio = o recomendado, sempre o mais novo da linha)", "")
             cheap = ui.ask("Modelo BARATO p/ extração+consolidação (vazio = default)", "")
             if cheap:
                 models = {"retain": cheap, "consolidation": cheap}
@@ -1018,16 +1022,24 @@ def _providers_step(brain, ui, slots: list[str], going_full: bool | None = None)
         if slot == "decision" and p == "local" and not base_url:
             ui.say("  instalando e ligando o decisor local (MLX no Apple Silicon, vLLM no Linux com GPU) — "
                    "na primeira vez leva alguns minutos; nada sai da máquina")
-        if slot == "decision" and p == "hindsight":
+        if slot == "decision" and info.get("recall"):
             if ui.confirm("Usar o decisor também no recall?", False):
                 recall = "on"
                 raw_cands = ui.ask("Teto de candidatos no recall (--candidates)", "")
                 candidates = int(raw_cands) if str(raw_cands).strip().isdigit() else 0
             else:
                 recall = "off"
+        effort = str(pre.get("effort") or "").strip() if slot == "llm" else ""
+        efforts = {op: str(v).strip() for op, v in (pre.get("efforts") or {}).items() if str(v or "").strip()} \
+            if slot == "llm" else None
         res = prov.set_slot(brain, slot, p, model=model, models=models, base_url=base_url,
-                            dimensions=pre_dims, candidates=candidates, key=key, recall=recall)
+                            dimensions=pre_dims, candidates=candidates, key=key, recall=recall,
+                            effort=effort, efforts=efforts or None)
         ui.say(f"✓ {slot} → {res['label']}" + (" (chave gravada no config/.env)" if key else ""))
+        if slot == "llm" and res.get("models"):
+            ui.say("  modelos: " + " · ".join(f"{op}={m}" for op, m in res["models"].items()))
+        for w in res.get("warnings") or []:
+            ui.say(f"  ⚠ {w}")
         if res["rebuild_needed"]:
             ui.say("→ rode `brain memory rebuild` depois do wizard"
                    + (f" — {prov.REBUILD_COST_NOTE}" if going_full else ""))
@@ -1351,6 +1363,12 @@ def _name_ok(v, what: str) -> str:
     return s
 
 
+def prov_levels() -> tuple[str, ...]:
+    """Escala de esforço que o payload aceita (o nível por modelo o providers.effort_plan confere)."""
+    from . import models_catalog
+    return models_catalog.LEVEL_ORDER
+
+
 def _llm_models_in(raw) -> dict[str, str]:
     """Modelo por operação do LLM no payload: `{"retain": "…", …}` (tela Memória) ou `"retain=…,…"` (o mesmo
     formato do `--models`). Operação desconhecida é recusada; modelo vazio é "não disse" e sai."""
@@ -1419,6 +1437,13 @@ def validate_memory_setup(data: dict) -> dict:
     model = str(llm_in.get("model") or data.get("model") or llm_reg.get("model", "")).strip()
     llm_base_url = str(llm_in.get("base_url") or data.get("base_url") or llm_reg.get("base_url", "")).strip()
     llm_models = _llm_models_in((llm_in or {}).get("models"))   # modelo por operação (tela Memória; `--models` da CLI)
+    # esforço: o do padrão (`effort`) e o de cada operação (`efforts`) — o nível o providers.effort_plan confere
+    llm_effort = str((llm_in or {}).get("effort") or data.get("effort") or "").strip().lower()
+    llm_efforts = _llm_models_in((llm_in or {}).get("efforts"))
+    if llm_effort and llm_effort not in prov_levels():
+        raise util.BrainError(f"esforço inválido: {llm_effort!r}", code=4)
+    if any(v.lower() not in prov_levels() for v in llm_efforts.values()):
+        raise util.BrainError("esforço por operação inválido", code=4)
     if mode == "full":
         if provider == "custom" and not (model or llm_models.get("default")):
             raise util.BrainError("provedor custom precisa do nome do modelo", code=4)
@@ -1454,7 +1479,7 @@ def validate_memory_setup(data: dict) -> dict:
     dec_flat = "" if isinstance(raw_dec, dict) else str(raw_dec or data.get("dec") or "")
     dec = str(dec_in.get("provider") or dec_flat or "off").strip()          # opcional: pular = só os tokens do LLM
     if dec not in prov.PROVIDERS["decision"]:
-        raise util.BrainError("decisão inválida (off|hindsight|local)", code=4)
+        raise util.BrainError(f"decisão inválida ({'|'.join(prov.PROVIDERS['decision'])})", code=4)
     if mode != "full" and dec != "off":
         raise util.BrainError("o slot decisão só vale no modo full (no embed não há LLM nem decisor)", code=4)
     dec_reg = prov.PROVIDERS["decision"][dec]
@@ -1473,9 +1498,10 @@ def validate_memory_setup(data: dict) -> dict:
         raise util.BrainError("teto de candidatos inválido (use um inteiro positivo)", code=4) from e
     cands_named = dec_cands_raw not in (None, "", 0, "0")     # 0 não é pedido: com o recall ligado é recusado abaixo
     if dec_recall:
-        if mode != "full" or dec != "hindsight":
+        if mode != "full" or not dec_reg.get("recall"):
             raise util.BrainError(
-                "decisor no recall só está disponível no modo full com o provedor hindsight (não disponível no local)",
+                "decisor no recall só está disponível no modo full com um decisor de nuvem "
+                f"({', '.join(prov.DECISION_CLOUD)}) — não no local",
                 code=4,
             )
         if dec_cands <= 0:
@@ -1514,7 +1540,7 @@ def validate_memory_setup(data: dict) -> dict:
     reconf = {s: bool((d or {}).get("reconfigure")) for s, d in (("llm", llm_in), ("embeddings", emb_in),
                                                                 ("reranker", rer_in), ("decision", dec_in))}
     model_given = {"llm": bool(llm_in.get("model") or data.get("model") or llm_in.get("base_url")
-                               or data.get("base_url") or llm_models or reconf["llm"]),
+                               or data.get("base_url") or llm_models or llm_effort or llm_efforts or reconf["llm"]),
                    "embeddings": bool(emb_in.get("model") or emb_in.get("base_url") or emb_dims
                                       or reconf["embeddings"]),
                    "reranker": bool(rer_in.get("model") or rer_in.get("base_url") or rer_cands or reconf["reranker"]),
@@ -1532,7 +1558,7 @@ def validate_memory_setup(data: dict) -> dict:
     slots: dict[str, dict] = {}
     if mode == "full":
         slots["llm"] = {"provider": provider, "key": llm_key, "model": model, "base_url": llm_base_url,
-                        "models": llm_models}
+                        "models": llm_models, "effort": llm_effort, "efforts": llm_efforts}
     slots["embeddings"] = {"provider": emb, "key": emb_key, "model": emb_model, "base_url": emb_base_url,
                            "dimensions": emb_dims}
     slots["reranker"] = {"provider": rer, "key": k_rer, "model": rer_model, "base_url": rer_base_url,
@@ -1568,8 +1594,9 @@ def _headless_slots(brain, mode: str, given: dict) -> list[str]:
         reg = prov.PROVIDERS[slot].get(cur) or {}
         # `local` gravado e não nomeado no payload do full: o payload manda (default de nuvem) — `local` no full é
         # escolha dita, não herança do embed (um payload que nomeia `local` entra pelo `given`, acima)
-        if not reg or (mode == "full" and slot == "embeddings" and cur == "local") \
-                or (reg.get("key_env") and not env.get(reg["key_env"])):
+        key_ok = (prov.decision_key_ready(cur, env, brain.inst.cfg["memory"]) if slot == "decision"
+                  else not reg.get("key_env") or bool(env.get(reg["key_env"])))
+        if not reg or (mode == "full" and slot == "embeddings" and cur == "local") or not key_ok:
             out.append(slot)
     return out
 
@@ -1639,7 +1666,9 @@ def configure_memory(brain, data: dict, say=print) -> str:
             k = fw_shared
         if k:
             keys[key_env] = k
-        if not (keys.get(key_env) or cur_env.get(key_env)):
+        have = (prov.decision_key_ready(p, cur_env, brain.inst.cfg["memory"]) if slot == "decision"
+                else bool(cur_env.get(key_env)))         # decisão: a chave de CADA provedor de nuvem, não a do servidor
+        if not (keys.get(key_env) or have):
             raise util.BrainError(
                 f"cole a chave de {slot} ({key_env}) — ou escolha um provedor local", code=4)
     # chave que veio para um slot que fica como está: entra no .env sozinha (o wizard só escreve chave no
@@ -1653,6 +1682,8 @@ def configure_memory(brain, data: dict, say=print) -> str:
         k = v["slots"][slot].get("key", "")
         if key_env and k and k != cur_env.get(key_env):
             rotate[key_env] = k
+            if slot == "decision" and v["slots"][slot]["provider"] in ("openai", "typesafe"):
+                rotate[prov.DECISION_WIRE_KEY] = k          # o servidor lê a do provedor ativo
     if rotate:
         prov._guard_env_updates(rotate)
         set_env(brain.inst, rotate)
@@ -1667,6 +1698,9 @@ def configure_memory(brain, data: dict, say=print) -> str:
                                     if isinstance(data.get(slot), dict)}
     if "llm" in slot_models and v["slots"].get("llm", {}).get("models"):
         slot_models["llm"]["models"] = dict(v["slots"]["llm"]["models"])
+    if "llm" in slot_models:
+        slot_models["llm"]["effort"] = v["slots"].get("llm", {}).get("effort", "")
+        slot_models["llm"]["efforts"] = dict(v["slots"].get("llm", {}).get("efforts") or {})
     if "reranker" in slot_models and v["slots"]["reranker"].get("candidates"):
         slot_models["reranker"]["candidates"] = v["slots"]["reranker"]["candidates"]
     if "embeddings" in slot_models and v["slots"]["embeddings"].get("dimensions"):

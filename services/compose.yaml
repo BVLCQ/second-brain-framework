@@ -7,10 +7,14 @@ name: segundo-cerebro
 services:
   hindsight:
     # Pin por digest (emenda R5 do plano da memória: tag pode ser reempurrada; digest não).
-    # Tag correspondente: 1.2.0-slim — fixa a regressão upstream #5738 (tool_choice forçado
+    # Tag correspondente: 1.3.0-slim — aplica o esforço no lane do Claude Code (--effort), traz os decisores de nuvem
+    # openai (Decisions API) e typesafe, e o extra body mesclado em profundidade (output_config.effort na API Anthropic).
+    # Herdado da 1.2.0: fixa a regressão upstream #5738 (tool_choice forçado
     # quebrava reflect no Sonnet/Opus desde a 0.10.2; resolvida na 1.1.0) e traz os mental
     # models endurecidos, datas no fuso do conteúdo e schema-por-resposta universal.
-    image: ghcr.io/vectorize-io/hindsight@sha256:c7d494c309fde53d07e79158be08d7a61f3f309b23cc417c7e4b0b8fc8adc77a
+    # A variável só existe na volta automática (services.sync_server): se a imagem nova não subir, o Brain recria com
+    # a anterior. Ninguém a põe no config/.env — sem ela vale o pin.
+    image: ${BRAIN_HINDSIGHT_IMAGE:-ghcr.io/vectorize-io/hindsight@sha256:d311bdee313f4be08d7f33ab7070ace35ebdec27985a6678acfc6ad186515b44}
     container_name: hindsight
     restart: unless-stopped
     # Colisão de nome/porta (decisão 10 do plano da memória): máquina que já roda outro
@@ -29,6 +33,9 @@ services:
       # o LLM abaixo não é chamado — pode ficar descarregado no LM Studio. Só o bge-m3 (embeddings, ~635 MB)
       # precisa estar disponível. O tuning que continha o qwen3-4b na consolidação está no git history.
       HINDSIGHT_API_SKIP_LLM_VERIFICATION: "true"
+      # Liga o POST /banks/{id}/health/llm (desligado de fábrica no servidor: 404). É a sonda com que o setup, a troca
+      # automática do modelo e a atualização do servidor conferem o LLM — sem ela, "LLM verificado" nunca era verdade.
+      HINDSIGHT_API_ENABLE_BANK_LLM_HEALTH: "true"
       # Id fixo do worker. O padrão é o hostname (= id do container, muda a cada recreate) e o
       # worker só recupera, ao subir, as operações que ele mesmo tinha pego — com id novo, a
       # consolidação em andamento ficava presa em "processing" para sempre.

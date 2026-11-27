@@ -235,7 +235,7 @@ const BRAIN_FORMS = (function(){
       && !(v.slot === "embeddings" && v.provider === "local")
       && !(v.slot === "decision" && v.provider === "local"),
     show_candidates: v => (v.slot === "reranker" && !["", "off"].includes(v.provider || ""))
-      || (v.slot === "decision" && v.provider === "hindsight" && v.recall === "on"),
+      || (v.slot === "decision" && ["hindsight", "openai", "typesafe"].includes(v.provider) && v.recall === "on"),
   };
   function cond(c, v, ctx, M){
     if (c === undefined || c === null) return true;
@@ -332,7 +332,7 @@ const BRAIN_FORMS = (function(){
     ice_impact: (x, v, ctx, M) => { let out = hIce("impact")(x, v, ctx, M); const h = (ctx.item || {}).hours_saved;
       if (/^[0-9]+$/.test(x) && h) { const hint = hHours(+h); out += "\nhoras declaradas: " + num(+h) + " h/mês → faixa sugerida " + hint;
         if (+x > hint) out += " · ⚠ escopo e horas divergem: vale a menor nota"; } return out; },
-    recall_note: x => x === "on" ? "Cada candidato é uma requisição própria ao decisor; sem fallback para RRF nesta versão (1.2.0) — se o decisor cair, o recall falha fechado." : "",
+    recall_note: x => x === "on" ? "Cada candidato é uma requisição própria ao decisor; sem fallback para RRF (padrão do servidor 1.3.0) — se o decisor cair, o recall falha fechado." : "",
   };
   function hint(name, x, v, ctx, M){ return (!name || !x || !HINTS[name]) ? "" : HINTS[name](x, v, ctx || {}, M); }
   const XF = {

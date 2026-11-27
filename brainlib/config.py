@@ -59,6 +59,9 @@ DEFAULTS: dict = {
         # provedores (plano memory-providers.md): a ESCOLHA mora aqui; a chave mora no config/.env
         "llm_provider": "",                    # "" = ainda não escolhido · anthropic|openai|fireworks|zai|lmstudio|custom (só full)
         "llm_models": "",                      # "retain=…,consolidation=…" por operação (vazio = recomendados do provedor)
+        "llm_pinned": "",                      # operações com modelo FIXADO pelo dono; as outras seguem o mais novo da linha
+        "llm_follow_v": 0,                     # 1 = llm_pinned vale (0 = instância anterior: o Brain deduz quem segue)
+        "llm_effort": "",                      # esforço dito pelo dono: "high" ou "default=high,retain=low" (vazio = padrão)
         "embeddings_provider": "local",        # local (LM Studio, zero egress) | fireworks | openai | cohere | custom
         "embeddings_model": "text-embedding-bge-m3",
         "embeddings_base_url": "",
@@ -69,7 +72,7 @@ DEFAULTS: dict = {
         "reranker_base_url": "",
         "reranker_max_candidates": 0,
         "cloud_reranker": False,               # true = pergunta+candidatos vão a uma API externa
-        "decision_provider": "off",            # off (padrão) | hindsight (nuvem, chave hsk_) | local (/v1/systemone)
+        "decision_provider": "off",            # off (padrão) | hindsight · openai · typesafe (nuvem) | local (/v1/systemone)
         "decision_model": "",
         "decision_base_url": "",
         "decision_recall": False,              # true = decisor julga candidatos no recall (só full + hindsight)

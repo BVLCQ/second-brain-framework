@@ -486,7 +486,14 @@ class ModelDefaultsTests(unittest.TestCase):
             for provider in ("anthropic", "claude-code"):
                 providers.set_slot(b, "llm", provider)
                 env = config.load_env(b.inst)
-                self.assertEqual(env.get("HINDSIGHT_API_LLM_REASONING_EFFORT"), "high")
+                # cada lane pelo caminho que o servidor 1.3.0 aplica: claude-code → --effort (REASONING_EFFORT);
+                # API Anthropic → output_config.effort no extra body (o lane ignora REASONING_EFFORT)
+                if provider == "claude-code":
+                    self.assertEqual(env.get("HINDSIGHT_API_LLM_REASONING_EFFORT"), "high")
+                    self.assertNotIn("HINDSIGHT_API_LLM_EXTRA_BODY", env)
+                else:
+                    self.assertEqual(json.loads(env["HINDSIGHT_API_LLM_EXTRA_BODY"]), {"output_config": {"effort": "high"}})
+                    self.assertNotIn("HINDSIGHT_API_LLM_REASONING_EFFORT", env)
                 self.assertEqual(env.get("HINDSIGHT_API_RETAIN_LLM_MODEL"), "claude-haiku-5-5")
                 self.assertEqual(env.get("HINDSIGHT_API_MENTAL_MODEL_REFRESH_LLM_MODEL"),
                                  "claude-haiku-5-5")   # Sonnet saiu: régua do dono é Haiku em tudo

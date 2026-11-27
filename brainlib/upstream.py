@@ -497,6 +497,17 @@ def update(inst: config.Instance, check: bool = False, rebase: bool = False,
         except subprocess.TimeoutExpired:
             doc_out, doc_ok = f"doctor não respondeu em {GIT_TIMEOUT_S}s", False
         res["hook"] = hook(inst, "install", git=git_fn)
+        if run is None and not check:
+            # o servidor de memória acompanha o código novo (imagem pinada + .env no formato da versão) — em segundo
+            # plano: a primeira vez baixa a imagem; o watchdog cobre se este processo cair antes
+            try:
+                subprocess.Popen([sys.executable, str(root / "brain"), "services", "ensure", "--reason", "update"],
+                                 cwd=root, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                 stderr=subprocess.DEVNULL, start_new_session=True)
+                res["server_sync"] = "started"
+            except OSError:
+                res["server_sync"] = "watchdog"
+
         res["doctor"] = [ln for ln in doc_out.splitlines() if ln.strip()]
         res["doctor_ok"] = doc_ok
     return res
@@ -531,6 +542,9 @@ def _print_update(res: dict) -> None:
                   + "\n    ".join(res["template_diverged"]))
         if res["hook"] == "instalado":
             print("  hook pre-push do brain ativo (varredura de dado pessoal em todo git push)")
+        if res.get("server_sync"):
+            print("  servidor de memória: conferindo em segundo plano (imagem pinada e config/.env desta versão; "
+                  "volta à anterior se não subir) — `brain services status`")
         print("doctor:")
         for ln in res["doctor"]:
             print(f"  {ln}")
@@ -1389,6 +1403,20 @@ def _print_json(obj) -> None:
     print(json.dumps(util.jsonable(obj, _show), ensure_ascii=False, indent=2))
 
 
+def _follow_models(inst) -> None:
+    """Carona no poll de 2 h do `update --check`: no máximo uma vez por dia, as operações do LLM que seguem o padrão
+    passam ao mais novo da linha (providers.follow_latest — o dono escolheu acompanhar). Nunca derruba o poll."""
+    try:
+        from . import providers
+        from .core import Brain
+        res = providers.follow_latest(Brain(inst), say=lambda *_a, **_k: None)
+        if res.get("moves") and res.get("reason") not in ("simulação",):
+            print("modelos da memória: " + ", ".join(f"{m['op']} {m['from'] or '—'} → {m['to']}" for m in res["moves"])
+                  + f" ({res['reason']})", file=sys.stderr)      # stderr: o `--json` do poll segue JSON puro
+    except Exception as e:                                   # noqa: BLE001 — checagem de fundo, nunca quebra o poll
+        print(f"modelos da memória: checagem falhou ({type(e).__name__})", file=sys.stderr)
+
+
 # ── entrada do CLI ──────────────────────────────────────────────────────────
 def cli_update(args, _b) -> None:
     inst = config.load()
@@ -1404,6 +1432,8 @@ def cli_update(args, _b) -> None:
         perms.try_sync(config.load(inst.root))   # settings.json novo desceu com o pull: o local acompanha
     if args.check and res.get("behind") and not res.get("news"):
         res["news"] = checked.get("news", [])
+    if args.check:
+        _follow_models(inst)
     if args.json:
         _print_json(res)
     else:
