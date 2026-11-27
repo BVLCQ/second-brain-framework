@@ -282,7 +282,8 @@ Regras do desenho:
   pré-selecionado; um payload headless que não nomeia embeddings no `full` cai no de nuvem. LLM local
   segue proibido. O passo Memória monta os três pares (LLM · embeddings ·
   reranker, cada um com provedor e chave; reranker: off/RRF default · Fireworks · Cohere) no painel
-  (Configurações › Memória), na TUI (Configurações › Provedores, tecla `m`) e no CLI headless
+  (Configurações › Memória — modo e provedores numa tela só, com todos os campos de `memory providers set`:
+  modelo, modelo por operação, base URL, dimensões, teto de candidatos e decisor no recall), na TUI (Configurações › Provedores, tecla `m`) e no CLI headless
   (`brain memory setup --mode full --provider … --approval ok`). Fireworks embeddings+reranker usam a
   mesma conta; OpenAI de LLM+embeddings idem. Flag ausente mantém o slot como está — só o que você nomeou é
   regravado (slot ainda sem escolha válida cai no padrão do modo). Ligou o full? O fluxo verifica o LLM no
@@ -298,9 +299,11 @@ Regras do desenho:
 - **Compose**: o `env_file: ../config/.env` injeta as chaves `HINDSIGHT_API_*` no container;
   os cinco campos do stack local são fallback de fábrica. Trocou provedor? Recrie com
   `--env-file config/.env`. **Trocou embeddings?** Vetores antigos ficam incompatíveis —
-  `brain memory rebuild` re-deriva tudo do vault. Isso vale para `local` ↔ nuvem nos dois sentidos, e **no `full`
+  `brain memory rebuild` re-deriva tudo do vault. Isso vale para `local` ↔ nuvem nos dois sentidos — e para trocar
+  o modelo ou a dimensão (`--dimensions`) no mesmo provedor —, e **no `full`
   o rebuild reenvia o vault inteiro ao LLM e paga a extração de novo** (`brain memory cost` mede): a saída da
-  troca avisa isso antes de gravar.
+  troca avisa isso antes de gravar. A troca regrava o slot inteiro: dimensão e teto de candidatos que ela não diz
+  voltam ao padrão do provedor novo (ou do servidor) — o do provedor anterior não fica no `.env`.
 - **Embeddings locais no `full`**: o Hindsight checa o LM Studio no boot e o contêiner morre sem ele. Todo caminho
   que sobe ou recria o servidor no `full` + `local` (wizard, `brain setup --only memoria`, job do painel, login do
   provedor de assinatura) roda antes do `up -d` o mesmo pré-voo do `embed`: LM Studio instalado, servidor em

@@ -600,7 +600,10 @@ def _forms() -> list[Form]:
                 "override): docker compose -f services/compose.yaml -f services/compose.full.yaml "
                 "--env-file config/.env up -d — no embed, sem o segundo -f. No full, trocar embeddings (local ↔ nuvem) "
                 "exige o rebuild e repaga a extração; o LLM é sempre de nuvem (embeddings local e decisor local "
-                "/v1/systemone não mandam texto para fora)."),
+                "/v1/systemone não mandam texto para fora).",
+             where="tui",
+             why="o painel junta modo e provedores numa tela só (Configurações › Memória), com todos os campos "
+                 "deste formulário, e aplica pela rota do passo Memória — que também recria o servidor"),
     ]
     del watch
     return out

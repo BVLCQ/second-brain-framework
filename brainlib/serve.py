@@ -41,7 +41,8 @@ ALLOWED: dict[str, set[str] | None] = {
     "action": {"open", "update", "close", "reopen", "merge", "drop"},
     "ask": {"answer", "drop"},
     "focus": {"approve", "apply", "plan", "sync"},
-    "memory": {"providers"},                 # face Configurações: provedores (harness saiu — canal MCP é CLI, `brain harness`)
+    # (memory saiu: Configurações › Memória aplica modo e provedores pela rota do passo Memória, /api/onboard/memory —
+    #  o job recria o servidor; a linha `memory providers set` ficou só na TUI e no terminal)
     "outbox": {"draft", "approve", "cancel"},
     "decision": {"add", "supersede"},              # supersede: o mesmo formulário da TUI (forms.py)
     "delivery": None,                                   # posicional, sem subcomando

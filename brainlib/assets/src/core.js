@@ -65,6 +65,7 @@ function normalizeBrain(m){
   m.source_kinds = m.source_kinds || []; if (!Array.isArray(m.source_kinds)) m.source_kinds = [];
   m.doc_kinds = m.doc_kinds || []; if (!Array.isArray(m.doc_kinds)) m.doc_kinds = [];   // Fontes e Documentos (ausentes em instância antiga)
   m.providers = m.providers || {};   // face Configurações (ausente em instância antiga)
+  m.memory_mode = m.memory_mode || "";   // modo da memória (none · embed · full); vazio = payload antigo
   m.actions = m.actions || []; if (!Array.isArray(m.actions)) m.actions = [];
   m.publishes = m.publishes || []; if (!Array.isArray(m.publishes)) m.publishes = [];
   m.focus = m.focus || null;
@@ -1096,20 +1097,32 @@ V["cfg/rotina"] = setupView("rotina", "Rotina", "Fuso e expediente: o Brain calc
 V["cfg/agente"] = setupView("agente", "Agentes/Harness", "O agente de IA que lê suas fontes e ajuda nas rotinas. Conectar cria o canal de leitura (MCP somente-leitura).");
 V["cfg/conectores"] = setupView("conectores", "Conectores", "O que o Brain pode ler, sempre só leitura. Nada é enviado sem você aprovar o texto exato.");
 V["cfg/integracoes"] = setupView("integracoes", "Integrações", "Opcionais. As chaves ficam só no seu computador e nunca aparecem de novo na tela.");
+// Memória: modo e provedores numa tela só. O resumo abaixo (do view model) é o retrato — só leitura; com a ponte no ar,
+// o extra.js troca o miolo de #setup pelo editor (os mesmos slots, com todos os campos), aplicado pela rota do passo Memória
 V["cfg/memoria"] = () => {
+  const MODE = {none: "nenhuma", embed: "embed", full: "full"}, mode = M.memory_mode || "";
   const rows = [["llm", "LLM"], ["embeddings", "Embeddings"], ["reranker", "Reranker"], ["decision", "Decisão"]].map(([k, icon]) => {
     const p = M.providers[k] || {};
     const egress = p.cloud ? '<span class="late">☁ egress</span>' : (p.local ? '<span class="dim">local</span>' : "");
-    const key = p.key_env ? (p.key_present ? '<span class="ok">chave ok</span>' : '<span class="late">sem chave</span>') : "";
+    const key = p.family === "subscription" ? '<span class="dim">assinatura</span>'
+      : p.managed ? (p.key_present ? '<span class="dim">gerenciado</span>' : '<span class="late">ainda não instalado</span>')
+      : p.key_env ? (p.key_present ? '<span class="ok">chave ok</span>' : '<span class="late">sem chave</span>') : "";
     const rec = k === "decision" && p.recall ? ' <span class="late">· recall (top-' + esc(String(p.candidates || "?")) + ")</span>" : "";
     const inert = k === "reranker" && p.inert ? ' <span class="dim">· inerte (decisor no recall)</span>' : "";
-    return "<tr><td><b>" + icon + "</b></td><td>" + esc(p.label || "—") + rec + inert + "</td><td>" + esc(p.model || "—") + "</td><td>" + egress + " " + key + "</td></tr>";
+    const uniq = Array.from(new Set(Object.values(p.ops || {})));   // a mesma em toda operação: um nome só
+    const model = (k === "llm" && uniq.length === 1 ? uniq[0] : String(p.model || "—").replace(/,/g, " · ")) +
+      (k === "embeddings" && p.dimensions ? " · " + p.dimensions + " dim" : "") +
+      (k === "reranker" && p.candidates ? " · top-" + p.candidates : "");
+    return "<tr><td><b>" + icon + "</b></td><td>" + esc(p.label || "—") + rec + inert + "</td><td>" + esc(model) + "</td><td>" + egress + " " + key + "</td></tr>";
   }).join("");
-  return '<div class="pagehead"><div><h1>Memória</h1><p class="sub">O modo e os provedores (LLM · embeddings · reranker · decisão) — configuração viva: mude quando quiser.</p></div></div>' +
-    '<div id="setup" data-step="memoria"></div>' +
-    panel("Provedores", '<div class="twrap"><table><tr><th>Slot</th><th>Provedor</th><th>Modelo</th><th></th></tr>' + rows + "</table></div>" +
-      '<p class="note-s" style="margin:10px 2px">A chave mora no config/.env e nunca aparece aqui. Trocou embeddings? O comando rebuild da memória re-deriva os vetores do vault. Depois de trocar, recrie o container (compose com o env-file da config).</p>' +
-      '<button class="btn primary" data-provform>Trocar provedor</button>');
+  const live = !!(window.BRAIN_AUTH && window.BRAIN_AUTH.isLive && window.BRAIN_AUTH.isLive());
+  return '<div class="pagehead"><div><h1>Memória</h1><p class="sub">O modo e os provedores (LLM · embeddings · reranker · decisão) numa tela só — configuração viva: mude quando quiser.</p></div></div>' +
+    '<div id="setup" data-step="memoria"><section class="panel stsec memro"><div class="sthead"><h2>Modo e provedores</h2>' +
+      (MODE[mode] ? '<span class="chip h-info">modo ' + MODE[mode] + "</span>" : "") + "</div>" +
+      '<div class="twrap"><table><tr><th>Slot</th><th>Provedor</th><th>Modelo</th><th></th></tr>' + rows + "</table></div>" +
+      '<p class="note-s" style="margin:10px 2px">' + (live ? "carregando o editor…"
+        : "Painel aberto como arquivo (retrato): só leitura. Para mudar o modo ou um provedor, abra o <b>Brain</b> pelo app — a ponte aplica, sobe ou recria o servidor de memória e narra cada passo.") +
+      "</p></section></div>";
 };
 function filesBlock(files) {
   if (!files || !files.length) return "";

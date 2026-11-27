@@ -432,12 +432,21 @@ def state(brain) -> dict:
                                          "hint": v.get("setup_hint", "") or v.get("note", ""),
                                          "model": _providers.default_model(k) if slot == "llm" else v.get("model", ""),
                                          "base_url": v.get("base_url", "") if (slot == "decision" and k == "local") else "",
+                                         # padrões do registro: a tela diz o que vale com o campo vazio
+                                         "dimensions": int(v.get("dimensions", 0) or 0) if slot == "embeddings" else 0,
+                                         "candidates": int(v.get("candidates", 0) or 0) if slot == "reranker" else 0,
                                          "key_required": bool(v.get("key_env")) and not v.get("managed"),
                                          "managed": bool(v.get("managed")),
                                          "key_set": bool(v.get("key_env") and not v.get("managed") and env.get(v["key_env"]))}
                                         for k, v in _providers.menu_providers(slot, include_custom=True, include_unavailable=False)]
                                  for slot in ("llm", "embeddings", "reranker", "decision")},
                    "llm_auth": _llm_auth_state(brain, _providers),
+                   # a tela Memória (Configurações) mostra e edita o que está gravado em cada slot — o mesmo stack
+                   # do `memory providers show` (chave: só presença) — e o modelo de cada operação do LLM
+                   "current": _providers.stack(brain),
+                   "slot_labels": dict(_providers.SLOT_LABELS),
+                   "llm_ops": [[op, _providers.LLM_OP_LABELS.get(op, op)] for op, _ in _providers.LLM_OPS
+                               if op != "default"],
                    "stack": {"llm": cfg["memory"].get("llm_provider", ""),
                              "embeddings": cfg["memory"].get("embeddings_provider", ""),
                              "reranker": cfg["memory"].get("reranker_provider", ""),
