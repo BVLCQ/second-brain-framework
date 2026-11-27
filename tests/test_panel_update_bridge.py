@@ -448,7 +448,7 @@ Promise.resolve().then(() => {
             self.assertEqual(proc.returncode, 0, proc.stderr)
             res = json.loads(proc.stdout)
 
-        self.assertEqual(res["badgeText"], "v2.29.0 → v2.30.0 · 2 commits atrás")
+        self.assertEqual(res["badgeText"], "v2.29.0 → v2.30.0")
         self.assertTrue(res["badgeBehind"])
         self.assertTrue(res["opened"])
         self.assertTrue(res["closedEsc"])

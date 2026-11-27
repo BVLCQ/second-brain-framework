@@ -1,4 +1,15 @@
+## 2.60.0 — o aviso de atualização ganha um resumo para quem não é técnico
+
+> Resumo: O aviso de atualização agora conta o que muda em uma frase por versão, sem códigos nem jargão técnico.
+
+- **O diálogo abre no Resumo.** Uma frase por versão que chega, escrita para quem não é técnico. No lugar de "2 commits atrás", o selo mostra só a versão (v2.57.0 → v2.58.0). Em dia, o diálogo mostra o que a versão instalada trouxe.
+- **"ver changelog" mostra o detalhe.** O botão alterna entre o Resumo e a lista completa da versão. Só aparece quando há o que ver (o `hidden` perdia para o estilo do botão pequeno e o botão ficava morto).
+- **Cada versão do CHANGELOG ganha uma linha `> Resumo: …`** logo abaixo do título. Sem ela, o resumo cai no título da seção. Um teste exige a linha na versão mais recente.
+- **As novidades chegam sem asteriscos soltos.** O parser tirava só o asterisco duplo de abertura do negrito e deixava o de fechamento, no painel e no `brain update --check`. Crase e negrito saem do texto.
+
 ## 2.59.0 — Memória: modo e provedores numa tela só
+
+> Resumo: A configuração de Memória agora cabe numa tela só, com o modo e os provedores juntos.
 
 - **Uma tela, todos os campos.** Configurações › Memória junta o modo (nenhuma · embed · full) e os provedores. Cada slot (LLM · embeddings · reranker · decisão) traz provedor, chave, modelo, modelo por operação do LLM, base URL, dimensões, teto de candidatos e decisor no recall — tudo o que `memory providers set` aceita —, pré-preenchido com o que está gravado. O cabeçalho de cada slot mostra o que vale hoje, no lugar da tabela antiga. No embed, o reranker aparece também.
 - **Aplicar usa a rota do passo Memória.** Só o slot que mudou é regravado, com exatamente o que a tela mostra: campo apagado volta ao recomendado. O servidor sobe ou é recriado e o job narra. O formulário de provedor (`memory providers set`) continua na TUI e no terminal; a ponte do painel deixou de aceitar essa linha.
@@ -7,12 +18,16 @@
 
 ## 2.58.0 — o menu do painel abre no índice e ganha a ordem nova
 
+> Resumo: O menu do painel foi reorganizado e agora abre sempre na primeira página de cada área.
+
 - **Início e Visão geral sempre abrem a barra.** Execução começa em Início, Portfólio em Visão geral e Configurações em Visão geral, sem rótulo acima. Trocar de face cai sempre nessa página.
 - **Execução em três blocos.** Agora (Tarefas, Perguntas), Registro (Projetos, Decisões, Linha do tempo) e Tools (Foco, Mensagens). O TODO se chama Tarefas. Fontes saiu daqui, junto com o badge de falha, e Conquistas deixou a barra: a página segue no ⌘K e no endereço `#wins`.
 - **Configurações reorganizada.** Visão geral e Saúde no topo; Conta (Perfil, Rotina, Agentes/Harness), Conexões (Memória, Conectores, Fontes, Integrações) e Melhore o App (Sugestões). "Seu agente" virou Agentes/Harness no menu, na paleta e no título da página.
 - **Rótulos de categoria em preto e branco.** Pretos no tema claro, brancos no escuro.
 
 ## 2.57.0 — todo arquivo que o painel cita agora tem link
+
+> Resumo: Todo arquivo citado no painel agora tem um botão para abrir.
 
 - **Linha do tempo, "última interação" e busca ligam o artefato.** A linha do tempo escondia a reunião ou o documento de onde cada item nasceu; a ficha da pessoa e os resultados da busca mostravam o caminho como texto solto. Agora cada um tem o botão Ver, que abre o leitor embutido.
 - **Mensagens e fontes mostram os arquivos.** A mensagem lista os arquivos da ação ou do artefato que a motivou, e a referência no cabeçalho vira link. A fonte ganha "ver último pull", que abre o snapshot que o pull gravou. A entrega, nas conquistas e na busca, lista os arquivos dela.

@@ -213,19 +213,61 @@ def _vkey(v: str) -> tuple:
     return tuple(out) or (0,)
 
 
-def parse_changelog(text: str) -> list[tuple[str, str, list[str]]]:
-    """CHANGELOG.md → [(versão, data, [bullets])], do mais novo para o mais antigo."""
-    out: list[tuple[str, str, list[str]]] = []
-    cur: tuple[str, str, list[str]] | None = None
+def _plain(text: str) -> str:
+    """Texto do painel é escapado: negrito e crase apareceriam como símbolos soltos."""
+    return re.sub(r"\s+", " ", (text or "").replace("**", "").replace("`", "")).strip()
+
+
+def changelog_entries(text: str) -> list[dict]:
+    """CHANGELOG.md → [{v, date, title, resumo, bullets}], do mais novo para o mais antigo.
+
+    `resumo` é a linha `> Resumo: …` logo abaixo do título: uma frase para quem não é técnico.
+    """
+    out: list[dict] = []
+    cur: dict | None = None
     for ln in text.splitlines():
         m = re.match(r"^##\s+(\d[\w.]*)(?:\s*[—–-]\s*(.+))?$", ln.strip())
         if m:
-            cur = (m.group(1), (m.group(2) or "").strip(), [])
+            tail = (m.group(2) or "").strip()
+            dt = re.match(r"^(\d{4}-\d{2}-\d{2})$", tail)       # título "AAAA-MM-DD" é data, não assunto
+            cur = {"v": m.group(1), "date": tail, "title": "" if dt else tail, "resumo": "", "bullets": []}
             out.append(cur)
             continue
-        if cur is not None and ln.strip().startswith(("-", "*")):
-            cur[2].append(ln.strip().lstrip("-* ").strip())
+        if cur is None:
+            continue
+        r = re.match(r"^>\s*resumo:\s*(.+)$", ln.strip(), re.I)
+        if r:
+            cur["resumo"] = _plain(r.group(1))
+            continue
+        b = re.match(r"^[-*]\s+(.*)$", ln.strip())      # só o marcador da lista: lstrip("-* ") comia o `**` de abertura
+        if b:
+            cur["bullets"].append(_plain(b.group(1)))      # negrito e crase apareceriam como símbolos soltos
     return out
+
+
+def parse_changelog(text: str) -> list[tuple[str, str, list[str]]]:
+    """CHANGELOG.md → [(versão, data, [bullets])], do mais novo para o mais antigo."""
+    return [(e["v"], e["date"], e["bullets"]) for e in changelog_entries(text)]
+
+
+def _summary_row(e: dict) -> dict:
+    text = e["resumo"] or _plain(e["title"])
+    return {"v": e["v"], "text": text[:1].upper() + text[1:]}
+
+
+def summary_between(text: str, from_v: str, to_v: str | None = None) -> list[dict]:
+    """Uma frase por versão em (from_v, to_v], para quem não é técnico. Sem `resumo`, cai no título da seção."""
+    lo, hi = _vkey(from_v), (_vkey(to_v) if to_v else (1 << 30,))
+    return [_summary_row(e) for e in changelog_entries(text) if lo < _vkey(e["v"]) <= hi and (e["resumo"] or e["title"])]
+
+
+def entry_for(text: str, version: str) -> dict:
+    """Resumo e detalhes de UMA versão (a instalada, quando já está em dia). {} se o changelog não a traz."""
+    for e in changelog_entries(text):
+        if _vkey(e["v"]) == _vkey(version):
+            row = _summary_row(e)
+            return {"summary": [row] if row["text"] else [], "news": e["bullets"]}
+    return {}
 
 
 def clip_subject(text: str, limit: int = 140) -> str:
@@ -317,12 +359,13 @@ def check_update(inst, force: bool = False, git=None) -> dict:
         changelog_remote = _file_at(root, ref, "CHANGELOG.md", git=git_fn)
         if changelog_remote and out["remote_version"] != "?":
             out["news"] = news_between(changelog_remote, local_version, out["remote_version"])
+            out["summary"] = summary_between(changelog_remote, local_version, out["remote_version"])
         else:
-            out["news"] = []
+            out["news"], out["summary"] = [], []
     except Exception as e:                              # noqa: BLE001 — offline é estado normal
         out.update(behind=cache.get("behind"), ahead=cache.get("ahead"),
                    incoming=cache.get("incoming", []), remote_version=cache.get("remote_version", "?"),
-                   news=cache.get("news", []), error=str(e)[:200])
+                   news=cache.get("news", []), summary=cache.get("summary", []), error=str(e)[:200])
     try:
         inst.fresh.mkdir(parents=True, exist_ok=True)
         _u.write_json(inst.fresh / CHECK_CACHE, out)
