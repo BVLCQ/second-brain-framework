@@ -584,12 +584,18 @@ def _forms() -> list[Form]:
             F("base_url", "base URL", ph="custom / openai-wire / local /v1/systemone", show="need_base_url", arg="--base-url"),
             F("key", "API key", ph="vazio = mantém a do config/.env", secret=True,
               show="need_provider_key", arg="--key"),
-            F("models", "modelos por operação", ph="retain=…,consolidation=… (vazio = recomendados)",
+            F("models", "modelos por operação", ph="retain=…,consolidation=… (vazio = recomendados; auto = segue o mais novo)",
               show={"slot": ["llm"]}, arg="--models"),
+            F("effort", "esforço", choices=(("", "padrão (o do Brain ou o do modelo)"), ("none", "none — sem raciocínio"),
+                                            ("minimal", "minimal"), ("low", "low"), ("medium", "medium"),
+                                            ("high", "high"), ("xhigh", "xhigh"), ("max", "max")),
+              value="", show={"slot": ["llm"]}, arg="--effort"),
+            F("efforts", "esforço por operação", ph="retain=low,reflect=high… (vazio = o do padrão)",
+              show={"slot": ["llm"]}, arg="--efforts"),
             F("recall", "usar no recall",
               choices=(("off", "off — só consolidação/reflect (padrão)"),
                        ("on", "on — julga cada candidato no recall (exige top-N; sem fallback)")),
-              value="off", init="@recall", show={"slot": ["decision"], "provider": ["hindsight"]},
+              value="off", init="@recall", show={"slot": ["decision"], "provider": ["hindsight", "openai", "typesafe"]},
               check="recall_candidates", hint="recall_note", arg="--recall"),
             F("candidates", "top-N candidatos", ph="exigido com recall on; vazio = default do reranker",
               show="show_candidates", check="int:1:500", arg="--candidates")),
@@ -909,7 +915,8 @@ PRED = {   # (valores, ctx, m) → bool — visibilidade de campo e comandos ext
                                            and not (v.get("slot") == "embeddings" and v.get("provider") == "local")
                                            and not (v.get("slot") == "decision" and v.get("provider") == "local"),
     "show_candidates": lambda v, ctx, m: (v.get("slot") == "reranker" and v.get("provider", "") not in ("", "off"))
-                                         or (v.get("slot") == "decision" and v.get("provider") == "hindsight"
+                                         or (v.get("slot") == "decision"
+                                             and v.get("provider") in ("hindsight", "openai", "typesafe")
                                              and v.get("recall") == "on"),
 }
 
@@ -1225,7 +1232,7 @@ HINTS = {   # (valor, valores, ctx, m) → texto de apoio
     "ice:impact": _h_ice("impact"), "ice:confidence": _h_ice("confidence"), "ice:ease": _h_ice("ease"),
     "ice_impact": _h_ice_impact,
     "recall_note": lambda x, v, ctx, m: (
-        "Cada candidato é uma requisição própria ao decisor; sem fallback para RRF nesta versão (1.2.0) — "
+        "Cada candidato é uma requisição própria ao decisor; sem fallback para RRF (padrão do servidor 1.3.0) — "
         "se o decisor cair, o recall falha fechado."
     ) if x == "on" else "",
     "dup_action": None,                # PY_ONLY — similaridade (dupes.py) sobre o ledger inteiro

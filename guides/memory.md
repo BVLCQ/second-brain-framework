@@ -61,7 +61,7 @@ docker compose --env-file config/.env \
 A imagem é pinada **por digest** (emenda R5: tag pode ser reempurrada). O container alcança o
 LM Studio do Mac por `host.docker.internal:1234`.
 
-**Ordem de boot na 1.2.0:** o servidor valida o endpoint de embeddings na inicialização —
+**Ordem de boot (1.2.0 em diante):** o servidor valida o endpoint de embeddings na inicialização —
 **suba o LM Studio (com o modelo carregado) antes do `up -d`**, senão o container morre na hora
 (o 0.10.x não fazia essa checagem). O modelo de LLM pode continuar descarregado no modo embed.
 No wizard e no `brain setup --only memoria` essa ordem é automática: o passo de memória instala
@@ -74,8 +74,23 @@ nasce lá) ou sobreponha as portas: `HINDSIGHT_API_PORT=8891 HINDSIGHT_UI_PORT=9
 
 ### Atualizar o Hindsight de versão
 
-Migrações de schema (Alembic) rodam no boot e são **forward-only** — apontou código antigo pra um
-banco já migrado, só restaurando backup. Por isso:
+**Automático no `brain update` (2.62+).** O servidor de memória acompanha o código: o `update` dispara
+`brain services ensure` em segundo plano (e o watchdog/abertura repetem enquanto faltar), que
+
+1. reescreve o slot LLM do `config/.env` no formato da versão (`providers.migrate_env`): modelo que o
+   dono digitou continua fixo, o resto passa a seguir o mais novo da linha, e o esforço vai pelo caminho
+   que o lane aplica — chave não muda;
+2. recria o contêiner com a imagem pinada se a que roda é outra (a primeira vez baixa a imagem);
+3. confere `health` e, no `full`, o LLM (`POST /banks/{id}/health/llm`, que o compose liga com
+   `HINDSIGHT_API_ENABLE_BANK_LLM_HEALTH=true`);
+4. se a imagem nova não subir, **recria com a anterior** (`BRAIN_HINDSIGHT_IMAGE`, só nessa volta) e o
+   status/`vault/logs/services.log` dizem o que falhou. Um lock evita duas atualizações ao mesmo tempo.
+
+A migração 1.2.0 → 1.3.0 foi conferida numa cópia de um banco real de 369 documentos: o Alembic migra no
+boot (~9 s) e recall e contagem de documentos ficam iguais.
+
+À mão (servidor adotado, fora do compose do Brain), a receita de sempre — migrações de schema (Alembic)
+rodam no boot e são **forward-only**: apontou código antigo pra um banco já migrado, só restaurando backup.
 
 1. `hindsight-admin export-bank <banco>` por banco (seguro até sem export no `embed` — bancos são
    derivados do vault e `brain memory rebuild` reconstrói; no `full` o export evita re-pagar extração);
@@ -350,7 +365,28 @@ máquina local** — exatamente o caso do Brain. Para uso compartilhado/servidor
 provedor de chave (`anthropic`, `gemini`…). O Google **não tem** faixa de assinatura no
 Hindsight: Gemini é pela chave do AI Studio (o Brain recomenda a `gemini-3.1-flash-lite`).
 
-### Modelos: campo livre, vazio = recomendado do provedor
+### Modelos: campo livre, vazio = o mais novo da linha recomendada
+
+**Vazio segue o mais novo.** Nos provedores dos quatro laboratórios (Anthropic/Claude Code, OpenAI/ChatGPT,
+xAI, Gemini) o Brain lê a lista viva de modelos — API do fornecedor com a chave do `config/.env`, ou o
+catálogo público do OpenRouter quando não há chave (assinatura) — no máximo 1×/dia (`brain memory providers
+catalog [--refresh]`, botão *Atualizar lista* no painel, entrada *Memória: modelos do LLM* na TUI). O
+recomendado abaixo é a **semente**: campo vazio vale o mais novo da mesma linha (`claude-haiku-5-5` →
+`claude-haiku-5-6` quando sair). A checagem diária (modo `full`) move as operações que seguem o padrão,
+recria o servidor, confere o LLM e, se falhar, volta ao modelo de antes; o painel mostra o que mudou.
+Modelo **digitado** fica fixo (`[memory] llm_pinned`) e nunca é movido. Snapshot datado, preview e variante
+(`:batch`) não entram na escolha.
+
+**Esforço por modelo.** Cada operação (e o Padrão) tem um seletor de esforço com os níveis que **aquele
+modelo** aceita — tabela do fornecedor; versão nova herda a da linha; na API da Anthropic, a capacidade
+lida do `/v1/models` vence a regra. Exemplos: Claude Haiku/Sonnet/Opus 5.5 `low…max`; Opus 4.6 `low…high,
+max`; Haiku 4.5 sem esforço; GPT-6 `none…xhigh` no OpenAI (o `max` só existe na Responses API, que o
+servidor não usa nesse lane) e `none…max` no ChatGPT; Grok 4.7 `low…xhigh`; Gemini 4 Neon/Hydrogen
+`low…xhigh`, Carbon `low…high`. Nível fora da lista é recusado antes de gravar. O caminho até o servidor
+(Hindsight 1.3.0) depende do lane: `*_REASONING_EFFORT` no Claude Code, OpenAI, ChatGPT e xAI;
+`*_EXTRA_BODY` com `output_config.effort` na API Anthropic e `thinking_config.thinking_level` no Gemini —
+o Brain só mexe na sua chave dentro do extra body; o resto do JSON do dono fica. CLI: `--effort high`,
+`--efforts retain=low,reflect=xhigh`.
 
 Todo provedor de LLM mostra o campo **Modelo** (assinatura inclusive). Vazio aplica o
 recomendado — o placeholder diz exatamente qual. As recomendações são **curadas pelo Brain**
@@ -378,9 +414,13 @@ Modelo digitado vence: vale para todas as operações. `custom` continua exigind
 
 Quarto slot, **só no modo full**, **desligado de fábrica**: pular é o caminho normal — sem
 ele, cada operação funciona como sempre e cada pessoa paga só os tokens do próprio LLM.
-**No painel a Decisão é Desligado ou Local** (o Brain instala e liga o decisor); o provedor de nuvem
-`hindsight` e o decisor no recall seguem na CLI e na TUI — e o painel só os mostra, como estão, para a
-instância que já os tem gravados.
+Opções (painel, TUI, CLI e wizard): **Desligado**, **Local** (o Brain instala e liga o decisor) e três de
+nuvem — **Hindsight** (`hs-decide-1-flash`, chave `hsk_`), **OpenAI** (Decisions API, `gpt-6-luna`; reusa a
+chave do LLM quando o LLM também é OpenAI) e **Typesafe** (`jev-latest`, System One). Cada um guarda a
+**sua** chave (`HINDSIGHT_API_DECISION_CLOUD_API_KEY`, `BRAIN_DECISION_OPENAI_API_KEY`,
+`BRAIN_DECISION_TYPESAFE_API_KEY`); a que o servidor lê (`HINDSIGHT_API_DECISION_MODEL_API_KEY`) é sempre a do
+ativo — trocar de provedor nunca manda a chave de um para o outro. Fireworks não serve decisão: o servidor só
+fala System One (Hindsight, Typesafe, Cloudflare) e a Decisions API da OpenAI.
 Quem liga usa o **hs-decide-1-flash** (Hindsight Inference): o modelo de 0,8B treinado
 para os julgamentos que o servidor faz (isso repete? muda? ajuda? é suficiente?) — o LLM
 só é chamado quando algo precisa ser escrito. Na leaderboard oficial isso **cortou ~40%
@@ -398,12 +438,12 @@ das chamadas do LLM SUBINDO a qualidade** (haiku-5.5: US$ 35→21 por 1k casos, 
   - Com `--recall off` (padrão, `HINDSIGHT_API_RECALL_DECISION_MODEL_PROVIDER=none`), o decisor
     só atua em consolidação/reflect/páginas: se falhar ali, essas operações voltam ao caminho
     só-LLM (perde-se a economia, nunca a operação) e o recall segue pelo caminho normal (RRF/reranker).
-  - Com `--recall on` (`HINDSIGHT_API_RECALL_DECISION_MODEL_PROVIDER=hindsight`, disponível apenas
-    no modo `full` com o provedor `hindsight`), o decisor também julga os candidatos do recall.
+  - Com `--recall on` (`HINDSIGHT_API_RECALL_DECISION_MODEL_PROVIDER=<provedor>`, disponível apenas
+    no modo `full` com um decisor de nuvem), o decisor também julga os candidatos do recall.
     Ligar exige um teto explícito de candidatos (`--candidates N`, sem default silencioso), e o
     slot Reranker fica oculto/inerte (o valor existente no `config/.env` é preservado, não apagado).
     **Importante**: com o decisor ligado no recall **não há fallback para RRF** nesta versão do
-    servidor (1.2.0) — cada candidato gera uma requisição própria ao decisor e, se o decisor cair,
+    servidor (1.3.0) — cada candidato gera uma requisição própria ao decisor e, se o decisor cair,
     **o recall falha fechado**. O `brain doctor` emite aviso sempre que o recall com decisor está ativo.
 - **Decisor local (`--provider local`)**:
   - Exceção declarada no modo `full`: roda o `hs-decide-1-flash` sem egress
@@ -421,13 +461,13 @@ das chamadas do LLM SUBINDO a qualidade** (haiku-5.5: US$ 35→21 por 1k casos, 
     ficar ligado; se falhar, o slot volta a `off`. Trocar para outro provedor para e remove o serviço
     (os pesos ficam) e não apaga a chave da nuvem. O noturno não instala — só confere e religa
     (`brain services ensure`).
-- **Servidor**: o pin 1.2.0 já suporta (`off` = `none`, o valor de fábrica); o doctor aponta
+- **Servidor**: o pin 1.3.0 suporta os cinco (`off` = `none`, o valor de fábrica); o doctor aponta
   chave/URL ausente quando o slot está ligado.
 
 ## Migração de instâncias antigas (0.10.x · dois bancos · sem harnesses)
 
 1. **Atualize o servidor** — `guides/memory.md` § *Atualizar o Hindsight de versão*
-   (export dos bancos → digest 1.2.0 no compose → `up -d` → re-audit). No `embed` o
+   (export dos bancos → digest novo no compose → `up -d` → re-audit; no 2.62+ o `brain update` faz isso). No `embed` o
    export é opcional (bancos são derivados do vault); no `full` ele evita re-pagar extração.
 2. **Consolide os bancos** — o `[memory]` dos dois bancos (`brain-raw`/`brain-mem`) virou
    um: `bank = "brain"`. Rode `brain memory rebuild` — ele **apaga os bancos legados do

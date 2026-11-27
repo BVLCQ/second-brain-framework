@@ -782,7 +782,10 @@ class MemoryProvidersStateTests(unittest.TestCase):
         self.assertIn("off", rer_by_key)
         self.assertFalse(rer_by_key["off"]["cloud"])
         dec_by_key = {p["key"]: p for p in mem["providers"]["decision"]}
-        self.assertEqual(set(dec_by_key), {"off", "local"})        # painel: decisor só local (o de nuvem é CLI/TUI)
+        # painel: desligado, local e os três de nuvem do servidor pinado (decisão do dono de 2026-11-27)
+        self.assertEqual(set(dec_by_key), {"off", "local", "hindsight", "openai", "typesafe"})
+        self.assertTrue(all(dec_by_key[k]["recall"] for k in ("hindsight", "openai", "typesafe")))
+        self.assertFalse(dec_by_key["local"]["recall"])
         self.assertTrue(dec_by_key["off"]["recommended"])
         self.assertFalse(dec_by_key["off"]["cloud"])
         self.assertIsInstance(mem["stack"], dict)

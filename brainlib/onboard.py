@@ -333,10 +333,51 @@ def connector_status(servers: dict[str, str] | None, cfg: dict, sources: set[str
 _PREREQ: dict = {"at": 0.0, "value": None}
 
 
-# Decisão no painel: só o decisor LOCAL ou desligado (decisão do dono). O de nuvem (`hindsight`, com o recall) segue na
-# CLI e na TUI; no painel ele só aparece para a instância que já o tem gravado — marcado `legacy` — para que abrir a tela
-# e aplicar nunca desfaça em silêncio uma escolha antiga.
-PANEL_DECISION = ("off", "local")
+# Decisão no painel: desligado, local e os três de nuvem do servidor pinado (Hindsight, OpenAI, Typesafe — decisão do
+# dono de 2026-11-27, que reabriu a nuvem depois da 2.61). Provedor fora desta lista só aparece para a instância que já o
+# tem gravado — marcado `legacy` — para que abrir a tela e aplicar nunca desfaça em silêncio uma escolha antiga.
+PANEL_DECISION = ("off", "local", "hindsight", "openai", "typesafe")
+
+
+def _llm_catalog_view(brain, provider: str) -> dict:
+    """O que a tela precisa de um provedor de LLM para oferecer modelo + esforço: sementes por operação, o mais novo
+    de cada uma (pelo cache — sem rede), a lista do catálogo e os níveis de cada modelo. Rede só no `memory_models`."""
+    from . import models_catalog as mc, providers as _p
+    ent = (mc.load_cache(brain).get("providers") or {}).get(provider) or {}
+    seeds = _p.seed_models(provider)
+    def newest_first(mid: str) -> tuple:     # a sugestão da tela abre no mais novo; id fora das regras vai ao fim
+        p = mc.parse(mid)
+        return (0, tuple(-n for n in p["version"]), p["line"], mid) if p else (1, (), "", mid)
+    ids = sorted({m["id"] for m in ent.get("models") or []} | set(seeds.values())
+                 | {mc.newest(s, ent.get("models") or []) for s in seeds.values()}, key=newest_first)
+    return {"lane": mc.lane(provider), "live": provider in mc.VENDOR,
+            "effort_default": (_p.PROVIDERS["llm"].get(provider) or {}).get("effort", ""),
+            "seeds": seeds, "latest": {op: mc.newest(s, ent.get("models") or []) for op, s in seeds.items()},
+            "source": ent.get("source", ""), "at": ent.get("at", 0), "error": ent.get("error", ""),
+            "models": [{"id": m, **{k: v for k, v in mc.efforts(provider, m, mc.entry(ent, m)).items()
+                                   if k in ("levels", "default", "known", "inferred", "source")}} for m in ids]}
+
+
+def memory_models(brain, data: dict) -> dict:
+    """Botão Atualizar lista da tela Memória: relê o catálogo do provedor (API do fornecedor com a chave do .env, ou o
+    OpenRouter) e devolve a mesma forma do `state()`. Falha de rede devolve o que havia, com `error`."""
+    from . import models_catalog as mc, providers as _p
+    provider = str(data.get("provider") or "")
+    if provider not in _p.PROVIDERS["llm"]:
+        raise util.BrainError(f"provedor de LLM desconhecido: {provider!r}", code=4)
+    if provider in mc.VENDOR:
+        mc.catalog(brain, provider, refresh=bool(data.get("refresh")))
+    return {"provider": provider, **_llm_catalog_view(brain, provider)}
+
+
+def _mc_order() -> tuple:
+    from . import models_catalog
+    return models_catalog.LEVEL_ORDER
+
+
+def _mc_labels() -> dict:
+    from . import models_catalog
+    return models_catalog.LEVEL_LABELS
 
 
 def _llm_auth_state(brain, _providers) -> dict:
@@ -421,11 +462,15 @@ def state(brain) -> dict:
                    "dec_provider": cfg["memory"].get("decision_provider", "") or "off",
                    "dec_key": bool(env.get("HINDSIGHT_API_DECISION_MODEL_API_KEY"))
                               and cfg["memory"].get("decision_provider") != "local",
+                   # chave de cada decisor de nuvem (presença): trocar de provedor não pede a que já existe
+                   "dec_keys": {k: _providers.decision_key_ready(k, env, cfg["memory"])
+                                for k in _providers.DECISION_CLOUD},
                    "dec_local_key": bool(env.get("BRAIN_DECISION_LOCAL_API_KEY")),
                    "dec_base_url": (env.get("HINDSIGHT_API_DECISION_MODEL_BASE_URL")
                                     or cfg["memory"].get("decision_base_url", "")),
                    "dec_recall": bool(cfg["memory"].get("decision_recall")
-                                      or env.get("HINDSIGHT_API_RECALL_DECISION_MODEL_PROVIDER") == "hindsight"),
+                                      or env.get("HINDSIGHT_API_RECALL_DECISION_MODEL_PROVIDER", "none")
+                                      not in ("", "none")),
                    "dec_candidates": int(cfg["memory"].get("decision_max_candidates")
                                          or env.get("HINDSIGHT_API_RERANKER_MAX_CANDIDATES") or 0),
                    "providers": {slot: [{"key": k, "label": v["label"], "recommended": bool(v.get("recommended")),
@@ -445,7 +490,10 @@ def state(brain) -> dict:
                                          "key_required": bool(v.get("key_env")) and not v.get("managed"),
                                          "managed": bool(v.get("managed")),
                                          "key_set": bool(v.get("key_env") and not v.get("managed") and env.get(v["key_env"])),
-                                         "legacy": slot == "decision" and k not in PANEL_DECISION}
+                                         "legacy": slot == "decision" and k not in PANEL_DECISION,
+                                         "recall": slot == "decision" and bool(v.get("recall")),
+                                         "shares_llm_key": v.get("shares_llm_key", "") if slot == "decision" else "",
+                                         **({"catalog": _llm_catalog_view(brain, k)} if slot == "llm" else {})}
                                         for k, v in _providers.menu_providers(slot, include_custom=True, include_unavailable=False)
                                         if slot != "decision" or k in PANEL_DECISION or k == cur_dec]
                                  for slot in ("llm", "embeddings", "reranker", "decision")},
@@ -459,6 +507,7 @@ def state(brain) -> dict:
                    "slot_labels": dict(_providers.SLOT_LABELS),
                    "llm_ops": [[op, _providers.LLM_OP_LABELS.get(op, op)] for op, _ in _providers.LLM_OPS
                                if op != "default"],
+                   "effort_levels": [[lv, _mc_labels().get(lv, lv)] for lv in _mc_order()],
                    "stack": {"llm": cfg["memory"].get("llm_provider", ""),
                              "embeddings": cfg["memory"].get("embeddings_provider", ""),
                              "reranker": cfg["memory"].get("reranker_provider", ""),
@@ -1234,7 +1283,7 @@ ACTIONS = {
     "connectors_scan": lambda b, d: scan_connectors(bool(d.get("force"))),
     "connectors_enable": enable_connectors, "permissions": lambda b, d: apply_permissions(b),
     "source_add": source_add, "source_remove": source_remove,
-    "keys": save_keys, "memory": apply_memory, "memory_auth": memory_auth,
+    "keys": save_keys, "memory": apply_memory, "memory_auth": memory_auth, "memory_models": memory_models,
     "maquina": apply_maquina, "foco_google": apply_foco_google,
     "entrevista": apply_entrevista,
     "agent_connect": connect_agent, "agent_later": agent_later,

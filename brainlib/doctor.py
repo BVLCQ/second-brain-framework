@@ -393,7 +393,8 @@ def checks(brain, online: bool = False, probe_agent: bool = False, docker_probe=
         llm_prov = llm_s["provider"]
         llm_p = _prov.PROVIDERS["llm"].get(llm_prov)
         effort_val = env.get("HINDSIGHT_API_LLM_REASONING_EFFORT", "").strip().lower()
-        effort_max = effort_val == "max"
+        # `max` escolhido pelo dono ([memory] llm_effort) é escolha, não desvio — o aviso é só para o `max` posto à mão
+        effort_max = effort_val == "max" and "max" not in str(cfg["memory"].get("llm_effort", ""))
         effort_note = " · HINDSIGHT_API_LLM_REASONING_EFFORT=max é diferente do padrão (high)" if effort_max else ""
         if llm_prov == "cursor" or (llm_p and llm_p.get("docker_auth") == "unavailable"):
             out.append(_c("warn", "memória · LLM",
@@ -510,9 +511,9 @@ def checks(brain, online: bool = False, probe_agent: bool = False, docker_probe=
         dec_prov = dec_s["provider"]
         dec_p = _prov.PROVIDERS["decision"].get(dec_prov)
         recall_on = (bool(cfg["memory"].get("decision_recall"))
-                     or env.get("HINDSIGHT_API_RECALL_DECISION_MODEL_PROVIDER") == "hindsight")
+                     or env.get("HINDSIGHT_API_RECALL_DECISION_MODEL_PROVIDER", "none") not in ("", "none"))
         recall_warn_msg = ("recall com decisor: cada candidato é uma requisição própria, não há fallback "
-                           "nesta versão do servidor (1.2.0) e o recall falha fechado se o decisor cair")
+                           "no padrão do servidor (1.3.0) e o recall falha fechado se o decisor cair")
         if dec_prov in ("", "off"):
             if recall_on:
                 out.append(_c("warn", "memória · decisão",
@@ -566,12 +567,14 @@ def checks(brain, online: bool = False, probe_agent: bool = False, docker_probe=
                                   "zero egress, cloud_decision = false)"))
         else:
             kenv = dec_p.get("key_env", "")
-            has_key = bool(kenv and env.get(kenv))
+            # cada decisor de nuvem guarda a sua chave; a que o servidor lê é a do ativo (a OpenAI aceita a do LLM)
+            has_key = _prov.decision_key_ready(dec_prov, env, cfg["memory"]) and bool(env.get(_prov.DECISION_WIRE_KEY))
+            khint = " hsk_" if dec_prov == "hindsight" else ""        # a chave do Hindsight começa por hsk_
             if recall_on:
                 if not has_key:
                     out.append(_c("warn", "memória · decisão",
-                                  f"decisão ({dec_prov}) com recall ligado e sem a chave hsk_ no config/.env ({kenv}) — "
-                                  f"{recall_warn_msg} · `brain memory providers set decision --provider hindsight "
+                                  f"decisão ({dec_prov}) com recall ligado e sem a chave{khint} no config/.env ({kenv}) — "
+                                  f"{recall_warn_msg} · `brain memory providers set decision --provider {dec_prov} "
                                   "--key … --recall on --candidates N`"))
                 else:
                     cands = (cfg["memory"].get("decision_max_candidates")
@@ -582,8 +585,8 @@ def checks(brain, online: bool = False, probe_agent: bool = False, docker_probe=
             else:
                 if not has_key:
                     out.append(_c("error", "memória · decisão",
-                                  f"decisão ({dec_prov}) sem a chave hsk_ no config/.env ({kenv}) — "
-                                  "`brain memory providers set decision --provider hindsight --key …` "
+                                  f"decisão ({dec_prov}) sem a chave{khint} no config/.env ({kenv}) — "
+                                  f"`brain memory providers set decision --provider {dec_prov} --key …` "
                                   "(ou volte a off)"))
                 else:
                     out.append(_c("ok", "memória · decisão",

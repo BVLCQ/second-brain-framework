@@ -56,7 +56,11 @@ class EffortDefaultHighTests(unittest.TestCase):
             for pid in ("claude-code", "anthropic"):
                 providers.set_slot(b, "llm", pid, key="sk-ant-1" if pid == "anthropic" else None)
                 env = config.load_env(b.inst)
-                self.assertEqual(env.get("HINDSIGHT_API_LLM_REASONING_EFFORT"), "high")
+                if pid == "claude-code":
+                    self.assertEqual(env.get("HINDSIGHT_API_LLM_REASONING_EFFORT"), "high")
+                else:                # o lane da API Anthropic só aplica esforço pelo extra body (#6640 do Hindsight)
+                    self.assertIn('"effort":"high"', env.get("HINDSIGHT_API_LLM_EXTRA_BODY", ""))
+                    self.assertNotIn("HINDSIGHT_API_LLM_REASONING_EFFORT", env)
 
         with tempfile.TemporaryDirectory() as td:
             b = _brain(Path(td))
