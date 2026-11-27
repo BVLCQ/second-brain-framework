@@ -318,6 +318,7 @@ a.card:hover{text-decoration:none;border-color:var(--accent)}
 .btn.primary:hover{filter:brightness(1.08);color:var(--accent-ink)}
 .btn:disabled{opacity:.5;cursor:not-allowed}
 .btn.ghost{border-style:dashed;color:var(--muted)}
+.btn[hidden]{display:none}  /* .btn.tiny força inline-flex e vencia o [hidden] do navegador */
 
 /* ── arrastar e soltar ── */
 .card[draggable]{cursor:grab;-webkit-user-select:none;user-select:none}

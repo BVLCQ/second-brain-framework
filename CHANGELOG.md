@@ -1,3 +1,8 @@
+## 2.58.1 — o diálogo de novidades deixa de mostrar botão morto e `**` solto
+
+- **"ver changelog" só aparece quando há o que ver.** Em dia, o botão aparecia mesmo sem changelog (o `hidden` perdia para o estilo do botão pequeno) e o clique só trocava o rótulo. Agora some.
+- **As novidades chegam sem `**` solto.** O parser tirava o `**` de abertura do negrito e deixava o de fechamento, no painel e no `brain update --check`. Agora o marcador da lista sai e o negrito também.
+
 ## 2.58.0 — o menu do painel abre no índice e ganha a ordem nova
 
 - **Início e Visão geral sempre abrem a barra.** Execução começa em Início, Portfólio em Visão geral e Configurações em Visão geral, sem rótulo acima. Trocar de face cai sempre nessa página.

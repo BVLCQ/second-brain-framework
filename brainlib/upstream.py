@@ -223,8 +223,9 @@ def parse_changelog(text: str) -> list[tuple[str, str, list[str]]]:
             cur = (m.group(1), (m.group(2) or "").strip(), [])
             out.append(cur)
             continue
-        if cur is not None and ln.strip().startswith(("-", "*")):
-            cur[2].append(ln.strip().lstrip("-* ").strip())
+        b = re.match(r"^[-*]\s+(.*)$", ln.strip())      # só o marcador da lista: lstrip("-* ") comia o `**` de abertura
+        if cur is not None and b:
+            cur[2].append(b.group(1).replace("**", "").strip())      # o painel escapa texto: negrito aparece como `**` solto
     return out
 
 

@@ -51,6 +51,12 @@ class ChangelogTests(unittest.TestCase):
                           "Aviso de atualização no painel", "Correções de estabilidade na TUI"])
 
 
+class ChangelogBoldTests(unittest.TestCase):
+    def test_bullet_bold_markers_do_not_leak(self):
+        text = "## 2.2.0 — x\n\n- **Título.** Corpo do item.\n* sem negrito\n"
+        self.assertEqual(upstream.news_between(text, "2.1.0"), ["Título. Corpo do item.", "sem negrito"])
+
+
 def _git(cwd, *args, check=True):
     r = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True)
     if check and r.returncode:
