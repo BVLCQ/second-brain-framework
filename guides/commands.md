@@ -647,6 +647,7 @@ do `/dump`: a mesma fonte não é processada duas vezes. Normalmente quem chama 
 | `--projects PROJ-#,PROJ-#` | projetos |
 | `--summary TEXTO` | resumo curto |
 | `--link PROC-#\|OPP-#` | liga o artefato a um processo/oportunidade |
+| `--deliverable PROJ-#.#` | entregável que o arquivo sustenta; o projeto dele entra em `--projects` sozinho. Sem o campo, o arquivo fica no nível do projeto |
 | + opções de registro | |
 
 ```bash

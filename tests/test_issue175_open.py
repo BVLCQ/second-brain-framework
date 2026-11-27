@@ -96,15 +96,23 @@ class LinkedFileTests(unittest.TestCase):
     def test_fichas_do_painel_ligam_os_arquivos(self):
         from pathlib import Path
         src = Path("brainlib/assets/src/core.js").read_text(encoding="utf-8")
-        for fid in ("V.action", "V.decision", "V.project", "V.person"):
+        for fid in ("V.action", "V.decision", "V.person"):
             start = src.index(fid + " = ")
             body = src[start:src.index("\n};", start)]
             self.assertIn("filesBlock(", body, fid)
+        for fn in ("function colsGoal", "function colsProj", "function colsDeliv"):    # goal, projeto e entregável: a mesma lista
+            start = src.index(fn)
+            self.assertIn("fileList(", src[start:src.index("\n}", start)], fn)
         self.assertIn("function docName", src)
         self.assertIn("data-read", src[src.index("function docName"):src.index("function docName") + 400])
-        self.assertIn("data-opentoggle", src)
-        self.assertIn("data-openall", src)
-        for needle in ("filesBlock(f.files)", "filesBlock(q.files)", "filesBlock(g.files)", "filesBlock(x.files)"):
+        row = src[src.index("function fileRow"):src.index("function fileTools")]
+        self.assertIn('data-doc="', row)                    # nome = pré-visualização no Brain
+        chip = src[src.index("function fileExtChip"):src.index("function fileRow")]
+        self.assertIn('data-open="', chip)                  # chip da extensão = aplicativo do sistema
+        self.assertIn("toUpperCase()", chip)
+        for gone in ("data-opentoggle", "data-openall", "data-openform", "f.app ||"):     # nada de "como abrir" nem nome de app na lista
+            self.assertNotIn(gone, src, gone)
+        for needle in ("filesBlock(f.files)", "filesBlock(q.files)", "filesBlock(x.files)"):      # goal: colsGoal (acima)
             self.assertIn(needle, src, needle)
         outbox = src[src.index("V.outbox"):src.index("V.feedback")]
         self.assertIn("safeUrl(m.link)", outbox)

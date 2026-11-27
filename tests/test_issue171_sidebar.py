@@ -26,7 +26,7 @@ class SidebarGroupTests(unittest.TestCase):
                 self.assertNotIn(-1, pos, f"{label}: faltou item em {keys}")
                 self.assertEqual(pos, sorted(pos), f"{label}: ordem esperada {keys}")
 
-            order(exec_tabs, "home", "Agora", "todo", "ask", "Registro", "projects", "decisions", "timeline",
+            order(exec_tabs, "home", "Agora", "todo", "ask", "Registro", "cols", "decisions", "timeline",
                   "Tools", "focus", "outbox")
             self.assertIn('"Tarefas"', exec_tabs, label)
             self.assertNotIn('"TODO"', exec_tabs, label)

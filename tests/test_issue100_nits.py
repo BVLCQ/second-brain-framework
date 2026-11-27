@@ -55,7 +55,7 @@ class ChipGuardTests(unittest.TestCase):
         lv_end = src.index("]);", lv_start) + 3
         levels_stmt = src[lv_start:lv_end]
         chip_start = src.index("const chip = (level")
-        chip_end = src.index("const goalReasonChip")
+        chip_end = src.index("const idc = id =>")
         harness = (CHIP_STUB + levels_stmt + "\n" + src[chip_start:chip_end] +
                    '\nconst _pre = warns.slice();'
                    '\nprocess.stdout.write(JSON.stringify({empty: chip("", "x"), known: chip("em-risco", "y"),'

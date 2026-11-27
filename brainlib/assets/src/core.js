@@ -124,13 +124,10 @@ const chip = (level, label) => {
   if (level && !CHIP_LEVELS.has(level)) console.warn("[chip] modificador sem estilo mapeado:", level);
   return '<span class="chip' + (level ? " h-" + esc(level) : "") + '">' + esc(label) + "</span>";
 };
-const goalReasonChip = g => (g.health_from && g.health !== "em-dia" && g.health !== "concluido")
-  ? '<a class="chip h-reason" href="#projects?focus=' + esc(g.health_from) + '" data-proj-jump="' + esc(g.health_from) + '" title="' + esc(g.health_reason || g.health_from) + '">↳ ' + esc(g.health_from) + (g.health_reason ? " · " + esc(g.health_reason) : "") + "</a>"
-  : "";
 const idc = id => '<code class="idchip">' + esc(id) + "</code>";
 const aL = id => A[id] ? '<a href="#action/' + id + '">' + idc(id) + "</a>" : idc(id);
 const dL = id => D[id] ? '<a href="#decision/' + id + '">' + idc(id) + "</a>" : idc(id);
-const pL = (id, long) => P[id] ? '<a href="#project/' + id + '">' + idc(id) + (long ? " " + esc(P[id].title) : "") + "</a>" : esc(id || "—");
+const pL = (id, long) => P[id] ? '<a href="' + colsHref(id) + '">' + idc(id) + (long ? " " + esc(P[id].title) : "") + "</a>" : esc(id || "—");
 const peL = id => PE[id] ? '<a href="#person/' + encodeURIComponent(id) + '">' + esc(PE[id].name) + "</a>" : esc(id);
 const empty = t => '<div class="empty">' + esc(t) + "</div>";
 const panel = (title, body, extra) => '<section class="panel"' + (extra || "") + ">" + (title ? "<h2>" + title + "</h2>" : "") + body + "</section>";
@@ -149,17 +146,6 @@ function dd(id0, opts, sel, ph){
     "</div></div>";
 }
 document.addEventListener("click", e => {
-  const pj = e.target.closest("a[data-proj-jump]");
-  if (pj && (location.hash.slice(1).split("?")[0] || "home") === "projects") {
-    const el = document.getElementById("proj-" + pj.dataset.projJump);
-    if (el) {
-      e.preventDefault();
-      if (typeof el.scrollIntoView === "function") el.scrollIntoView({behavior: "smooth", block: "center"});
-      el.classList.add("just-moved");
-      setTimeout(() => el.classList.remove("just-moved"), 1400);
-    }
-    return;
-  }
   const grpBtn = e.target.closest("[data-src-grp]");
   if (grpBtn) {
     e.preventDefault();
@@ -360,9 +346,9 @@ function bdEnt(id){
   } else if (k === "PROJ" || k === "GOAL") {
     var pid = up.split(".")[0];
     if (k === "GOAL" && (g = G[pid])) {
-      e.href = "#projects?focus=" + pid; e.title = g.title; e.sit = g.health_label || g.status || "";
+      e.href = colsHref(pid); e.title = g.title; e.sit = g.health_label || g.status || "";
     } else if (k === "PROJ" && (p = P[pid])) {
-      e.href = "#project/" + pid;
+      e.href = colsHref(sub ? up : pid);
       if (sub) {
         var dv = (p.deliverables || []).find(v => v.id === up);
         if (!dv) return null;
@@ -648,16 +634,7 @@ V.home = () => {
   if (c.mine_no_due) needs.push('<li class="warn">' + chip("atencao", "prazo") + " " + c.mine_no_due + " " + pl(c.mine_no_due, "ação sua sem prazo", "ações suas sem prazo") + " — o foco não consegue agendá-las</li>");
   if (c.mine_no_effort) needs.push('<li class="warn">' + chip("atencao", "esforço") + " " + c.mine_no_effort + " " + pl(c.mine_no_effort, "ação sua sem estimativa", "ações suas sem estimativa") + " de esforço</li>");
   if (needs.length) h += panel("Precisa de você", '<ul class="feed">' + needs.join("") + "</ul>", ' data-priority');
-  h += "<h2 class=\"sec\">Goals</h2>";
-  if (!M.goals.length) h += empty("Nenhum goal no PLANNING ainda — rode /init ou /goal.");
-  h += '<div class="grid g2">' + M.goals.map(g => '<section class="panel goal"><div class="goal-head">' + donut(g.progress.pct, 48) +
-    '<div><b class="goal-title">' + g.id + " — " + esc(g.title) + "</b>" + chip(g.health, g.health_label) + goalReasonChip(g) +
-    '<div class="muted small">' + (g.horizon ? "horizonte " + fmtDL(g.horizon) + " · " : "") + progTxt(g.progress) + ' · <button class="btn ghost tiny" data-progress="' + esc(g.id) + '">⛏ declarar %</button>' +
-    (g.declared ? " · declarado " + g.declared.pct + "% em " + fmtD(g.declared.date) : "") + "</div></div></div>" +
-    g.projects.map(pid => { const p = P[pid]; return '<div class="proj"><div class="t">' + pL(pid, true) + "<small>" + esc(p.health.reason) +
-      (p.next_due ? " · próximo: " + p.next_due.id + " " + fmtD(p.next_due.date) : "") + "</small></div>" + bar(p.progress.pct) + chip(p.health.level, p.health.label) + "</div>"; }).join("") +
-    filesBlock(g.files) +
-    "</section>").join("") + "</div>";
+  h += homeGoals();
   h += '<div class="grid g2" style="margin-top:14px">';
   const days = {};
   M.agenda.forEach(it => (days[it.date] = days[it.date] || []).push(it));
@@ -669,9 +646,11 @@ V.home = () => {
   ));
   h += panel("Hoje e próximos 7 dias", (Object.keys(days).length ? Object.keys(days).sort().map(d => "<h3 class=\"day\">" + fmtDW(d) + (d < M.today ? ' <span class="late">atrasado</span>' : d === M.today ? " · hoje" : "") + "</h3>" +
     '<ul class="feed">' + days[d].map(it => "<li>" + chip(it.kind === "foco" ? "info" : it.overdue_days ? "em-risco" : "atencao", it.kind) + " " +
-      (it.id.startsWith("TASK-") ? aL(it.id) : "<b>" + esc(it.id) + "</b>") + " " + esc(it.title) + (it.project ? " · " + pL(it.project) : "") + "</li>").join("") + "</ul>").join("") : empty("Nada com data nos próximos 7 dias.")));
-  const wins = [...M.deliveries.map(e => ({date: e.date, html: "✓ <b>" + esc(e.title) + "</b> — " + esc(e.result) + (e.project ? " · " + pL(e.project) : "")})),
-    ...M.deliverables_done.map(x => ({date: x.date, html: "✓ entregável <b>" + x.id + "</b> " + esc(x.title) + " · " + pL(x.project)}))]
+      (it.id.startsWith("TASK-") ? aL(it.id) : DELIV_RE.test(it.id) && findDeliv(it.id) ? '<a href="' + colsHref(it.id) + '">' + idc(it.id) + "</a>" : "<b>" + esc(it.id) + "</b>") + " " + esc(it.title) + (it.project ? " · " + pL(it.project) : "") + "</li>").join("") + "</ul>").join("") : empty("Nada com data nos próximos 7 dias.")));
+  const refd = new Set(M.deliveries.map(e => e.ref).filter(Boolean));      // entrega com ref = o entregável feito: aparece uma vez
+  const wins = [...M.deliveries.map(e => ({date: e.date, html: "✓ " + (e.ref && DELIV_RE.test(e.ref) && findDeliv(e.ref) ? '<a href="' + colsHref(e.ref) + '">' + idc(e.ref) + "</a> " : "") +
+      "<b>" + esc(e.title) + "</b> — " + esc(e.result) + (e.project ? " · " + pL(e.project) : "")})),
+    ...M.deliverables_done.filter(x => !refd.has(x.id)).map(x => ({date: x.date, html: '✓ entregável <a href="' + colsHref(x.id) + '">' + idc(x.id) + "</a> " + esc(x.title) + " · " + pL(x.project)}))]
     .sort((a, b) => (b.date || "").localeCompare(a.date || "")).slice(0, 7);
   h += panel("Conquistas recentes", (wins.length ? '<ul class="feed">' + wins.map(w => '<li><span class="muted">' + fmtD(w.date) + "</span> · " + w.html + "</li>").join("") + "</ul>" :
     empty("Nenhuma entrega registrada ainda — declare no /week ou com /done.")) + '<p class="more"><a href="#wins">todas as conquistas →</a></p>');
@@ -812,53 +791,6 @@ V.todo = (q) => {
     const c = document.querySelector("#fw");
     if (c) c.onchange = e => go("todo", todoQ({w: e.target.checked ? "1" : ""}));
   });
-  return h;
-};
-V.projects = (q) => {
-  let h = '<div class="pagehead"><div><h1>Projetos</h1><p class="sub">A árvore de PLANNING, por goal.</p></div></div>';
-  if (!M.projects.length) return h + empty("Nenhum projeto no PLANNING.");
-  M.goals.forEach(g => {
-    h += '<h2 class="sec">' + g.id + " — " + esc(g.title) + " " + chip(g.health, g.health_label) + goalReasonChip(g) + '</h2><div class="grid g3">' + g.projects.map(pid => { const p = P[pid];
-      return '<section class="panel projcard" id="proj-' + esc(p.id) + '"><div class="projcard-head">' + donut(p.progress.pct, 44) + '<div><b>' + pL(pid, true) + "</b>" + chip(p.health.level, p.health.label) +
-        '<div class="muted small">' + progTxt(p.progress) + "</div></div></div>" +
-        '<div class="muted small">' + esc(p.health.reason) + "</div>" +
-        '<div class="foot small">' + p.actions.mine.length + " minhas · " + p.actions.waiting.length + " aguardando · " + p.decisions.length + " decisões" +
-        (p.next_due ? " · próximo " + p.next_due.id + " " + fmtD(p.next_due.date) : "") + "</div></section>"; }).join("") + "</div>";
-  });
-  const focusId = q && q.get("focus");
-  if (focusId) {
-    setTimeout(() => {
-      const el = document.getElementById("proj-" + focusId);
-      if (el) {
-        if (typeof el.scrollIntoView === "function") el.scrollIntoView({behavior: "smooth", block: "center"});
-        el.classList.add("just-moved");
-        setTimeout(() => el.classList.remove("just-moved"), 1400);
-      }
-    });
-  }
-  return h;
-};
-V.project = (q, id) => {
-  const p = P[id]; if (!p) return empty("Projeto não encontrado: " + id);
-  let h = '<p class="crumb muted"><a href="#projects">← projetos</a> · ' + p.goal + " " + esc(p.goal_title) + "</p>" +
-    '<div class="pagehead"><div><h1>' + p.id + " — " + esc(p.title) + "</h1>" +
-    '<div class="sub">' + chip(p.health.level, p.health.label) + "<span>" + esc(p.health.reason) + "</span>" + bar(p.progress.pct) +
-    "<span>" + progTxt(p.progress) + "</span>" + (p.owner && PE[p.owner] ? "<span>dono: " + peL(p.owner) + "</span>" : "") +
-    (p.declared ? "<span>declarado " + p.declared.pct + "% em " + fmtD(p.declared.date) + "</span>" : "") + "</div></div></div>";
-  h += '<div class="grid g2">' + panel("Entregáveis", (p.deliverables.length ? '<ul class="feed">' + p.deliverables.map(d => '<li data-deliv="' + esc(d.id) + '" data-dstatus="' + esc(d.status) + '" title="space marca feito · s muda estado">' +
-    '<button class="dmark ' + (d.status === "feito" ? "is-done" : d.status === "cancelado" ? "is-cancel" : d.status === "em-andamento" ? "is-doing" : "") + '">' +
-    (d.status === "feito" ? "✓" : d.status === "cancelado" ? "×" : d.status === "em-andamento" ? "◐" : "○") + "</button> <b>" + d.id + "</b> " + esc(d.title) + ' <span class="muted">· ' +
-    (d.done_date ? "feito " + fmtD(d.done_date) : d.due ? "prazo " + fmtDW(d.due) : "sem prazo") + "</span>" + (d.overdue_days ? ' <span class="late">⚠ venceu há ' + d.overdue_days + "d</span>" : "") +
-    ((d.files || []).map(f => ' <button type="button" class="btn tiny" data-open="' + esc(f.rel) + '">Abrir</button> <button type="button" class="btn tiny" data-read="' + esc(f.rel) + '">' + esc(f.name) + "</button>").join("")) +
-    "</li>").join("") + "</ul>" : empty("Sem entregáveis — progresso não calculável.")));
-  h += panel("Pessoas", (p.people.length ? '<ul class="feed">' + p.people.map(x => "<li>" + peL(x.id) + ' <span class="muted">— ' + x.roles.map(esc).join(", ") + " (" + x.count + ")</span></li>").join("") + "</ul>" : empty("—"))) + "</div>";
-  h += panel("Decisões — quem decidiu o quê, quando", decisionTable(p.decisions.map(d => D[d])), ' style="margin-top:14px"');
-  h += '<div class="grid g2" style="margin-top:14px">' + panel("Minhas ações · " + p.actions.mine.length, actionTable(p.actions.mine, ["status", "age"]) +
-    "<h2>Aguardando de outros · " + p.actions.waiting.length + "</h2>" + actionTable(p.actions.waiting, ["owner", "age"]) +
-    (p.actions.watching.length ? "<h2>Observando · " + p.actions.watching.length + "</h2>" + actionTable(p.actions.watching, ["owner"]) : "") +
-    (p.actions.closed.length ? "<h2>Fechadas recentemente</h2><ul class=\"feed\">" + p.actions.closed.map(aid => { const a = A[aid]; return '<li><span class="muted">' + fmtD(a.closed) + "</span> · " + aL(aid) + " " + esc(a.title) + ' <span class="muted">(' + esc(a.owner_name) + ") — " + esc(a.how) + "</span></li>"; }).join("") + "</ul>" : ""));
-  h += panel("Linha do tempo", timelineList(p.timeline, 80)) + "</div>";
-  h += filesBlock(p.files);
   return h;
 };
 V.decisions = (q) => {
@@ -1127,18 +1059,325 @@ V["cfg/memoria"] = () => {
         : "Painel aberto como arquivo (retrato): só leitura. Para mudar o modo ou um provedor, abra o <b>Brain</b> pelo app — a ponte aplica, sobe ou recria o servidor de memória e narra cada passo.") +
       "</p></section></div>";
 };
+// ── documentos ligados: o resumo do Brain (PROCESSED) e o original (RAW) são UMA linha ──
+// O nome abre a pré-visualização no Brain; o chip da extensão abre o arquivo no aplicativo do sistema.
+const DOC_EXTCAT = {pdf: "pdf", doc: "doc", docx: "doc", pptx: "doc", key: "doc", pages: "doc", txt: "doc", odt: "doc", rtf: "doc",
+  xlsx: "sheet", xls: "sheet", csv: "sheet", numbers: "sheet", png: "media", jpg: "media", jpeg: "media", heic: "media", webp: "media",
+  gif: "media", mp4: "media", mov: "media", m4a: "audio", mp3: "audio", wav: "audio", md: "text", eml: "text", vtt: "text"};
+const DOC_GROUPS = [["reuniao", "Reuniões"], ["doc", "Documentos"], ["planilha", "Planilhas"], ["midia", "Imagens e vídeos"],
+  ["conversa", "Conversas"], ["nota", "Notas"]];
+const DOC_GLABEL = Object.fromEntries(DOC_GROUPS);
+const DOCS = Object.create(null);                      // chave → documento (a pré-visualização acha por aqui)
+const FL_KEYS = [];                                     // ordem dos documentos da última página montada (‹ › da pré-visualização)
+const docNorm = s => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+const fileExt = rel => { const m = /\.([A-Za-z0-9]+)$/.exec(String(rel || "").split("#")[0]); return m ? m[1].toLowerCase() : ""; };
+const rawType = rel => { const m = /^RAW\/\d{4}\/\d{2}\/([a-z]+)\//.exec(String(rel || "")); return m ? m[1] : ""; };
+function docGroup(d){
+  const t = rawType(d.raw);
+  if (t === "meetings" || d.akind === "reuniao") return "reuniao";
+  if (t === "slack" || t === "connectors" || d.akind === "conector") return "conversa";
+  if (t === "notes" || d.akind === "nota") return "nota";
+  if (t === "images" || t === "videos") return "midia";
+  const c = DOC_EXTCAT[d.ext];
+  return c === "sheet" ? "planilha" : c === "media" || c === "audio" ? "midia" : "doc";
+}
+const docSort = l => l.sort((x, y) => (y.date || "").localeCompare(x.date || "") || x.title.localeCompare(y.title));
+// files (do payload, linked.collect) → documentos: o bruto que já tem resumo na lista some (mora na linha do resumo)
+function docsFrom(files, home){
+  const out = new Map(), raws = new Set();
+  (files || []).forEach(f => { if (f.kind === "artefato" && f.raw) raws.add(f.raw); });
+  (files || []).forEach(f => {
+    if (f.kind !== "artefato" && raws.has(f.rel)) return;
+    const a = f.kind === "artefato" ? (ART[f.rel] || {}) : {};
+    const d = f.kind === "artefato"
+      ? {key: f.rel, title: a.title || f.name, date: f.date || a.date || "", proc: f.rel, raw: f.raw || "", summary: a.summary || "",
+         people: a.people || [], projects: f.projects || a.projects || [], akind: a.kind || "", deliv: f.deliverable || a.deliverable || ""}
+      : {key: f.rel, title: f.name, date: "", proc: "", raw: f.rel, summary: "", people: [], projects: [], akind: f.kind, deliv: ""};
+    d.ext = fileExt(d.raw) || f.ext || fileExt(d.proc);
+    d.group = docGroup(d);
+    if (home) d.home = home;
+    DOCS[d.key] = d; out.set(d.key, d);
+  });
+  return docSort([...out.values()]);
+}
+function fileExtChip(d, which){
+  const rel = which === "proc" ? d.proc : (d.raw || d.proc), ext = fileExt(rel) || "?";
+  return '<button type="button" class="fl-ext c-' + (DOC_EXTCAT[ext] || "text") + '" data-open="' + esc(rel) + '" title="Abrir ' + esc(rel.split("/").pop()) +
+    ' no aplicativo do sistema">' + esc(ext.toUpperCase()) + "</button>";
+}
+function fileRow(d, o, hidden){
+  const meta = [];
+  if (o.ctx === "proj" && d.home) meta.push('<span class="fl-tag">' + esc(d.home) + "</span>");
+  if (d.date) meta.push('<span class="fl-date">' + fmtD(d.date) + "</span>");
+  return '<li class="fl-file' + (hidden ? " fl-hide" : "") + '" data-g="' + d.group + '" data-q="' + esc(docNorm(d.title + " " + d.ext + " " + (d.home || ""))) + '">' +
+    fileExtChip(d) + '<button type="button" class="fl-name" data-doc="' + esc(d.key) + '" title="Pré-visualizar no Brain">' + esc(d.title) + "</button>" +
+    '<span class="fl-meta">' + meta.join("") + "</span></li>";
+}
+function fileTools(docs){
+  const n = {}; docs.forEach(d => { n[d.group] = (n[d.group] || 0) + 1; });
+  return '<div class="fl-tools"><input type="search" class="fl-q" placeholder="Filtrar ' + docs.length + ' arquivos" aria-label="filtrar arquivos">' +
+    '<span class="fl-chips"><button type="button" class="fl-chip on" data-fl-g="">todos <b>' + docs.length + "</b></button>" +
+    DOC_GROUPS.filter(([k]) => n[k]).map(([k, l]) => '<button type="button" class="fl-chip" data-fl-g="' + k + '">' + l.toLowerCase() + " <b>" + n[k] + "</b></button>").join("") +
+    "</span></div>";
+}
+// lista de documentos: por tipo (padrão), por projeto ou sem grupo; 6 à vista por grupo; filtro a partir de 9
+function fileList(docs, o){
+  o = Object.assign({by: "tipo", tools: null, more: 6, ctx: "", compact: false, empty: "Nenhum arquivo ligado a este item.", order: null}, o || {});
+  if (!docs.length) return '<div class="empty fl-empty">' + esc(o.empty) + "</div>";
+  const groups = [];
+  if (o.by === "tipo") DOC_GROUPS.forEach(([k, l]) => { const ds = docs.filter(d => d.group === k); if (ds.length) groups.push([l, ds]); });
+  else if (o.by === "projeto") (o.order || []).forEach(pid => { const ds = docs.filter(d => d.home === pid); if (ds.length) groups.push([idc(pid) + " " + esc((P[pid] || {}).title || ""), ds]); });
+  else groups.push(["", docs]);
+  const keys = groups.flatMap(g => g[1].map(d => d.key));
+  FL_KEYS.push(...keys);
+  const tools = (o.tools == null ? docs.length > 8 : o.tools) ? fileTools(docs) : "";
+  return '<div class="fl-files' + (o.compact ? " is-compact" : "") + '">' + tools +
+    groups.map(([l, ds]) => '<section class="fl-group">' + (l ? '<h3 class="fl-gh">' + l + ' <span class="fl-cnt">' + ds.length + "</span></h3>" : "") +
+      '<ul class="fl-list">' + ds.map((d, i) => fileRow(d, o, i >= o.more)).join("") + "</ul>" +
+      (ds.length > o.more ? '<button type="button" class="fl-more" data-fl-more>mostrar mais ' + (ds.length - o.more) + "</button>" : "") + "</section>").join("") +
+    '<div class="fl-none" hidden>nada encontrado</div></div>';
+}
+function fileFilter(box){
+  const q = docNorm((box.querySelector(".fl-q") || {}).value || ""), on = box.querySelector(".fl-chip.on"), g = on ? on.dataset.flG : "";
+  const active = !!(q || g);
+  let shown = 0;
+  box.querySelectorAll(".fl-file").forEach(li => {
+    const ok = (!g || li.dataset.g === g) && (!q || li.dataset.q.indexOf(q) >= 0);
+    li.classList.toggle("fl-off", !ok);
+    if (ok) shown++;
+  });
+  box.classList.toggle("is-filtering", active);
+  box.querySelectorAll(".fl-group").forEach(s => { s.hidden = active && !s.querySelector(".fl-file:not(.fl-off)"); });
+  const none = box.querySelector(".fl-none"); if (none) none.hidden = shown > 0;
+}
+document.addEventListener("click", ev => {
+  const t = ev.target; if (!t.closest) return;
+  const more = t.closest("[data-fl-more]");
+  if (more) { ev.preventDefault(); const s = more.closest(".fl-group"); s.querySelectorAll(".fl-hide").forEach(li => li.classList.remove("fl-hide")); more.remove(); return; }
+  const fc = t.closest(".fl-files .fl-chip");
+  if (fc) { ev.preventDefault(); const box = fc.closest(".fl-files"); box.querySelectorAll(".fl-chip").forEach(x => x.classList.toggle("on", x === fc)); fileFilter(box); }
+});
+document.addEventListener("input", ev => { const q = ev.target.closest && ev.target.closest(".fl-q"); if (q) fileFilter(q.closest(".fl-files")); });
 function filesBlock(files) {
   if (!files || !files.length) return "";
-  const reader = !!(window.BRAIN && window.BRAIN.M && window.BRAIN.M.open && window.BRAIN.M.open.reader);
-  const rows = files.map(f =>
-    '<li><button type="button" class="btn tiny" data-open="' + esc(f.rel) + '">Abrir</button> ' +
-    '<button type="button" class="btn tiny" data-read="' + esc(f.rel) + '">Ver</button> ' +
-    esc(f.kind) + " · " + esc(f.name) +
-    ' <span class="muted">→ ' + esc(f.app || "padrão do sistema") + "</span></li>").join("");
-  return panel("Arquivos linkados", '<p class="muted small"><button type="button" class="btn tiny" data-openform="open.set">Como abrir</button> ' +
-    '<button type="button" class="btn tiny" data-opentoggle>' + (reader ? "Abrir no editor" : "Ver no Brain") + '</button> ' +
-    '<button type="button" class="btn tiny" data-openall>abrir tudo</button></p><ul class="feed">' + rows + "</ul>");
+  const docs = docsFrom(files);
+  return panel("Arquivos <span class=\"fl-cnt\">" + docs.length + "</span>", fileList(docs, {by: docs.length > 6 ? "tipo" : "none", compact: docs.length > 4}));
 }
+
+// ── Goals e projetos: colunas (goal › projeto › entregável › detalhe), como o Finder ──
+// O caminho mora no hash (#cols/GOAL-1/PROJ-1/PROJ-1.3?f=<arquivo>); a coluna com foco e o arquivo com foco,
+// em COLS (as teclas e a barra de comandos moram nos extras e agem no item da coluna com foco).
+const COLS = window.BRAIN_COLS = window.BRAIN_COLS || {col: 0, file: 0, own: false, last: "", tab: {}, list: []};
+const DELIV_RE = /^PROJ-\d+\.\d+$/, PROJ_RE = /^PROJ-\d+$/, GOAL_RE = /^GOAL-\d+$/;
+function colsHref(id){
+  id = String(id || "");
+  if (DELIV_RE.test(id)) { const pid = id.split(".")[0]; return "#cols/" + [(P[pid] || {}).goal, pid, id].filter(Boolean).join("/"); }
+  if (PROJ_RE.test(id)) return "#cols/" + [(P[id] || {}).goal, id].filter(Boolean).join("/");
+  return GOAL_RE.test(id) ? "#cols/" + id : "#cols";
+}
+const findDeliv = did => { const p = P[String(did).split(".")[0]]; return p ? (p.deliverables || []).find(x => x.id === did) : null; };
+const delivOpen = d => d.status !== "feito" && d.status !== "cancelado";
+const lateDelivs = () => M.projects.flatMap(p => (p.deliverables || []).filter(d => delivOpen(d) && d.overdue_days > 0));
+function colsPath(){
+  const raw = decodeURIComponent(location.hash.slice(1)), path = raw.split("?")[0], seg = path.split("/").slice(1);
+  const gid = seg[0] && G[seg[0]] ? seg[0] : (M.goals[0] || {}).id || "";
+  const g = G[gid] || {projects: []};
+  const pid = seg[1] && P[seg[1]] && g.projects.indexOf(seg[1]) >= 0 ? seg[1] : "";
+  const did = seg[2] && pid && seg[2].indexOf(pid + ".") === 0 && findDeliv(seg[2]) ? seg[2] : "";
+  const f = new URLSearchParams(raw.split("?")[1] || "").get("f") || "";
+  return {gid, pid, did, f};
+}
+const colsHash = (gid, pid, did) => "#cols/" + [gid, pid, did].filter(Boolean).join("/");
+function colsNode(id){
+  id = String(id || "");
+  if (GOAL_RE.test(id) && G[id]) return {kind: "goal", id: id, node: G[id]};
+  if (PROJ_RE.test(id) && P[id]) return {kind: "project", id: id, node: P[id]};
+  const d = findDeliv(id); if (d) return {kind: "deliv", id: id, node: d, proj: id.split(".")[0]};
+  return {kind: "", id: "", node: null};
+}
+function colsCur(){                                     // o item da coluna com foco (é nele que os comandos agem)
+  const p = colsPath(), c = COLS.col;
+  return colsNode(c === 0 ? p.gid : c === 1 ? (p.pid || p.gid) : (p.did || p.pid || p.gid));
+}
+// documentos por nível: o goal soma os projetos; o projeto mostra o que não é de nenhum entregável; o entregável, o seu
+const projDocs = pid => P[pid] ? docsFrom(P[pid].files, pid) : [];
+const looseDocs = pid => projDocs(pid).filter(d => !d.deliv);
+const delivDocs = did => { const d = findDeliv(did); return d ? docsFrom(d.files) : []; };
+function goalDocs(gid){
+  const g = G[gid]; if (!g) return [];
+  const seen = new Map();
+  g.projects.forEach(pid => projDocs(pid).forEach(d => { if (!seen.has(d.key)) seen.set(d.key, d); }));
+  return docSort([...seen.values()]);
+}
+const DST = {feito: ["is-done", "✓", "feito"], cancelado: ["is-cancel", "×", "cancelado"],
+  "em-andamento": ["is-doing", "◐", "em andamento"], "nao-iniciado": ["", "○", "não iniciado"]};
+function delivMark(d){ const s = DST[d.status] || DST["nao-iniciado"];
+  return '<button type="button" class="dmark ' + s[0] + '" title="' + s[2] + ' · espaço marca feito · s muda o estado">' + s[1] + "</button>"; }
+function delivDue(d, short){
+  if (d.status === "feito") return '<span class="ok">✓ feito ' + fmtD(d.done_date) + "</span>";
+  if (d.status === "cancelado") return '<span class="muted">cancelado</span>';
+  if (!d.due) return '<span class="muted">sem prazo</span>';
+  if (d.overdue_days) return '<span class="late">venceu há ' + d.overdue_days + "d</span>";
+  if (d.due_in === 0) return '<span class="soon">vence hoje</span>';
+  if (d.due_in != null && d.due_in <= 7) return '<span class="soon">' + fmtDW(d.due) + " · em " + d.due_in + "d</span>";
+  return (short ? fmtD(d.due) : fmtDW(d.due)) + (d.due_in != null ? ' <span class="muted">· em ' + d.due_in + "d</span>" : "");
+}
+const daysTo = iso => iso ? Math.round((new Date(iso + "T12:00:00") - new Date(M.today + "T12:00:00")) / 864e5) : null;
+function horizonTxt(g){ if (!g.horizon) return '<span class="muted">sem horizonte</span>';
+  const n = daysTo(g.horizon); return "até " + fmtDL(g.horizon) + (n != null ? ' <span class="muted">· ' + (n >= 0 ? n + " dias" : "passou há " + (-n) + "d") + "</span>" : ""); }
+// progresso: UMA barra (calculado) + tique do que o dono declarou; o texto diz uma vez
+function progBar(prog, declared, o){
+  o = o || {};
+  if (!prog || prog.pct == null) return '<span class="pbar is-none"><span class="ptrack"></span><span class="pcount">sem entregáveis</span></span>';
+  const tip = prog.pct + "% calculado (peso " + prog.weight_done + "/" + prog.weight_total + ")" + (declared ? " · declarado " + declared.pct + "% em " + fmtD(declared.date) : "");
+  return '<span class="pbar" title="' + esc(tip) + '"><span class="ptrack"><span class="pfill" style="width:' + prog.pct + '%"></span>' +
+    (declared ? '<i class="pdecl" style="left:' + declared.pct + '%"></i>' : "") + "</span>" +
+    '<b class="pnum">' + prog.pct + "%</b>" +
+    (o.count ? '<span class="pcount">' + prog.done + " de " + prog.total + " entregáveis</span>" : "") +
+    (declared ? '<span class="pcount">· você declarou ' + declared.pct + "%</span>" : "") + "</span>";
+}
+const hDot = (lvl, label) => '<i class="hdot h-' + esc(lvl || "") + '" title="' + esc(label || lvl || "") + '"></i>';
+// o motivo de risco aparece UMA vez: no entregável que causa, com link para ele
+function lateAlert(projIds){
+  const late = projIds.flatMap(pid => ((P[pid] || {}).deliverables || []).filter(d => delivOpen(d) && d.overdue_days > 0));
+  if (!late.length) return "";
+  const d = late[0];
+  return '<a class="late-alert" href="' + colsHref(d.id) + '"><b>⚠</b> ' + idc(d.id) + " " + esc(d.title) + ' <span class="late">venceu há ' + d.overdue_days + "d</span>" +
+    (late.length > 1 ? ' <span class="muted">+' + (late.length - 1) + "</span>" : "") + "</a>";
+}
+// Início: um bloco por goal — progresso, saúde, horizonte e a próxima coisa (ou o atraso)
+function homeGoals(){
+  if (!M.goals.length) return '<h2 class="sec">Goals</h2>' + empty("Nenhum goal no PLANNING ainda — rode /init ou /goal.");
+  return '<div class="sechead"><h2 class="sec">Goals</h2><a class="seclink" href="#cols">abrir goals e projetos →</a></div><div class="gtiles">' + M.goals.map(g => {
+    const ds = g.projects.flatMap(pid => ((P[pid] || {}).deliverables || [])).filter(delivOpen)
+      .sort((a, b) => (b.overdue_days || 0) - (a.overdue_days || 0) || (a.due || "9").localeCompare(b.due || "9"));
+    const n = ds[0];
+    return '<a class="gtile" href="#cols/' + esc(g.id) + '"><div class="gtile-t">' + donut(g.progress.pct, 46) +
+      '<div class="gtile-n">' + idc(g.id) + "<b>" + esc(g.title) + "</b></div></div>" +
+      '<div class="gtile-m">' + chip(g.health, g.health_label) + '<span class="muted small">' + (g.horizon ? "até " + fmtD(g.horizon) : "") + "</span></div>" +
+      '<div class="gtile-x small">' + (n ? (n.overdue_days ? '<span class="late">⚠ ' + esc(n.id) + " venceu há " + n.overdue_days + "d</span>" : '<span class="muted">próxima:</span> ' + esc(n.id) + (n.due ? " · " + fmtD(n.due) : ""))
+        : '<span class="muted">' + (g.projects.length ? "nada em aberto" : "sem projetos ainda") + "</span>") + "</div></a>";
+  }).join("") + "</div>";
+}
+const colsBtn = (k, label, id, o) => { o = o || {};
+  return '<button type="button" class="btn' + (o.primary ? " primary" : "") + (o.gate ? " cols-gate" : "") + '" data-cols-key="' + esc(k) + '" data-id="' + esc(id || "") + '"' +
+    ' title="' + esc((o.gate ? "gate — confirmar o formulário aprova · " : "") + "tecla " + k) + '"><kbd>' + esc(k) + "</kbd>" + label + (o.gate ? ' <span class="gatebadge">gate</span>' : "") + "</button>"; };
+function colsBar(it){
+  const id = it.id;
+  if (it.kind === "goal") return '<div class="cols-bar">' + colsBtn("n", "projeto", id, {gate: true}) + colsBtn("e", "editar", id, {gate: true}) +
+    colsBtn("P", "declarar %", id) + colsBtn("S", "exportar", id) + colsBtn("N", "nota", id) + "</div>";
+  if (it.kind === "project") return '<div class="cols-bar">' + colsBtn("n", "entregável", id) + colsBtn("e", "editar", id, {gate: true}) +
+    colsBtn("P", "declarar %", id) + colsBtn("S", "exportar", id) + colsBtn("N", "nota", id) + "</div>";
+  const done = it.node.status === "feito";
+  return '<div class="cols-bar">' + colsBtn("space", done ? "desmarcar feito" : "marcar feito", id, {primary: !done && it.node.status !== "cancelado"}) +
+    colsBtn("s", "estado", id) + colsBtn("e", "editar", id) + colsBtn("n", "ação", id) + colsBtn("N", "nota", id) + "</div>";
+}
+function colsActs(ids, max){
+  const as = ids.map(x => A[x]).filter(Boolean);
+  return as.length ? '<ul class="cols-acts">' + as.slice(0, max).map(a => "<li>" + aL(a.id) + " " + esc(a.title) + ' <span class="small nowrap">' + (a.list === "waiting" ? '<span class="muted">' + esc(a.owner_name) + " · </span>" : "") + dueTxt(a) + "</span></li>").join("") + "</ul>"
+    : '<p class="muted small">nenhuma</p>';
+}
+function colsGoal(gid){
+  const g = G[gid]; if (!g) return empty("Nenhum goal no PLANNING ainda — rode /init ou /goal.");
+  const docs = goalDocs(gid);
+  return '<div class="cols-dh"><span class="cols-k">Goal ' + idc(g.id) + "</span><h2>" + esc(g.title) + "</h2>" + chip(g.health, g.health_label) + "</div>" + colsBar(colsNode(gid)) +
+    '<dl class="cols-kv"><dt>Horizonte</dt><dd>' + horizonTxt(g) + "</dd>" + (g.why ? "<dt>Por quê</dt><dd>" + esc(g.why) + "</dd>" : "") +
+    "<dt>Progresso</dt><dd>" + progBar(g.progress, g.declared, {count: true}) + "</dd></dl>" +
+    (lateAlert(g.projects) ? '<div class="cols-al">' + lateAlert(g.projects) + "</div>" : "") +
+    '<h3 class="cols-sh">Arquivos <span class="fl-cnt">' + docs.length + "</span></h3>" +
+    fileList(docs, {by: "projeto", order: g.projects, compact: true, more: 4, tools: docs.length > 8, ctx: "", empty: "Nenhum arquivo nos projetos deste goal."});
+}
+function colsProj(pid){
+  const p = P[pid], docs = looseDocs(pid), all = projDocs(pid), open = p.actions.mine.concat(p.actions.waiting);
+  const decs = p.decisions.map(x => D[x]).filter(Boolean);
+  const nAct = p.actions.watching.length + p.actions.closed.length + p.timeline.length;
+  return '<div class="cols-dh"><span class="cols-k">Projeto ' + idc(p.id) + "</span><h2>" + esc(p.title) + "</h2>" + chip(p.health.level, p.health.label) + "</div>" + colsBar(colsNode(pid)) +
+    '<dl class="cols-kv"><dt>Dono</dt><dd>' + (p.owner && PE[p.owner] ? peL(p.owner) : '<span class="muted">—</span>') + "</dd><dt>Progresso</dt><dd>" + progBar(p.progress, p.declared, {count: true}) + "</dd>" +
+    "<dt>Próxima</dt><dd>" + (p.next_due ? idc(p.next_due.id) + " " + esc(p.next_due.title || "") + " · " + delivDue(findDeliv(p.next_due.id) || {due: p.next_due.date}, true) : "—") + "</dd>" +
+    (p.people.length ? "<dt>Pessoas</dt><dd>" + p.people.map(x => peL(x.id)).join(", ") + "</dd>" : "") + "</dl>" +
+    (lateAlert([pid]) ? '<div class="cols-al">' + lateAlert([pid]) + "</div>" : "") +
+    '<h3 class="cols-sh">Ações abertas <span class="fl-cnt">' + open.length + '</span><a class="cols-more" href="#todo?p=' + esc(pid) + '">no TODO →</a></h3>' + colsActs(open, 6) +
+    '<h3 class="cols-sh">Decisões <span class="fl-cnt">' + decs.length + '</span><a class="cols-more" href="#decisions?p=' + esc(pid) + '">todas →</a></h3>' +
+    (decs.length ? '<ul class="cols-acts">' + decs.slice(0, 3).map(d => '<li><span class="muted small">' + fmtD(d.date) + "</span> " + dL(d.id) + " " + esc(d.title) + "</li>").join("") + "</ul>" : '<p class="muted small">nenhuma</p>') +
+    '<h3 class="cols-sh">Do projeto <span class="fl-cnt">' + docs.length + '</span><span class="muted small cols-shn">sem entregável · ' + (all.length - docs.length) + " nos entregáveis</span></h3>" +
+    fileList(docs, {compact: true, more: 4, tools: docs.length > 8, empty: "Todos os arquivos estão em algum entregável."}) +
+    '<details class="cols-act"><summary>Atividade <span class="fl-cnt">' + nAct + '</span><span class="muted small">histórico, observando e fechadas</span></summary>' +
+      (p.actions.watching.length ? '<h3 class="fl-gh">Observando</h3>' + colsActs(p.actions.watching, 50) : "") +
+      (p.actions.closed.length ? '<h3 class="fl-gh">Fechadas recentemente</h3><ul class="cols-acts">' + p.actions.closed.map(aid => { const a = A[aid];
+        return a ? '<li><span class="muted small">' + fmtD(a.closed) + "</span> " + aL(aid) + " " + esc(a.title) + (a.how ? ' <span class="muted small">— ' + esc(a.how) + "</span>" : "") + "</li>" : ""; }).join("") + "</ul>" : "") +
+      '<h3 class="fl-gh">Histórico</h3>' + timelineList(p.timeline, 80) + "</details>";
+}
+function colsDeliv(did){
+  const d = findDeliv(did), docs = delivDocs(did), acts = M.actions.filter(a => a.deliverable === did), p = P[did.split(".")[0]];
+  return '<div class="cols-dh"><span class="cols-k">Entregável ' + idc(did) + "</span><h2>" + esc(d.title) + "</h2></div>" + colsBar(colsNode(did)) +
+    '<ul class="cols-stat"><li data-deliv="' + esc(did) + '" data-dstatus="' + esc(d.status) + '">' + delivMark(d) + "<b>" + (DST[d.status] || DST["nao-iniciado"])[2] + "</b></li></ul>" +
+    '<dl class="cols-kv"><dt>Prazo</dt><dd>' + delivDue(d) + "</dd>" + (d.weight ? "<dt>Peso</dt><dd>" + d.weight + ' <span class="muted small">de ' + p.progress.weight_total + " no projeto</span></dd>" : "") + "</dl>" +
+    '<h3 class="cols-sh">Ações <span class="fl-cnt">' + acts.length + "</span></h3>" +
+    (acts.length ? colsActs(acts.map(a => a.id), 50) : '<p class="muted small">nenhuma ação ligada — <kbd>n</kbd> cria uma já neste entregável</p>') +
+    '<h3 class="cols-sh">Arquivos <span class="fl-cnt">' + docs.length + "</span></h3>" +
+    fileList(docs, {by: "none", more: 12, tools: false, empty: "Nenhum arquivo ligado a este entregável."});
+}
+// pré-visualização na 4ª coluna: entra no histórico (Voltar fecha); o conteúdo vem da ponte (extras: colsLoadPreview)
+function colsPreview(key, base){
+  const d = DOCS[key], pair = !!(d.proc && d.raw), tab = COLS.tab[key] || (d.raw ? "orig" : "resumo");
+  const list = COLS.list.indexOf(key) >= 0 ? COLS.list : [key], i = list.indexOf(key), n = list.length;
+  const where = d.deliv ? idc(d.deliv) + " " + esc((findDeliv(d.deliv) || {}).title || "") : (d.projects[0] ? idc(d.projects[0]) + " " + esc((P[d.projects[0]] || {}).title || "") : "");
+  const rel = tab === "resumo" ? d.proc : (d.raw || d.proc);
+  const nav = n > 1 ? '<span class="pv-n"><a href="' + esc(base + "?f=" + encodeURIComponent(list[(i - 1 + n) % n])) + '" aria-label="anterior">‹</a>' + (i + 1) + " de " + n +
+    '<a href="' + esc(base + "?f=" + encodeURIComponent(list[(i + 1) % n])) + '" aria-label="próximo">›</a></span>' : "";
+  return '<div class="cols-pv" data-rel="' + esc(rel) + '" data-key="' + esc(key) + '" data-tab="' + tab + '">' +
+    '<header class="pv-h"><div class="pv-t"><b>' + esc(d.title) + '</b><span class="pv-sub">' + [esc(DOC_GLABEL[d.group] || ""), d.date ? fmtDL(d.date) : "", where].filter(Boolean).join(" · ") + "</span></div>" +
+    '<div class="pv-a">' + nav + '<span class="pv-open">' + fileExtChip(d, tab === "resumo" ? "proc" : "") + '<span class="muted small">abrir no app</span></span>' +
+    '<button type="button" class="pv-x" data-pv-expand title="ampliar (janela por cima)">⤢</button><button type="button" class="pv-x" data-pv-close>← voltar</button></div></header>' +
+    (pair ? '<nav class="pv-tabs"><button type="button" data-pv-tab="orig" class="' + (tab === "orig" ? "on" : "") + '">Original · ' + esc(fileExt(d.raw).toUpperCase()) + "</button>" +
+      '<button type="button" data-pv-tab="resumo" class="' + (tab === "resumo" ? "on" : "") + '">Resumo do Brain · MD</button></nav>' : "") +
+    '<div class="pv-b">' + (tab === "resumo" && d.summary ? '<p class="pv-sum">' + esc(d.summary) + "</p>" : "") + '<div class="pv-doc"><p class="muted">carregando…</p></div></div>' +
+    '<p class="pv-f"><code>' + esc(rel) + "</code></p></div>";
+}
+V.cols = (q) => {
+  const p = colsPath(), gid = p.gid, g = G[gid] || {projects: []}, pid = p.pid, did = p.did, fkey = p.f;
+  const base = colsHash(gid, pid, did);
+  if (!COLS.own) COLS.col = fkey ? 3 : did ? 2 : pid ? 1 : 0;            // chegou por link: foco na coluna mais funda do caminho
+  if (base !== COLS.last) COLS.file = 0;
+  COLS.last = base; COLS.own = false;
+  const item = (href, on, inner, key, col) => '<a class="cols-it' + (on ? " on" : "") + '" href="' + href + '" data-cols-it="' + esc(key) + '" data-col="' + col + '">' + inner + '<span class="cols-chev">›</span></a>';
+  const plus = (kind, parent, title, gate, dis) => '<button type="button" class="cols-plus" data-cols-new="' + kind + '" data-id="' + esc(parent || "") + '"' + (dis ? " disabled" : "") +
+    ' title="' + esc(title + (gate ? " (gate)" : "")) + '" aria-label="' + esc(title) + '">+</button>';
+  const col1 = M.goals.map(x => item("#cols/" + x.id, x.id === gid, hDot(x.health, x.health_label) + '<span class="cols-il">' + idc(x.id) + " " + esc(x.title) +
+    "<small>" + (x.progress.pct == null ? "sem entregáveis" : x.progress.pct + "% · " + x.projects.length + (x.projects.length === 1 ? " projeto" : " projetos")) + "</small></span>", x.id, 0)).join("") ||
+    '<p class="cols-hint">Nenhum goal ainda</p>';
+  const col2 = g.projects.length ? g.projects.map(id => { const pp = P[id];
+    return item("#cols/" + gid + "/" + id, id === pid, hDot(pp.health.level, pp.health.label) + '<span class="cols-il">' + idc(id) + " " + esc(pp.title) +
+      "<small>" + (pp.progress.pct == null ? "sem entregáveis" : pp.progress.pct + "% · " + pp.progress.done + "/" + pp.progress.total + " entregáveis") + "</small></span>", id, 1); }).join("")
+    : gid ? '<div class="cols-empty">Sem projetos ainda.' + colsBtn("n", "projeto", gid, {gate: true}) + "</div>" : "";
+  const col3 = pid ? '<ul class="cols-dl">' + P[pid].deliverables.map(d => '<li class="cols-dli' + (d.id === did ? " on" : "") + (d.status === "cancelado" ? " is-cancel" : "") + '" data-deliv="' + esc(d.id) + '" data-dstatus="' + esc(d.status) + '">' +
+      delivMark(d) + '<a href="#cols/' + gid + "/" + pid + "/" + esc(d.id) + '" class="cols-dla" data-cols-it="' + esc(d.id) + '" data-col="2"><span class="cols-il">' + idc(d.id) + " " + esc(d.title) +
+      "<small>" + delivDue(d, true) + " · " + delivDocs(d.id).length + ' arq.</small></span><span class="cols-chev">›</span></a></li>').join("") + "</ul>" +
+      '<a class="cols-loose' + (!did ? " on" : "") + '" href="#cols/' + gid + "/" + pid + '" data-cols-it="loose:' + esc(pid) + '" data-col="2">◇ Do projeto <small>' + looseDocs(pid).length + " arquivos sem entregável</small></a>"
+    : '<p class="cols-hint">Escolha um projeto</p>';
+  let det;
+  FL_KEYS.length = 0;
+  if (fkey && DOCS[fkey] === undefined) { if (did) delivDocs(did); else if (pid) projDocs(pid); else goalDocs(gid); }   // o registro dos documentos nasce ao listar
+  if (fkey && DOCS[fkey]) det = colsPreview(fkey, base);
+  else det = did ? colsDeliv(did) : pid ? colsProj(pid) : gid ? colsGoal(gid) : empty("Nenhum goal no PLANNING ainda — rode /init ou /goal.");
+  if (!fkey) COLS.list = FL_KEYS.slice();
+  const crumbs = [["#cols", "Goals e projetos"]].concat(gid ? [["#cols/" + gid, idc(gid) + " " + esc(g.title || "")]] : [])
+    .concat(pid ? [["#cols/" + gid + "/" + pid, idc(pid) + " " + esc(P[pid].title)]] : []).concat(did ? [["", idc(did) + " " + esc(findDeliv(did).title)]] : []);
+  return '<div class="pagehead"><div><h1>Goals e projetos</h1><p class="sub">Escolha da esquerda para a direita. ← → entre colunas · ↑ ↓ dentro da coluna · os comandos agem no item com foco.</p></div></div>' +
+    '<nav class="cols-crumbs" aria-label="caminho">' + crumbs.map((c, i) => i === crumbs.length - 1 ? "<b>" + c[1] + "</b>" : '<a href="' + c[0] + '">' + c[1] + '</a><span class="sep">›</span>').join("") + "</nav>" +
+    '<div class="cols"><section class="cols-col"><div class="cols-in"><h2>Goals <span class="fl-cnt">' + M.goals.length + "</span>" + plus("goal", "", "novo goal", true) + "</h2>" + col1 + "</div></section>" +
+    '<section class="cols-col"><div class="cols-in"><h2>Projetos <span class="fl-cnt">' + g.projects.length + "</span>" + plus("project", gid, "novo projeto em " + gid, true, !gid) + "</h2>" + col2 + "</div></section>" +
+    '<section class="cols-col"><div class="cols-in"><h2>Entregáveis' + (pid ? ' <span class="fl-cnt">' + P[pid].deliverables.length + "</span>" : "") + plus("deliv", pid, pid ? "novo entregável em " + pid : "escolha um projeto", false, !pid) + "</h2>" + col3 + "</div></section>" +
+    '<section class="cols-col cols-det">' + det + "</section></div>";
+};
+// endereços antigos (#projects, #project/PROJ-1, #goal/GOAL-1) caem nas colunas sem empilhar histórico
+const colsRedirect = id => {
+  if (typeof history !== "undefined" && history.replaceState) history.replaceState(null, "", colsHref(id));
+  return V.cols(new URLSearchParams());
+};
+V.projects = (q) => colsRedirect(q && q.get("focus"));
+V.project = (q, id) => colsRedirect(id);
+V.goal = (q, id) => colsRedirect(id);
 V.action = (q, id) => {
   const a = A[id]; if (!a) return empty("Ação não encontrada");
   return '<p class="crumb muted"><a href="#todo">← TODO</a></p><div class="pagehead"><div><h1>' + a.id + " · " + esc(a.title) + '</h1>' +
@@ -1621,7 +1860,7 @@ const sourceFails = () => (M.sources || []).filter(s => s.failures).length || 0;
 const TABS_EXEC = [["home", "Início"],
   ["", "Agora"], ["todo", "Tarefas", () => M.counts.mine_overdue],
   ["ask", "Perguntas", () => ((M.questions || []).filter(q => q.status === "aberta").length + M.proposals.length) || 0],
-  ["", "Registro"], ["projects", "Projetos"], ["decisions", "Decisões"], ["timeline", "Linha do tempo"],
+  ["", "Registro"], ["cols", "Goals e projetos", () => lateDelivs().length], ["decisions", "Decisões"], ["timeline", "Linha do tempo"],
   ["", "Tools"], ["focus", "Foco", () => M.focus && M.focus.status === "proposto" ? 1 : 0],
   ["outbox", "Mensagens", () => M.counts.outbox_pending]];
   // Fontes e Sugestões saíram da lista (D + D2). A primeira linha de cada face é sempre a sua página-índice
@@ -1643,7 +1882,7 @@ const FACES = [["execucao", "Execução", TABS_EXEC], ["portfolio", "Portfólio"
 if (window.PF_ONLY) { FACES.length = 0; FACES.push(["portfolio", "Portfólio", TABS_PF]); }
 const faceOf = v => (v.indexOf("pf/") === 0 || v === "people" || v === "person") ? "portfolio"
   : (v.indexOf("cfg/") === 0 || v === "sources" || v === "feedback") ? "configuracoes" : "execucao";
-const PARENT = {project: "projects", person: "people", action: "todo", decision: "decisions", "pf/opp": "pf/opps", "pf/proc": "pf/procs", "pf/area": "pf/areas"};
+const PARENT = {project: "cols", goal: "cols", person: "people", action: "todo", decision: "decisions", "pf/opp": "pf/opps", "pf/proc": "pf/procs", "pf/area": "pf/areas"};
 function go(view, params){ const q = new URLSearchParams(Object.entries(params || {}).filter(([, v]) => v)).toString(); location.hash = view + (q ? "?" + q : ""); }
 function route(){
   if (IS_SHELL && !HYDRATED) {
@@ -1687,6 +1926,7 @@ function route(){
 }
 window.BRAIN = {M, A, D, P, G, PE, OPP, PROC, AREA, docUrl, safeUrl, normalizeBrain, go, route, chip, aL, dL, pL, peL, fmtD, fmtDW, donut, bar, esc, renderSafeMd,
   qArg, V, S_COLLAPSED, get S_SORT(){ return S_SORT; }, set S_SORT(v){ S_SORT = v; },
+  cols: {path: colsPath, cur: colsCur, node: colsNode, href: colsHref, hash: colsHash, docs: DOCS, deliv: findDeliv, state: COLS},
   refresh: function(nm){                       // ponte CLI (./brain serve): novo view model → índices + views (troca atômica)
     let nextM, nA, nD, nP, nG, nPE, nART, nDL, nDD, nPF, nAREA, nOPP, nPROC;
     try {

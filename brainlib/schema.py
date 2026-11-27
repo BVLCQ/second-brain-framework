@@ -295,6 +295,12 @@ def validate(ev: dict, state, plan) -> None:
         if data.get("link"):
             _need(data["link"] in state.processes or data["link"] in state.opportunities,
                   f"link: {data['link']!r} não existe (PROC-… ou OPP-…)")
+        if data.get("deliverable"):
+            dv = data["deliverable"]
+            _need(isinstance(dv, str) and dv in plan.deliverables,
+                  f"deliverable: {dv!r} não é entregável do PLANNING/goals.md (PROJ-#.#)")
+            _need(plan.deliverables[dv].project_id in data.get("projects", []),
+                  f"deliverable: {dv} é do {plan.deliverables[dv].project_id}, que precisa estar em projects")
     if t == "proposal.opened":
         _need(data["kind"] in PROPOSAL_KINDS, f"kind de proposta inválido: {data['kind']!r}")
         if data["kind"] == "framework":

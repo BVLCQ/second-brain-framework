@@ -741,8 +741,9 @@ por uma versão.
 
 **Execução** — páginas:
 
-- **Início** — o `/brief` visual: goals com barras de progresso (calculado
-  **e** declarado), saúde, hoje + 7 dias, "precisa de você", conquistas e
+- **Início** — o `/brief` visual: um bloco por goal (progresso, saúde,
+  horizonte e a próxima entrega — ou a atrasada, uma vez só; clicar abre o
+  goal nas colunas), hoje + 7 dias, "precisa de você", conquistas e
   decisões recentes. `n` escreve uma nota rápida; `u`/`d`/`b`/`c` rodam ações
   do agente ao vivo quando a ponte está no ar e o `[runner]` configurado
   (com saída no console lateral).
@@ -755,12 +756,26 @@ por uma versão.
   vista · ordem · todas. Os cartões da visão geral filtram o quadro (clique
   soma o recorte; de novo tira; "limpar filtros" volta ao normal) e se
   combinam com projeto, vista e ordem. A ficha da ação tem os mesmos botões.
-- **Projetos** — ficha por projeto: entregáveis com peso, próximos marcos,
-  saúde com motivo, decisões e ações ligadas. O círculo do entregável
-  marca feito (`space`) ou muda estado (`s`) — é a colheita do checkbox.
-  `n estrutura` cria goal/projeto/entregável (os dois primeiros com gate —
-  confirmar aprova); `e` edita com o mesmo gate; o botão ⛏ no goal
-  declara progresso.
+- **Goals e projetos** (badge: entregáveis atrasados) — colunas como as do
+  Finder: Goals › Projetos › Entregáveis › detalhe. `←` `→` trocam de coluna,
+  `↑` `↓` (ou `j` `k`) andam dentro dela; o detalhe mostra o item da coluna
+  com foco e a barra de comandos dele. `n` cria o filho (goal → projeto, com
+  gate · projeto → entregável · entregável → ação já ligada), `G` novo goal
+  (gate), `e` edita (goal/projeto com gate), `space`/`s` marcam o entregável
+  feito ou mudam o estado, `P` declara % de goal ou projeto, `S` exporta,
+  `N` deixa uma nota ligada ao item. Cada tecla tem botão (barra do
+  detalhe, `+` no topo de cada coluna e a barra de teclas). Arquivos aparecem
+  **uma vez, no nível certo**: no entregável, os que o `/dump` ligou a ele
+  (`--deliverable`); no projeto, os gerais ("Do projeto"); no goal, a soma.
+  Na coluna de arquivos, `enter` pré-visualiza ali mesmo (Voltar fecha) e
+  `o` abre no aplicativo. Os endereços antigos (`#projects`, `#project/…`)
+  caem nas colunas.
+- **Arquivos** (em toda ficha) — um documento por linha: o resumo do Brain e
+  o original juntos. **O nome abre a pré-visualização no Brain** (abas
+  Original · Resumo); **o chip com a extensão** (`PDF`, `XLSX`, `MD`…)
+  **abre no aplicativo do sistema**. Muitos arquivos: grupos por tipo, filtro
+  e "mostrar mais". Como abrir (editor, leitor) é preferência da máquina e
+  mora na paleta (⌘K › Como abrir arquivos), não em cada lista.
 - **Decisões** — quem decidiu, quando, com base em quê, cadeia de
   supersedes. `n` nova, `S` supera a selecionada.
 - **Conquistas** — wins por semana. `n` registra uma entrega.

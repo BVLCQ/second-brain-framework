@@ -104,15 +104,16 @@ class PanelCssTests(unittest.TestCase):
         self.assertNotIn("color:#fff", rule)
 
     def test_project_summary_two_line_clamp(self):
-        """#49: .goal .proj .t small usa clamp de 2 linhas em vez de nowrap."""
-        rule = _extract_rule(self.css, r"\.goal\s+\.proj\s+\.t\s+small")
+        """#49 (nas colunas e no Início): o título longo do goal clampa em 2 linhas; a linha de apoio
+        do item da coluna corta com reticências — nada empurra a coluna para os lados."""
+        rule = _extract_rule(self.css, r"\.gtile-n\s+b")
         self.assertIn("display:-webkit-box", rule)
         self.assertIn("-webkit-box-orient:vertical", rule)
         self.assertIn("-webkit-line-clamp:2", rule)
-        self.assertIn("white-space:normal", rule)
         self.assertIn("overflow:hidden", rule)
-        self.assertNotIn("white-space:nowrap", rule)
-        self.assertNotIn("text-overflow:ellipsis", rule)
+        small = _extract_rule(self.css, r"\.cols-il\s+small")
+        self.assertIn("text-overflow:ellipsis", small)
+        self.assertIn("overflow:hidden", small)
 
     def test_narrow_viewport_overflow_guards(self):
         """#50: grades, inputs, foco e media queries protegem 500px contra overflow horizontal."""
@@ -123,17 +124,16 @@ class PanelCssTests(unittest.TestCase):
         self.assertIn("minmax(min(280px,100%),1fr)", g3)
         self.assertIn("repeat(2,minmax(0,1fr))", mx)
 
-        grid_items = _extract_rule(self.css, r"\.panel,\.grid>\*,\.projcard,\.col")
+        grid_items = _extract_rule(self.css, r"\.panel,\.grid>\*,\.col")
         self.assertIn("min-width:0", grid_items)
 
         wrap_rule = _extract_rule(self.css, r"\.card-title,ul\.feed\s+li")
         self.assertIn("overflow-wrap:anywhere", wrap_rule)
 
-        goal_head = _extract_rule(self.css, r"\.goal-head")
-        self.assertIn("flex-wrap:wrap", goal_head)
-        goal_div = _extract_rule(self.css, r"\.goal-head>div")
-        self.assertIn("min-width:0", goal_div)
-        self.assertIn("flex:1", goal_div)
+        tiles = _extract_rule(self.css, r"\.gtiles")                 # blocos de goal no Início: quebram em vez de vazar
+        self.assertIn("auto-fit", tiles)
+        self.assertIn("min-width:0", _extract_rule(self.css, r"\.gtile-n"))
+        self.assertIn("min-width:0", _extract_rule(self.css, r"\.cols-col"))
 
         self.assertIn("min-width:min(220px,100%)", _extract_rule(self.css, r"\.ask-free\s+\.rin"))
         self.assertIn("min-width:min(190px,100%)", _extract_rule(self.css, r"\.lfbar\s+input"))

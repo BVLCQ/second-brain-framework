@@ -131,8 +131,13 @@ class PanelLinkAudit(unittest.TestCase):
     def test_mensagem_que_cita_um_artefato_mostra_o_arquivo(self):
         msg = next(m for m in self.vm["outbox"] if m["ref"] == self.art)
         self.assertTrue(msg["files"], "o modelo da mensagem precisa trazer os arquivos")
-        for f in msg["files"]:
-            self.assertIn(f'data-open="{f["rel"]}"', self.pages["outbox"])
+        page = self.pages["outbox"]
+        for f in msg["files"]:                     # um documento por linha: o nome pré-visualiza o resumo, o chip abre o original
+            if f["kind"] == "artefato":
+                self.assertIn(f'data-doc="{f["rel"]}"', page)
+                self.assertIn(f'data-open="{f.get("raw") or f["rel"]}"', page)
+            else:
+                self.assertTrue(f'data-open="{f["rel"]}"' in page or f'data-doc="{f["rel"]}"' in page, f["rel"])
 
     def test_fonte_com_snapshot_oferece_ver_o_ultimo_pull(self):
         src = next(s for s in self.vm["sources"] if s["key"] == "slack-geral")

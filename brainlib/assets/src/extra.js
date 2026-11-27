@@ -230,6 +230,7 @@ function commands(){
       cmd: 'brain proposal reject ' + p.id + ' --quote "não"', mut: m => { m.proposals = m.proposals.filter(x => x.id !== p.id); }});
   });
   out.push({label: "Regenerar views (render)", cmd: "brain render"});
+  out.push({label: "Como abrir arquivos (editor, leitor do Brain)", act: () => openForm("open.set", MD.open || {})});
   if (!window.PF_ONLY) {
     [
       ["Atualizar tudo (/update)", () => runAgent("update", "", "atualizar tudo", "/update")],
@@ -311,38 +312,14 @@ function showReader(name, text) {
   back.classList.add("open");
 }
 document.addEventListener("click", async (ev) => {
-  const formBtn = ev.target.closest && ev.target.closest("[data-openform]");
-  if (formBtn) {
+  const docBtn = ev.target.closest && ev.target.closest("[data-doc]");
+  if (docBtn) {                                       // nome do documento: pré-visualização no Brain
     ev.preventDefault();
-    openForm("open.set", window.BRAIN && window.BRAIN.M && window.BRAIN.M.open || {});
-    return;
-  }
-  const tog = ev.target.closest && ev.target.closest("[data-opentoggle]");
-  if (tog) {
-    ev.preventDefault();
-    const M = window.BRAIN && window.BRAIN.M;
-    if (!M) return;
-    M.open = Object.assign({mode: "auto", ide: "", reader: false}, M.open || {});
-    const next = M.open.reader ? "ide" : "brain";
-    M.open.mode = next;
-    M.open.reader = next === "brain";
-    runCommand("brain files set --mode " + next);
-    if (window.BRAIN.route) window.BRAIN.route();
-    return;
-  }
-  const allBtn = ev.target.closest && ev.target.closest("[data-openall]");
-  if (allBtn) {
-    ev.preventDefault();
-    const box = allBtn.closest("section") || allBtn.parentElement;
-    const rels = [...box.querySelectorAll("[data-open]")].map(b => b.getAttribute("data-open")).filter(Boolean);
-    if (!LIVE) { agentToast("arquivo", rels.join(", "), "ponte serve desligada"); return; }
-    for (const rel of rels) {
-      try {
-        const j = await api("/api/open", {method: "POST", headers: {"Content-Type": "application/json"},
-                                          body: JSON.stringify({rel: rel})});
-        if (!j.ok) agentToast("arquivo", rel, j.error || "recusado");
-      } catch (e) { agentToast("arquivo", rel, "ponte fora do ar"); }
-    }
+    const key = docBtn.getAttribute("data-doc"), st = window.BRAIN.cols.state;
+    if (location.hash.startsWith("#cols") && docBtn.closest(".cols-det")) {        // nas colunas: abre na 4ª coluna e entra no histórico
+      const fs = colsFiles(); st.own = true; st.col = 3; st.file = Math.max(0, fs.indexOf(docBtn.closest(".fl-file")));
+      colsPvPushed = true; location.hash = location.hash.split("?")[0] + "?f=" + encodeURIComponent(key);
+    } else openDoc(key);
     return;
   }
   const openBtn = ev.target.closest && ev.target.closest("[data-open]");
@@ -351,9 +328,9 @@ document.addEventListener("click", async (ev) => {
   if (!btn) return;
   ev.preventDefault();
   const rel = btn.getAttribute(readBtn ? "data-read" : "data-open");
-  if (!LIVE) { agentToast("arquivo", rel, "ponte serve desligada"); return; }
+  if (!LIVE) { toast("abrir " + rel.split("/").pop() + " precisa da ponte — abra o Brain pelo app (./brain serve)"); return; }
   try {
-    if (readBtn || (openBtn && window.BRAIN && window.BRAIN.M && window.BRAIN.M.open && window.BRAIN.M.open.reader)) {
+    if (readBtn) {                                    // leitor do Brain (texto); binário abre no aplicativo
       const j = await api("/api/file?rel=" + encodeURIComponent(rel));
       if (!j.ok) { agentToast("arquivo", rel, j.error || "recusado"); return; }
       if (j.binary) {
@@ -365,7 +342,7 @@ document.addEventListener("click", async (ev) => {
       showReader(j.name || rel, j.text || "");
       return;
     }
-    const j = await api("/api/open", {method: "POST", headers: {"Content-Type": "application/json"},
+    const j = await api("/api/open", {method: "POST", headers: {"Content-Type": "application/json"},   // chip: aplicativo do sistema
                                       body: JSON.stringify({rel: rel})});
     if (!j.ok) agentToast("arquivo", rel, j.error || "recusado");
   } catch (e) { agentToast("arquivo", rel, "ponte fora do ar"); }
@@ -411,7 +388,7 @@ function navEntries(){
     ["people", "Portfólio · Pessoas"]]
     : [["face/execucao", "→ face Execução"], ["face/portfolio", "→ face Portfólio"], ["face/configuracoes", "→ face Configurações"],
     ["home", "Início"], ["todo", "Tarefas"], ["focus", "Foco"], ["ask", "Perguntas"], ["outbox", "Mensagens"],
-    ["projects", "Projetos"], ["decisions", "Decisões"], ["wins", "Conquistas"], ["timeline", "Linha do tempo"],
+    ["cols", "Goals e projetos"], ["decisions", "Decisões"], ["wins", "Conquistas"], ["timeline", "Linha do tempo"],
     ["cfg/inicio", "Configurações · Visão geral"], ["cfg/perfil", "Configurações · Perfil"], ["cfg/rotina", "Configurações · Rotina"],
     ["cfg/agente", "Configurações · Agentes/Harness"], ["cfg/conectores", "Configurações · Conectores"], ["sources", "Configurações · Fontes"],
     ["cfg/memoria", "Configurações · Memória"], ["cfg/integracoes", "Configurações · Integrações"],
@@ -589,7 +566,6 @@ function pubRequestForm(){
 function nbForm(kind){
   if (kind === "note") return noteForm();
   if (kind === "newaction") return newAction();
-  if (kind === "planform") return planNew();
   if (kind === "outbox") return draftForm();
   if (kind === "feedback") return feedbackForm();
   if (kind === "pub") return pubRequestForm();
@@ -617,7 +593,7 @@ function wireP0(){
     runCommand("brain feedback sync"); }});
   const head = document.querySelector("#view .pagehead");
   if (head && !head.querySelector(".planbtns")) {
-    const map = {"#home": ["note", "n nota"], "#projects": ["planform", "n estrutura"], "#todo": ["newaction", "n nova ação"],
+    const map = {"#home": ["note", "n nota"], "#todo": ["newaction", "n nova ação"],
       "#outbox": ["outbox", "n rascunhar"], "#decisions": ["decision", "n nova decisão"],
       "#feedback": ["feedback", "n sugerir/corrigir"],
       "#wins": ["delivery", "n nova entrega"], "#people": ["person", "n nova pessoa"],
@@ -642,26 +618,11 @@ function wireP0(){
 
 // ── nota, estrutura do plano, mesclar ação ───────────────────────────────
 function noteForm(){                                   // vínculo: o item aberto ou selecionado (ação, goal, projeto, entregável)
+  if (location.hash.startsWith("#cols")) { const it = colsApi().cur(); openForm("note.add", {text: "", link: it.id || ""}); return; }
   const h = decodeURIComponent(location.hash.slice(1).split("?")[0]), sel = selId() || "";
   const page = (h.match(/^(?:action|project|goal)\/(.+)$/) || [])[1] || "";
   const link = [page, sel].find(x => /^(TASK-\d{4,}|GOAL-\d+|PROJ-\d+(\.\d+)?)$/.test(x)) || "";
   openForm("note.add", {text: "", link: link});
-}
-function shareForm(){                                  // mesmo formulário da TUI (S exportar na árvore)
-  const id = selId() || "", kind = id.startsWith("GOAL-") ? "goal" : /^PROJ-\d+$/.test(id) ? "project" : "status";
-  openForm("share.export", {kind: kind, target: kind === "status" ? "" : id});
-}
-function planNew(){                                    // n na árvore: o que nasce depende do item (como a TUI)
-  const M = window.BRAIN.M, id = selId() || "";
-  const nextN = (ids, re) => Math.max(0, ...ids.map(x => (x.match(re) || [])[1]).filter(Boolean).map(Number)) + 1;
-  const goal = M.goals.find(g => g.id === id), proj = M.projects.find(p => p.id === id);
-  if (goal) return openForm("project.new", {nid: "PROJ-" + nextN(M.projects.map(p => p.id), /^PROJ-(\d+)$/), goal: goal.id, goal_title: goal.title});
-  if (proj) return openForm("deliverable.new", {nid: proj.id + "." + nextN((proj.deliverables || []).map(d => d.id), /\.(\d+)$/),
-    project: proj.id, project_title: proj.title});
-  const dv = selEl() && selEl().dataset.deliv;
-  if (dv) { const pr = M.projects.find(p => (p.deliverables || []).some(d => d.id === dv));
-    return newAction({project: pr ? pr.id : "—", deliv: dv}); }
-  return planGoal();
 }
 function planGoal(){ const M = window.BRAIN.M;
   const n = Math.max(0, ...M.goals.map(g => +(g.id.match(/^GOAL-(\d+)$/) || [0, 0])[1])) + 1;
@@ -791,7 +752,7 @@ SETUP.inicio = box => {
   box.innerHTML = '<div class="stbar"><span style="width:' + Math.round(n / SETUP_STEPS.length * 100) + '%"></span></div>' +
     '<section class="panel stlist">' + SETUP_STEPS.map(([k, t]) =>
       '<a class="strow" href="#cfg/' + k + '">' + stStatus(st[k]) + "<b>" + t + '</b><span class="muted">' + esc(detail[k]) + '</span><span class="stgo">›</span></a>').join("") + "</section>" +
-    '<div class="stactions"><button class="btn" data-welcome>Rever boas-vindas</button><a class="btn" href="#projects">Goals e projetos em Execução</a></div>';
+    '<div class="stactions"><button class="btn" data-welcome>Rever boas-vindas</button><a class="btn" href="#cols">Goals e projetos em Execução</a></div>';
   box.querySelector("[data-welcome]").onclick = () => {
     try { localStorage.setItem("brain-onboarding-step", "inicio"); } catch (e) {}
     location.hash = "onboarding";   // F8: o wizard mora no painel — mesma página, sem recarregar
@@ -1526,6 +1487,7 @@ SETUP.integracoes = box => {
 
 window.afterRoute = function(view){
   if (location.hash.startsWith("#focus")) wireFocus();
+  if (location.hash.startsWith("#cols")) { colsLoadPreview(); setTimeout(colsPaint); }
   if (location.hash.startsWith("#pf/opps")) wireOppKanban();
   if (location.hash.startsWith("#ask")) wireAskPage();
   if (document.getElementById("setup")) wireSetup(document.getElementById("setup").dataset.step);
@@ -1608,6 +1570,7 @@ const SEL = {items: [], i: -1};
 const SEL_QUERY = "#view .kanban .card, #view .pf-kanban .pf-card, #view table tbody tr, #view .blk.prop, #view .msgrow, #view ul.feed li, #view li[data-deliv]";
 const selable = el => el.querySelector('a[href^="#"]') || el.classList.contains("blk") || el.classList.contains("pf-card") || el.hasAttribute("data-deliv") || el.hasAttribute("data-sel");
 function collectSel(){
+  if (location.hash.startsWith("#cols")) { SEL.items = []; SEL.i = -1; paintSel(); return; }
   SEL.items = [...document.querySelectorAll(SEL_QUERY)].filter(selable).filter(el => !el.classList.contains("flt-off"));   // filtrado some da navegação j/k
   SEL.i = -1; paintSel();
   SEL.items.forEach(el => { if (el._selWired) return; el._selWired = true;                      // o filtro recoleta a cada tecla: ligar o mouse uma vez só
@@ -2016,6 +1979,174 @@ function editPlanNode(kind, id, node){                 // goal/projeto: gate est
   else if (kind === "goal") openForm("goal.edit", ctx);
   else openForm("project.edit", ctx);
 }
+// ── Goals e projetos (#cols): os comandos da árvore da TUI e o teclado do Finder ──
+// A coluna com foco decide o item: n filho · G goal · e editar · espaço feito · s estado · P % · S exportar · N nota · E árvore.
+// ← → entre colunas, ↑ ↓ (j k) dentro da coluna; na coluna de arquivos, enter pré-visualiza e o abre no app.
+const COLS_E_TREE = "mudança livre no goals.md: E na TUI abre o editor e mostra o diff (gate) — aqui, n cria e e edita o item";
+const colsApi = () => window.BRAIN.cols;
+const colsNextN = (ids, re) => Math.max(0, ...ids.map(x => (String(x).match(re) || [])[1]).filter(Boolean).map(Number)) + 1;
+function colsNew(kind, parent){
+  const M = window.BRAIN.M;
+  if (kind === "goal") return planGoal();
+  if (kind === "project") { const g = M.goals.find(x => x.id === parent); if (!g) return needSel();
+    return openForm("project.new", {nid: "PROJ-" + colsNextN(M.projects.map(p => p.id), /^PROJ-(\d+)$/), goal: g.id, goal_title: g.title}); }
+  if (kind === "deliv") { const p = M.projects.find(x => x.id === parent); if (!p) return needSel();
+    return openForm("deliverable.new", {nid: p.id + "." + colsNextN((p.deliverables || []).map(d => d.id), /\.(\d+)$/), project: p.id, project_title: p.title}); }
+  if (kind === "action") return newAction({project: String(parent).split(".")[0], deliv: parent});
+}
+function colsRun(k, it){
+  it = it || colsApi().cur();
+  if (k === "space") k = " ";
+  if (k === "G") { colsNew("goal"); return true; }
+  if (k === "E") { toast(COLS_E_TREE); return true; }
+  if (k === "n") {
+    colsNew(it.kind === "goal" ? "project" : it.kind === "project" ? "deliv" : it.kind === "deliv" ? "action" : "goal", it.id);
+    return true; }
+  if (![" ", "s", "e", "P", "S", "N"].includes(k)) return false;
+  if (!it.kind) { toast("nenhum goal ainda — G cria o primeiro"); return true; }
+  if (k === "e") { editPlanNode(it.kind === "deliv" ? "deliverable" : it.kind, it.id, it.node); return true; }
+  if (k === " " || k === "s") {
+    if (it.kind !== "deliv") { toast((k === "s" ? "s muda o estado" : "espaço marca feito") + " de um entregável — escolha um na coluna Entregáveis"); return true; }
+    if (k === " ") delivToggle(it.id); else delivState(it.id);
+    return true; }
+  if (k === "P") {
+    if (it.kind === "deliv") { toast("P declara % de goal ou projeto — o entregável é feito ou não"); return true; }
+    progressForm(it.id); return true; }
+  if (k === "S") { openForm("share.export", it.kind === "deliv" ? {kind: "project", target: it.proj} : {kind: it.kind, target: it.id}); return true; }
+  openForm("note.add", {text: "", link: it.id});                       // N
+  return true;
+}
+function colsItems(c, p){
+  const M = window.BRAIN.M, g = M.goals.find(x => x.id === p.gid), pr = M.projects.find(x => x.id === p.pid);
+  if (c === 0) return M.goals.map(x => x.id);
+  if (c === 1) return g ? g.projects.slice() : [];
+  if (c === 2) return pr ? (pr.deliverables || []).map(d => d.id).concat([""]) : [];   // "" = Do projeto (sem entregável)
+  return [];
+}
+function colsGo(hash, col){ const st = colsApi().state; st.own = true; if (col != null) st.col = col; location.hash = hash; }
+function colsFiles(){ return [...document.querySelectorAll("#view .cols-det .fl-file")].filter(li => li.offsetParent !== null); }
+function colsPaint(){
+  const st = colsApi().state, p = colsApi().path(), c = st.col;
+  document.querySelectorAll("#view .cols-col").forEach((el, i) => el.classList.toggle("is-focus", i === c));
+  document.querySelectorAll("#view .cols-kf").forEach(el => el.classList.remove("cols-kf"));
+  const sel = c === 0 ? '[data-cols-it="' + p.gid + '"]' : c === 1 ? (p.pid ? '[data-cols-it="' + p.pid + '"]' : "") : c === 2 ? '[data-cols-it="' + (p.did || "loose:" + p.pid) + '"]' : "";
+  const el = sel && document.querySelector("#view " + sel); if (el) el.classList.add("cols-kf");
+  const fs = colsFiles();
+  if (c === 3 && fs.length) { st.file = Math.max(0, Math.min(st.file, fs.length - 1)); fs[st.file].classList.add("cols-kf");
+    if (fs[st.file].scrollIntoView) fs[st.file].scrollIntoView({block: "nearest"}); }
+  renderKeyBar();
+}
+function colsKey(k){
+  const api = colsApi(), st = api.state, p = api.path(), c = st.col;
+  if (k === "ArrowDown" || k === "j" || k === "ArrowUp" || k === "k") {
+    const d = (k === "ArrowDown" || k === "j") ? 1 : -1;
+    if (c === 3) { const n = colsFiles().length; if (n) { st.file = (st.file + d + n) % n; colsPaint(); } return true; }
+    const items = colsItems(c, p); if (!items.length) return true;
+    const cur = c === 0 ? p.gid : c === 1 ? p.pid : (p.did || ""), i = items.indexOf(cur);
+    const nx = items[i < 0 ? (d > 0 ? 0 : items.length - 1) : (i + d + items.length) % items.length];
+    colsGo(c === 0 ? api.hash(nx) : c === 1 ? api.hash(p.gid, nx) : api.hash(p.gid, p.pid, nx));
+    return true; }
+  if (k === "ArrowRight" || k === "Enter") {
+    if (c === 3) { const li = colsFiles()[st.file]; if (li && k === "Enter") li.querySelector(".fl-name").click(); return true; }
+    if (c === 0) { const pj = colsItems(1, p); if (!pj.length) { toast("este goal não tem projetos — n cria o primeiro"); return true; }
+      colsGo(api.hash(p.gid, p.pid || pj[0]), 1); return true; }
+    if (c === 1) { if (!p.pid) return true; const ds = colsItems(2, p); colsGo(api.hash(p.gid, p.pid, p.did || ds[0]), 2); return true; }
+    if (!colsFiles().length) { toast("nada para abrir aqui: este item não tem arquivos"); return true; }
+    st.col = 3; st.file = 0; colsPaint(); return true; }
+  if (k === "ArrowLeft") {
+    if (c === 3) { st.col = p.pid ? 2 : 0; colsPaint(); return true; }
+    if (c === 2) { colsGo(api.hash(p.gid, p.pid), 1); return true; }
+    if (c === 1) { colsGo(api.hash(p.gid), 0); return true; }
+    return true; }
+  if (k === "o" && c === 3) { const li = colsFiles()[st.file]; if (li) li.querySelector(".fl-ext").click(); return true; }
+  return colsRun(k);
+}
+function colsLegend(add){
+  const it = colsApi().cur(), c = colsApi().state.col;
+  const nl = it.kind === "goal" ? "novo projeto em " + it.id : it.kind === "project" ? "novo entregável em " + it.id : it.kind === "deliv" ? "nova ação em " + it.id : "novo goal";
+  add("←", "voltar", c === 0); add("→", c === 2 ? "arquivos" : "entrar", c === 3);
+  if (c === 3) { add("enter", "pré-visualizar"); add("o", "abrir no app"); }
+  add("n", nl, false, it.kind === "goal" || !it.kind);
+  add("G", "novo goal", false, true);
+  add("e", "editar", !it.kind, it.kind === "goal" || it.kind === "project");
+  add("space", "marcar feito", it.kind !== "deliv"); add("s", "estado", it.kind !== "deliv");
+  add("P", "declarar %", !(it.kind === "goal" || it.kind === "project"));
+  add("S", "exportar", !it.kind); add("N", "nota", !it.kind);
+  add("E", "mudar árvore", false, true);
+}
+const COLS_KEYMAP = {"←": "ArrowLeft", "→": "ArrowRight", enter: "Enter"};
+// clique: item de coluna dá o foco à coluna; + e a barra de comandos abrem o formulário; a pré-visualização troca aba, amplia, volta
+document.addEventListener("click", ev => {
+  const t = ev.target; if (!t.closest || !location.hash.startsWith("#cols")) return;
+  const st = window.BRAIN && window.BRAIN.cols && window.BRAIN.cols.state; if (!st) return;
+  const it = t.closest("[data-cols-it]");
+  if (it && !t.closest(".dmark")) { st.col = +it.dataset.col; st.own = true; return; }      // o link segue; a coluna clicada ganha o foco
+  const nb = t.closest("[data-cols-new]");
+  if (nb) { ev.preventDefault(); if (!nb.disabled) colsNew(nb.dataset.colsNew, nb.dataset.id); return; }
+  const cb = t.closest("[data-cols-key]");
+  if (cb) { ev.preventDefault(); colsRun(cb.dataset.colsKey, colsApi().node(cb.dataset.id)); return; }
+  const box = t.closest(".cols-pv"); if (!box) return;
+  const key = box.dataset.key;
+  if (t.closest("[data-pv-close]")) { ev.preventDefault(); st.own = true; st.col = 3; if (history.length > 1 && colsPvPushed) history.back(); else location.hash = location.hash.split("?")[0]; return; }
+  if (t.closest("[data-pv-expand]")) { ev.preventDefault(); openDoc(key); return; }
+  const tb = t.closest("[data-pv-tab]");
+  if (tb) { ev.preventDefault(); st.tab[key] = tb.dataset.pvTab; st.own = true; st.col = 3; window.BRAIN.route(); return; }
+  const nv = t.closest(".pv-n a");                                   // ‹ ›: troca o arquivo sem empilhar histórico (Voltar fecha)
+  if (nv) { ev.preventDefault(); st.own = true; st.col = 3; history.replaceState(null, "", nv.getAttribute("href")); colsPrevHash = location.hash; window.BRAIN.route(); }
+});
+let colsPvPushed = false, colsPrevHash = location.hash;           // Voltar saindo da pré-visualização: o foco volta aos arquivos
+window.addEventListener("hashchange", () => {
+  const now = location.hash, st = window.BRAIN && window.BRAIN.cols && window.BRAIN.cols.state;
+  if (st && /\?f=/.test(colsPrevHash) && !/\?f=/.test(now) && colsPrevHash.split("?")[0] === now.split("?")[0]) { st.own = true; st.col = 3; }
+  if (!/\?f=/.test(now)) colsPvPushed = false;
+  colsPrevHash = now;
+});
+
+// ── documento: nome = pré-visualização no Brain (com Original · Resumo); chip = aplicativo do sistema ──
+async function fetchDoc(rel){
+  if (!LIVE) return {ok: false, offline: true};
+  try { return await api("/api/file?rel=" + encodeURIComponent(rel)); } catch (e) { return {ok: false, error: "ponte fora do ar"}; }
+}
+function docBodyHtml(j, d, rel){                       // devolve marca já escapada: esc() nos textos, renderSafeMd() no arquivo
+  if (j.offline) return '<p class="muted">A pré-visualização lê o arquivo pela ponte — abra o Brain pelo app (./brain serve). O chip <b>' +
+    esc((rel.split(".").pop() || "").toUpperCase()) + "</b> também precisa dela.</p>";
+  if (!j.ok) return '<p class="muted">' + esc(j.error || "não consegui ler o arquivo") + "</p>";
+  if (j.binary) return '<p class="muted">Sem pré-visualização para .' + esc(rel.split(".").pop() || "") + " — use o chip para abrir no aplicativo do sistema.</p>";
+  return '<div class="pv-md">' + renderSafeMd(j.text || "") + "</div>";
+}
+async function colsLoadPreview(){
+  const box = document.querySelector("#view .cols-pv"); if (!box) return;
+  const rel = box.dataset.rel, d = (window.BRAIN.cols.docs || {})[box.dataset.key] || {};
+  const j = await fetchDoc(rel);
+  const doc = box.querySelector(".pv-doc"); if (doc && box.isConnected) doc.innerHTML = docBodyHtml(j, d, rel);
+}
+// janela por cima (fora das colunas, ou ⤢): as mesmas abas
+async function openDoc(key, tab0){
+  const d = (window.BRAIN.cols.docs || {})[key]; if (!d) return;
+  let back = document.getElementById("docback");
+  if (!back) {
+    back = document.createElement("div"); back.id = "docback"; back.className = "pal-back";
+    document.body.appendChild(back);
+    back.addEventListener("click", ev => {
+      if (ev.target === back || ev.target.closest("[data-doc-close]")) { back.classList.remove("open"); return; }
+      const tb = ev.target.closest("[data-doc-tab]"); if (tb) openDoc(back.dataset.key, tb.dataset.docTab);
+    });
+  }
+  const tab = tab0 || (d.raw ? "orig" : "resumo"), rel = tab === "resumo" ? d.proc : (d.raw || d.proc), pair = !!(d.proc && d.raw);
+  const ext = (rel.split(".").pop() || "").toLowerCase();
+  back.dataset.key = key;
+  // innerHTML só com pedaços escapados; o arquivo (entrada não confiável) passa por renderSafeMd
+  back.innerHTML = '<div class="palette doc-dlg" role="dialog" aria-label="Pré-visualização"><div class="pal-head doc-h"><div class="pv-t"><b>' + esc(d.title) + "</b>" +
+    (d.date ? '<span class="pv-sub">' + esc(d.date) + "</span>" : "") + '</div><span class="pv-open"><button type="button" class="fl-ext" data-open="' + esc(rel) + '" title="Abrir no aplicativo do sistema">' +
+    esc(ext.toUpperCase()) + '</button><span class="muted small">abrir no app</span></span><button type="button" class="btn tiny" data-doc-close>fechar</button></div>' +
+    (pair ? '<nav class="pv-tabs"><button type="button" data-doc-tab="orig" class="' + (tab === "orig" ? "on" : "") + '">Original · ' + esc((d.raw.split(".").pop() || "").toUpperCase()) + "</button>" +
+      '<button type="button" data-doc-tab="resumo" class="' + (tab === "resumo" ? "on" : "") + '">Resumo do Brain · MD</button></nav>' : "") +
+    '<div class="pv-b">' + (tab === "resumo" && d.summary ? '<p class="pv-sum">' + esc(d.summary) + "</p>" : "") + '<div class="pv-doc"><p class="muted">carregando…</p></div></div>' +
+    '<p class="pv-f"><code>' + esc(rel) + "</code></p></div>";
+  back.classList.add("open");
+  const j = await fetchDoc(rel);
+  const doc = back.querySelector(".pv-doc"); if (doc && back.dataset.key === key) doc.innerHTML = docBodyHtml(j, d, rel);
+}
 function promoteDialog(o){ openForm("opportunity.promote", {id: o.id, item: o}); }
 function statusPicker(o, status){ openForm("opportunity.status", {id: o.id, title: o.title, item: o}, status ? {values: {status: status}} : {}); }
 function supersedeForm(d){ openForm("decision.supersede", {id: d.id, title: d.title}); }
@@ -2181,17 +2312,7 @@ function ctxKeys(k){
     if (k === "d") { srcRemoveForm(src); return true; }          // no watch: remove de lá; avulsa: sai da lista
     if (k === "w") { if (!src.in_watch) srcAddForm({key: src.key}); else toast(src.key + " já está no watch.toml"); return true; }
     runAgent("connect", src.key, "puxar " + src.key, "/connect " + src.key); return true; }
-  if (h.startsWith("#projects")) {
-    if (k === "n") { planNew(); return true; }
-    if (k === "G") { planGoal(); return true; }
-    if (k === "E") { toast("mudança livre no goals.md: E na TUI abre o editor e mostra o diff (gate) — aqui, n cria e e edita o item"); return true; }   // E = mudar árvore: o gate estrutural mora no formulário   // G = novo goal: o gate estrutural mora no formulário
-    if (k === "P") { const id = selId() || "";
-      if (id.startsWith("GOAL-")) progressForm(id);
-      else if (id) toast("P declara progresso de goal — selecione um goal");
-      else needSel();
-      return true; }
-    if (k === "S") { shareForm(); return true; }
-    return false; }
+  if (h.startsWith("#cols")) return colsKey(COLS_KEYMAP[k] || k);
   if (h.startsWith("#todo") || h.startsWith("#action/")) {
     const a = h.startsWith("#action/") ? A_OF(decodeURIComponent(h.slice(8))) : null;
     if (k === "D") k = "d";                                // teclas antigas (2.10): ainda valem, escondidas
@@ -2225,12 +2346,6 @@ function ctxKeys(k){
       if (w) chaseDraft(w); else toast("m cobrar: selecione uma ação aguardando outra pessoa (waiting)"); return true; }
     return mut.includes(k) || k === "o" || k === "M";
   }
-  if (h.startsWith("#project/")) { const p = window.BRAIN.P[decodeURIComponent(h.slice(9))];
-    if (k === "e" && p) { editPlanNode("project", p.id, p); return true; }
-    const dv = selEl() && selEl().dataset.deliv ? selEl().dataset.deliv : null;
-    if (k === " " && dv) { delivToggle(dv); return true; }
-    if (k === "s" && dv) { delivState(dv); return true; }
-    return false; }
   if (h.startsWith("#people")) {
     if (k === "n") { nbForm("person"); return true; }
     if (k === "R") { resolveForm(); return true; }
@@ -2418,11 +2533,12 @@ function helpOverlay(){
     ["Portfólio · Documentos", ""], ["L", "ligar"], ["d", "desligar"], ["enter", "abrir"],
     ["Configurações · Memória", ""], ["s", "trocar provedor"],
     ["Configurações · Saúde", ""], ["f", "corrigir o aviso selecionado"], ["o", "testar online (doctor --online)"],
-    ["Ficha de projeto", ""], ["space", "entregável feito"], ["s", "estado do entregável"],
-    ["Outros n", ""], ["n", "nota (Início) · estrutura do plano (Projetos) · rascunhar msg · nova decisão · nova entrega · nova pessoa · novo processo · nova área"],
+    ["Outros n", ""], ["n", "nota (Início) · rascunhar msg · nova decisão · nova entrega · nova pessoa · novo processo · nova área"],
     ["Pessoas / fichas", ""], ["e", "editar pessoa"], ["a", "alias"], ["R", "quem é…?"],
-    ["Projetos / Goals", ""], ["e", "editar (gate estrutural: brain plan log)"], ["G", "novo goal (gate)"], ["E", "mudar árvore (gate)"],
-    ["P", "declarar progresso do goal"], ["S", "exportar (share)"],
+    ["Goals e projetos (colunas)", ""], ["← →", "coluna anterior / próxima (→ na coluna de entregáveis entra nos arquivos)"], ["↑ ↓ j k", "item anterior / próximo na coluna"],
+    ["n", "filho do item: goal → projeto (gate) · projeto → entregável · entregável → ação"], ["G", "novo goal (gate)"],
+    ["e", "editar (goal/projeto: gate)"], ["space / s", "entregável: marcar feito / mudar estado"], ["P", "declarar % de goal ou projeto"],
+    ["S", "exportar (share)"], ["N", "nota ligada ao item"], ["E", "mudar árvore (gate)"], ["enter / o", "arquivo: pré-visualizar / abrir no app"],
   ];
   ov.innerHTML = '<div class="palette"><div class="pin"><b>Teclas — as mesmas da TUI</b><span class="hint">? fecha</span></div>' +
     '<div style="padding:10px 16px 14px;max-height:70vh;overflow:auto"><table class="khelp">' +
@@ -2474,6 +2590,10 @@ document.addEventListener("keydown", e => {
   if (k === "Escape" && lfPop()) { e.preventDefault(); return; }
   if (k === "N") { e.preventDefault(); noteForm(); return; }                  // nota rápida em qualquer página
   if (k === "?") { e.preventDefault(); helpOverlay(); return; }
+  if (location.hash.startsWith("#cols") && ["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "Enter", "j", "k", "o"].includes(k) && !e.metaKey && !e.ctrlKey && !e.altKey) {
+    if (k === "Enter" && e.target && e.target.closest && e.target.closest("button, a")) return;       // enter num botão focado: o próprio botão
+    if (colsKey(k)) e.preventDefault();
+    return; }
   if (k === "j" || k === "ArrowDown") { e.preventDefault(); selMove(1); return; }
   if (k === "k" || k === "ArrowUp") { e.preventDefault(); selMove(-1); return; }
   if (k === "Enter" && SEL.i >= 0) { e.preventDefault(); selOpen(); return; }
@@ -2507,10 +2627,7 @@ function keyLegend(){
     const sid = SEL.i >= 0 ? (selId() || "") : "", src = sid.startsWith("src:") ? (M.sources || []).find(x => x.key === sid.slice(4)) : null;
     add("n", "adicionar"); add("e", "editar", !(src && src.in_watch)); add("d", "remover", !(src && src.in_watch));
     add("w", "incluir no watch", !(src && !src.in_watch)); add("c", "⚡ puxar", !src); add("u", "⚡ atualizar tudo"); }
-  else if (h.startsWith("#projects")) { add("n", "estrutura"); add("G", "novo goal (gate)"); add("E", "mudar árvore (gate)");
-    add("P", "progresso do goal", !id.startsWith("GOAL-")); add("S", "exportar"); }
-  else if (h.startsWith("#project/")) { add("e", "editar (gate)");
-    add("space", "marcar feito", !(selEl() && selEl().dataset.deliv)); add("s", "estado", !(selEl() && selEl().dataset.deliv)); }
+  else if (h.startsWith("#cols")) colsLegend(add);
   else if (h.startsWith("#person/")) { add("e", "editar"); add("a", "alias"); }
   else if (h.startsWith("#ask")) {
     const id = SEL.i >= 0 ? (selId() || "") : "";
