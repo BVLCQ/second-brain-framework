@@ -482,6 +482,7 @@ html[data-live="1"] .only-portrait,html:not([data-live="1"]) .only-live{display:
 .fsug{margin:-4px 0 8px 130px;background:var(--panel);border:1px solid var(--line);border-radius:10px;
   box-shadow:var(--shadow-lg);max-height:220px;overflow-y:auto;padding:4px}
 .fsug[hidden]{display:none}
+.fsug.memsug{position:absolute;margin:0;z-index:5;max-height:240px;overflow:auto;box-shadow:var(--shadow-lg)}
 .fsug-item{display:flex;gap:10px;align-items:center;padding:6px 10px;border-radius:8px;cursor:pointer;font-size:14px}
 .fsug-item .ent{font:11.5px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--accent);font-weight:600;white-space:nowrap}
 .fsug-item.sel,.fsug-item:hover{background:color-mix(in srgb,var(--accent) 12%,transparent)}
@@ -550,11 +551,15 @@ html[data-live="1"] .only-portrait,html:not([data-live="1"]) .only-live{display:
 .memops{margin:0 0 10px}
 .memops summary{cursor:pointer;color:var(--accent);font-size:12.5px;margin:0 0 8px}
 .memops .chk{margin:0 0 8px}
-.memopsbox{border:1px solid var(--line);border-radius:10px;background:var(--bg);padding:10px 12px 6px;margin:0 0 12px}
+.memopsbox{position:relative;border:1px solid var(--line);border-radius:10px;background:var(--bg);padding:10px 12px 6px;margin:0 0 12px}
 .memopshead{display:flex;justify-content:space-between;gap:10px;align-items:baseline;margin:0 0 6px}
 .memopshead b{font-size:14px}
-.memoprow{display:grid;grid-template-columns:minmax(150px,240px) minmax(0,1fr) 76px;gap:10px;align-items:center;padding:5px 0;border-top:1px solid var(--line2)}
-.memopshead+.memoprow{border-top:0}
+.memoprow{display:grid;grid-template-columns:minmax(150px,240px) minmax(0,1fr) 150px 76px;gap:10px;align-items:center;padding:5px 0;border-top:1px solid var(--line2)}
+.memoprow.memophd{padding:0 0 2px;border-top:0}
+.memoprow select.memopeff{padding:5px 7px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--ink);font:inherit;font-size:12.5px;min-width:0;width:100%}
+.memopsrc{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.memdecl{font-size:11.5px;color:var(--muted);margin:10px 0 6px;text-transform:none}
+.memopshead+.memoprow,.memophd+.memoprow{border-top:0}
 .memopname{font-size:12.5px;color:var(--ink);font-weight:600}
 .memoprow input{padding:6px 9px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--ink);font:inherit;font-size:12.5px;min-width:0;width:100%}
 .memoprow input:focus{outline:2px solid color-mix(in srgb,var(--accent) 40%,transparent);border-color:var(--accent)}
@@ -577,7 +582,7 @@ html[data-live="1"] .only-portrait,html:not([data-live="1"]) .only-live{display:
 .memconsent input{margin-top:3px;flex:none}
 .memrb .fld>.btn{padding:7px 10px;font-size:14px;border-radius:8px;min-height:0;align-self:flex-start}   /* Autenticar na altura do campo ao lado */
 @media (max-width:1000px){.memrh{grid-template-columns:132px minmax(0,1fr) 22px}.memrw,.memrt{display:none}
-  .memrow.off .memrh{grid-template-columns:132px minmax(0,1fr)}.memra{grid-column:1 / -1}.memoprow{grid-template-columns:1fr}.memoptag{display:none}}
+  .memrow.off .memrh{grid-template-columns:132px minmax(0,1fr)}.memra{grid-column:1 / -1}.memoprow{grid-template-columns:1fr}.memoptag,.memophd{display:none}}
 
 /* ── arrastar arquivo ou pasta para a inbox ── */
 .inbox-drop-ov{position:fixed;inset:0;z-index:100;display:flex;flex-direction:column;gap:14px;padding:24px;
@@ -1404,7 +1409,7 @@ const BRAIN_FORMS = (function(){
       && !(v.slot === "embeddings" && v.provider === "local")
       && !(v.slot === "decision" && v.provider === "local"),
     show_candidates: v => (v.slot === "reranker" && !["", "off"].includes(v.provider || ""))
-      || (v.slot === "decision" && v.provider === "hindsight" && v.recall === "on"),
+      || (v.slot === "decision" && ["hindsight", "openai", "typesafe"].includes(v.provider) && v.recall === "on"),
   };
   function cond(c, v, ctx, M){
     if (c === undefined || c === null) return true;
@@ -1501,7 +1506,7 @@ const BRAIN_FORMS = (function(){
     ice_impact: (x, v, ctx, M) => { let out = hIce("impact")(x, v, ctx, M); const h = (ctx.item || {}).hours_saved;
       if (/^[0-9]+$/.test(x) && h) { const hint = hHours(+h); out += "\nhoras declaradas: " + num(+h) + " h/mês → faixa sugerida " + hint;
         if (+x > hint) out += " · ⚠ escopo e horas divergem: vale a menor nota"; } return out; },
-    recall_note: x => x === "on" ? "Cada candidato é uma requisição própria ao decisor; sem fallback para RRF nesta versão (1.2.0) — se o decisor cair, o recall falha fechado." : "",
+    recall_note: x => x === "on" ? "Cada candidato é uma requisição própria ao decisor; sem fallback para RRF (padrão do servidor 1.3.0) — se o decisor cair, o recall falha fechado." : "",
   };
   function hint(name, x, v, ctx, M){ return (!name || !x || !HINTS[name]) ? "" : HINTS[name](x, v, ctx || {}, M); }
   const XF = {
@@ -2468,16 +2473,20 @@ const MEM_MODES = [["none", "Nenhuma", "Busca por palavras. Nada a instalar."],
 const MEM_SLOTS = ["llm", "embeddings", "reranker", "decision"];
 const MEM_SLOT_NAMES = {llm: "LLM", embeddings: "Embeddings", reranker: "Reranker", decision: "Decisão"};
 const MEM_VERB = {embeddings: "vetorizar", reranker: "reranquear", decision: "julgar"};
+const MEM_DEC_CLOUD = ["hindsight", "openai", "typesafe"];      // decisores de nuvem (recall + chave própria)
 let memLast = null;                 // log da última aplicação: sobrevive ao redesenho que vem depois do job
 const memSlotsFor = (sel, recallOn) => sel === "full" ? (recallOn ? ["llm", "embeddings", "decision"] : ["llm", "embeddings", "reranker", "decision"])
   : sel === "embed" ? ["embeddings", "reranker"] : [];
 // o que está gravado num slot, no formato que a tela edita (campo vazio = o recomendado do provedor)
 function memDraft(slot, cur, reg){
-  const c = cur || {}, d = {provider: c.provider || "", key: "", model: "", ops: {}, base_url: "", url_on: false, candidates: "", dimensions: "", recall: "off", rcands: ""};
+  const c = cur || {}, d = {provider: c.provider || "", key: "", model: "", ops: {}, base_url: "", url_on: false, candidates: "", dimensions: "", recall: "off", rcands: "", effort: "", efforts: {}};
   if (slot === "llm") {
-    const ops = c.ops || {};
-    d.model = ops.default || "";
-    Object.keys(ops).forEach(op => { if (op !== "default" && ops[op] && ops[op] !== d.model) d.ops[op] = ops[op]; });
+    // só o que o dono FIXOU volta ao campo: o resto segue o mais novo da linha (o campo fica vazio e o placeholder diz qual)
+    const ops = c.ops || {}, pin = c.pinned || Object.keys(ops), ex = c.effort_explicit || {};
+    d.model = pin.includes("default") ? (ops.default || "") : "";
+    Object.keys(ops).forEach(op => { if (op !== "default" && pin.includes(op) && ops[op] && ops[op] !== d.model) d.ops[op] = ops[op]; });
+    d.effort = ex.default || "";
+    Object.keys(ex).forEach(op => { if (op !== "default" && ex[op]) d.efforts[op] = ex[op]; });
     if (c.provider === "custom") d.base_url = c.base_url || "";
     return d;
   }
@@ -2497,9 +2506,10 @@ function memDraft(slot, cur, reg){
 // o slot mudou em relação ao gravado (provedor ou qualquer campo)? a chave não conta: colar chave só a troca
 function memDiff(d, c){
   if (d.provider !== c.provider) return true;
-  const ops = Object.assign({}, d.ops, c.ops);
-  return ["model", "base_url", "candidates", "dimensions", "recall", "rcands"].some(k => String(d[k] || "") !== String(c[k] || "")) ||
-    !!d.url_on !== !!c.url_on || Object.keys(ops).some(op => (d.ops[op] || "") !== (c.ops[op] || ""));
+  const ops = Object.assign({}, d.ops, c.ops), de = d.efforts || {}, ce = c.efforts || {}, eff = Object.assign({}, de, ce);
+  return ["model", "base_url", "candidates", "dimensions", "recall", "rcands", "effort"].some(k => String(d[k] || "") !== String(c[k] || "")) ||
+    !!d.url_on !== !!c.url_on || Object.keys(ops).some(op => (d.ops[op] || "") !== (c.ops[op] || "")) ||
+    Object.keys(eff).some(op => (de[op] || "") !== (ce[op] || ""));
 }
 // a parte do payload de um slot: o provedor sempre (nomeado); o resto só quando o slot mudou — e aí ele é
 // regravado com exatamente o que está na tela (`reconfigure`: campo apagado volta ao recomendado)
@@ -2510,15 +2520,18 @@ function memSlotBody(slot, d, c){
   out.reconfigure = true;
   if (d.model) out.model = d.model;
   if (slot === "llm") {
-    const ops = {};
+    const ops = {}, effs = {};
     Object.keys(d.ops).forEach(op => { if (d.ops[op]) ops[op] = d.ops[op]; });
     if (Object.keys(ops).length) out.models = ops;
+    if (d.effort) out.effort = d.effort;
+    Object.keys(d.efforts || {}).forEach(op => { if (d.efforts[op]) effs[op] = d.efforts[op]; });
+    if (Object.keys(effs).length) out.efforts = effs;
   }
   if (d.provider === "custom" && d.base_url) out.base_url = d.base_url;
   if (slot === "decision" && d.provider === "local" && d.url_on && d.base_url) out.base_url = d.base_url;
   if (slot === "reranker" && d.provider !== "off" && d.candidates) out.candidates = parseInt(d.candidates, 10) || 0;
   if (slot === "embeddings" && d.dimensions) out.dimensions = parseInt(d.dimensions, 10) || 0;
-  if (slot === "decision" && d.provider === "hindsight") {      // configuração antiga (só CLI/TUI escolhem o de nuvem)
+  if (slot === "decision" && MEM_DEC_CLOUD.includes(d.provider)) {    // decisor de nuvem: também no recall (com teto)
     out.recall = d.recall;
     if (d.recall === "on") out.candidates = parseInt(d.rcands, 10) || 0;
   }
@@ -2586,6 +2599,7 @@ SETUP.memoria = box => {
   const slotName = slot => slotLab(slot).split(" (")[0];
   const slotSub = slot => { const mm = slotLab(slot).match(/\(([^)]*)\)/); return mm ? mm[1].replace(/\s*\/\s*/g, " / ") : ""; };
   const short = p => (p && p.label ? String(p.label).split(" (")[0] : "—");
+  const decName = p => (p && p.label ? String(p.label).split(" — ")[0] : "—");
   const chip = (tone, t) => '<span class="chip' + (tone ? " " + tone : "") + '">' + t + "</span>";
   let sel = curMode, planOpen = null, consent = false;   // o aceite do Full sobrevive ao redesenho (abrir uma linha não o apaga)
   // rascunho por slot: começa no gravado; provedor sem registro (instância nova) cai no recomendado do slot
@@ -2604,7 +2618,25 @@ SETUP.memoria = box => {
       draft[slot] = Object.assign(memDraft(slot, {}, null), {provider: recOf(slot, sel === "full" ? "full" : "embed")});
   };
   MEM_SLOTS.forEach(resetDraft);
-  const recallOn = () => sel === "full" && draft.decision.provider === "hindsight" && draft.decision.recall === "on";
+  const recallOn = () => sel === "full" && MEM_DEC_CLOUD.includes(draft.decision.provider) && draft.decision.recall === "on";
+  // ── LLM: catálogo (a lista viva do provedor), o mais novo de cada operação e os níveis de esforço de cada modelo ──
+  const LEVELS = (m.effort_levels || []).map(x => x[0]);
+  const llmCat = p => (p && p.catalog) || {};
+  const modelInfo = (p, id) => (llmCat(p).models || []).find(x => x.id === id) || null;
+  // o modelo que a operação usa com o que está na tela: o dela; senão o Padrão digitado; senão o mais novo da linha
+  const opModel = (p, op) => {
+    const d = draft.llm, lat = llmCat(p).latest || {};
+    if (op !== "default" && d.ops[op]) return d.ops[op];
+    if (d.model) return d.model;
+    return lat[op] || lat.default || (p && p.model) || "";
+  };
+  // o nível que vale com o seletor em "padrão": o do Brain (registro) se o modelo aceita, senão o do próprio modelo
+  const effDefault = (p, op) => {
+    const i = modelInfo(p, opModel(p, op)) || {}, lv = i.levels || [];
+    const base = draft.llm.effort || llmCat(p).effort_default || "";
+    if (op !== "default" && draft.llm.effort && lv.includes(draft.llm.effort)) return draft.llm.effort;
+    return base && lv.includes(base) ? base : (i.default || "");
+  };
   const active = () => memSlotsFor(sel, recallOn());
   const embChanged = () => !!cur("embeddings").provider && ["provider", "model", "dimensions", "base_url"]
     .some(k => String(draft.embeddings[k] || "") !== String(base.embeddings[k] || ""));
@@ -2614,6 +2646,9 @@ SETUP.memoria = box => {
   // a chave do slot está resolvida? salva, colada agora, ou a mesma conta de outro slot (o servidor aceita igual)
   const keyOk = slot => {
     const d = draft[slot], p = reg(slot, d.provider) || {};
+    // decisão: cada provedor de nuvem guarda a sua chave (a OpenAI aceita a do LLM OpenAI) — presença vem do servidor
+    if (slot === "decision") return !MEM_DEC_CLOUD.includes(d.provider) || !!d.key || !!(m.dec_keys || {})[d.provider]
+      || (!!p.shares_llm_key && draft.llm.provider === p.shares_llm_key && !!draft.llm.key);
     if (!p.key_required || p.subscription || p.key_set || d.key) return true;
     if (slot === "embeddings" && sel === "full" && draft.llm.provider === d.provider && draft.llm.key) return true;
     return slot === "reranker" && d.provider === "fireworks" &&
@@ -2653,14 +2688,17 @@ SETUP.memoria = box => {
     const d = draft[slot], p = reg(slot, d.provider) || {};
     if (slot === "llm") {
       if (!d.provider) return ["Ainda sem provedor", "escolha uma assinatura ou uma chave de API"];
-      const n = opLabels.filter(([op]) => d.ops[op]).length, dflt = d.model || p.model || "modelo do provedor";
-      return [short(p), dflt + (n ? " · " + n + (n === 1 ? " operação ajustada" : " operações ajustadas") : " em todas as operações")];
+      const n = opLabels.filter(([op]) => d.ops[op]).length, dflt = d.model || opModel(p, "default") || "modelo do provedor";
+      const eff = llmCat(p).lane ? (d.effort || effDefault(p, "default")) : "";
+      return [short(p), dflt + (d.model ? "" : " (o mais novo)") + (eff ? " · esforço " + eff : "") +
+        (n ? " · " + n + (n === 1 ? " operação ajustada" : " operações ajustadas") : " em todas as operações")];
     }
     if (slot === "embeddings") return [short(p), (d.model || p.model || "") + (d.dimensions ? " · " + d.dimensions + " dim" : p.dimensions ? " · " + p.dimensions + " dim" : "")];
     if (slot === "reranker") return d.provider === "off" ? ["Desligado — fusão RRF", "sem modelo: a busca une os resultados por posição"]
       : [short(p), (d.model || p.model || "") + ((d.candidates || p.candidates) ? " · top-" + (d.candidates || p.candidates) : "")];
     if (d.provider === "local") return ["Local — hs-decide-1-flash", d.url_on && d.base_url ? d.base_url : "/v1/systemone · nada sai da máquina"];
-    if (p.legacy) return [short(p) + " (nuvem)", "configuração antiga, mantida como está"];
+    if (MEM_DEC_CLOUD.includes(d.provider) || p.legacy) return [decName(p) + " (nuvem)", (d.model || p.model || "") +
+      (d.recall === "on" ? " · também no recall (top-" + (d.rcands || "?") + ")" : " · consolidação, reflect e mental models")];
     return ["Desligado", "cada operação paga só os tokens do próprio LLM"];
   };
   const nameCell = slot => '<span class="memrn"><b>' + esc(slotName(slot)) + "</b>" + (slotSub(slot) ? "<small>" + esc(slotSub(slot)) + "</small>" : "") + "</span>";
@@ -2674,7 +2712,7 @@ SETUP.memoria = box => {
   const offRow = slot => {   // slot que o modo escolhido não usa: fica na pilha, apagado, com o que está guardado
     const c = cur(slot), inert = slot === "reranker";             // fora no full só com o decisor de nuvem no recall
     const saved = c.provider && c.provider !== "off" ? (c.label || c.provider) : "";
-    const what = inert ? "Inerte — o decisor de nuvem julga o recall (configuração antiga, mantida)"
+    const what = inert ? "Inerte — o decisor de nuvem julga o recall (o que está gravado no reranker fica guardado)"
       : saved ? "Guardado para o Full: " + saved : "Só vale no modo Full";
     const sub = slot === "llm" ? "o texto do vault só vai a um LLM quando você ativa o Full" : slot === "decision" ? "juiz rápido que corta ~40% das chamadas do LLM" : "";
     return '<div class="memrow off" data-slot="' + slot + '"><div class="memrh">' + nameCell(slot) +
@@ -2692,9 +2730,12 @@ SETUP.memoria = box => {
       ? "LLM e embeddings no mesmo provedor: a chave do LLM serve aqui."
       : slot === "reranker" && p.key === "fireworks" && draft.embeddings.provider === "fireworks"
         ? "Fireworks nos embeddings e no reranker: a mesma chave serve nos dois." : "";
-    return fld("API key" + (p.key_set ? ' <span class="chip h-em-dia">já salva</span>' : ""),
-      '<input type="password" id="m-key-' + slot + '" autocomplete="off" placeholder="' + (p.key_set ? "vazio = mantém a do config/.env" : "cole a chave") + '">',
-      shared || "Vai para o config/.env (0600) e nunca volta para a tela.");
+    const set = slot === "decision" ? !!(m.dec_keys || {})[p.key] : p.key_set;
+    const sharedDec = slot === "decision" && p.shares_llm_key && draft.llm.provider === p.shares_llm_key
+      ? "LLM na OpenAI: a mesma chave serve aqui (vazio = usa a do LLM)." : "";
+    return fld("API key" + (set ? ' <span class="chip h-em-dia">já salva</span>' : ""),
+      '<input type="password" id="m-key-' + slot + '" autocomplete="off" placeholder="' + (set ? "vazio = mantém a do config/.env" : sharedDec ? "vazio = a do LLM" : "cole a chave") + '">',
+      shared || sharedDec || "Vai para o config/.env (0600) e nunca volta para a tela.");
   };
   const authFld = p => {
     if (!p || !p.subscription) return "";
@@ -2713,13 +2754,90 @@ SETUP.memoria = box => {
     return '<div class="stgrid">' + fld("Provedor", '<select id="m-prov-' + slot + '" data-mslot="' + slot + '">' + opts + "</select>",
       p.hint && !p.subscription ? esc(p.hint) : "") + "</div>";
   };
-  // LLM: qual modelo faz o quê — a linha Padrão é o campo Modelo; cada operação vazia segue o Padrão
+  // LLM: qual modelo faz o quê, e com quanto esforço — a linha Padrão é o campo Modelo; cada operação vazia segue o Padrão.
+  // Vazio no Padrão = o mais novo da linha do recomendado (a checagem diária acompanha); digitado = fixo.
+  const effSel = (p, op) => {
+    const c = llmCat(p);
+    if (!c.lane) return '<span class="muted small memopeff" title="este provedor não tem esforço ajustável pelo Brain">—</span>';
+    const id = opModel(p, op), i = modelInfo(p, id) || {known: false, levels: []};
+    const curv = op === "default" ? draft.llm.effort : ((draft.llm.efforts || {})[op] || "");
+    if (i.known && !(i.levels || []).length) return '<span class="muted small memopeff" title="' + esc(id) + ' não aceita esforço">sem esforço</span>';
+    const lv = i.known ? i.levels : LEVELS, dv = effDefault(p, op);
+    const opts = ['<option value="">' + esc(dv ? (op === "default" ? "padrão (" : "= Padrão (") + dv + ")" : "do modelo") + "</option>"]
+      .concat(lv.map(x => '<option value="' + esc(x) + '"' + (x === curv ? " selected" : "") + ">" + esc(x) + (i.known ? "" : " · não verificado") + "</option>"));
+    if (curv && !lv.includes(curv)) opts.push('<option value="' + esc(curv) + '" selected>' + esc(curv) + " · não existe em " + esc(id) + "</option>");
+    return '<select class="memopeff" id="m-eff-' + op + '" title="' + esc("Esforço de " + (id || "—") + (i.inferred ? " (níveis herdados da versão anterior)" : "")) + '">' + opts.join("") + "</select>";
+  };
+  const catLine = p => {
+    const c = llmCat(p);
+    if (!c.live) return '<span class="muted small">lista do registro</span>';
+    const src = {openrouter: "catálogo do OpenRouter", anthropic: "API da Anthropic", openai: "API da OpenAI", google: "API do Gemini"}[c.source] || "";
+    const age = c.at ? Math.max(0, Math.round((Date.now() / 1000 - c.at) / 3600)) : -1;
+    return '<span class="muted small">' + (src ? esc(src) + " · " + (age < 1 ? "lida agora" : age < 48 ? "lida há " + age + " h" : "lida há " + Math.round(age / 24) + " dias")
+      : "ainda não lida") + (c.error ? ' · <span class="late">' + esc(c.error) + "</span>" : "") + "</span>" +
+      '<button class="btn tiny" type="button" id="m-models-refresh">Atualizar lista</button>';
+  };
+  const movedNote = () => {   // o que a checagem diária fez sozinha (o mais novo da linha) — última semana
+    const mv = (cur("llm").moves || [])[0];
+    if (!mv || Date.now() / 1000 - (mv.at || 0) > 7 * 86400) return "";
+    const when = new Date(mv.at * 1000).toLocaleDateString("pt-BR", {day: "2-digit", month: "2-digit"});
+    const what = (mv.moves || []).map(x => (x.op === "default" ? "padrão" : x.op) + " " + (x.from || "—") + " → " + x.to).join(" · ");
+    return '<p class="memnote' + (mv.ok ? "" : " late") + '">' + (mv.ok ? "✓ Atualizado sozinho em " + esc(when) + ": " : "⚠ Em " + esc(when) + " tentei ") + esc(what) +
+      (mv.note ? " — " + esc(mv.note) : "") + "</p>";
+  };
+  let msugIds = [];
+  const wireModelSuggest = () => {   // sugestão de modelo: o dropdown da casa (F.filterOptions + .fsug), não a lista nativa do navegador
+    const sbox = q("#m-msug"), F = window.BRAIN_FORMS;
+    if (!sbox || !F) return;
+    let cur = null, items = [], selI = 0;
+    const close = () => { sbox.hidden = true; sbox.innerHTML = ""; items = []; };
+    const pick = it => { if (!cur || !it) return; cur.value = it.id; close(); refresh(); cur.focus(); };
+    const paint = () => {
+      if (!cur || !items.length) return close();
+      sbox.style.top = (cur.offsetTop + cur.offsetHeight + 2) + "px";
+      sbox.style.left = cur.offsetLeft + "px";
+      sbox.style.width = Math.max(cur.offsetWidth, 220) + "px";
+      sbox.hidden = false;
+      sbox.innerHTML = items.map((it, i) => '<div class="fsug-item' + (i === selI ? " sel" : "") + '" data-i="' + i + '"><span class="ent">' +
+        esc(it.id) + "</span></div>").join("");
+      sbox.querySelectorAll(".fsug-item").forEach(row => {
+        row.onmousedown = ev => { ev.preventDefault(); pick(items[+row.dataset.i]); };
+      });
+    };
+    const open = el => {          // casa como os formulários (F.filterOptions); ordem = mais novo primeiro, não alfabética
+      cur = el;
+      const hit = new Set(F.filterOptions(msugIds, el.value.trim(), msugIds.length).map(x => x.id));
+      items = msugIds.filter(x => hit.has(x)).slice(0, F.SUGGEST_LIMIT).map(x => ({id: x}));
+      selI = 0; paint();
+    };
+    box.querySelectorAll("input[data-msug]").forEach(el => {
+      el.addEventListener("focus", () => open(el));
+      el.addEventListener("input", () => open(el));
+      el.addEventListener("blur", () => setTimeout(() => { if (cur === el) close(); }, 120));
+      el.addEventListener("keydown", ev => {
+        if (sbox.hidden || cur !== el) return;
+        if (ev.key === "ArrowDown") { selI = (selI + 1) % items.length; paint(); ev.preventDefault(); }
+        else if (ev.key === "ArrowUp") { selI = (selI + items.length - 1) % items.length; paint(); ev.preventDefault(); }
+        else if (ev.key === "Enter") { pick(items[selI]); ev.preventDefault(); }
+        else if (ev.key === "Escape") { close(); ev.preventDefault(); }
+      });
+    });
+  };
   const opsTable = p => {
-    const d = draft.llm, dflt = d.model || p.model || "";
-    const r = (lab, input, tuned) => '<div class="memoprow"><span class="memopname">' + lab + "</span>" + input + '<span class="memoptag">' + (tuned ? chip("h-info", "ajustado") : "") + "</span></div>";
-    return '<div class="memopsbox"><div class="memopshead"><b>Qual modelo faz o quê</b><span class="muted small">vazio = o modelo padrão</span></div>' +
-      r("Padrão — toda operação sem modelo próprio", inp("m-model-llm", d.model, d.provider === "custom" ? "obrigatório no Outro" : "vazio = " + (p.model || "recomendado do provedor")), false) +
-      opLabels.map(([op, lab]) => r(esc(lab), inp("m-op-" + op, d.ops[op], "vazio = " + (dflt || "o Padrão acima")), !!d.ops[op])).join("") + "</div>";
+    const d = draft.llm, lat = llmCat(p).latest || {}, dflt = d.model || lat.default || p.model || "";
+    const ids = (llmCat(p).models || []).map(x => x.id);      // já vem do mais novo ao mais antigo (onboard)
+    msugIds = ids;       // a lista viva alimenta o dropdown de sugestão (o mesmo .fsug dos formulários)
+    const inl = (id, v, ph) => '<input type="text" id="' + id + '" value="' + esc(v || "") + '" placeholder="' + esc(ph || "") + '" title="' + esc(ph || "") +
+      '" autocomplete="off"' + (ids.length ? " data-msug" : "") + ">";
+    const r = (lab, input, op, tuned) => '<div class="memoprow"><span class="memopname">' + lab + "</span>" + input + effSel(p, op) +
+      '<span class="memoptag">' + (tuned ? chip("h-info", "ajustado") : "") + "</span></div>";
+    const dPh = d.provider === "custom" ? "obrigatório no Outro" : "vazio = " + (lat.default || p.model || "recomendado do provedor") + (llmCat(p).live ? " · segue o mais novo" : "");
+    return '<div class="memopsbox"><div class="memopshead"><b>Qual modelo faz o quê</b><span class="memopsrc">' + catLine(p) + "</span></div>" +
+      (ids.length ? '<div class="fsug memsug" id="m-msug" hidden></div>' : "") +
+      '<div class="memoprow memophd"><span></span><span class="muted small">modelo</span><span class="muted small">esforço</span><span></span></div>' +
+      r("Padrão — toda operação sem modelo próprio", inl("m-model-llm", d.model, dPh), "default", !!(d.model || d.effort)) +
+      opLabels.map(([op, lab]) => r(esc(lab), inl("m-op-" + op, d.ops[op], "vazio = " + (d.model || lat[op] || dflt || "o Padrão acima")), op,
+        !!(d.ops[op] || (d.efforts || {})[op]))).join("") + "</div>" + movedNote();
   };
   const wireChips = slot => {      // o que o Brain liga sozinho para este slot local
     const out = [];
@@ -2735,17 +2853,31 @@ SETUP.memoria = box => {
     return '<div class="memwire"><span class="memwl">' + (all ? "Pronto nesta máquina" : "O Brain liga sozinho ao aplicar") + "</span>" +
       out.map(([st, t]) => chip(st === "ok" ? "h-em-dia" : "h-info", (st === "ok" ? "✓ " : "⟳ ") + esc(t))).join("") + "</div>";
   };
-  const decEditor = () => {   // só Desligado ou Local; o de nuvem aparece apenas se já estava gravado (legado)
-    const d = draft.decision, legacy = list("decision").find(x => x.legacy);
+  const decEditor = () => {   // Desligado · Local (zero egress) · nuvem (Hindsight, OpenAI, Typesafe — com chave própria)
+    const d = draft.decision, legacy = list("decision").find(x => x.legacy), cloudP = list("decision").filter(x => MEM_DEC_CLOUD.includes(x.key));
     const card = (p, disabled, note) => {
       const s = String(p.label), i = s.indexOf(" — "), title = i < 0 ? s : s.slice(0, i), sub = note || (i < 0 ? "" : s.slice(i + 3));
       return '<button type="button" class="stopt' + (d.provider === p.key ? " sel" : "") + '" data-mdec="' + esc(p.key) + '"' + (disabled ? " disabled" : "") + "><b>" + esc(title) +
         (p.key === cur("decision").provider ? ' <span class="chip h-info">gravado</span>' : "") + "</b><span>" + esc(sub) + "</span></button>";
     };
     const off = reg("decision", "off"), loc = reg("decision", "local");
-    let h = '<div class="stopts memdec">' + (off ? card(off) : "") + (loc ? card(loc, !decOk) : "") +
-      (legacy ? card(legacy, false, "nuvem — configuração antiga; o painel oferece só Desligado ou Local") : "") + "</div>";
-    if (!decOk) h += '<p class="memnote late">O decisor local precisa de Apple Silicon (MLX) ou de Linux com GPU NVIDIA (vLLM) — nesta máquina não há nenhum dos dois, então nada é instalado. Deixe desligado: cada operação paga só os tokens do próprio LLM.</p>';
+    const cloudCard = p => card(p, false, (p.model ? p.model + " · " : "") + ((m.dec_keys || {})[p.key] ? "chave salva" :
+      p.shares_llm_key && draft.llm.provider === p.shares_llm_key ? "usa a chave do LLM" : "pede a chave"));
+    let h = '<div class="stopts memdec">' + (off ? card(off) : "") + (loc ? card(loc, !decOk, decOk ? "" : "indisponível nesta máquina") : "") + "</div>" +
+      '<p class="memdecl">Na nuvem — trechos pequenos da memória vão ao provedor para julgamento</p>' +
+      '<div class="stopts memdec">' + cloudP.map(cloudCard).join("") + (legacy ? card(legacy, false, "configuração antiga, mantida como está") : "") + "</div>";
+    if (!decOk && d.provider === "local") h += '<p class="memnote late">O decisor local precisa de Apple Silicon (MLX) ou de Linux com GPU NVIDIA (vLLM) — nesta máquina não há nenhum dos dois, então nada é instalado. Escolha um de nuvem ou deixe desligado.</p>';
+    else if (MEM_DEC_CLOUD.includes(d.provider)) {
+      const p = reg("decision", d.provider) || {};
+      h += '<div class="stgrid">' + keyFld("decision", Object.assign({key_required: true}, p)) +
+        fld("Modelo (opcional)", inp("m-model-decision", d.model, "vazio = " + (p.model || "o do provedor")), "Troca o modelo padrão do provedor.") + "</div>" +
+        '<div class="stgrid">' + fld("Também no recall", '<select id="m-recall-decision"><option value="off"' + (d.recall !== "on" ? " selected" : "") +
+          ">Não — só consolidação, reflect e mental models</option><option value=\"on\"" + (d.recall === "on" ? " selected" : "") +
+          ">Sim — julga cada candidato da busca (o reranker fica inerte)</option></select>") +
+        (d.recall === "on" ? fld("Top-N candidatos *", inp("m-rcands-decision", d.rcands, "1–500", "number"),
+          "Cada candidato é uma requisição ao decisor; sem fallback para RRF — se ele cair, o recall falha.") : "") + "</div>";
+      if (p.hint) h += '<p class="memnote">☁ ' + esc(p.hint) + "</p>";
+    }
     else if (d.provider === "local") {
       if (loc && loc.hint) h += '<p class="memnote">' + esc(loc.hint) + "</p>";
       h += wireChips("decision") +
@@ -2753,8 +2885,6 @@ SETUP.memoria = box => {
         '<label class="chk"><input type="checkbox" id="m-urlon-decision"' + (d.url_on ? " checked" : "") + "> informar a URL (o Brain não instala)</label>" +
         '<div class="stgrid">' + fld("Base URL", inp("m-url-decision", d.base_url, (loc && loc.base_url) || "http://…:8000")) + "</div></details>";
     }
-    if (legacy && d.provider === legacy.key && cur("decision").recall)
-      h += '<p class="memnote">Recall ligado (top-' + esc(String(cur("decision").candidates || "?")) + "): o decisor julga cada candidato e o reranker fica inerte.</p>";
     return h;
   };
   const editor = slot => {
@@ -2855,13 +2985,33 @@ SETUP.memoria = box => {
       const u = val("m-url-" + slot); if (u !== null) d.base_url = u;
       if (slot === "reranker") { const c = val("m-cands-reranker"); if (c !== null) d.candidates = c; }
       if (slot === "embeddings") { const dm = val("m-dims-embeddings"); if (dm !== null) d.dimensions = dm; }
-      if (slot === "llm") opLabels.forEach(([op]) => { const o = val("m-op-" + op); if (o !== null) d.ops[op] = o; });
-      if (slot === "decision") { const on = q("#m-urlon-decision"); if (on) d.url_on = on.checked; }
+      if (slot === "llm") {
+        opLabels.forEach(([op]) => { const o = val("m-op-" + op); if (o !== null) d.ops[op] = o; });
+        const e0 = val("m-eff-default"); if (e0 !== null) d.effort = e0;
+        opLabels.forEach(([op]) => { const e = val("m-eff-" + op); if (e !== null) d.efforts[op] = e; });
+      }
+      if (slot === "decision") {
+        const on = q("#m-urlon-decision"); if (on) d.url_on = on.checked;
+        const rc = val("m-recall-decision"); if (rc !== null) d.recall = rc;
+        const rn = val("m-rcands-decision"); if (rn !== null) d.rcands = rn;
+      }
     });
   };
   // digitar não redesenha a tela (o foco fica no campo): só o plano, a nota de reconstrução e o resumo das mudanças
+  // o seletor de esforço segue o modelo da linha: trocar o modelo troca os níveis (sem redesenhar — o foco fica no campo)
+  const syncEff = () => {
+    const p = reg("llm", draft.llm.provider);
+    if (!p || sel !== "full") return;
+    [["default"]].concat(opLabels).forEach(([op]) => {
+      const el = q("#m-eff-" + op); if (!el) return;
+      const tmp = document.createElement("span"); tmp.innerHTML = effSel(p, op);   // effSel só monta texto passado por esc()
+      const nx = tmp.firstElementChild; if (!nx || nx.outerHTML === el.outerHTML) return;
+      el.replaceWith(nx); if (nx.tagName === "SELECT") nx.onchange = refresh;
+    });
+  };
   const refresh = () => {
     readDrafts();
+    syncEff();
     // planHTML só monta texto passado por esc() e rótulos fixos desta tela — o mesmo regime do box.innerHTML do draw()
     const pl = q("#m-plan"); if (pl) { pl.innerHTML = planHTML(); wirePlan(); }
     const n = q("#m-rebuild"); if (n) n.hidden = !embChanged();
@@ -2890,6 +3040,8 @@ SETUP.memoria = box => {
         return say(fail(name + ": as dimensões são um inteiro de 1 a 16384"));
       if (slot === "decision" && d.provider === "local" && !decOk) return say("Decisão: o decisor local não roda nesta máquina — escolha Desligado");
       if (slot === "decision" && d.provider === "local" && d.url_on && !d.base_url) return say("Decisão: informe a URL do servidor — ou desmarque o avançado");
+      if (slot === "decision" && MEM_DEC_CLOUD.includes(d.provider) && d.recall === "on" && !(/^\d+$/.test(d.rcands) && +d.rcands >= 1 && +d.rcands <= 500))
+        return say(fail("Decisão: o recall pede o top-N de candidatos (1 a 500)"));
       if (!keyOk(slot)) return say(fail("cole a API key de " + name + " (" + p.label + ")"));
     }
     const llmP = reg("llm", draft.llm.provider) || {}, a = m.llm_auth || {};
@@ -2931,6 +3083,19 @@ SETUP.memoria = box => {
       await hydrateShell();          // o resto do painel (Saúde, Visão geral) lê o modelo novo; a tela redesenha
     } catch (err) { say(err.message); }
   };
+  // a lista viva do provedor de LLM (API do fornecedor ou OpenRouter): o botão força; abrir a tela relê só se passou de 24 h
+  const loadCatalog = async (provider, force) => {
+    const p = reg("llm", provider);
+    if (!p || !llmCat(p).live) return;
+    try {
+      const r = await obAct("memory_models", {provider: provider, refresh: !!force});
+      p.catalog = r;
+      const typing = box.contains(document.activeElement) && document.activeElement.tagName === "INPUT";
+      if (force || !typing) { readDrafts(); draw(); }
+      if (force && r.error) stMsg(q("#m-msg"), "late", "lista de modelos: " + r.error);
+    } catch (err) { if (force) stMsg(q("#m-msg"), "late", err.message); }
+  };
+  const staleCat = provider => { const c = llmCat(reg("llm", provider)); return c.live && (!c.at || Date.now() / 1000 - c.at > 86400); };
   const wire = () => {
     // chave digitada sobrevive ao redesenho (trocar outro slot, o modo…): volta como propriedade, nunca como atributo
     MEM_SLOTS.forEach(slot => { const k = q("#m-key-" + slot); if (k && draft[slot].key) k.value = draft[slot].key; });
@@ -2949,6 +3114,7 @@ SETUP.memoria = box => {
         : Object.assign(memDraft(slot, {}, null), {provider: s.value});
       draw();
       const again = q("#m-prov-" + slot); if (again) again.focus();
+      if (slot === "llm" && staleCat(s.value)) loadCatalog(s.value, false);   // a lista do provedor novo
     });
     box.querySelectorAll("[data-mdec]").forEach(b => b.onclick = () => {
       readDrafts();
@@ -2958,6 +3124,12 @@ SETUP.memoria = box => {
       draw();
     });
     box.querySelectorAll("input[id^='m-']").forEach(el => { if (el.type === "checkbox") el.onchange = refresh; else el.oninput = refresh; });
+    box.querySelectorAll("select[id^='m-eff-']").forEach(el => { el.onchange = refresh; });
+    const rsel = q("#m-recall-decision");     // recall liga/desliga: o reranker sai/volta da pilha e o top-N aparece
+    if (rsel) rsel.onchange = () => { readDrafts(); draw(); };
+    wireModelSuggest();
+    const mref = q("#m-models-refresh");
+    if (mref) mref.onclick = e => stBusy(e.currentTarget, "lendo…", () => loadCatalog(draft.llm.provider, true));
     wirePlan();
     q("#m-discard").onclick = () => {
       MEM_SLOTS.forEach(resetDraft); sel = curMode; planOpen = null; consent = false;
@@ -2982,6 +3154,7 @@ SETUP.memoria = box => {
     q("#m-apply").onclick = e => stBusy(e.currentTarget, "aplicando…", apply);
   };
   draw();
+  if (draft.llm.provider && staleCat(draft.llm.provider)) loadCatalog(draft.llm.provider, false);   // relê em segundo plano
 };
 SETUP.agente = box => {
   const agents = SS.agents || [];
@@ -5438,7 +5611,7 @@ OBV.memoria = () => {
     chosen.embeddings = sel === "full" && cloud ? cloud : embInit;
   };
   syncEmbDefault();
-  const isRecallActive = () => sel === "full" && chosen.decision === "hindsight" && decRecall === "on";
+  const isRecallActive = () => sel === "full" && MEM_DEC_CLOUD.includes(chosen.decision) && decRecall === "on";
 
   const pre = (on, t, link, midNote) => {
     const mid = on === "installed";
@@ -5479,7 +5652,8 @@ OBV.memoria = () => {
     const modelPh = p.model ? "vazio = " + p.model : "ex.: gpt-4o-mini";
     const urlPh = p.base_url || "https://…/v1";
     const urlVal = (slot === "decision" && curKey === "local") ? (m.dec_base_url || p.base_url || "") : "";
-    const showRecall = slot === "decision" && sel === "full" && curKey === "hindsight";
+    const showRecall = slot === "decision" && sel === "full" && MEM_DEC_CLOUD.includes(curKey);
+    const keySet = slot === "decision" ? !!(m.dec_keys || {})[curKey] : p.key_set;   // decisão: a chave de CADA provedor
     return '<div class="slot" data-slot="' + slot + '">' +
       '<div class="sh"><span>' + esc(title) + "</span>" + (isRec(slot, p) ? '<span class="pill rec">✓ recomendado</span>' : "") + "</div>" +
       '<select id="prov-' + slot + '">' +
@@ -5495,8 +5669,8 @@ OBV.memoria = () => {
         : (p.auth_command ? '<div style="margin-top:6px"><small>Comando no servidor: <code class="kbd">' + esc(p.auth_command) + "</code></small></div>" : "")) +
       "</label>" : needKey ? '<div style="margin-top:10px">' +
         '<label class="f" style="margin-bottom:' + (needModel ? "10px" : "0") + '">' +
-          "<span>API key " + (p.key_set ? '<span class="pill ok" style="margin-left:6px">chave já salva</span>' : "") + "</span>" +
-          '<input type="password" id="key-' + slot + '" placeholder="' + (p.key_set ? "deixe vazio para manter a atual" : "cole a chave aqui") + '" autocomplete="off">' +
+          "<span>API key " + (keySet ? '<span class="pill ok" style="margin-left:6px">chave já salva</span>' : "") + "</span>" +
+          '<input type="password" id="key-' + slot + '" placeholder="' + (keySet ? "deixe vazio para manter a atual" : "cole a chave aqui") + '" autocomplete="off">' +
           '<small>Vai direto para <span class="kbd">config/.env</span> (0600) e nunca volta para a tela.</small>' +
         "</label>" +
       "</div>" : "") +
@@ -5515,7 +5689,7 @@ OBV.memoria = () => {
         (decRecall === "on" ? '<label class="f" style="margin-bottom:0">' +
           "<span>Teto de candidatos no recall (--candidates) *</span>" +
           '<input type="number" min="1" max="500" id="candidates-decision" value="' + esc(decCands) + '" placeholder="obrigatório (ex.: 25)">' +
-          "<small>Cada candidato é uma requisição própria ao decisor; não há fallback para RRF nesta versão (1.2.0) e o recall falha fechado se o decisor cair. O slot Reranker fica inerte (.env preservado).</small>" +
+          "<small>Cada candidato é uma requisição própria ao decisor; não há fallback para RRF (padrão do servidor 1.3.0) e o recall falha fechado se o decisor cair. O slot Reranker fica inerte (.env preservado).</small>" +
         "</label>" : "") +
       "</div>" : "") +
     "</div>";
@@ -5599,7 +5773,7 @@ OBV.memoria = () => {
     if (kEl && kEl.value.trim()) obj.key = kEl.value.trim();
     if (mEl && mEl.value.trim()) obj.model = mEl.value.trim();
     if (uEl && uEl.value.trim()) obj.base_url = uEl.value.trim();
-    if (slot === "decision" && sEl.value === "hindsight") {
+    if (slot === "decision" && MEM_DEC_CLOUD.includes(sEl.value)) {
       const rEl = $("#recall-decision"), cEl = $("#candidates-decision");
       obj.recall = rEl ? rEl.value : "off";
       if (cEl && cEl.value.trim()) obj.candidates = parseInt(cEl.value.trim(), 10) || 0;

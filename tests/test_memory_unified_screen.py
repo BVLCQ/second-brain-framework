@@ -297,9 +297,9 @@ class StaleValuesDoNotSurviveAProviderSwitch(unittest.TestCase):
 
 class EveryProviderSettingHasAControl(unittest.TestCase):
     """O pedido: modo e provedores numa tela só, sem perder configuração. Todo campo do formulário da TUI e toda flag
-    da CLI de provedores têm um controle na tela — campo novo lá, sem lugar aqui, reprova este teste. A exceção é
-    decisão do dono e fica escrita aqui: no painel a Decisão é só local ou desligada, então o decisor de nuvem e o
-    recall dele (que só existe com ele) ficam na CLI e na TUI — e a tela não pode voltar a oferecê-los."""
+    da CLI de provedores têm um controle na tela — campo novo lá, sem lugar aqui, reprova este teste. Desde a 2.62 a
+    Decisão do painel volta a ter a nuvem (Hindsight, OpenAI, Typesafe) e o recall dela, e o LLM tem esforço por
+    operação: nada fica só na CLI."""
     # controle = o trecho do fonte que cria o campo (id montado no HTML ou passado ao `inp`)
     FORM_FIELD_CONTROL = {      # campo do formulário memory.provider → controle da tela
         "slot": 'data-mslot="',                                 # uma linha por slot, na pilha
@@ -308,18 +308,18 @@ class EveryProviderSettingHasAControl(unittest.TestCase):
         "advanced": 'id="m-urlon-decision"',
         "base_url": 'inp("m-url-"',
         "key": 'id="m-key-',
-        "models": 'inp("m-op-"',
+        "models": 'inl("m-op-"',
         "candidates": 'inp("m-cands-reranker"',
+        "recall": 'id="m-recall-decision"',
+        "effort": 'id="m-eff-',
+        "efforts": 'id="m-eff-',
     }
     CLI_FLAG_CONTROL = {
-        "--provider": 'id="m-prov-', "--model": 'inp("m-model-"', "--models": 'inp("m-op-"',
+        "--provider": 'id="m-prov-', "--model": 'inp("m-model-"', "--models": 'inl("m-op-"',
         "--base-url": 'inp("m-url-"', "--dimensions": 'inp("m-dims-embeddings"', "--candidates": 'inp("m-cands-reranker"',
-        "--key": 'id="m-key-',
+        "--key": 'id="m-key-', "--recall": 'id="m-recall-decision"', "--effort": 'id="m-eff-', "--efforts": 'id="m-eff-',
     }
-    NOT_ON_THE_PANEL = {        # decisão do dono: Decisão do painel = local ou desligada
-        "recall": "o recall é do decisor de nuvem, que o painel não oferece",
-        "--recall": "o recall é do decisor de nuvem, que o painel não oferece",
-    }
+    NOT_ON_THE_PANEL: dict = {}   # tudo que a CLI e a TUI configuram tem lugar na tela
 
     def _screen_src(self) -> str:
         src = EXTRA_JS.read_text(encoding="utf-8")
@@ -347,12 +347,12 @@ class EveryProviderSettingHasAControl(unittest.TestCase):
         for flag, control in self.CLI_FLAG_CONTROL.items():
             self.assertIn(control, src, f"{flag} sem controle na tela Memória")
 
-    def test_the_panel_offers_no_cloud_decider_and_no_recall(self):
+    def test_the_panel_offers_cloud_deciders_with_recall_and_llm_effort(self):
         src = self._screen_src()
         editor = src[src.index("SETUP.memoria = box => {"):]
-        for gone in ('id="m-recall"', '"m-rcands"', 'data-mdec="hindsight"'):
-            self.assertNotIn(gone, editor)
-        self.assertIn("x.legacy", editor)            # o de nuvem só aparece como o gravado de uma instância antiga
+        self.assertIn('const MEM_DEC_CLOUD = ["hindsight", "openai", "typesafe"]', src)
+        for ctl in ('id="m-recall-decision"', 'inp("m-rcands-decision"', 'id="m-models-refresh"', 'obAct("memory_models"'):
+            self.assertIn(ctl, editor)
 
     def test_the_three_modes_and_the_cloud_consent_are_on_the_same_screen(self):
         src = self._screen_src()
@@ -362,25 +362,25 @@ class EveryProviderSettingHasAControl(unittest.TestCase):
         self.assertIn('obAct("memory", body)', src)        # a rota do passo Memória (o job sobe/recria o servidor)
 
 
-class DecisionMenuIsLocalOnlyOnThePanel(unittest.TestCase):
-    """View model: a Decisão do painel oferece Desligado e Local; o decisor de nuvem só volta, marcado `legacy`, para a
-    instância que já o tem gravado — abrir a tela e aplicar nunca o troca em silêncio."""
+class DecisionMenuOnThePanel(unittest.TestCase):
+    """View model: a Decisão do painel oferece Desligado, Local e os três de nuvem do servidor pinado; a chave de cada
+    um aparece como presença própria — trocar de provedor não pede a que já existe e não mostra a de outro."""
 
-    def test_fresh_instance_sees_off_and_local(self):
+    def test_fresh_instance_sees_off_local_and_the_three_clouds(self):
         with tempfile.TemporaryDirectory() as td:
-            dec = _menus(_brain(Path(td)))["providers"]["decision"]
-            self.assertEqual([x["key"] for x in dec], ["off", "local"])
-            self.assertFalse(any(x["legacy"] for x in dec))
+            mem = _menus(_brain(Path(td)))
+            dec = {x["key"]: x for x in mem["providers"]["decision"]}
+            self.assertEqual(set(dec), {"off", "local", "hindsight", "openai", "typesafe"})
+            self.assertFalse(any(x["legacy"] for x in dec.values()))
+            self.assertEqual(mem["dec_keys"], {"hindsight": False, "openai": False, "typesafe": False})
 
-    def test_saved_cloud_decider_stays_visible_as_legacy(self):
+    def test_each_cloud_decider_shows_its_own_key(self):
         with tempfile.TemporaryDirectory() as td:
             b = _brain(Path(td))
             providers.set_slot(b, "decision", "hindsight", key="hs-" + "1")
+            providers.set_slot(b, "decision", "typesafe", key="ts-" + "1")
             b.inst = config.load(b.inst.root)
-            dec = {x["key"]: x for x in _menus(b)["providers"]["decision"]}
-            self.assertEqual(set(dec), {"off", "local", "hindsight"})
-            self.assertTrue(dec["hindsight"]["legacy"])
-            self.assertFalse(dec["local"]["legacy"])
+            self.assertEqual(_menus(b)["dec_keys"], {"hindsight": True, "openai": False, "typesafe": True})
 
     def test_the_screen_knows_whether_the_local_decider_can_run_here(self):
         with tempfile.TemporaryDirectory() as td:

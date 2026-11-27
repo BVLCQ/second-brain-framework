@@ -122,6 +122,10 @@ SYS_OPS = [
     {"id": "sys:provshow", "name": "Memória: provedores", "args": ["memory", "providers", "show"],
      "show": "Provedores",
      "desc": "O stack atual: LLM, embeddings e reranker — quem é local, quem é nuvem (egress), chave presente."},
+    {"id": "sys:provcatalog", "name": "Memória: modelos do LLM", "args": ["memory", "providers", "catalog", "--refresh"],
+     "show": "Provedores",
+     "desc": "A lista viva do provedor do LLM: o mais novo de cada linha (o padrão acompanha) e os níveis de esforço "
+             "de cada modelo."},
     {"id": "sys:wizmem", "name": "Wizard da memória (terminal interativo)", "args": ["setup", "--only", "memoria"],
      "external": True,
      "desc": "Re-roda o passo Memória do setup: modo, provedores, chaves. Configuração é seção viva, não uma vez só."},

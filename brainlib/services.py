@@ -168,6 +168,14 @@ def ensure(inst, *, reason: str = "cli", install: bool = False, probes=None, run
     for name in req:
         deps[name] = _one(inst, name, mem, probes=probes, run=run, install=install,
                           nightly=nightly, reason=reason, sleep=sleep, waits=waits, pause=pause)
+    # o código foi atualizado (brain update) e o servidor ainda roda a imagem/.env de antes: acompanha agora
+    if "hindsight" in deps and deps.get("docker", {}).get("state", "ready") == "ready":
+        try:
+            synced = sync_server(inst, run=run, probes=probes, sleep=sleep, waits=max(waits, 24), pause=pause)
+        except Exception as e:                                 # noqa: BLE001 — nunca derruba o watchdog
+            synced = {"state": "failed", "detail": f"atualização do servidor falhou: {e}"}
+        if synced:
+            deps["hindsight"] = synced
     if any(d["state"] == "failed" for d in deps.values()):
         state = "failed"
     elif any(d["state"] == "starting" for d in deps.values()):
@@ -264,6 +272,123 @@ def _restart_docker(inst, *, run, probes, sleep, waits: int, pause: float = 5) -
 def shutil_which_orb() -> bool:
     import shutil
     return shutil.which("orbctl") is not None or Path("/opt/homebrew/bin/orbctl").exists()
+
+
+def pinned_image(services_dir: Path | None = None) -> str:
+    """A imagem do Hindsight que ESTE código pede (o pin do services/compose.yaml, sem a variável de volta)."""
+    import re
+    try:
+        txt = ((services_dir or (FRAMEWORK / "services")) / "compose.yaml").read_text(encoding="utf-8")
+    except OSError:
+        return ""
+    m = re.search(r"^\s*image:\s*(?:\$\{BRAIN_HINDSIGHT_IMAGE:-)?([^\s}]+)", txt, re.M)
+    return m.group(1) if m else ""
+
+
+def running_image(run) -> str | None:
+    """A imagem com que o contêiner `hindsight` foi criado; None = sem contêiner (ou sem docker)."""
+    code, out = run([_docker_bin(), "inspect", "--format", "{{.Config.Image}}", "hindsight"])
+    out = (out or "").strip()
+    return out if code == 0 and out else None
+
+
+def sync_server(inst, *, run=None, probes=None, sleep=time.sleep, waits: int = 24, pause: float = 5,
+                verify_llm=None) -> dict | None:
+    """Depois de um `brain update`: o servidor de memória acompanha o código. Duas coisas, nesta ordem:
+      1. o config/.env do LLM no formato desta versão (providers.migrate_env — escolhas do dono preservadas);
+      2. o contêiner recriado com a imagem pinada, se a que roda é outra — e conferido (health; no full, o LLM).
+    A imagem nova não subiu? Recria com a anterior (o dono nunca fica sem memória) e o status diz o que falhou.
+    Roda no watchdog e na abertura (código novo já no disco, qualquer que seja o código que fez o pull) e no fim do
+    `brain update`. None = nada a fazer."""
+    mem = (inst.cfg or {}).get("memory") or {}
+    if mem.get("engine") != "hindsight" or os.environ.get("BRAIN_SERVICES_NO_KICK") == "1":
+        return None
+    if run is None and probes is None and decider._scratch(Path(inst.root)):
+        return None
+    lock = Path(inst.logs) / "server-sync.lock"     # o watchdog roda a cada 5 min; baixar ~2 GB pode levar mais
+    try:
+        if lock.exists() and time.time() - lock.stat().st_mtime < 30 * 60:
+            return None
+        lock.parent.mkdir(parents=True, exist_ok=True)
+        lock.write_text(str(os.getpid()), encoding="utf-8")
+    except OSError:
+        pass
+    try:
+        return _sync_server(inst, run=run, probes=probes, sleep=sleep, waits=waits, pause=pause, verify_llm=verify_llm)
+    finally:
+        try:
+            lock.unlink()
+        except OSError:
+            pass
+
+
+def _sync_server(inst, *, run, probes, sleep, waits: int, pause: float, verify_llm) -> dict | None:
+    mem = inst.cfg["memory"]
+    run = run or decider._default_run
+    probes = probes or _default_probes()
+    from . import config, providers
+    from .core import Brain
+    changed_env: list[str] = []
+    if providers.env_migration_pending(mem):
+        try:
+            changed_env = providers.migrate_env(Brain(inst))
+            _log(inst, f"sync: config/.env do LLM no formato novo ({', '.join(changed_env) or 'sem mudança'})")
+        except util.BrainError as e:
+            _log(inst, f"sync: migração do .env falhou — {e}")
+        inst = config.load(inst.root)
+        mem = inst.cfg["memory"]
+    want, have = pinned_image(), running_image(run)
+    if have is None or (have == want and not changed_env):
+        return None                           # sem contêiner: quem cria é o ensure/setup, já com a imagem pinada
+    from .memory import mode
+    m = mode(mem)
+    lms_up = True
+    if mem.get("embeddings_provider", "local") == "local":
+        try:
+            lms_up = bool(probes.get("lmstudio", lambda: False)())
+        except Exception:                                      # noqa: BLE001
+            lms_up = False
+    blocked = hindsight_blocked(mem, lms_up)
+    if blocked:
+        return {"state": "failed", "detail": f"servidor de memória por atualizar — {blocked}"}
+    argv = [_docker_bin(), *compose_argv(Path(inst.root), m)]
+    upgrading = have != want
+    code, out = run(argv, 900) if upgrading else run(argv)     # a imagem nova baixa na primeira vez (~2 GB)
+    _log(inst, f"sync: compose ({m}) {have} → {want} code={code} {out[-200:]}")
+
+    def _healthy() -> tuple[bool, str]:
+        if not _wait(probes["hindsight"], sleep, waits, pause):
+            return False, "sem health depois de recriar"
+        if m == "full":
+            try:
+                (verify_llm or _verify_llm)(inst)
+            except Exception as e:                             # noqa: BLE001
+                return False, f"health/llm falhou: {str(e)[:160]}"
+        return True, ""
+    ok, why = (code == 0, out[-200:]) if code != 0 else _healthy()
+    if ok:
+        return {"state": "ready", "detail": "servidor de memória atualizado" + (f" ({want.split('@')[-1][:19]})"
+                                                                                if upgrading else " (.env novo)")}
+    if upgrading:                                              # volta à imagem que funcionava
+        run(["env", f"BRAIN_HINDSIGHT_IMAGE={have}", *argv])
+        back = _wait(probes["hindsight"], sleep, waits, pause)
+        _log(inst, f"sync: imagem nova falhou ({why}) — voltei para {have} ({'ok' if back else 'sem health'})")
+        return {"state": "failed", "detail": f"a imagem nova do Hindsight não subiu ({why}) — o Brain voltou à "
+                                             f"anterior; detalhes em vault/logs/services.log e `docker logs hindsight`"}
+    return {"state": "failed", "detail": f"servidor de memória recriado com o .env novo, mas {why}"}
+
+
+def _verify_llm(inst) -> None:
+    """Confere o LLM no servidor. Sonda desligada no servidor (404 "disabled" — servidor adotado, fora do compose do
+    Brain) não é falha do LLM: sem como verificar, não se desfaz nada por isso."""
+    from . import memory
+    from .core import Brain
+    try:
+        memory.client(Brain(inst)).health_llm(inst.cfg["memory"]["bank"])
+    except util.BrainError as e:
+        if "disabled" in str(e).lower() or "ENABLE_BANK_LLM_HEALTH" in str(e):
+            return
+        raise
 
 
 def _restart_hindsight(inst, mem: dict, *, run, probes, sleep, waits: int, pause: float = 5) -> dict:

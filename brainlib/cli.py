@@ -1632,9 +1632,14 @@ def build_parser() -> argparse.ArgumentParser:
                          "llm (chave): anthropic|openai|fireworks|zai|gemini|minimax|custom · "
                          "embeddings: local|fireworks|openai|cohere|custom · "
                          "reranker: off|fireworks|cohere|zeroentropy|openrouter|custom · "
-                         "decision: off|hindsight|local (hs-decide-1-flash, opcional)")
-    pv.add_argument("--model", help="modelo (opcional em assinatura/anthropic; exigido em llm custom/openai/zai/gemini)")
-    pv.add_argument("--models", help="llm por operação: retain=…,consolidation=…,mental_models=…,reflect=…,default=…")
+                         "decision: off|hindsight|openai|typesafe (nuvem) · local (hs-decide-1-flash, zero egress)")
+    pv.add_argument("--model", help="modelo (vazio = segue o mais novo da linha do recomendado — Claude, GPT, Grok e "
+                                    "Gemini; dito = fixo). Exigido em llm custom")
+    pv.add_argument("--models", help="llm por operação: retain=…,consolidation=…,mental_models=…,reflect=…,default=… "
+                                     "(`auto` = segue o mais novo)")
+    pv.add_argument("--effort", help="llm: esforço do padrão — none|minimal|low|medium|high|xhigh|max, conforme o "
+                                     "modelo (`brain memory providers catalog` lista os níveis de cada um)")
+    pv.add_argument("--efforts", help="llm: esforço por operação — retain=low,reflect=high,…")
     pv.add_argument("--base-url", help="endpoint (custom / openai-wire / decision local)")
     pv.add_argument("--dimensions", type=int, default=0,
                     help="embeddings: dimensão de saída (ex.: 1536 MRL); omitida = a do provedor ou do modelo")
@@ -1642,8 +1647,17 @@ def build_parser() -> argparse.ArgumentParser:
                     help="reranker: teto de candidatos (omitido = o do provedor ou do servidor) · "
                          "decision --recall on: top-N candidatos (obrigatório)")
     pv.add_argument("--recall", choices=["on", "off"],
-                    help="decision (só full + hindsight): usar o decisor também no recall (on exige --candidates N)")
+                    help="decision (só full + nuvem: hindsight|openai|typesafe): usar o decisor também no recall "
+                         "(on exige --candidates N)")
     pv.add_argument("--key", help="chave da API — vai ao config/.env (0600), nunca volta em output")
+    xm = ps.add_parser("catalog", help="modelos do LLM: a lista viva do provedor, o mais novo de cada linha e os "
+                                       "níveis de esforço de cada modelo")
+    xm.add_argument("--provider", help="provedor do slot LLM (padrão: o atual)")
+    xm.add_argument("--refresh", action="store_true", help="relê a lista agora (API do fornecedor ou OpenRouter)")
+    xm.add_argument("--follow", action="store_true",
+                    help="aplica o mais novo às operações que seguem o padrão (o que a checagem diária faz)")
+    xm.add_argument("--dry-run", action="store_true", help="com --follow: só mostra o que mudaria")
+    xm.add_argument("--json", action="store_true")
     xa = ms.add_parser("auth", help="autentica o provedor de assinatura do LLM (claude-code: token de longo "
                                     "prazo via `claude setup-token` · xai-oauth: código de dispositivo no servidor)")
     xa.add_argument("provider", help="provedor de assinatura: claude-code | xai-oauth (demais: caminho manual "
