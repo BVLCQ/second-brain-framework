@@ -990,7 +990,6 @@ V.memoria = () => {
         ],
         decision: [
           {key: "off", label: "Desligado — só os tokens do próprio LLM (padrão)", recommended: true, cloud: false, key_set: false},
-          {key: "hindsight", label: "Hindsight — hs-decide-1-flash · US$ 0,02/1M de entrada (corta ~40% das chamadas do LLM)", recommended: false, cloud: true, key_required: true, model: "hs-decide-1-flash", key_set: !!m.dec_key},
           {key: "local", label: "Local — hs-decide-1-flash (/v1/systemone, zero egress)", recommended: false, cloud: false, local: true, managed: true, key_required: false, model: "hs-decide-1-flash", key_set: false},
         ],
       };

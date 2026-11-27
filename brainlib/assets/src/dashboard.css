@@ -523,16 +523,61 @@ html[data-live="1"] .only-portrait,html:not([data-live="1"]) .only-live{display:
 .stopt span{font-size:12.5px;color:var(--muted)}
 .stopt:hover{border-color:var(--accent)}
 .stopt.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
-/* Configurações › Memória: modo e provedores numa tela só — um bloco por slot, com o gravado no cabeçalho */
-.memslot{border-top:1px solid var(--line2);padding:12px 0 2px}
-.memhead{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin:0 0 10px}
-.memhead b{font-size:14px}
-.memnow{margin-left:auto;font-size:11.5px;color:var(--muted);text-align:right}
+/* Configurações › Memória: modo e provedores numa tela só — a pilha viva: um slot por linha-resumo, que abre no lugar */
+#setup[data-step="memoria"] .stsec{max-width:1040px}   /* a pilha tem quatro colunas: o resumo não pode cortar */
+.memstack{border:1px solid var(--line);border-radius:12px;overflow:hidden;margin:0 0 12px;background:var(--bg)}
+.memrow{border-top:1px solid var(--line)}
+.memrow:first-child{border-top:0}
+.memrh{display:grid;grid-template-columns:168px minmax(0,1fr) 92px 172px 22px;gap:14px;align-items:center;width:100%;padding:13px 16px;
+  text-align:left;background:transparent;border:0;color:var(--ink);font:inherit;cursor:pointer}
+.memrow.on .memrh:hover{background:color-mix(in srgb,var(--accent) 8%,transparent)}
+.memrow.open .memrh{background:color-mix(in srgb,var(--accent) 6%,transparent)}
+.memrn b{display:block;font-size:14px}
+.memrn small{display:block;font-size:11.5px;color:var(--muted);line-height:1.3;margin-top:1px}
+.memrs{min-width:0}
+.memrp{display:block;font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.memrs small{display:block;font-size:12.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.memrw,.memrt{display:flex;align-items:center;min-width:0}
+.memrc{display:flex;justify-content:center;align-items:center;height:18px}
+.memrc::before{content:"";width:7px;height:7px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:translateY(-2px) rotate(45deg)}
+.memrow.open .memrc::before{transform:translateY(2px) rotate(225deg)}
+.memrb{padding:14px 16px 4px;border-top:1px dashed var(--line);background:var(--panel)}
+.memrow.off .memrh{grid-template-columns:168px minmax(0,1fr) auto;cursor:default}
+.memrow.off .memrn,.memrow.off .memrs{opacity:.62}
+.memra{display:flex;align-items:center;gap:10px}
+.memro .memrh{cursor:default}
 .memnote{font-size:12.5px;color:var(--muted);margin:0 0 10px}
 .memops{margin:0 0 10px}
 .memops summary{cursor:pointer;color:var(--accent);font-size:12.5px;margin:0 0 8px}
 .memops .chk{margin:0 0 8px}
-.memslot .fld>.btn{padding:7px 10px;font-size:14px;border-radius:8px;min-height:0}   /* Autenticar na altura do campo ao lado */
+.memopsbox{border:1px solid var(--line);border-radius:10px;background:var(--bg);padding:10px 12px 6px;margin:0 0 12px}
+.memopshead{display:flex;justify-content:space-between;gap:10px;align-items:baseline;margin:0 0 6px}
+.memopshead b{font-size:14px}
+.memoprow{display:grid;grid-template-columns:minmax(150px,240px) minmax(0,1fr) 76px;gap:10px;align-items:center;padding:5px 0;border-top:1px solid var(--line2)}
+.memopshead+.memoprow{border-top:0}
+.memopname{font-size:12.5px;color:var(--ink);font-weight:600}
+.memoprow input{padding:6px 9px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--ink);font:inherit;font-size:12.5px;min-width:0;width:100%}
+.memoprow input:focus{outline:2px solid color-mix(in srgb,var(--accent) 40%,transparent);border-color:var(--accent)}
+.memoptag{text-align:right}
+.memwire{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:2px 0 12px}
+.memwl{font-size:11.5px;color:var(--muted);margin-right:4px;font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+.memdec .stopt:disabled{opacity:.5;cursor:not-allowed}
+.memprereq{margin:0 0 12px}
+.memprereq .memi{color:var(--info);font-weight:700}
+.memprep{margin:0 0 12px}
+.memprep summary{cursor:pointer;color:var(--accent);font-size:12.5px;margin:0 0 6px}
+.memplan{list-style:none;margin:0;padding:4px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg)}
+.memplan li{display:flex;gap:10px;padding:8px 0;border-top:1px solid var(--line2);font-size:14px}
+.memplan li:first-child{border-top:0}
+.mempi{width:18px;flex:none;text-align:center;font-weight:700}
+.memplan li.ok .mempi{color:var(--ok)}.memplan li.todo .mempi{color:var(--info)}.memplan li.you .mempi{color:var(--warn)}.memplan li.later .mempi{color:var(--muted)}
+.memplan li.ok .mempt,.memplan li.later .mempt{color:var(--muted)}
+.mempt small{display:block;font-size:11.5px;color:var(--muted);margin-top:1px}
+.memconsent{display:flex;align-items:flex-start;margin:0 0 4px;line-height:1.45}
+.memconsent input{margin-top:3px;flex:none}
+.memrb .fld>.btn{padding:7px 10px;font-size:14px;border-radius:8px;min-height:0;align-self:flex-start}   /* Autenticar na altura do campo ao lado */
+@media (max-width:1000px){.memrh{grid-template-columns:132px minmax(0,1fr) 22px}.memrw,.memrt{display:none}
+  .memrow.off .memrh{grid-template-columns:132px minmax(0,1fr)}.memra{grid-column:1 / -1}.memoprow{grid-template-columns:1fr}.memoptag{display:none}}
 
 /* ── arrastar arquivo ou pasta para a inbox ── */
 .inbox-drop-ov{position:fixed;inset:0;z-index:100;display:flex;flex-direction:column;gap:14px;padding:24px;

@@ -282,8 +282,10 @@ Regras do desenho:
   pré-selecionado; um payload headless que não nomeia embeddings no `full` cai no de nuvem. LLM local
   segue proibido. O passo Memória monta os três pares (LLM · embeddings ·
   reranker, cada um com provedor e chave; reranker: off/RRF default · Fireworks · Cohere) no painel
-  (Configurações › Memória — modo e provedores numa tela só, com todos os campos de `memory providers set`:
-  modelo, modelo por operação, base URL, dimensões, teto de candidatos e decisor no recall), na TUI (Configurações › Provedores, tecla `m`) e no CLI headless
+  (Configurações › Memória — modo e provedores numa tela só: uma pilha com uma linha por slot, que abre no lugar com
+  os campos de `memory providers set` — provedor, chave ou assinatura, qual modelo faz cada operação do LLM, base URL,
+  dimensões e teto de candidatos; antes do Aplicar a tela lista o que o Brain liga sozinho — OrbStack, LM Studio,
+  modelo, decisor), na TUI (Configurações › Provedores, tecla `m`) e no CLI headless
   (`brain memory setup --mode full --provider … --approval ok`). Fireworks embeddings+reranker usam a
   mesma conta; OpenAI de LLM+embeddings idem. Flag ausente mantém o slot como está — só o que você nomeou é
   regravado (slot ainda sem escolha válida cai no padrão do modo). Ligou o full? O fluxo verifica o LLM no
@@ -376,6 +378,9 @@ Modelo digitado vence: vale para todas as operações. `custom` continua exigind
 
 Quarto slot, **só no modo full**, **desligado de fábrica**: pular é o caminho normal — sem
 ele, cada operação funciona como sempre e cada pessoa paga só os tokens do próprio LLM.
+**No painel a Decisão é Desligado ou Local** (o Brain instala e liga o decisor); o provedor de nuvem
+`hindsight` e o decisor no recall seguem na CLI e na TUI — e o painel só os mostra, como estão, para a
+instância que já os tem gravados.
 Quem liga usa o **hs-decide-1-flash** (Hindsight Inference): o modelo de 0,8B treinado
 para os julgamentos que o servidor faz (isso repete? muda? ajuda? é suficiente?) — o LLM
 só é chamado quando algo precisa ser escrito. Na leaderboard oficial isso **cortou ~40%

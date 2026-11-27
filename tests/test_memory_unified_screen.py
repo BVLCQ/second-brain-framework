@@ -297,23 +297,28 @@ class StaleValuesDoNotSurviveAProviderSwitch(unittest.TestCase):
 
 class EveryProviderSettingHasAControl(unittest.TestCase):
     """O pedido: modo e provedores numa tela só, sem perder configuração. Todo campo do formulário da TUI e toda flag
-    da CLI de provedores têm um controle na tela — campo novo lá, sem lugar aqui, reprova este teste."""
+    da CLI de provedores têm um controle na tela — campo novo lá, sem lugar aqui, reprova este teste. A exceção é
+    decisão do dono e fica escrita aqui: no painel a Decisão é só local ou desligada, então o decisor de nuvem e o
+    recall dele (que só existe com ele) ficam na CLI e na TUI — e a tela não pode voltar a oferecê-los."""
     # controle = o trecho do fonte que cria o campo (id montado no HTML ou passado ao `inp`)
     FORM_FIELD_CONTROL = {      # campo do formulário memory.provider → controle da tela
-        "slot": 'data-mslot="',                                 # um bloco por slot, todos à vista
+        "slot": 'data-mslot="',                                 # uma linha por slot, na pilha
         "provider": 'id="m-prov-',
         "model": 'inp("m-model-"',
         "advanced": 'id="m-urlon-decision"',
         "base_url": 'inp("m-url-"',
         "key": 'id="m-key-',
         "models": 'inp("m-op-"',
-        "recall": 'id="m-recall"',
-        "candidates": 'inp("m-cands-reranker"',                 # reranker; o do recall é m-rcands
+        "candidates": 'inp("m-cands-reranker"',
     }
     CLI_FLAG_CONTROL = {
         "--provider": 'id="m-prov-', "--model": 'inp("m-model-"', "--models": 'inp("m-op-"',
-        "--base-url": 'inp("m-url-"', "--dimensions": 'inp("m-dims-embeddings"', "--candidates": 'inp("m-rcands"',
-        "--key": 'id="m-key-', "--recall": 'id="m-recall"',
+        "--base-url": 'inp("m-url-"', "--dimensions": 'inp("m-dims-embeddings"', "--candidates": 'inp("m-cands-reranker"',
+        "--key": 'id="m-key-',
+    }
+    NOT_ON_THE_PANEL = {        # decisão do dono: Decisão do painel = local ou desligada
+        "recall": "o recall é do decisor de nuvem, que o painel não oferece",
+        "--recall": "o recall é do decisor de nuvem, que o painel não oferece",
     }
 
     def _screen_src(self) -> str:
@@ -322,7 +327,7 @@ class EveryProviderSettingHasAControl(unittest.TestCase):
 
     def test_every_tui_form_field_has_a_control(self):
         fm = forms.FORMS["memory.provider"]
-        self.assertEqual({f.id for f in fm.fields}, set(self.FORM_FIELD_CONTROL),
+        self.assertEqual({f.id for f in fm.fields}, set(self.FORM_FIELD_CONTROL) | (set(self.NOT_ON_THE_PANEL) & {f.id for f in fm.fields}),
                          "campo novo no formulário memory.provider: dê a ele um controle na tela Memória")
         src = self._screen_src()
         for name, control in self.FORM_FIELD_CONTROL.items():
@@ -336,11 +341,18 @@ class EveryProviderSettingHasAControl(unittest.TestCase):
             return getattr(sub, "choices")[name]
         pv = child(child(child(cli.build_parser(), "memory"), "providers"), "set")
         flags = {o for a in pv._actions for o in a.option_strings if o.startswith("--") and o != "--help"}
-        self.assertEqual(flags, set(self.CLI_FLAG_CONTROL),
+        self.assertEqual(flags, set(self.CLI_FLAG_CONTROL) | {f for f in self.NOT_ON_THE_PANEL if f.startswith("--")},
                          "flag nova em `memory providers set`: dê a ela um controle na tela Memória")
         src = self._screen_src()
         for flag, control in self.CLI_FLAG_CONTROL.items():
             self.assertIn(control, src, f"{flag} sem controle na tela Memória")
+
+    def test_the_panel_offers_no_cloud_decider_and_no_recall(self):
+        src = self._screen_src()
+        editor = src[src.index("SETUP.memoria = box => {"):]
+        for gone in ('id="m-recall"', '"m-rcands"', 'data-mdec="hindsight"'):
+            self.assertNotIn(gone, editor)
+        self.assertIn("x.legacy", editor)            # o de nuvem só aparece como o gravado de uma instância antiga
 
     def test_the_three_modes_and_the_cloud_consent_are_on_the_same_screen(self):
         src = self._screen_src()
@@ -348,6 +360,104 @@ class EveryProviderSettingHasAControl(unittest.TestCase):
             self.assertIn(f'["{mode}", ', src)
         self.assertIn('id="m-consent"', src)
         self.assertIn('obAct("memory", body)', src)        # a rota do passo Memória (o job sobe/recria o servidor)
+
+
+class DecisionMenuIsLocalOnlyOnThePanel(unittest.TestCase):
+    """View model: a Decisão do painel oferece Desligado e Local; o decisor de nuvem só volta, marcado `legacy`, para a
+    instância que já o tem gravado — abrir a tela e aplicar nunca o troca em silêncio."""
+
+    def test_fresh_instance_sees_off_and_local(self):
+        with tempfile.TemporaryDirectory() as td:
+            dec = _menus(_brain(Path(td)))["providers"]["decision"]
+            self.assertEqual([x["key"] for x in dec], ["off", "local"])
+            self.assertFalse(any(x["legacy"] for x in dec))
+
+    def test_saved_cloud_decider_stays_visible_as_legacy(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            providers.set_slot(b, "decision", "hindsight", key="hs-" + "1")
+            b.inst = config.load(b.inst.root)
+            dec = {x["key"]: x for x in _menus(b)["providers"]["decision"]}
+            self.assertEqual(set(dec), {"off", "local", "hindsight"})
+            self.assertTrue(dec["hindsight"]["legacy"])
+            self.assertFalse(dec["local"]["legacy"])
+
+    def test_the_screen_knows_whether_the_local_decider_can_run_here(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            from brainlib import decider
+            with mock.patch.object(decider, "platform_kind", return_value=None):
+                self.assertEqual(_menus(b)["decider"], {"platform": "", "installed": False})
+            with mock.patch.object(decider, "platform_kind", return_value="mlx"):
+                self.assertEqual(_menus(b)["decider"]["platform"], "mlx")
+
+
+@unittest.skipUnless(NODE, "node ausente")
+class WiringPlanMirrorsTheJob(unittest.TestCase):
+    """O que a tela diz que o Brain liga sozinho, antes do Aplicar — cada passo é um passo real do `configure_memory`."""
+    MENUS = {"llm": [{"key": "claude-code", "subscription": True, "flow": "claude-token", "label": "Claude Code (assinatura)"},
+                     {"key": "anthropic", "key_required": True, "label": "Anthropic"}],
+             "embeddings": [{"key": "local", "local": True, "model": "text-embedding-bge-m3"},
+                            {"key": "fireworks", "key_required": True, "model": "fireworks/qwen3-embedding-8b", "dimensions": 1536}],
+             "decision": [{"key": "off"}, {"key": "local", "local": True, "managed": True}]}
+
+    def _plan(self, sel, cur_mode, draft, base, machine):
+        m = dict(machine, providers=self.MENUS)
+        return _node(f"""
+const blank = s => memDraft(s, {{}}, null);
+const mk = o => {{ const d = {{}}; for (const s of ["llm", "embeddings", "reranker", "decision"]) d[s] = Object.assign(blank(s), (o || {{}})[s] || {{}}); return d; }};
+const out = memPlan({{sel: {json.dumps(sel)}, curMode: {json.dumps(cur_mode)}, draft: mk({json.dumps(draft)}), base: mk({json.dumps(base)}), m: {json.dumps(m)}}});
+process.stdout.write(JSON.stringify(out.map(x => x.id + ":" + x.st)));""")
+
+    NEW_MACHINE = {"docker_state": "missing", "lmstudio_state": "missing", "decider": {"platform": "mlx", "installed": False},
+                   "llm_auth": {"provider": "", "state": "unknown"}}
+    READY = {"docker_state": "up", "lmstudio_state": "up", "decider": {"platform": "mlx", "installed": True},
+             "dec_local_key": True, "llm_auth": {"provider": "claude-code", "state": "ok"}}
+    LOCAL_FULL = {"llm": {"provider": "claude-code"}, "embeddings": {"provider": "local"}, "reranker": {"provider": "off"},
+                  "decision": {"provider": "local"}}
+
+    def test_new_machine_choosing_local_lists_every_install_step(self):
+        steps = self._plan("full", "none", self.LOCAL_FULL, {}, self.NEW_MACHINE)
+        self.assertEqual(steps, ["docker-inst:todo", "lms-inst:todo", "lms-srv:todo", "lms-model:todo", "dec-inst:todo",
+                                 "dec-up:todo", "auth:you", "write:todo", "hs:todo", "verify:todo"])
+
+    def test_ready_machine_only_writes_and_recreates(self):
+        steps = self._plan("full", "full", dict(self.LOCAL_FULL, llm={"provider": "claude-code", "model": "outro"}),
+                           self.LOCAL_FULL, self.READY)
+        self.assertEqual(steps, ["docker:ok", "lms:ok", "dec:ok", "auth:ok", "write:todo", "hs:todo", "verify:todo"])
+
+    def test_saved_decider_without_its_key_is_reinstalled(self):
+        """Mesmo sem mudar a escolha: sem a chave do decisor no .env o job não mantém o slot — o plano diz isso."""
+        steps = self._plan("full", "full", self.LOCAL_FULL, self.LOCAL_FULL, dict(self.READY, dec_local_key=False))
+        self.assertIn("dec:todo", steps)
+        steps = self._plan("full", "full", self.LOCAL_FULL, self.LOCAL_FULL, dict(self.READY, decider={"platform": "mlx", "installed": False}))
+        self.assertIn("dec-inst:todo", steps)
+
+    def test_installed_decider_is_only_rechecked(self):
+        steps = self._plan("full", "embed", self.LOCAL_FULL, dict(self.LOCAL_FULL, decision={"provider": "off"}), self.READY)
+        self.assertIn("dec:todo", steps)
+        self.assertNotIn("dec-inst:todo", steps)
+
+    def test_cloud_choices_install_nothing_local(self):
+        steps = self._plan("full", "none", {"llm": {"provider": "anthropic"}, "embeddings": {"provider": "fireworks"},
+                                            "decision": {"provider": "off"}}, {}, self.NEW_MACHINE)
+        self.assertFalse([x for x in steps if x.startswith(("lms", "dec", "auth"))])
+        self.assertEqual(steps[0], "docker-inst:todo")
+
+    def test_own_decider_url_installs_nothing(self):
+        steps = self._plan("full", "none", dict(self.LOCAL_FULL, decision={"provider": "local", "url_on": True,
+                                                                           "base_url": "http://exemplo.invalid:8000"}),
+                           {}, self.NEW_MACHINE)
+        self.assertFalse([x for x in steps if x.startswith("dec")])
+
+    def test_embeddings_switch_leaves_the_rebuild_for_later(self):
+        steps = self._plan("embed", "embed", {"embeddings": {"provider": "fireworks"}}, {"embeddings": {"provider": "local"}}, self.READY)
+        self.assertEqual(steps[-1], "rebuild:later")
+        self.assertIn("verify:todo", steps)
+
+    def test_turning_memory_off_is_one_step(self):
+        self.assertEqual(self._plan("none", "embed", {}, {}, self.READY), ["off:todo"])
+        self.assertEqual(self._plan("none", "none", {}, {}, self.READY), [])
 
 
 if __name__ == "__main__":

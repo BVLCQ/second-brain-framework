@@ -1,3 +1,14 @@
+## 2.61.0 — Memória: uma pilha só, e o Brain mostra o que vai ligar
+
+> Resumo: A tela de Memória virou uma lista única dos quatro provedores, cada um abre no lugar, e antes de aplicar ela mostra tudo o que o Brain vai instalar sozinho.
+
+- **Uma linha por slot.** Configurações › Memória mostra o modo em cima e, embaixo, LLM · Embeddings · Reranker · Decisão numa pilha. Cada linha resume o provedor, o modelo, onde roda (local ou ☁ egress) e o estado (chave ok, autenticado, instala ao aplicar…). Clicar abre os campos ali mesmo. O que precisa de você (chave que falta, assinatura por autenticar) já abre sozinho.
+- **Qual modelo faz o quê.** Na linha do LLM, uma tabela: o modelo Padrão e, abaixo, o de cada operação (retain, consolidação, mental models, reflect). Vazio segue o Padrão; o que você ajustou ganha a etiqueta "ajustado".
+- **Slot fora do modo continua à vista.** No embed, LLM e Decisão ficam na pilha, apagados, com o que está guardado para o Full e um botão Ativar no Full.
+- **A Decisão do painel é Desligado ou Local.** O decisor de nuvem e o recall dele saem do painel (seguem na CLI e na TUI). Quem já o tinha gravado continua vendo e mantendo a escolha — o painel nunca a troca em silêncio. Numa máquina sem Apple Silicon nem GPU NVIDIA, Local aparece indisponível, com o motivo.
+- **Antes do Aplicar, o que o Brain liga sozinho.** Uma lista com cada passo real do job — instalar e subir o OrbStack, instalar o LM Studio, baixar e carregar o bge-m3, instalar o decisor local, gravar, subir ou recriar o servidor, verificar — marcando o que já está pronto e o que é seu (autenticar). Abre sozinha quando há algo a instalar. A reconstrução depois de trocar os embeddings aparece como passo para depois.
+- **Descartar e resumo das mudanças.** A barra de baixo diz o que vai mudar ("modo embed → full · Embeddings: Local → Fireworks") e um Descartar volta ao gravado. Se o decisor local falhar no teste de fumaça, um botão aplica o resto sem a Decisão.
+
 ## 2.60.0 — o aviso de atualização ganha um resumo para quem não é técnico
 
 > Resumo: O aviso de atualização agora conta o que muda em uma frase por versão, sem códigos nem jargão técnico.

@@ -1097,29 +1097,32 @@ V["cfg/rotina"] = setupView("rotina", "Rotina", "Fuso e expediente: o Brain calc
 V["cfg/agente"] = setupView("agente", "Agentes/Harness", "O agente de IA que lê suas fontes e ajuda nas rotinas. Conectar cria o canal de leitura (MCP somente-leitura).");
 V["cfg/conectores"] = setupView("conectores", "Conectores", "O que o Brain pode ler, sempre só leitura. Nada é enviado sem você aprovar o texto exato.");
 V["cfg/integracoes"] = setupView("integracoes", "Integrações", "Opcionais. As chaves ficam só no seu computador e nunca aparecem de novo na tela.");
-// Memória: modo e provedores numa tela só. O resumo abaixo (do view model) é o retrato — só leitura; com a ponte no ar,
-// o extra.js troca o miolo de #setup pelo editor (os mesmos slots, com todos os campos), aplicado pela rota do passo Memória
+// Memória: modo e provedores numa tela só. O resumo abaixo (do view model) é o retrato — só leitura, a mesma pilha de slots do
+// editor sem os campos; com a ponte no ar, o extra.js troca o miolo de #setup pelo editor, aplicado pela rota do passo Memória
 V["cfg/memoria"] = () => {
   const MODE = {none: "nenhuma", embed: "embed", full: "full"}, mode = M.memory_mode || "";
-  const rows = [["llm", "LLM"], ["embeddings", "Embeddings"], ["reranker", "Reranker"], ["decision", "Decisão"]].map(([k, icon]) => {
+  const chip = (tone, t) => '<span class="chip' + (tone ? " " + tone : "") + '">' + t + "</span>";
+  const rows = [["llm", "LLM"], ["embeddings", "Embeddings"], ["reranker", "Reranker"], ["decision", "Decisão"]].map(([k, name]) => {
     const p = M.providers[k] || {};
-    const egress = p.cloud ? '<span class="late">☁ egress</span>' : (p.local ? '<span class="dim">local</span>' : "");
-    const key = p.family === "subscription" ? '<span class="dim">assinatura</span>'
-      : p.managed ? (p.key_present ? '<span class="dim">gerenciado</span>' : '<span class="late">ainda não instalado</span>')
-      : p.key_env ? (p.key_present ? '<span class="ok">chave ok</span>' : '<span class="late">sem chave</span>') : "";
-    const rec = k === "decision" && p.recall ? ' <span class="late">· recall (top-' + esc(String(p.candidates || "?")) + ")</span>" : "";
-    const inert = k === "reranker" && p.inert ? ' <span class="dim">· inerte (decisor no recall)</span>' : "";
+    const where = p.cloud ? chip("h-atencao", "☁ egress") : (p.local ? chip("h-em-dia", "local") : "");
+    const key = p.family === "subscription" ? chip("", "assinatura")
+      : p.managed ? (p.key_present ? chip("h-em-dia", "gerenciado") : chip("h-atencao", "ainda não instalado"))
+      : p.key_env ? (p.key_present ? chip("h-em-dia", "chave ok") : chip("h-em-risco", "sem chave")) : "";
+    const rec = k === "decision" && p.recall ? " · recall top-" + (p.candidates || "?") : "";
+    const inert = k === "reranker" && p.inert ? " · inerte (decisor no recall)" : "";
     const uniq = Array.from(new Set(Object.values(p.ops || {})));   // a mesma em toda operação: um nome só
     const model = (k === "llm" && uniq.length === 1 ? uniq[0] : String(p.model || "—").replace(/,/g, " · ")) +
       (k === "embeddings" && p.dimensions ? " · " + p.dimensions + " dim" : "") +
       (k === "reranker" && p.candidates ? " · top-" + p.candidates : "");
-    return "<tr><td><b>" + icon + "</b></td><td>" + esc(p.label || "—") + rec + inert + "</td><td>" + esc(model) + "</td><td>" + egress + " " + key + "</td></tr>";
+    return '<div class="memrow on"><div class="memrh"><span class="memrn"><b>' + name + '</b></span><span class="memrs"><span class="memrp">' +
+      esc((p.label || "—") + rec + inert) + "</span><small>" + esc(model) + '</small></span><span class="memrw">' + where +
+      '</span><span class="memrt">' + key + "</span><span></span></div></div>";
   }).join("");
   const live = !!(window.BRAIN_AUTH && window.BRAIN_AUTH.isLive && window.BRAIN_AUTH.isLive());
   return '<div class="pagehead"><div><h1>Memória</h1><p class="sub">O modo e os provedores (LLM · embeddings · reranker · decisão) numa tela só — configuração viva: mude quando quiser.</p></div></div>' +
     '<div id="setup" data-step="memoria"><section class="panel stsec memro"><div class="sthead"><h2>Modo e provedores</h2>' +
       (MODE[mode] ? '<span class="chip h-info">modo ' + MODE[mode] + "</span>" : "") + "</div>" +
-      '<div class="twrap"><table><tr><th>Slot</th><th>Provedor</th><th>Modelo</th><th></th></tr>' + rows + "</table></div>" +
+      '<div class="memstack">' + rows + "</div>" +
       '<p class="note-s" style="margin:10px 2px">' + (live ? "carregando o editor…"
         : "Painel aberto como arquivo (retrato): só leitura. Para mudar o modo ou um provedor, abra o <b>Brain</b> pelo app — a ponte aplica, sobe ou recria o servidor de memória e narra cada passo.") +
       "</p></section></div>";

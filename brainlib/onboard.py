@@ -333,6 +333,12 @@ def connector_status(servers: dict[str, str] | None, cfg: dict, sources: set[str
 _PREREQ: dict = {"at": 0.0, "value": None}
 
 
+# Decisão no painel: só o decisor LOCAL ou desligado (decisão do dono). O de nuvem (`hindsight`, com o recall) segue na
+# CLI e na TUI; no painel ele só aparece para a instância que já o tem gravado — marcado `legacy` — para que abrir a tela
+# e aplicar nunca desfaça em silêncio uma escolha antiga.
+PANEL_DECISION = ("off", "local")
+
+
 def _llm_auth_state(brain, _providers) -> dict:
     """Estado de autenticação do LLM por assinatura, à prova de falha (docker lento nunca
     derruba o passo Memória — vira unknown e a tela mostra o que sabe)."""
@@ -359,9 +365,10 @@ def _prereqs() -> dict:
 
 
 def state(brain) -> dict:
-    from . import memory, perms, providers as _providers, setup
+    from . import decider as _decider, memory, perms, providers as _providers, setup
     providers_registry = _providers.PROVIDERS
     inst, cfg = brain.inst, brain.inst.cfg
+    cur_dec = cfg["memory"].get("decision_provider", "") or "off"
     person = brain.state.people.get(brain.owner)
     env = config.load_env(inst)
     mem_mode = memory.mode(cfg["memory"])
@@ -437,9 +444,14 @@ def state(brain) -> dict:
                                          "candidates": int(v.get("candidates", 0) or 0) if slot == "reranker" else 0,
                                          "key_required": bool(v.get("key_env")) and not v.get("managed"),
                                          "managed": bool(v.get("managed")),
-                                         "key_set": bool(v.get("key_env") and not v.get("managed") and env.get(v["key_env"]))}
-                                        for k, v in _providers.menu_providers(slot, include_custom=True, include_unavailable=False)]
+                                         "key_set": bool(v.get("key_env") and not v.get("managed") and env.get(v["key_env"])),
+                                         "legacy": slot == "decision" and k not in PANEL_DECISION}
+                                        for k, v in _providers.menu_providers(slot, include_custom=True, include_unavailable=False)
+                                        if slot != "decision" or k in PANEL_DECISION or k == cur_dec]
                                  for slot in ("llm", "embeddings", "reranker", "decision")},
+                   # o decisor local precisa de MLX (Apple Silicon) ou vLLM (Linux com GPU NVIDIA); `installed` = o
+                   # venv e o modelo já estão no disco (o Aplicar só confere e religa) — a tela diz o que vai acontecer
+                   "decider": {"platform": _decider.platform_kind() or "", "installed": _decider.installed(inst)},
                    "llm_auth": _llm_auth_state(brain, _providers),
                    # a tela Memória (Configurações) mostra e edita o que está gravado em cada slot — o mesmo stack
                    # do `memory providers show` (chave: só presença) — e o modelo de cada operação do LLM
