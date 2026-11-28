@@ -1,3 +1,9 @@
+## 2.63.2 — a atualização do servidor de memória só mexe no servidor do Brain
+
+> Resumo: A atualização automática do servidor de memória agora só mexe no servidor que o próprio Brain criou; quem usa um servidor seu continua no controle.
+
+- **Servidor adotado fica intocado.** Quem já tinha um Hindsight e apontou o Brain para ele (guia de memória) pode ter um contêiner com o mesmo nome, `hindsight`, de outro projeto. A atualização da 2.63.1 o pararia, falharia ao recriar (o nome já em uso) e o deixaria parado. Agora o Brain confere o rótulo do projeto compose e só atualiza o contêiner do projeto `segundo-cerebro`; o outro fica como está e o `services.log` diz que a atualização é à mão.
+
 ## 2.63.1 — a atualização do servidor de memória guarda o banco antes e sabe voltar
 
 > Resumo: Antes de trocar a versão do servidor de memória, o Brain agora guarda uma cópia do banco, e se a versão nova falhar ele devolve o banco e a versão de antes.
