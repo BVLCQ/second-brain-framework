@@ -110,7 +110,7 @@ extraiu de reunião/e-mail/Slack · `[sem-fonte]` sem base (evite).
 
 ### Listas de ação
 
-| Lista | Quem deve | Cobrado no TODO? | Entra no foco? |
+| Lista | Quem deve | Cobrado nas Tarefas? | Entra no foco? |
 |---|---|---|---|
 | `mine` | você (o dono já vem preenchido como `eu`) | sim | sim |
 | `waiting` | outra pessoa, a você | aparece no brief | não |

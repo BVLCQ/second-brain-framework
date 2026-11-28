@@ -2674,7 +2674,7 @@ function helpOverlay(){
     ["N", "nota rápida na inbox"],
     ["j k ↑ ↓", "mover na lista · enter abre a ficha"],
     ["[ ] ← → (h l)", "aba anterior / próxima"],
-    ["T", "alterna só abertas ↔ todas (TODO, Perguntas, Mensagens, Sugestões)"],
+    ["T", "alterna só abertas ↔ todas (Tarefas, Perguntas, Mensagens, Sugestões)"],
     ["`", "console da ponte (abre/fecha)"],
     ["?", "esta ajuda"],
     ["? (dentro do ICE)", "metodologia de pontuação — as notas com critério e regras"],
@@ -2683,7 +2683,7 @@ function helpOverlay(){
     ["s", "status / estado"], ["A", "aprovar (gate)"],
     ["Início", ""], ["n", "nota"], ["u d b c", "(agente) atualizar tudo · processar inbox · brief · puxar fonte"],
     ["Fontes", ""], ["n", "adicionar"], ["e", "editar"], ["d", "remover"], ["w", "incluir no watch"], ["c u", "(agente) puxar · atualizar tudo"],
-    ["TODO (com cartão selecionado)", ""],
+    ["Tarefas (com cartão selecionado)", ""],
     ["n", "nova ação"], ["e", "editar"], ["c", "fechar"], ["s", "status (ciclo)"], ["t", "prazo"],
     ["d", "descartar"], ["z", "depois / voltar"], ["o", "reabrir"], ["m", "cobrar (rascunho de msg)"], ["M", "mesclar duplicada"],
     ["v / O / T", "vista · ordem · todas (como o TUI)"],
@@ -3658,7 +3658,7 @@ OBV.agente = () => {
       const r = await obAct("agent_later", obAgentChosen && obPickedAgent !== "other" ? {agent: obPickedAgent} : {});
       await obRefresh();
       if (!obStillOn(gen)) return;
-      obMsg($("#m"), "ok", "✓ Tarefa " + r.id + " criada — ficou no seu TODO.");
+      obMsg($("#m"), "ok", "✓ Tarefa " + r.id + " criada — ficou nas suas Tarefas.");
       setTimeout(() => { if (obStillOn(gen)) obNext(); }, 1100);
     } catch (e) { if (obStillOn(gen)) obMsg($("#m"), "err", e.message); } finally { if (btn.isConnected) obBusy(btn, false); }
   };
@@ -4017,7 +4017,7 @@ OBV.memoria = () => {
 
   obSet(obHead("Conexões · memória de IA", "Memória", "A memória deixa o Brain responder perguntas pelo <b>significado</b>. Sem ela, o Brain continua funcionando inteiro com busca por palavras.") +
     '<div class="grid3">' +
-      '<div class="opt" data-m="none"><span class="pill off">Sem servidor · grátis</span><h3>Apenas livro-razão</h3><p>O cérebro funciona inteiro; ligar depois é 2 min e vira tarefa no seu TODO.</p></div>' +
+      '<div class="opt" data-m="none"><span class="pill off">Sem servidor · grátis</span><h3>Apenas livro-razão</h3><p>O cérebro funciona inteiro; ligar depois é 2 min e vira tarefa nas suas Tarefas.</p></div>' +
       '<div class="opt" data-m="embed"><span class="pill rec">✓ recomendado pra começar</span><h3>Embed</h3><p>Busca por significado, 100% local e grátis. Chunks do vault, zero LLM, nada sai da máquina.</p></div>' +
       '<div class="opt" data-m="full"><span class="pill warn">Usa a sua chave · custo por uso</span><h3>Full</h3><p>Extrai fatos e liga assuntos entre reuniões. O texto vai para a IA com a sua chave.</p></div>' +
     "</div>" +
@@ -4480,7 +4480,7 @@ function obCollectTree() {
 
 // 10. A conversa
 OBV.conversa = () => {
-  obSet(obHead("Começando", "A conversa", "O formulário acabou; a entrevista não. Responda aqui mesmo — ou pule e o Brain anota no seu TODO.") +
+  obSet(obHead("Começando", "A conversa", "O formulário acabou; a entrevista não. Responda aqui mesmo — ou pule e o Brain anota nas suas Tarefas.") +
     '<div class="card">' +
       "<h2>Uma pergunta aberta para o agente</h2>" +
       '<p class="sub">O que o Brain ainda quer saber para fechar o seu mapa:</p>' +
@@ -4494,7 +4494,7 @@ OBV.conversa = () => {
     "</div>" +
     '<div class="card soft">' +
       '<div class="rowline" style="padding:0">' +
-        '<div class="info"><b>Se preferir conversar depois</b><p>Pule — o Brain cria uma tarefa no seu TODO e retoma a pergunta quando você abrir o chat (ou o <span class="kbd">⚡</span> na TUI).</p></div>' +
+        '<div class="info"><b>Se preferir conversar depois</b><p>Pule — o Brain cria uma tarefa nas suas Tarefas e retoma a pergunta quando você abrir o chat (ou o <span class="kbd">⚡</span> na TUI).</p></div>' +
         '<span class="pill ok">não se perde</span>' +
       "</div>" +
     "</div>" +
@@ -4536,7 +4536,7 @@ OBV.pronto = () => {
       row(mqDone || d.has("maquina"), "Máquina", mqExtra) +
       row(nGoals > 0, "Goals e projetos", nGoals ? nGoals + " goal(s)" : "nenhum ainda") +
     "</ul></div>" +
-    '<div class="msg info show" style="margin:0 0 14px">O que ficou pra depois virou tarefa com nome no seu TODO.</div>' +
+    '<div class="msg info show" style="margin:0 0 14px">O que ficou pra depois virou tarefa com nome nas suas Tarefas.</div>' +
     '<div class="card soft"><h2>Primeiros passos</h2><ol class="howto">' +
       "<li>No chat com o seu agente, nesta pasta, digite <b>/brief</b> para ver o seu dia.</li>" +
       "<li>Jogue arquivos (atas, PDFs, prints) na caixa de entrada do Brain e digite <b>/dump</b> — ele organiza tudo.</li>" +

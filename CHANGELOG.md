@@ -1,3 +1,9 @@
+## 2.63.3 — o quadro de ações se chama Tarefas em todo lugar
+
+> Resumo: O quadro que antes se chamava TODO agora se chama Tarefas também no título da página, nos textos de ajuda e no onboarding, não só no menu.
+
+- **Nome único.** O menu já dizia Tarefas, mas o título da página, o link de volta da ficha da ação, o "no TODO →" do projeto, o mapa de teclas (`?`), as mensagens do onboarding e do `runner`, e o título e o link de `FRESH/todo.md` ainda diziam TODO. Tudo passa a dizer Tarefas. A rota (`#todo`), o arquivo `todo.md` e o comando `/todo` não mudam, então nada que já existe quebra. Um teste (`test_tarefas_naming`) impede o rótulo antigo de voltar.
+
 ## 2.63.2 — a atualização do servidor de memória só mexe no servidor do Brain
 
 > Resumo: A atualização automática do servidor de memória agora só mexe no servidor que o próprio Brain criou; quem usa um servidor seu continua no controle.

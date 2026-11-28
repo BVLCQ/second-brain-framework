@@ -170,7 +170,7 @@ tbody tr.src-problem:hover td{background:color-mix(in srgb,var(--riskbg) 55%,tra
 .col.col-later{background:transparent;border:1px dashed var(--line)}
 .card.is-parked{opacity:.82}
 .card.is-parked:hover{opacity:1}
-/* visão geral do TODO: aberta = cartões; recolhida = uma linha */
+/* visão geral das Tarefas: aberta = cartões; recolhida = uma linha */
 .todo-ov{margin:0 0 12px}
 .todo-ov-bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .todo-ov-line{display:flex;gap:4px 14px;flex-wrap:wrap;color:var(--muted);font-size:12.5px}
@@ -4282,7 +4282,7 @@ function helpOverlay(){
     ["N", "nota rápida na inbox"],
     ["j k ↑ ↓", "mover na lista · enter abre a ficha"],
     ["[ ] ← → (h l)", "aba anterior / próxima"],
-    ["T", "alterna só abertas ↔ todas (TODO, Perguntas, Mensagens, Sugestões)"],
+    ["T", "alterna só abertas ↔ todas (Tarefas, Perguntas, Mensagens, Sugestões)"],
     ["`", "console da ponte (abre/fecha)"],
     ["?", "esta ajuda"],
     ["? (dentro do ICE)", "metodologia de pontuação — as notas com critério e regras"],
@@ -4291,7 +4291,7 @@ function helpOverlay(){
     ["s", "status / estado"], ["A", "aprovar (gate)"],
     ["Início", ""], ["n", "nota"], ["u d b c", "(agente) atualizar tudo · processar inbox · brief · puxar fonte"],
     ["Fontes", ""], ["n", "adicionar"], ["e", "editar"], ["d", "remover"], ["w", "incluir no watch"], ["c u", "(agente) puxar · atualizar tudo"],
-    ["TODO (com cartão selecionado)", ""],
+    ["Tarefas (com cartão selecionado)", ""],
     ["n", "nova ação"], ["e", "editar"], ["c", "fechar"], ["s", "status (ciclo)"], ["t", "prazo"],
     ["d", "descartar"], ["z", "depois / voltar"], ["o", "reabrir"], ["m", "cobrar (rascunho de msg)"], ["M", "mesclar duplicada"],
     ["v / O / T", "vista · ordem · todas (como o TUI)"],
@@ -5266,7 +5266,7 @@ OBV.agente = () => {
       const r = await obAct("agent_later", obAgentChosen && obPickedAgent !== "other" ? {agent: obPickedAgent} : {});
       await obRefresh();
       if (!obStillOn(gen)) return;
-      obMsg($("#m"), "ok", "✓ Tarefa " + r.id + " criada — ficou no seu TODO.");
+      obMsg($("#m"), "ok", "✓ Tarefa " + r.id + " criada — ficou nas suas Tarefas.");
       setTimeout(() => { if (obStillOn(gen)) obNext(); }, 1100);
     } catch (e) { if (obStillOn(gen)) obMsg($("#m"), "err", e.message); } finally { if (btn.isConnected) obBusy(btn, false); }
   };
@@ -5625,7 +5625,7 @@ OBV.memoria = () => {
 
   obSet(obHead("Conexões · memória de IA", "Memória", "A memória deixa o Brain responder perguntas pelo <b>significado</b>. Sem ela, o Brain continua funcionando inteiro com busca por palavras.") +
     '<div class="grid3">' +
-      '<div class="opt" data-m="none"><span class="pill off">Sem servidor · grátis</span><h3>Apenas livro-razão</h3><p>O cérebro funciona inteiro; ligar depois é 2 min e vira tarefa no seu TODO.</p></div>' +
+      '<div class="opt" data-m="none"><span class="pill off">Sem servidor · grátis</span><h3>Apenas livro-razão</h3><p>O cérebro funciona inteiro; ligar depois é 2 min e vira tarefa nas suas Tarefas.</p></div>' +
       '<div class="opt" data-m="embed"><span class="pill rec">✓ recomendado pra começar</span><h3>Embed</h3><p>Busca por significado, 100% local e grátis. Chunks do vault, zero LLM, nada sai da máquina.</p></div>' +
       '<div class="opt" data-m="full"><span class="pill warn">Usa a sua chave · custo por uso</span><h3>Full</h3><p>Extrai fatos e liga assuntos entre reuniões. O texto vai para a IA com a sua chave.</p></div>' +
     "</div>" +
@@ -6088,7 +6088,7 @@ function obCollectTree() {
 
 // 10. A conversa
 OBV.conversa = () => {
-  obSet(obHead("Começando", "A conversa", "O formulário acabou; a entrevista não. Responda aqui mesmo — ou pule e o Brain anota no seu TODO.") +
+  obSet(obHead("Começando", "A conversa", "O formulário acabou; a entrevista não. Responda aqui mesmo — ou pule e o Brain anota nas suas Tarefas.") +
     '<div class="card">' +
       "<h2>Uma pergunta aberta para o agente</h2>" +
       '<p class="sub">O que o Brain ainda quer saber para fechar o seu mapa:</p>' +
@@ -6102,7 +6102,7 @@ OBV.conversa = () => {
     "</div>" +
     '<div class="card soft">' +
       '<div class="rowline" style="padding:0">' +
-        '<div class="info"><b>Se preferir conversar depois</b><p>Pule — o Brain cria uma tarefa no seu TODO e retoma a pergunta quando você abrir o chat (ou o <span class="kbd">⚡</span> na TUI).</p></div>' +
+        '<div class="info"><b>Se preferir conversar depois</b><p>Pule — o Brain cria uma tarefa nas suas Tarefas e retoma a pergunta quando você abrir o chat (ou o <span class="kbd">⚡</span> na TUI).</p></div>' +
         '<span class="pill ok">não se perde</span>' +
       "</div>" +
     "</div>" +
@@ -6144,7 +6144,7 @@ OBV.pronto = () => {
       row(mqDone || d.has("maquina"), "Máquina", mqExtra) +
       row(nGoals > 0, "Goals e projetos", nGoals ? nGoals + " goal(s)" : "nenhum ainda") +
     "</ul></div>" +
-    '<div class="msg info show" style="margin:0 0 14px">O que ficou pra depois virou tarefa com nome no seu TODO.</div>' +
+    '<div class="msg info show" style="margin:0 0 14px">O que ficou pra depois virou tarefa com nome nas suas Tarefas.</div>' +
     '<div class="card soft"><h2>Primeiros passos</h2><ol class="howto">' +
       "<li>No chat com o seu agente, nesta pasta, digite <b>/brief</b> para ver o seu dia.</li>" +
       "<li>Jogue arquivos (atas, PDFs, prints) na caixa de entrada do Brain e digite <b>/dump</b> — ele organiza tudo.</li>" +
@@ -7052,7 +7052,7 @@ V.home = () => {
   });
   return h;
 };
-// ── visão geral do quadro (TODO): recolhível; aberta = cartões, recolhida = uma linha ──
+// ── visão geral do quadro (Tarefas): recolhível; aberta = cartões, recolhida = uma linha ──
 // Os cartões também filtram o quadro (união). A contagem usa o mesmo predicado do filtro.
 const TODO_KPI_KEY = "brain.todo.overview";
 const TODO_KPI_ORDER = ["abertas", "atrasadas", "vencem", "fazendo", "bloqueadas", "depois", "outros", "feitas"];
@@ -7130,7 +7130,7 @@ V.todo = (q) => {
   const sortA = l => l.sort((x, y) => sortK === "id" ? x.id.localeCompare(y.id)
     : ((x.due || "9999").localeCompare(y.due || "9999") || (x.priority === "alta" ? -1 : 0)));
   const VIEWS = [["todas", "todas"], ["semana", "esta semana"], ["adiante", "mais adiante"]];
-  let h = '<div class="pagehead"><div><h1>TODO</h1><p class="sub">Suas ações em quadro. Feche pelo chat (/done), marcando em FRESH/todo.md — ou pelo painel, se a ponte CLI estiver ligada. Arraste para Depois o que você adiou de propósito: lá não conta como atrasada.</p></div></div>' +
+  let h = '<div class="pagehead"><div><h1>Tarefas</h1><p class="sub">Suas ações em quadro. Feche pelo chat (/done), marcando em FRESH/todo.md — ou pelo painel, se a ponte CLI estiver ligada. Arraste para Depois o que você adiou de propósito: lá não conta como atrasada.</p></div></div>' +
     todoOverview(all, (M.actions || []).filter(a => a.open && a.list === "waiting" && (!proj || a.project === proj)).length, selected) +
     '<div class="filters">' + dd("fp", M.projects.map(p => [p.id, p.id + " " + p.title]), proj, "todos os projetos") +
     dd("fv", VIEWS, view, "todas as vistas") + dd("fo", [["prazo", "por prazo"], ["id", "por id"]], sortK, "por prazo") +
@@ -7673,7 +7673,7 @@ function colsProj(pid){
     "<dt>Próxima</dt><dd>" + (p.next_due ? idc(p.next_due.id) + " " + esc(p.next_due.title || "") + " · " + delivDue(findDeliv(p.next_due.id) || {due: p.next_due.date}, true) : "—") + "</dd>" +
     (p.people.length ? "<dt>Pessoas</dt><dd>" + p.people.map(x => peL(x.id)).join(", ") + "</dd>" : "") + "</dl>" +
     (lateAlert([pid]) ? '<div class="cols-al">' + lateAlert([pid]) + "</div>" : "") +
-    '<h3 class="cols-sh">Ações abertas <span class="fl-cnt">' + open.length + '</span><a class="cols-more" href="#todo?p=' + esc(pid) + '">no TODO →</a></h3>' + colsActs(open, 6) +
+    '<h3 class="cols-sh">Ações abertas <span class="fl-cnt">' + open.length + '</span><a class="cols-more" href="#todo?p=' + esc(pid) + '">nas Tarefas →</a></h3>' + colsActs(open, 6) +
     '<h3 class="cols-sh">Decisões <span class="fl-cnt">' + decs.length + '</span><a class="cols-more" href="#decisions?p=' + esc(pid) + '">todas →</a></h3>' +
     (decs.length ? '<ul class="cols-acts">' + decs.slice(0, 3).map(d => '<li><span class="muted small">' + fmtD(d.date) + "</span> " + dL(d.id) + " " + esc(d.title) + "</li>").join("") + "</ul>" : '<p class="muted small">nenhuma</p>') +
     '<h3 class="cols-sh">Do projeto <span class="fl-cnt">' + docs.length + '</span><span class="muted small cols-shn">sem entregável · ' + (all.length - docs.length) + " nos entregáveis</span></h3>" +
@@ -7757,7 +7757,7 @@ V.project = (q, id) => colsRedirect(id);
 V.goal = (q, id) => colsRedirect(id);
 V.action = (q, id) => {
   const a = A[id]; if (!a) return empty("Ação não encontrada");
-  return '<p class="crumb muted"><a href="#todo">← TODO</a></p><div class="pagehead"><div><h1>' + a.id + " · " + esc(a.title) + '</h1>' +
+  return '<p class="crumb muted"><a href="#todo">← Tarefas</a></p><div class="pagehead"><div><h1>' + a.id + " · " + esc(a.title) + '</h1>' +
     '<div class="sub">' + chip(a.status === "bloqueada" ? "em-risco" : a.open ? "info" : "em-dia", a.status) +
     "<span>dono: " + peL(a.owner) + "</span><span>" + dueTxt(a) + "</span>" + (a.effort_min ? "<span>esforço " + dur(a.effort_min) + "</span>" : "") + (a.project ? "<span>" + pL(a.project, true) + "</span>" : "") + "</div></div>" +
     '<div class="ask-opts"><button class="btn" data-act="edit" data-id="' + esc(a.id) + '">e editar</button>' +

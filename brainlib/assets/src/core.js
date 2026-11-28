@@ -675,7 +675,7 @@ V.home = () => {
   });
   return h;
 };
-// ── visão geral do quadro (TODO): recolhível; aberta = cartões, recolhida = uma linha ──
+// ── visão geral do quadro (Tarefas): recolhível; aberta = cartões, recolhida = uma linha ──
 // Os cartões também filtram o quadro (união). A contagem usa o mesmo predicado do filtro.
 const TODO_KPI_KEY = "brain.todo.overview";
 const TODO_KPI_ORDER = ["abertas", "atrasadas", "vencem", "fazendo", "bloqueadas", "depois", "outros", "feitas"];
@@ -753,7 +753,7 @@ V.todo = (q) => {
   const sortA = l => l.sort((x, y) => sortK === "id" ? x.id.localeCompare(y.id)
     : ((x.due || "9999").localeCompare(y.due || "9999") || (x.priority === "alta" ? -1 : 0)));
   const VIEWS = [["todas", "todas"], ["semana", "esta semana"], ["adiante", "mais adiante"]];
-  let h = '<div class="pagehead"><div><h1>TODO</h1><p class="sub">Suas ações em quadro. Feche pelo chat (/done), marcando em FRESH/todo.md — ou pelo painel, se a ponte CLI estiver ligada. Arraste para Depois o que você adiou de propósito: lá não conta como atrasada.</p></div></div>' +
+  let h = '<div class="pagehead"><div><h1>Tarefas</h1><p class="sub">Suas ações em quadro. Feche pelo chat (/done), marcando em FRESH/todo.md — ou pelo painel, se a ponte CLI estiver ligada. Arraste para Depois o que você adiou de propósito: lá não conta como atrasada.</p></div></div>' +
     todoOverview(all, (M.actions || []).filter(a => a.open && a.list === "waiting" && (!proj || a.project === proj)).length, selected) +
     '<div class="filters">' + dd("fp", M.projects.map(p => [p.id, p.id + " " + p.title]), proj, "todos os projetos") +
     dd("fv", VIEWS, view, "todas as vistas") + dd("fo", [["prazo", "por prazo"], ["id", "por id"]], sortK, "por prazo") +
@@ -1296,7 +1296,7 @@ function colsProj(pid){
     "<dt>Próxima</dt><dd>" + (p.next_due ? idc(p.next_due.id) + " " + esc(p.next_due.title || "") + " · " + delivDue(findDeliv(p.next_due.id) || {due: p.next_due.date}, true) : "—") + "</dd>" +
     (p.people.length ? "<dt>Pessoas</dt><dd>" + p.people.map(x => peL(x.id)).join(", ") + "</dd>" : "") + "</dl>" +
     (lateAlert([pid]) ? '<div class="cols-al">' + lateAlert([pid]) + "</div>" : "") +
-    '<h3 class="cols-sh">Ações abertas <span class="fl-cnt">' + open.length + '</span><a class="cols-more" href="#todo?p=' + esc(pid) + '">no TODO →</a></h3>' + colsActs(open, 6) +
+    '<h3 class="cols-sh">Ações abertas <span class="fl-cnt">' + open.length + '</span><a class="cols-more" href="#todo?p=' + esc(pid) + '">nas Tarefas →</a></h3>' + colsActs(open, 6) +
     '<h3 class="cols-sh">Decisões <span class="fl-cnt">' + decs.length + '</span><a class="cols-more" href="#decisions?p=' + esc(pid) + '">todas →</a></h3>' +
     (decs.length ? '<ul class="cols-acts">' + decs.slice(0, 3).map(d => '<li><span class="muted small">' + fmtD(d.date) + "</span> " + dL(d.id) + " " + esc(d.title) + "</li>").join("") + "</ul>" : '<p class="muted small">nenhuma</p>') +
     '<h3 class="cols-sh">Do projeto <span class="fl-cnt">' + docs.length + '</span><span class="muted small cols-shn">sem entregável · ' + (all.length - docs.length) + " nos entregáveis</span></h3>" +
@@ -1380,7 +1380,7 @@ V.project = (q, id) => colsRedirect(id);
 V.goal = (q, id) => colsRedirect(id);
 V.action = (q, id) => {
   const a = A[id]; if (!a) return empty("Ação não encontrada");
-  return '<p class="crumb muted"><a href="#todo">← TODO</a></p><div class="pagehead"><div><h1>' + a.id + " · " + esc(a.title) + '</h1>' +
+  return '<p class="crumb muted"><a href="#todo">← Tarefas</a></p><div class="pagehead"><div><h1>' + a.id + " · " + esc(a.title) + '</h1>' +
     '<div class="sub">' + chip(a.status === "bloqueada" ? "em-risco" : a.open ? "info" : "em-dia", a.status) +
     "<span>dono: " + peL(a.owner) + "</span><span>" + dueTxt(a) + "</span>" + (a.effort_min ? "<span>esforço " + dur(a.effort_min) + "</span>" : "") + (a.project ? "<span>" + pL(a.project, true) + "</span>" : "") + "</div></div>" +
     '<div class="ask-opts"><button class="btn" data-act="edit" data-id="' + esc(a.id) + '">e editar</button>' +

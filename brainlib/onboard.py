@@ -1171,7 +1171,7 @@ def apply_planning(brain, data: dict) -> dict:
 
 def apply_entrevista(brain, data: dict) -> dict:
     """A conversa acontece AQUI também (ruling do dono): responder já no wizard ou pular —
-    pular vira TASK no TODO, não só ASK esperando o agente. As respostas ficam no progresso
+    pular vira TASK nas Tarefas, não só ASK esperando o agente. As respostas ficam no progresso
     (logs/onboarding.json) e o finish() aplica: pessoas viram fichas na hora, fontes viram
     resposta da ASK para o agente aplicar (/dump passo 0)."""
     if util.is_nightly():
@@ -1236,7 +1236,7 @@ def finish(brain) -> dict:
                               "source": "onboarding",
                               "data": {"how": f"pessoas viraram fichas no onboarding: {', '.join(applied_inline)}"}})
         elif not stash.get("answered") and brain.owner in brain.state.people:
-            # pulou a conversa: não se perde — vira TASK no TODO do dono (a ASK segue aberta pro agente;
+            # pulou a conversa: não se perde — vira TASK nas Tarefas do dono (a ASK segue aberta pro agente;
             # sem a ficha do dono (passo Você pulado) a ASK sozinha cobre — nada de ficha fantasma)
             brain.record_one({"type": "action.opened", "by": "agent", "prov": "observado", "source": "onboarding",
                               "data": {"title": "Terminar a entrevista do Brain — pessoas recorrentes e fontes que valem observar",

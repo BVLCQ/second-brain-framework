@@ -22,7 +22,7 @@ A constituição é `AGENTS.md`. O guia de uso A a Z — cada comando, cada cone
   de vida de tudo que ele grava.
 - **FRESH é 100% derivado** — `./brain render` regenera Markdown + painel
   HTML offline (um arquivo, abre no navegador: goals, projetos, decisões,
-  TODO, timeline, Gantt, busca). Antes de sobrescrever, colhe as edições do
+  Tarefas, timeline, Gantt, busca). Antes de sobrescrever, colhe as edições do
   dono (checkbox em `todo.md`, `status:` na ficha da ação, `PLANNING`).
 - **Foco** — planejador EDF, teto diário, férias, folga entre reuniões.
   Lote semanal proposto → um "ok" → eventos no calendário (ou `.ics`, sem
