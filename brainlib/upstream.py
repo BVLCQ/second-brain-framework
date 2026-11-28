@@ -182,6 +182,18 @@ def _ahead_behind(root: Path, ref: str, git=None) -> tuple[int, int]:
     return int(a), int(b)
 
 
+def _merge_base(root: Path, ref: str | None, git=None) -> str:
+    """O commit em que HEAD e `ref` se separaram ("" se o git não souber dizer)."""
+    if not ref:
+        return ""
+    try:
+        r = (git or _git)(root, "merge-base", "HEAD", ref, check=False)
+    except util.BrainError:
+        return ""
+    out = (getattr(r, "stdout", "") or "").strip()
+    return out if getattr(r, "returncode", 1) == 0 and re.fullmatch(r"[0-9a-f]{7,64}", out) else ""
+
+
 def _pending_files(root: Path, ref: str, git=None) -> tuple[list[str], list[str]]:
     """(rastreados que diferem do remoto, novos não rastreados e não ignorados)."""
     git_fn = git or _git
@@ -436,7 +448,9 @@ def update(inst: config.Instance, check: bool = False, rebase: bool = False,
     root = inst.root
     remote, branch, ref = _prepare(inst, remote, branch, git=git_fn)
     ahead, behind = _ahead_behind(root, ref, git=git_fn)
-    tracked, untracked = _pending_files(root, ref, git=git_fn)
+    # Melhoria local = o que mudou desde o ponto em que este clone se separou do remoto. Contra o próprio `ref`, um
+    # clone só ATRASADO contava como "alterado" cada arquivo que o remoto mudou (\"48 arquivo(s)\" num clone limpo).
+    tracked, untracked = _pending_files(root, _merge_base(root, ref, git=git_fn) or ref, git=git_fn)
     res: dict = {"remote": remote, "branch": branch, "ahead": ahead, "behind": behind, "checked_only": check,
                  "version_before": _version(root), "incoming": [], "areas": {}, "seeded": [],
                  "template_diverged": [], "local_pending": len(tracked) + len(untracked)}

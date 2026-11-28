@@ -104,6 +104,8 @@ class _FakeGit:
             return ok(head + ("\n" if head else ""))
         if args[:2] == ("merge-base", "--is-ancestor"):
             return subprocess.CompletedProcess(cmd, 0 if self.is_ancestor else 1, "", "")
+        if args[:2] == ("merge-base", "HEAD"):              # ponto de separação: o HEAD de antes do pull
+            return ok(self.initial_head + ("\n" if self.initial_head else ""))
         if args[:2] == ("rev-parse", "--git-path"):
             return ok(f".git/{args[2]}\n")
         if args and args[0] == "show":

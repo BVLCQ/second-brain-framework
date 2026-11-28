@@ -1,3 +1,11 @@
+## 2.63.4 — Atualizar pelo painel não derruba mais a ponte
+
+> Resumo: Depois de atualizar pelo painel, ele volta sozinho em vez de ficar travado em "Ponte demorou para voltar", e a atualização deixa de acusar mudanças locais que não existem.
+
+- **A ponte volta depois do Atualizar.** O reinício da ponte rodava numa thread que morria junto com o processo antes de subir a ponte nova: o painel ficava em "Ponte demorou para voltar" e, ao recarregar, "ponte fora do ar". Agora o processo espera a ponte nova nascer. Reproduzido e conferido com ponte real.
+- **Quem atualiza a partir de uma versão antiga também volta.** Nesse caso quem reinicia é o código velho, ainda com o defeito; a conferência dos serviços (a cada 5 minutos e ao abrir o Brain) vê que a ponte morreu no meio de uma atualização e sobe outra. Enquanto isso, abrir o Brain pelo ícone resolve na hora.
+- **Sem "melhorias locais" falsas.** A atualização contava como alterado por você cada arquivo que o remoto mudou ("48 arquivo(s)" num clone limpo e só atrasado). Agora conta só o que mudou desde o ponto em que o seu clone se separou.
+
 ## 2.63.3 — o quadro de ações se chama Tarefas em todo lugar
 
 > Resumo: O quadro que antes se chamava TODO agora se chama Tarefas também no título da página, nos textos de ajuda e no onboarding, não só no menu.

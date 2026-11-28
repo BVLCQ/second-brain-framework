@@ -145,6 +145,11 @@ def ensure(inst, *, reason: str = "cli", install: bool = False, probes=None, run
         _log(inst, "pausado")
         return row
     nightly = util.is_nightly() or reason == "nightly"
+    if not nightly:
+        try:
+            revive_bridge_after_update(inst)
+        except Exception as e:                                 # noqa: BLE001 — a conferência nunca cai por isso
+            _log(inst, f"ponte: não consegui religar depois da atualização ({e})")
     if nightly:
         install = False
     mem = (inst.cfg or {}).get("memory") or {}
@@ -283,6 +288,41 @@ def pinned_image(services_dir: Path | None = None) -> str:
         return ""
     m = re.search(r"^\s*image:\s*(?:\$\{BRAIN_HINDSIGHT_IMAGE:-)?([^\s}]+)", txt, re.M)
     return m.group(1) if m else ""
+
+
+BRIDGE_REVIVE_WINDOW_S = 30 * 60
+
+
+def revive_bridge_after_update(inst, *, now: float | None = None, spawn=None) -> bool:
+    """A ponte do painel morreu reiniciando depois de um Atualizar? Sobe de novo.
+
+    Até a 2.63.3 a ponte se reiniciava numa thread daemon que morria junto com o processo antes de subir a nova: o
+    painel ficava em "Ponte demorou para voltar" e recarregar não adiantava. Quem atualiza A PARTIR dessas versões
+    roda o código velho no restart — esta conferência (código novo, no watchdog e na abertura) é a rede: o último
+    evento de vida da ponte no serve.log é um `↻ update`, o log é recente e não há ponte no ar → sobe uma."""
+    log = Path(inst.logs) / "serve.log"
+    try:
+        st = log.stat()
+    except OSError:
+        return False
+    if (now if now is not None else time.time()) - st.st_mtime > BRIDGE_REVIVE_WINDOW_S:
+        return False
+    with open(log, "rb") as fh:
+        fh.seek(max(0, st.st_size - 256 * 1024))
+        tail = fh.read().decode("utf-8", "replace")
+    if tail.rfind("↻ update → job=") <= tail.rfind("ponte CLI no ar"):
+        return False
+    from . import serve
+    if serve.live_panel_url(inst):
+        return False
+    if spawn is None:
+        from . import render
+        from .core import Brain
+        spawn = lambda: render.ensure_bridge(Brain(inst), wait_s=10.0)   # noqa: E731
+    ok = bool(spawn())
+    _log(inst, "ponte do painel religada (tinha morrido no reinício de uma atualização)" if ok
+         else "ponte do painel caiu no reinício de uma atualização e não voltou — abra o Brain de novo")
+    return ok
 
 
 def compose_project(services_dir: Path | None = None) -> str:
