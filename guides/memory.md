@@ -96,6 +96,10 @@ Ensaiado de verdade (Docker real, contêiner de ensaio sobre a cópia de um serv
 1.2.0 → 1.3.0 com cópia de segurança, e falha forçada no 1.3.0 com restauração — nos dois casos documentos e
 memórias de todos os bancos iguais aos do original, e o 1.2.0 volta a subir sobre o banco restaurado.
 
+Só o contêiner `hindsight` **do projeto do Brain** (`segundo-cerebro`, rótulo `com.docker.compose.project`) é
+atualizado. Servidor adotado — outro projeto compose ou `docker run` avulso com o mesmo nome — nunca é parado nem
+recriado: o `vault/logs/services.log` registra e a atualização é à mão.
+
 À mão (servidor adotado, fora do compose do Brain), a receita de sempre — migrações de schema (Alembic)
 rodam no boot e são **forward-only**: apontou código antigo pra um banco já migrado, só restaurando backup.
 

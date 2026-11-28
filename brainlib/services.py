@@ -285,11 +285,31 @@ def pinned_image(services_dir: Path | None = None) -> str:
     return m.group(1) if m else ""
 
 
-def running_image(run) -> str | None:
-    """A imagem com que o contêiner `hindsight` foi criado; None = sem contêiner (ou sem docker)."""
-    code, out = run([_docker_bin(), "inspect", "--format", "{{.Config.Image}}", "hindsight"])
-    out = (out or "").strip()
-    return out if code == 0 and out else None
+def compose_project(services_dir: Path | None = None) -> str:
+    """O `name:` do projeto no services/compose.yaml (o rótulo com.docker.compose.project dos contêineres do Brain)."""
+    import re
+    try:
+        txt = ((services_dir or (FRAMEWORK / "services")) / "compose.yaml").read_text(encoding="utf-8")
+    except OSError:
+        return ""
+    m = re.search(r"^name:\s*(\S+)", txt, re.M)
+    return m.group(1) if m else ""
+
+
+def running_image(run, inst=None) -> str | None:
+    """A imagem com que o contêiner `hindsight` DO BRAIN foi criado. None = sem contêiner, sem docker, ou um
+    `hindsight` de outro projeto (servidor adotado — guia de memória, decisão 10): esse o Brain não para nem recria."""
+    code, out = run([_docker_bin(), "inspect", "--format",
+                     '{{index .Config.Labels "com.docker.compose.project"}}|{{.Config.Image}}', "hindsight"])
+    proj, _, image = (out or "").strip().partition("|")
+    if code != 0 or not image:
+        return None
+    if proj != compose_project():
+        if inst is not None:
+            _log(inst, f"sync: o contêiner hindsight é do projeto {proj or '(fora do compose)'}, não do Brain — "
+                       f"servidor adotado: atualize à mão (guides/memory.md)")
+        return None
+    return image
 
 
 def data_volume(run) -> str | None:
@@ -353,7 +373,7 @@ def _sync_server(inst, *, run, probes, sleep, waits: int, pause: float, verify_l
             _log(inst, f"sync: migração do .env falhou — {e}")
         inst = config.load(inst.root)
         mem = inst.cfg["memory"]
-    want, have = pinned_image(), running_image(run)
+    want, have = pinned_image(), running_image(run, inst)
     if have is None or (have == want and not changed_env):
         return None                           # sem contêiner: quem cria é o ensure/setup, já com a imagem pinada
     from .memory import mode

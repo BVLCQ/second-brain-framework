@@ -380,7 +380,7 @@ class ServerFollowsTheUpdate(unittest.TestCase):
 
     VOL = "segundo-cerebro_hindsight-data"
 
-    def _run(self, image: str | None, compose_code: int = 0, fail: tuple = ()):
+    def _run(self, image: str | None, compose_code: int = 0, fail: tuple = (), project: str = "segundo-cerebro"):
         """Docker de mentira. `fail`: passos que devolvem erro — "pull", "backup" (cópia vol → bak), "restore"."""
         calls = []
 
@@ -389,7 +389,9 @@ class ServerFollowsTheUpdate(unittest.TestCase):
             if "inspect" in argv:
                 if not image:
                     return 1, "Error: No such object: hindsight"
-                return (0, self.VOL + "\n") if any(".pg0" in a for a in argv) else (0, image + "\n")
+                if any(".pg0" in a for a in argv):
+                    return 0, self.VOL + "\n"
+                return 0, f"{project}|{image}\n"
             if "pull" in argv:
                 return (1, "net down") if "pull" in fail else (0, "pulled")
             if "run" in argv and "--rm" in argv:
@@ -538,6 +540,20 @@ class ServerFollowsTheUpdate(unittest.TestCase):
             self.assertIn(f"{self.VOL}-pre-upgrade", res["detail"])
             self.assertIn("Não rode `memory rebuild`", res["detail"])
             self.assertFalse(any(c[0] == "env" for c in calls))      # não sobe a versão de antes num banco pela metade
+
+    def test_adopted_server_of_another_project_is_never_touched(self):
+        from brainlib import services
+        with tempfile.TemporaryDirectory() as td:
+            inst = self._inst(td)
+            for proj in ("my-own-hindsight", ""):            # outro projeto compose · `docker run` avulso
+                run, calls = self._run(OLD_IMAGE, project=proj)
+                self.assertIsNone(services.sync_server(inst, run=run, probes={"hindsight": lambda: True}))
+                self.assertEqual({self._step(c) for c in calls}, {"inspect"}, proj)
+            self.assertIn("servidor adotado", (Path(inst.logs) / "services.log").read_text(encoding="utf-8"))
+
+    def test_the_brain_project_name_matches_the_compose_file(self):
+        from brainlib import services
+        self.assertEqual(services.compose_project(), "segundo-cerebro")
 
     def test_a_sync_already_running_is_not_doubled(self):
         from brainlib import services
