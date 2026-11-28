@@ -693,7 +693,7 @@ V.agente = () => {
     try {
       const r = await act("agent_later", agentChosen && pickedAgent !== "other" ? {agent: pickedAgent} : {});
       await refresh();
-      msg($("#m"), "ok", `✓ Tarefa ${r.id} criada — ficou no seu TODO.`);
+      msg($("#m"), "ok", `✓ Tarefa ${r.id} criada — ficou nas suas Tarefas.`);
       setTimeout(next, 1100);
     } catch (e) { msg($("#m"), "err", e.message); } finally { if (btn.isConnected) busy(btn, false); }
   };
@@ -1033,7 +1033,7 @@ V.memoria = () => {
 
   $("#view").innerHTML = `${head("Conexões · memória de IA", "Memória", "A memória deixa o Brain responder perguntas pelo <b>significado</b>. Sem ela, o Brain continua funcionando inteiro com busca por palavras.")}
     <div class="grid3">
-      <div class="opt" data-m="none"><span class="pill off">Sem servidor · grátis</span><h3>Apenas livro-razão</h3><p>O cérebro funciona inteiro; ligar depois é 2 min e vira tarefa no seu TODO.</p></div>
+      <div class="opt" data-m="none"><span class="pill off">Sem servidor · grátis</span><h3>Apenas livro-razão</h3><p>O cérebro funciona inteiro; ligar depois é 2 min e vira tarefa nas suas Tarefas.</p></div>
       <div class="opt" data-m="embed"><span class="pill rec">✓ recomendado pra começar</span><h3>Embed</h3><p>Busca por significado, 100% local e grátis. Chunks do vault, zero LLM, nada sai da máquina.</p></div>
       <div class="opt" data-m="full"><span class="pill warn">Usa a sua chave · custo por uso</span><h3>Full</h3><p>Extrai fatos e liga assuntos entre reuniões. O texto vai para a IA com a sua chave.</p></div>
     </div>
@@ -1481,7 +1481,7 @@ function collectTree() {
 
 // ── 10. A conversa (NOVA) ──────────────────────────────────────────────────
 V.conversa = () => {
-  $("#view").innerHTML = `${head("Começando", "A conversa", "O formulário acabou; a entrevista não. Responda aqui mesmo — ou pule e o Brain anota no seu TODO.")}
+  $("#view").innerHTML = `${head("Começando", "A conversa", "O formulário acabou; a entrevista não. Responda aqui mesmo — ou pule e o Brain anota nas suas Tarefas.")}
     <div class="card">
       <h2>Uma pergunta aberta para o agente</h2>
       <p class="sub">O que o Brain ainda quer saber para fechar o seu mapa:</p>
@@ -1495,7 +1495,7 @@ V.conversa = () => {
     </div>
     <div class="card soft">
       <div class="rowline" style="padding:0">
-        <div class="info"><b>Se preferir conversar depois</b><p>Pule — o Brain cria uma tarefa no seu TODO e retoma a pergunta quando você abrir o chat (ou o <span class="kbd">⚡</span> na TUI).</p></div>
+        <div class="info"><b>Se preferir conversar depois</b><p>Pule — o Brain cria uma tarefa nas suas Tarefas e retoma a pergunta quando você abrir o chat (ou o <span class="kbd">⚡</span> na TUI).</p></div>
         <span class="pill ok">não se perde</span>
       </div>
     </div>
@@ -1537,7 +1537,7 @@ V.pronto = () => {
       ${row(mqDone || d.has("maquina"), "Máquina", mqExtra)}
       ${row(nGoals > 0, "Goals e projetos", nGoals ? `${nGoals} goal(s)` : "nenhum ainda")}
     </ul></div>
-    <div class="msg info show" style="margin:0 0 14px">O que ficou pra depois virou tarefa com nome no seu TODO.</div>
+    <div class="msg info show" style="margin:0 0 14px">O que ficou pra depois virou tarefa com nome nas suas Tarefas.</div>
     <div class="card soft"><h2>Primeiros passos</h2><ol class="howto">
       <li>No chat com o seu agente, nesta pasta, digite <b>/brief</b> para ver o seu dia.</li>
       <li>Jogue arquivos (atas, PDFs, prints) na caixa de entrada do Brain e digite <b>/dump</b> — ele organiza tudo.</li>

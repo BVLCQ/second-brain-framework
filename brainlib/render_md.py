@@ -198,7 +198,7 @@ class Pages:
         if not waiting:
             out.append("_Ninguém te devendo nada registrado._")
         out += ["", "---", "", "Painel completo: " + " · ".join([
-            self.link(f, "dashboard/index.html", "painel (HTML)"), self.link(f, "todo.md", "TODO"),
+            self.link(f, "dashboard/index.html", "painel (HTML)"), self.link(f, "todo.md", "Tarefas"),
             self.link(f, "goals.md", "Goals"), self.link(f, "decisions.md", "Decisões"),
             self.link(f, "wins.md", "Conquistas"), self.link(f, "timeline.md", "Linha do tempo"),
             self.link(f, "map.md", "Mapa"), self.link(f, "focus.md", "Foco"),
@@ -218,7 +218,7 @@ class Pages:
 
     def todo(self) -> list:
         f, m = "todo.md", self.m
-        out = [self.header("TODO", [LEDGER]),
+        out = [self.header("Tarefas", [LEDGER]),
                "> Marque `[x]` para fechar uma ação (vira declaração sua no próximo `brain render`). "
                "Desmarcar reabre. Outras edições neste arquivo são descartadas.", ""]
         mine = [a for a in m["actions"] if a["list"] == "mine" and a["mine"]]

@@ -162,7 +162,7 @@ tbody tr.src-problem:hover td{background:color-mix(in srgb,var(--riskbg) 55%,tra
 .col.col-later{background:transparent;border:1px dashed var(--line)}
 .card.is-parked{opacity:.82}
 .card.is-parked:hover{opacity:1}
-/* visão geral do TODO: aberta = cartões; recolhida = uma linha */
+/* visão geral das Tarefas: aberta = cartões; recolhida = uma linha */
 .todo-ov{margin:0 0 12px}
 .todo-ov-bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .todo-ov-line{display:flex;gap:4px 14px;flex-wrap:wrap;color:var(--muted);font-size:12.5px}

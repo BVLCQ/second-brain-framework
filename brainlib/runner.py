@@ -345,7 +345,7 @@ def nightly(brain, skip_agent: bool = False, run=None) -> dict:
             fix = auth.get("fix") or "brain memory auth"
             title = f"Reautenticar a memória ({auth.get('provider')}) — {fix}"
             if any(a.open and a.title == title for a in brain.state.actions.values()):
-                return "pendente — tarefa já aberta no TODO"
+                return "pendente — tarefa já aberta nas Tarefas"
             brain.record_one({"type": "action.opened", "by": "agent", "prov": "observado", "source": "nightly",
                               "data": {"title": title, "owner": brain.owner, "list": "mine", "due": None,
                                        "due_suggested": None, "due_reason": "",
@@ -354,7 +354,7 @@ def nightly(brain, skip_agent: bool = False, run=None) -> dict:
                                        "effort_min": None, "project": None, "deliverable": None, "blocked_by": [],
                                        "unblocks": [], "people": [], "priority": None, "link": "",
                                        "origin": "nightly"}})
-            return "pendente — tarefa aberta no TODO"
+            return "pendente — tarefa aberta nas Tarefas"
         step("memória autenticação", _auth_guard)
     bk = brain.inst.cfg["backup"]
     if bk["enabled"] and util.today().isoweekday() == bk["weekday"]:

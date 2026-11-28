@@ -984,7 +984,7 @@ edita `events.jsonl` à mão — com backup, uma linha.
   (Slack), publicação (canvas/Drive), backup (Drive), upstream do framework
   (git), pastas de oportunidade (Drive) e issues de sugestão/bug (GitHub).
 - **mine / waiting / watching** — as três listas: eu devo, me devem, é contexto. `mine` é sempre do dono do Brain:
-  escolher `mine` preenche o dono (`eu`) e o TODO do painel mostra essa lista.
+  escolher `mine` preenche o dono (`eu`) e as Tarefas do painel mostram essa lista.
 - **Proposta (`PROP-####`)** — sugestão do agente esperando seu veredito.
 - **Entrega (`WIN-####`)** — trabalho concluído com resultado observável.
 - **Noturno** — rotina das 05:00: render → `/update` → memória → backup
