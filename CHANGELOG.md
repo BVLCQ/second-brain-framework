@@ -1,3 +1,12 @@
+## 2.63.5 — o decisor local sobe no launchd
+
+> Resumo: No Mac, ligar a memória com o decisor local falhava no teste de fumaça porque o launchd recusava o arquivo do serviço; agora o decisor sobe e, se o launchd recusar, a mensagem diz por quê.
+
+- **A causa.** O plist do LaunchAgent do decisor saía com `</key>` onde devia ter `</dict>`. O `launchctl bootstrap` respondia `Bootstrap failed: 5` e o Brain engolia a resposta: o serviço nunca iniciava, o `decider.log` nem era criado e a tela só dizia "teste de fumaça falhou — ver decider.log", um arquivo que não existia. Os testes não pegavam porque, em pasta de teste, a unit não é instalada.
+- **O conserto.** O plist agora é gerado com `plistlib` (XML sempre válido, caminho com espaço ou `&` escapado) e o modelo em `services/` foi corrigido. Conferido com `plutil -lint` e com o decisor subindo de fato pelo launchd.
+- **Erro que ensina.** Se o launchd recusar a unit, o erro mostra o código e a resposta do `launchctl`. Se o serviço nem chegou a escrever o log, a mensagem do teste de fumaça diz isso em vez de apontar para um arquivo que não existe.
+- **Python do venv.** A busca pelo Python 3.12+ também olha Homebrew e mise, porque a ponte do painel roda com `PATH` enxuto.
+
 ## 2.63.4 — Atualizar pelo painel não derruba mais a ponte
 
 > Resumo: Depois de atualizar pelo painel, ele volta sozinho em vez de ficar travado em "Ponte demorou para voltar", e a atualização deixa de acusar mudanças locais que não existem.

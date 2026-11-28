@@ -16,7 +16,7 @@
   <dict>
     <key>BRAIN_DIR</key>
     <string>__BRAIN_DIR__</string>
-  </key>
+  </dict>
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>

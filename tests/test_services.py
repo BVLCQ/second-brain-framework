@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import os
+import shutil
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -57,6 +59,66 @@ class PlatformTests(unittest.TestCase):
             self.assertIn("nada foi instalado", str(cm.exception))
             self.assertEqual(ran, [])
             self.assertFalse(decider.installed(b.inst))
+
+
+class UnitPlistTests(unittest.TestCase):
+    """O plist do LaunchAgent já saiu malformado (`</key>` no lugar de `</dict>`): o launchd recusou
+    em silêncio, o decisor nunca subiu e o `decider.log` nem foi criado. Os testes antigos rodam em
+    pasta de teste, onde a unit não é instalada, então nada olhava o XML."""
+
+    def test_plist_is_well_formed_and_complete(self):
+        import plistlib
+        d = plistlib.loads(decider.unit_plist("/opt/demo/Meu Brain & Cia").encode("utf-8"))
+        self.assertEqual(d["Label"], decider.LABEL)
+        self.assertEqual(d["ProgramArguments"],
+                         ["/bin/sh", "/opt/demo/Meu Brain & Cia/services/decider-serve.sh"])
+        self.assertEqual(d["EnvironmentVariables"], {"BRAIN_DIR": "/opt/demo/Meu Brain & Cia"})
+        self.assertIs(d["RunAtLoad"], True)
+        self.assertIs(d["KeepAlive"], True)
+        self.assertEqual(d["StandardOutPath"], "/opt/demo/Meu Brain & Cia/vault/logs/decider.log")
+        self.assertEqual(d["StandardErrorPath"], d["StandardOutPath"])
+
+    def test_repo_template_matches_generated_plist(self):
+        import plistlib
+        raw = (ROOT / "services" / "com.segundo-cerebro.decider.plist").read_text(encoding="utf-8")
+        self.assertEqual(plistlib.loads(raw.replace("__BRAIN_DIR__", "/x").encode("utf-8")),
+                         plistlib.loads(decider.unit_plist("/x").encode("utf-8")))
+
+    @unittest.skipUnless(sys.platform == "darwin" and shutil.which("plutil"), "plutil só no macOS")
+    def test_plutil_accepts_the_generated_plist(self):
+        import subprocess
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td) / "d.plist"
+            p.write_text(decider.unit_plist(td), encoding="utf-8")
+            out = subprocess.run(["plutil", "-lint", str(p)], capture_output=True, text=True)
+            self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
+
+    def test_launchd_refusal_is_reported_not_swallowed(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            home = Path(td) / "home"
+
+            def run(cmd):
+                return (5, "Bootstrap failed: 5: Input/output error") if "bootstrap" in cmd else (0, "")
+
+            with mock.patch.object(decider.sys, "platform", "darwin"), \
+                    mock.patch.object(decider, "_scratch", return_value=False), \
+                    mock.patch.object(decider.Path, "home", return_value=home):
+                with self.assertRaises(util.BrainError) as cm:
+                    decider._install_unit(b.inst, run=run)
+            self.assertIn("launchd recusou", str(cm.exception))
+            self.assertIn("Input/output error", str(cm.exception))
+
+    def test_smoke_failure_says_when_the_service_never_started(self):
+        with tempfile.TemporaryDirectory() as td:
+            b = _brain(Path(td))
+            with mock.patch.object(decider, "_install_unit"), mock.patch.object(decider, "_start_unit"), \
+                    mock.patch.object(decider, "stop_service"):
+                with self.assertRaises(util.BrainError) as cm:
+                    decider.prepare(b, system="darwin", machine="arm64", nvidia=False,
+                                    python=sys.executable, run=lambda cmd: (0, ""),
+                                    http_post=lambda *a: False, sleep=lambda _s: None)
+            self.assertIn("nem chegou a escrever", str(cm.exception))
 
 
 class NightlyTests(unittest.TestCase):
