@@ -1101,8 +1101,11 @@ class _Handler(BaseHTTPRequestHandler):
                     if self.state.update_active == jid:
                         self.state.update_active = None
             if rc == 0:
+                # NÃO daemon: o restart_fn derruba o httpd, o `serve_forever` da thread principal retorna e o processo
+                # termina — uma thread daemon morria junto antes do Popen da ponte nova, e o painel ficava sem ponte
+                # ("Ponte demorou para voltar"). Não-daemon, o interpretador espera a ponte nova nascer.
                 t = threading.Timer(1.2, restart_fn)
-                t.daemon = True
+                t.daemon = False
                 t.start()
 
         threading.Thread(target=_worker, daemon=True, name=f"serve-update-{jid}").start()
