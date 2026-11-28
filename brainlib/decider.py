@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import os
 import platform
+import plistlib
 import secrets
 import shutil
 import sys
@@ -94,6 +95,9 @@ def python_for_venv(which=shutil.which) -> str | None:
         which("python3.12") if which else None,
         which("python3") if which else None,
         sys.executable,
+        # a ponte do painel roda com PATH enxuto do launchd: sem isto, Homebrew/mise ficam invisíveis
+        *(f"{d}/python3.{v}" for v in (13, 12) for d in ("/opt/homebrew/bin", "/usr/local/bin")),
+        str(Path.home() / ".local" / "share" / "mise" / "shims" / "python3"),
     ]
     for c in candidates:
         if c and Path(c).exists() and _py_ok(c):
@@ -152,35 +156,18 @@ def serve_argv(inst, kind: str | None = None) -> list[str]:
 
 def unit_plist(brain_dir: str) -> str:
     """LaunchAgent. `__BRAIN_DIR__` já substituído — o template do repo não leva caminho real."""
-    return f"""<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key>
-  <string>{LABEL}</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>/bin/sh</string>
-    <string>{brain_dir}/services/decider-serve.sh</string>
-  </array>
-  <key>EnvironmentVariables</key>
-  <dict>
-    <key>BRAIN_DIR</key>
-    <string>{brain_dir}</string>
-  </key>
-  <key>RunAtLoad</key>
-  <true/>
-  <key>KeepAlive</key>
-  <true/>
-  <key>StandardOutPath</key>
-  <string>{brain_dir}/vault/logs/decider.log</string>
-  <key>StandardErrorPath</key>
-  <string>{brain_dir}/vault/logs/decider.log</string>
-  <key>ProcessType</key>
-  <string>Background</string>
-</dict>
-</plist>
-"""
+    # plistlib, não f-string: o XML nunca sai malformado e o caminho (espaço, `&`) é escapado.
+    log = f"{brain_dir}/vault/logs/decider.log"
+    return plistlib.dumps({
+        "Label": LABEL,
+        "ProgramArguments": ["/bin/sh", f"{brain_dir}/services/decider-serve.sh"],
+        "EnvironmentVariables": {"BRAIN_DIR": brain_dir},
+        "RunAtLoad": True,
+        "KeepAlive": True,
+        "StandardOutPath": log,
+        "StandardErrorPath": log,
+        "ProcessType": "Background",
+    }, sort_keys=False).decode("utf-8")
 
 
 def unit_systemd(brain_dir: str) -> str:
@@ -280,9 +267,11 @@ def prepare(brain, *, key: str | None = None, run=None, http_post=None,
     _start_unit(inst, run=run)
     if not _wait_smoke(HOST_URL, local_key, http_post=http_post, sleep=sleep):
         stop_service(inst, remove=False, run=run)
+        log = inst.logs / "decider.log"
+        where = (f"ver {log}" if log.exists()
+                 else f"o serviço nem chegou a escrever {log} — o gerenciador (launchd/systemd) não o iniciou")
         raise util.BrainError(
-            "teste de fumaça do decisor falhou — o slot não foi ligado. "
-            f"ver {inst.logs / 'decider.log'}",
+            f"teste de fumaça do decisor falhou — o slot não foi ligado. {where}",
             code=4)
     return {"kind": kind, "local_key": local_key, "container_url": CONTAINER_URL,
             "host_url": HOST_URL, "installed": True, "smoked": True}
@@ -319,8 +308,14 @@ def _install_unit(inst, *, run) -> None:
         dest = dest_dir / f"{LABEL}.plist"
         dest.write_text(unit_plist(brain_dir), encoding="utf-8")
         uid = str(os.getuid())
-        run(["launchctl", "bootout", f"gui/{uid}/{LABEL}"])
-        run(["launchctl", "bootstrap", f"gui/{uid}", str(dest)])
+        run(["launchctl", "bootout", f"gui/{uid}/{LABEL}"])  # não carregado é o caso comum
+        code, out = run(["launchctl", "bootstrap", f"gui/{uid}", str(dest)])
+        if code != 0:
+            # sem isto a falha some e só aparece como "fumaça falhou", sem decider.log para ler
+            raise util.BrainError(
+                f"o launchd recusou o serviço do decisor (launchctl bootstrap, código {code}): "
+                f"{(out or '').strip()[:300]} — plist em {dest}",
+                code=4)
     elif sys.platform == "linux":
         if _scratch(Path(inst.root)):
             return
